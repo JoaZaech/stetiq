@@ -26,5 +26,9 @@ class GraphSourceUnavailableError(StetiqError):
     """The Client was built without a Graph Source adapter, so it cannot observe."""
 
 
+class InvalidEvolutionModeError(StetiqError, ValueError):
+    """An Evolution Mode other than "strict" or "evolving"."""
+
+
 class RunNotActiveError(StetiqError):
     """The Construction Run has already ended (finished or failed)."""

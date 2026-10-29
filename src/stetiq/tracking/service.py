@@ -16,20 +16,25 @@ import uuid
 from datetime import UTC, datetime
 from typing import Protocol
 
+from stetiq.conformance import assess_conformance, candidate_ontology
 from stetiq.errors import (
+    InvalidEvolutionModeError,
     GraphSourceNotBoundError,
     MissingDeclaredOntologyError,
     NotFoundError,
     RunNotActiveError,
 )
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
-from stetiq.ontology import Ontology, content_hash
+from stetiq.ontology import Ontology, content_hash, from_dict, to_dict
 from stetiq.tracking.entities import (
+    DEFAULT_EVOLUTION_MODE,
     ConstructionRun,
+    EvolutionMode,
     KnowledgeGraph,
     Observation,
     OntologyVersion,
     Origin,
+    RunStatus,
 )
 from stetiq.tracking.store import Store
 
@@ -57,6 +62,10 @@ class TrackingService(Protocol):
     def bind_graph_source(self, knowledge_graph: str, scope: GraphSourceScope) -> None: ...
 
     def get_graph_source(self, knowledge_graph: str) -> GraphSourceScope: ...
+
+    def set_evolution_mode(self, knowledge_graph: str, mode: EvolutionMode) -> None: ...
+
+    def get_evolution_mode(self, knowledge_graph: str) -> EvolutionMode: ...
 
     def start_run(self, knowledge_graph: str, ontology_version: int) -> ConstructionRun: ...
 
@@ -108,6 +117,8 @@ class LocalTrackingService:
             return self._register(knowledge_graph, ontology, origin)
 
     def _register(self, knowledge_graph: str, ontology: Ontology, origin: Origin) -> OntologyVersion:
+        # Hold the canonical form, so the returned version equals it fetched back.
+        ontology = from_dict(to_dict(ontology))
         digest = content_hash(ontology)
         existing = self._store.find_ontology_version_by_hash(knowledge_graph, digest)
         if existing is not None:
@@ -152,6 +163,21 @@ class LocalTrackingService:
                 f"Knowledge Graph {knowledge_graph!r} is not bound to a Graph Source"
             )
         return scope
+
+    # --- Evolution Mode -------------------------------------------------------------
+
+    def set_evolution_mode(self, knowledge_graph: str, mode: EvolutionMode) -> None:
+        if mode not in ("strict", "evolving"):
+            raise InvalidEvolutionModeError(
+                f"Unknown Evolution Mode {mode!r} (expected 'strict' or 'evolving')"
+            )
+        with self._store.transaction():
+            self.get_knowledge_graph(knowledge_graph)
+            self._store.set_evolution_mode(knowledge_graph, mode)
+
+    def get_evolution_mode(self, knowledge_graph: str) -> EvolutionMode:
+        self.get_knowledge_graph(knowledge_graph)
+        return self._store.get_evolution_mode(knowledge_graph) or DEFAULT_EVOLUTION_MODE
 
     # --- Construction Runs ----------------------------------------------------------
 
@@ -210,7 +236,20 @@ class LocalTrackingService:
                 run_id=run_id,
             )
             self._store.add_observation(obs)
-            self._store.end_run(run_id, "finished", ended, obs.id)
+            # Conformance, then Evolution Mode handling: a run introducing new Concepts
+            # fails (strict) or gives rise to a Candidate linked to it (evolving).
+            declared = self.get_ontology_version(run.knowledge_graph, run.ontology_version)
+            conformance = assess_conformance(declared.ontology, schema)
+            self._store.set_run_conformance(run_id, conformance)
+            status: RunStatus = "finished"
+            candidate = candidate_ontology(declared.ontology, schema)
+            if candidate is not None:
+                if self.get_evolution_mode(run.knowledge_graph) == "strict":
+                    status = "failed"
+                else:
+                    version = self._register(run.knowledge_graph, candidate, "run")
+                    self._store.set_run_candidate(run_id, run.knowledge_graph, version.number)
+            self._store.end_run(run_id, status, ended, obs.id)
             return self.get_run(run_id)
 
     def fail_run(self, run_id: str) -> ConstructionRun:

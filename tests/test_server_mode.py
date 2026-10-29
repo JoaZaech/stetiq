@@ -4,7 +4,6 @@ The behaviour itself is covered by the whole SDK suite running in `remote` mode
 (see conftest); these tests cover starting the server and URI-based mode selection.
 """
 
-import os
 import socket
 import subprocess
 import sys

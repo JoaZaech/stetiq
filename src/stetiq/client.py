@@ -9,6 +9,7 @@ from stetiq.errors import GraphSourceUnavailableError
 from stetiq.graph_source import GraphSource, GraphSourceScope
 from stetiq.ontology import Ontology, parse_yaml
 from stetiq.ontology.diff import OntologyDiff, diff_ontologies
+from stetiq.tracking.entities import EvolutionMode
 from stetiq.tracking import (
     ConstructionRun,
     KnowledgeGraph,
@@ -117,6 +118,16 @@ class Client:
 
     def get_graph_source(self, knowledge_graph: str) -> GraphSourceScope:
         return self._service.get_graph_source(knowledge_graph)
+
+    # --- Evolution Mode -------------------------------------------------------------
+
+    def set_evolution_mode(self, knowledge_graph: str, mode: EvolutionMode) -> None:
+        """What ending a run that introduces new Concepts does: "strict" fails the run,
+        "evolving" (the default) creates a Candidate Ontology Version linked to it."""
+        self._service.set_evolution_mode(knowledge_graph, mode)
+
+    def get_evolution_mode(self, knowledge_graph: str) -> EvolutionMode:
+        return self._service.get_evolution_mode(knowledge_graph)
 
     # --- Construction Runs ----------------------------------------------------------
 

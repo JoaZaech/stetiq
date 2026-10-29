@@ -9,9 +9,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
+from stetiq.conformance import Conformance
 from stetiq.graph_source import GraphSourceScope
 from stetiq.tracking.entities import (
     ConstructionRun,
+    EvolutionMode,
     KnowledgeGraph,
     Observation,
     OntologyVersion,
@@ -58,6 +60,16 @@ class Store(Protocol):
     def end_run(
         self, run_id: str, status: RunStatus, ended_at: datetime, observation_id: str | None
     ) -> None: ...
+
+    def set_run_conformance(self, run_id: str, conformance: Conformance) -> None: ...
+
+    def set_run_candidate(self, run_id: str, knowledge_graph: str, ontology_version: int) -> None:
+        """Link the run to the Candidate Ontology Version it gave rise to."""
+
+    def set_evolution_mode(self, knowledge_graph: str, mode: EvolutionMode) -> None: ...
+
+    def get_evolution_mode(self, knowledge_graph: str) -> EvolutionMode | None:
+        """None when never set (callers apply the default)."""
 
     def add_observation(self, observation: Observation) -> None: ...
 

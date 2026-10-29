@@ -70,6 +70,13 @@ def test_registering_changed_content_creates_a_new_version(client, kg):
     assert [(v.number, v.origin) for v in versions] == [(1, "registered"), (2, "registered")]
 
 
+def test_a_newly_registered_version_holds_its_ontology_in_canonical_form(client, kg):
+    created = client.register_ontology(kg.name, WITH_AGENT)  # concepts not sorted by label
+
+    assert created == client.get_ontology_version(kg.name, created.number)
+    assert [n.label for n in created.ontology.node_types] == ["Agent", "Customer", "Ticket"]
+
+
 def test_existing_versions_are_unchanged_by_later_registrations(client, kg):
     before = client.get_ontology_yaml(kg.name, 1)
 

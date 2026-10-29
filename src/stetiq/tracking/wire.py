@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Any
 
 from stetiq import errors
+from stetiq.conformance import Conformance
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import from_dict, to_dict
 from stetiq.tracking.entities import ConstructionRun, KnowledgeGraph, Observation, OntologyVersion
@@ -84,6 +85,9 @@ def graph_source_scope_from_json(d: dict[str, Any]) -> GraphSourceScope:
 ERROR_STATUS[errors.RunNotActiveError] = 409
 
 
+ERROR_STATUS[errors.InvalidEvolutionModeError] = 422
+
+
 def _dt(value: str | None) -> datetime | None:
     return None if value is None else datetime.fromisoformat(value)
 
@@ -99,6 +103,8 @@ def run_to_json(run: ConstructionRun) -> dict[str, Any]:
         "params": dict(run.params),
         "metrics": dict(run.metrics),
         "observation_id": run.observation_id,
+        "conformance": None if run.conformance is None else run.conformance.to_dict(),
+        "candidate_version": run.candidate_version,
     }
 
 
@@ -113,6 +119,8 @@ def run_from_json(d: dict[str, Any]) -> ConstructionRun:
         params=dict(d["params"]),
         metrics={k: float(v) for k, v in d["metrics"].items()},
         observation_id=d["observation_id"],
+        conformance=None if d.get("conformance") is None else Conformance.from_dict(d["conformance"]),
+        candidate_version=d.get("candidate_version"),
     )
 
 

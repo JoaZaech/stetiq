@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
+from stetiq.conformance import Conformance
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import Ontology, to_yaml
 
@@ -36,6 +37,11 @@ class OntologyVersion:
 # "failed" when the run crashed, was aborted, or its Observation could not be made.
 RunStatus = Literal["running", "finished", "failed"]
 
+# A Knowledge Graph's setting for runs that introduce new Concepts: "strict" fails the
+# run, "evolving" (the default) creates a Candidate Ontology Version.
+EvolutionMode = Literal["strict", "evolving"]
+DEFAULT_EVOLUTION_MODE: EvolutionMode = "evolving"
+
 
 @dataclass(frozen=True)
 class ConstructionRun:
@@ -48,6 +54,11 @@ class ConstructionRun:
     params: dict[str, str] = field(default_factory=dict)
     metrics: dict[str, float] = field(default_factory=dict)
     observation_id: str | None = None  # set when the run's ending Observation is stored
+    # Conformance of the ending Observation to the Declared Ontology (None until ended
+    # with an Observation).
+    conformance: Conformance | None = None
+    # The Candidate Ontology Version this run gave rise to (evolving mode, new Concepts).
+    candidate_version: int | None = None
 
 
 @dataclass(frozen=True)
