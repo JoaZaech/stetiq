@@ -15,9 +15,14 @@ from stetiq.evaluation import (
     Evaluation,
     OntologyVersionEvaluator,
 )
+from stetiq.ontology.diff import Change, ChangeKind, Classification, OntologyDiff
 from stetiq.tracking import EvaluationResult, KnowledgeGraph, OntologyVersion
 
 __all__ = [
+    "Change",
+    "ChangeKind",
+    "Classification",
+    "OntologyDiff",
     "Client",
     "ConstructionRunEvaluator",
     "Detail",
