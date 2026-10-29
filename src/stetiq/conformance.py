@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from enum import StrEnum
+from collections.abc import Callable
 from typing import Any, Literal
 
 from stetiq.graph_source import (
@@ -126,12 +127,19 @@ def assess_conformance(declared: Ontology, observed: ObservedSchema) -> Conforma
     Order: node types, then relationship types, each by label with its properties
     (by name) right after it; then patterns, sorted."""
     checks = _Checks()
-    _check_concepts(checks, "node_type", declared.node_types, observed.node_types)
+    _check_concepts(
+        checks,
+        "node_type",
+        declared.node_types,
+        observed.node_types,
+        _properties_of(declared),
+    )
     _check_concepts(
         checks,
         "relationship_type",
         declared.relationship_types,
         observed.relationship_types,
+        _own_properties,
     )
     _check_patterns(checks, declared, observed)
     return checks.result()
@@ -171,6 +179,7 @@ def _check_concepts(
     kind: SubjectKind,
     declared: tuple[NodeType, ...] | tuple[RelationshipType, ...],
     observed: tuple[ObservedNodeType, ...] | tuple[ObservedRelationshipType, ...],
+    properties_of: PropertiesOf,
 ) -> None:
     declared_by_label = {c.label: c for c in declared}
     observed_by_label = {o.label: o for o in observed}
@@ -179,7 +188,7 @@ def _check_concepts(
         o = observed_by_label.get(label)
         if checks.presence(label, kind, d is not None, o is not None):
             checks.record(label, kind, [])
-        declared_props = {p.name: p for p in (d.properties if d else ())}
+        declared_props = {p.name: p for p in (properties_of(d) if d else ())}
         observed_props = {p.name: p for p in (o.properties if o else ())}
         for name in sorted(declared_props.keys() | observed_props.keys()):
             subject = f"{label}.{name}"
@@ -188,6 +197,33 @@ def _check_concepts(
                 checks.record(
                     subject, "property", _property_mismatches(subject, label, dp, op)
                 )
+
+
+# The properties declared for a Concept (own, and for node types inherited ones too).
+PropertiesOf = Callable[[NodeType | RelationshipType], tuple[Property, ...]]
+
+
+def _own_properties(concept: NodeType | RelationshipType) -> tuple[Property, ...]:
+    return concept.properties
+
+
+def _properties_of(declared: Ontology) -> PropertiesOf:
+    """A node type's own properties plus those inherited from its ancestors (the
+    nearest declaration of a name wins)."""
+    nodes = {n.label: n for n in declared.node_types}
+
+    def properties_of(concept: NodeType | RelationshipType) -> tuple[Property, ...]:
+        props, names, seen = [], set(), set()
+        current: NodeType | RelationshipType | None = concept
+        while current is not None and current.label not in seen:
+            seen.add(current.label)
+            props += [p for p in current.properties if p.name not in names]
+            names |= {p.name for p in current.properties}
+            parent = getattr(current, "parent", None)
+            current = nodes.get(parent) if parent else None
+        return tuple(props)
+
+    return properties_of
 
 
 def _property_mismatches(
@@ -248,10 +284,13 @@ def candidate_ontology(declared: Ontology, observed: ObservedSchema) -> Ontology
     only when they involve a new node or relationship type: an undeclared pattern between
     declared Concepts is a pattern mismatch, not a new Concept, and is left out."""
     node_types, new_nodes, new_node_props = _extend(
-        declared.node_types, observed.node_types, NodeType
+        declared.node_types, observed.node_types, NodeType, _properties_of(declared)
     )
     relationship_types, new_rels, new_rel_props = _extend(
-        declared.relationship_types, observed.relationship_types, RelationshipType
+        declared.relationship_types,
+        observed.relationship_types,
+        RelationshipType,
+        _own_properties,
     )
     if not (new_nodes or new_rels or new_node_props or new_rel_props):
         return None
@@ -260,14 +299,15 @@ def candidate_ontology(declared: Ontology, observed: ObservedSchema) -> Ontology
         for p in observed.patterns
         if {p.source, p.target} & new_nodes or p.relationship in new_rels
     }
-    return Ontology(
+    return replace(  # keeps everything else declared, e.g. constraints
+        declared,
         node_types=node_types,
         relationship_types=relationship_types,
         patterns=tuple(sorted(patterns)),
     )
 
 
-def _extend(declared, observed, concept_type):
+def _extend(declared, observed, concept_type, properties_of: PropertiesOf):
     """Declared Concepts with their undeclared observed properties added, plus the
     undeclared observed Concepts, sorted by label; also the new labels and whether any
     property was added to a declared Concept."""
@@ -277,7 +317,7 @@ def _extend(declared, observed, concept_type):
     added_properties = False
     for c in declared:
         o = observed_by_label.get(c.label)
-        known = {p.name for p in c.properties}
+        known = {p.name for p in properties_of(c)}  # inherited ones are not new
         extra = tuple(
             _property(p) for p in (o.properties if o else ()) if p.name not in known
         )

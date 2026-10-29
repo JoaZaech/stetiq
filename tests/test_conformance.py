@@ -245,7 +245,50 @@ def test_a_candidate_only_adds_to_the_declared_ontology(
     assert diff.classification == "additive"
 
 
-def test_a_candidate_is_evaluated_by_the_built_in_evaluators(client, support_kg, graph_source):
+def test_a_candidate_keeps_the_declared_constraints(
+    client, support_ontology, graph_source
+):
+    constrained = support_ontology + (
+        "constraints:\n  - {type: UNIQUENESS, node_type: Customer, property_name: name}\n"
+    )
+    client.create_knowledge_graph("support", ontology=constrained)
+    client.bind_graph_source("support", GraphSourceScope(database="neo4j"))
+    seed_graph_with_new_concepts(graph_source)
+
+    run = run_once(client, "support")
+
+    candidate = client.get_ontology_version("support", run.candidate_version).ontology
+    assert [(c.node_type, c.property_name) for c in candidate.constraints] == [
+        ("Customer", "name")
+    ]
+
+
+HIERARCHY_ONTOLOGY = """
+node_types:
+  - label: Person
+    properties:
+      - {name: name, type: STRING, required: true}
+  - label: Agent
+    parent: Person
+"""
+
+
+def test_properties_inherited_from_a_parent_are_declared_on_the_subclass(
+    client, graph_source
+):
+    client.create_knowledge_graph("staff", ontology=HIERARCHY_ONTOLOGY)
+    client.bind_graph_source("staff", GraphSourceScope(database="neo4j"))
+    graph_source.add_node(["Person", "Agent"], {"name": "Grace"})
+
+    run = run_once(client, "staff")
+
+    assert run.conformance.mismatches == ()
+    assert run.candidate_version is None
+
+
+def test_a_candidate_is_evaluated_by_the_built_in_evaluators(
+    client, support_kg, graph_source
+):
     seed_graph_with_new_concepts(graph_source)
 
     run = run_once(client, support_kg)
