@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
-from stetiq.evaluation.framework import Detail, MetricValue, SubjectKind
+from stetiq.evaluation.framework import Detail, MetricValue, ParameterValue, SubjectKind
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import Ontology, to_yaml
 
@@ -94,3 +94,5 @@ class EvaluationResult:
     metrics: dict[str, MetricValue]
     details: tuple[Detail, ...]
     created_at: datetime
+    # The Evaluator's configuration (e.g. its reference Ontology Version); {} if none.
+    parameters: dict[str, ParameterValue] = field(default_factory=dict)

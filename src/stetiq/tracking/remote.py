@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 from urllib.parse import quote
 
 import httpx
 
 from stetiq.errors import EvaluatorError, StetiqError
-from stetiq.evaluation.framework import Evaluation, SubjectKind
+from stetiq.evaluation.framework import Evaluation, ParameterValue, SubjectKind
 from stetiq.graph_source import GraphSourceScope
 from stetiq.ontology import Ontology, to_dict
 from stetiq.tracking import wire
@@ -148,9 +149,14 @@ class RemoteTrackingService:
         subject_id: str,
         evaluator: str,
         evaluation: Evaluation,
+        parameters: Mapping[str, ParameterValue] | None = None,
     ) -> EvaluationResult:
         path = self._subject_path(knowledge_graph, subject_kind, subject_id) + "/evaluations"
-        body = {"evaluator": evaluator, **wire.evaluation_to_json(evaluation)}
+        body = {
+            "evaluator": evaluator,
+            **wire.evaluation_to_json(evaluation),
+            "parameters": dict(parameters or {}),
+        }
         return wire.evaluation_result_from_json(self._call("POST", path, body))
 
     def get_evaluation_results(

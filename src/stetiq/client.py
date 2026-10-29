@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from pathlib import Path
 
 from stetiq.errors import EvaluatorError, GraphSourceUnavailableError
@@ -121,14 +122,34 @@ class Client:
         """The latest result of every Evaluator (built-in and custom) for an Ontology Version."""
         return self._service.get_evaluation_results(knowledge_graph, "ontology_version", str(version))
 
-    def evaluate(self, knowledge_graph: str, version: int) -> list[EvaluationResult]:
+    def evaluate(
+        self,
+        knowledge_graph: str,
+        version: int,
+        *,
+        evaluators: Sequence[OntologyVersionEvaluator] = (),
+    ) -> list[EvaluationResult]:
         """Re-run every Evaluator (built-in and this client's custom ones) on a version.
 
-        Results are stored as the newest per Evaluator; returns the latest of all.
+        `evaluators` are extra, one-off Evaluators for this call only (not
+        registered), e.g. a parameterised `GoldOntologyAlignment(gold_version)`
+        whose reference is chosen per evaluation.
+
+        Results are stored as the newest per Evaluator (and parameters); returns
+        the latest of all.
         """
+        for evaluator in evaluators:
+            check_evaluator(evaluator)
+            if not isinstance(evaluator, OntologyVersionEvaluator):
+                raise EvaluatorError(f"{evaluator.name!r} is not an OntologyVersionEvaluator")
+            if evaluator.name in {e.name for e in BUILT_IN_EVALUATORS}:
+                raise EvaluatorError(f"An Evaluator named {evaluator.name!r} is already registered")
         self._service.evaluate_ontology_version(knowledge_graph, version)
-        if self._evaluators:
-            self._run_custom_evaluators(self._service.get_ontology_version(knowledge_graph, version))
+        extra = list(evaluators)
+        if self._evaluators or extra:
+            self._run_custom_evaluators(
+                self._service.get_ontology_version(knowledge_graph, version), extra=extra
+            )
         return self.get_evaluation_results(knowledge_graph, version)
 
     def register_evaluator(self, evaluator: Evaluator) -> None:
@@ -145,11 +166,15 @@ class Client:
         self._evaluators[evaluator.name] = evaluator
 
     def _run_custom_evaluators(
-        self, version: OntologyVersion, *, only_missing: bool = False
+        self,
+        version: OntologyVersion,
+        *,
+        only_missing: bool = False,
+        extra: Sequence[OntologyVersionEvaluator] = (),
     ) -> list[EvaluationResult]:
         evaluators = [
             e for e in self._evaluators.values() if isinstance(e, OntologyVersionEvaluator)
-        ]
+        ] + list(extra)
         if not evaluators:
             return []
         subject_id = str(version.number)
@@ -177,6 +202,7 @@ class Client:
                     subject_id,
                     evaluator.name,
                     check_evaluation(evaluator.name, outcome),
+                    evaluator.parameters,
                 )
             )
         return results

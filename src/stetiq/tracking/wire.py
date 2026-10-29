@@ -93,6 +93,7 @@ def evaluation_result_to_json(r: EvaluationResult) -> dict[str, Any]:
         "metrics": r.metrics,
         "details": [_detail_to_json(d) for d in r.details],
         "created_at": r.created_at.isoformat(),
+        "parameters": dict(r.parameters),
     }
 
 
@@ -105,6 +106,7 @@ def evaluation_result_from_json(d: dict[str, Any]) -> EvaluationResult:
         metrics=dict(d["metrics"]),
         details=tuple(_detail_from_json(x) for x in d["details"]),
         created_at=datetime.fromisoformat(d["created_at"]),
+        parameters=dict(d.get("parameters", {})),
     )
 
 

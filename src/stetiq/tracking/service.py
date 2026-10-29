@@ -12,7 +12,9 @@ store rows); format conversion is the SDK's job.
 
 from __future__ import annotations
 
+import json
 import uuid
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Protocol
 
@@ -23,7 +25,13 @@ from stetiq.errors import (
     NotFoundError,
     RunNotActiveError,
 )
-from stetiq.evaluation.framework import Evaluation, SubjectKind, check_evaluation
+from stetiq.evaluation.framework import (
+    Evaluation,
+    ParameterValue,
+    SubjectKind,
+    check_evaluation,
+    check_parameters,
+)
 from stetiq.evaluation.structural import BUILT_IN_EVALUATORS
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import Ontology, content_hash
@@ -93,14 +101,19 @@ class TrackingService(Protocol):
         subject_id: str,
         evaluator: str,
         evaluation: Evaluation,
+        parameters: Mapping[str, ParameterValue] | None = None,
     ) -> EvaluationResult:
-        """Store a result computed elsewhere (a custom Evaluator run by the SDK)."""
+        """Store a result computed elsewhere (a custom Evaluator run by the SDK).
+
+        `parameters` is the Evaluator's configuration; results are kept per
+        (evaluator, parameters)."""
         ...
 
     def get_evaluation_results(
         self, knowledge_graph: str, subject_kind: SubjectKind, subject_id: str
     ) -> list[EvaluationResult]:
-        """The latest result per Evaluator for the subject, ordered by Evaluator name."""
+        """The latest result per (Evaluator, parameters) for the subject, ordered by
+        Evaluator name then parameters."""
         ...
 
 
@@ -171,6 +184,7 @@ class LocalTrackingService:
         subject_id: str,
         evaluator: str,
         evaluation: Evaluation,
+        parameters: Mapping[str, ParameterValue] | None = None,
     ) -> EvaluationResult:
         result = EvaluationResult(
             knowledge_graph=knowledge_graph,
@@ -180,6 +194,7 @@ class LocalTrackingService:
             metrics=dict(evaluation.metrics),
             details=tuple(evaluation.details),
             created_at=_now(),
+            parameters=dict(parameters or {}),
         )
         self._store.add_evaluation_result(result)
         return result
@@ -210,14 +225,16 @@ class LocalTrackingService:
         subject_id: str,
         evaluator: str,
         evaluation: Evaluation,
+        parameters: Mapping[str, ParameterValue] | None = None,
     ) -> EvaluationResult:
         if evaluator in {e.name for e in BUILT_IN_EVALUATORS}:
             raise EvaluatorError(f"{evaluator!r} is a built-in Evaluator; its results are computed by stetiq")
         evaluation = check_evaluation(evaluator, evaluation)
+        parameters = check_parameters(evaluator, parameters or {})
         with self._store.transaction():
             self._check_subject(knowledge_graph, subject_kind, subject_id)
             return self._store_result(
-                knowledge_graph, subject_kind, subject_id, evaluator, evaluation
+                knowledge_graph, subject_kind, subject_id, evaluator, evaluation, parameters
             )
 
     def get_evaluation_results(
@@ -225,10 +242,10 @@ class LocalTrackingService:
     ) -> list[EvaluationResult]:
         self._check_subject(knowledge_graph, subject_kind, subject_id)
         latest = {
-            r.evaluator: r
+            (r.evaluator, json.dumps(r.parameters, sort_keys=True)): r
             for r in self._store.list_evaluation_results(knowledge_graph, subject_kind, subject_id)
         }
-        return [latest[name] for name in sorted(latest)]
+        return [latest[key] for key in sorted(latest)]
 
     def list_ontology_versions(self, knowledge_graph: str) -> list[OntologyVersion]:
         self.get_knowledge_graph(knowledge_graph)

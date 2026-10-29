@@ -146,6 +146,8 @@ evaluation_results = Table(
     Column("metrics_json", Text, nullable=False),
     Column("details_json", Text, nullable=False),
     Column("created_at", Text, nullable=False),
+    # The Evaluator's parameters (e.g. its reference Ontology Version), JSON; "{}" if none.
+    Column("parameters_json", Text, nullable=False, server_default="{}"),
 )
 Index(
     "ix_evaluation_results_subject",
@@ -444,6 +446,7 @@ class SqlStore:
                         ]
                     ),
                     created_at=result.created_at.isoformat(),
+                    parameters_json=json.dumps(result.parameters, sort_keys=True),
                 )
             )
 
@@ -473,6 +476,7 @@ def _evaluation_from_row(row) -> EvaluationResult:
         metrics=json.loads(row["metrics_json"]),
         details=tuple(Detail(**d) for d in json.loads(row["details_json"])),
         created_at=datetime.fromisoformat(row["created_at"]),
+        parameters=json.loads(row["parameters_json"]),
     )
 
 

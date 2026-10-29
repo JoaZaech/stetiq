@@ -16,6 +16,7 @@ from stetiq.evaluation import (
     ConstructionRunEvaluator,
     Detail,
     Evaluation,
+    GoldOntologyAlignment,
     OntologyVersionEvaluator,
 )
 from stetiq.graph_source import GraphSource, GraphSourceScope, InMemoryGraphSource
@@ -42,6 +43,7 @@ __all__ = [
     "EvaluationResult",
     "EvaluatorError",
     "ConstructionRun",
+    "GoldOntologyAlignment",
     "GraphSource",
     "GraphSourceNotBoundError",
     "GraphSourceScope",

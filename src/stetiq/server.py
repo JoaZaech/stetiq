@@ -145,10 +145,11 @@ def create_app(
         evaluator: str = Body(),
         metrics: dict[str, Any] = Body(),
         details: list[dict[str, Any]] = Body([]),
+        parameters: dict[str, Any] = Body({}),
     ) -> dict[str, Any]:
         evaluation = wire.evaluation_from_json({"metrics": metrics, "details": details})
         result = tracking.record_evaluation(
-            name, "ontology_version", str(number), evaluator, evaluation
+            name, "ontology_version", str(number), evaluator, evaluation, parameters
         )
         return wire.evaluation_result_to_json(result)
 
