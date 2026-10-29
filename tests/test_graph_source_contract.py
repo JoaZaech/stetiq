@@ -2,7 +2,8 @@
 
 Every adapter must pass it. The `graph` fixture yields a harness that can seed data
 (test-side writes) and exposes the adapter under test as `.source`; add a param for
-each adapter (ticket #7 adds Neo4j via testcontainers, seeding through a write session).
+each adapter (`neo4j` runs a throwaway testcontainer, seeding through a write session, and is
+skipped when Docker is unavailable).
 """
 
 import pytest
@@ -11,6 +12,7 @@ from stetiq.graph_source import (
     Degree,
     GraphSourceScope,
     InMemoryGraphSource,
+    Neo4jGraphSource,
     ObservedProperty,
 )
 
@@ -26,11 +28,53 @@ class _MemoryHarness:
         return self.source.add_relationship(start, type_, end, properties)
 
 
-@pytest.fixture(params=["memory"])
+class _Neo4jHarness:
+    """Seeds through a write session on the testcontainer; `.source` is the adapter."""
+
+    def __init__(self, driver, container) -> None:
+        self._driver = driver
+        self.source = Neo4jGraphSource.connect(
+            container.get_connection_url(), user=container.username, password=container.password
+        )
+
+    def add_node(self, labels, properties=None, database="neo4j"):
+        label_expr = ":".join(f"`{label}`" for label in labels)
+        records, _, _ = self._driver.execute_query(
+            f"CREATE (n:{label_expr}) SET n = $props RETURN elementId(n) AS id",
+            props=properties or {},
+            database_=database,
+        )
+        return (database, records[0]["id"])
+
+    def add_relationship(self, start, type_, end, properties=None):
+        (database, start_id), (end_database, end_id) = start, end
+        assert database == end_database, "a relationship cannot span databases"
+        self._driver.execute_query(
+            f"MATCH (a), (b) WHERE elementId(a) = $a AND elementId(b) = $b "
+            f"CREATE (a)-[r:`{type_}`]->(b) SET r = $props",
+            a=start_id,
+            b=end_id,
+            props=properties or {},
+            database_=database,
+        )
+
+    def close(self) -> None:
+        self.source.close()
+
+
+@pytest.fixture(params=["memory", pytest.param("neo4j", marks=pytest.mark.neo4j)])
 def graph(request):
     if request.param == "memory":
-        return _MemoryHarness()
-    raise AssertionError(request.param)
+        yield _MemoryHarness()
+    elif request.param == "neo4j":
+        harness = _Neo4jHarness(
+            request.getfixturevalue("neo4j_admin_driver"),
+            request.getfixturevalue("neo4j_container"),
+        )
+        yield harness
+        harness.close()
+    else:
+        raise AssertionError(request.param)
 
 
 SCOPE = GraphSourceScope(database="neo4j", label="KG")

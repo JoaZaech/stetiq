@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 from urllib.parse import quote
 
 import httpx
 
 from stetiq.errors import EvaluatorError, StetiqError
-from stetiq.evaluation.framework import Evaluation, SubjectKind
+from stetiq.evaluation.framework import Evaluation, ParameterValue, SubjectKind
 from stetiq.graph_source import GraphSourceScope
 from stetiq.ontology import Ontology, to_dict
 from stetiq.tracking import wire
 from stetiq.tracking.entities import (
+    Alias,
+    Promotion,
+    validate_alias_name,
     ConstructionRun,
     EvaluationResult,
     EvolutionMode,
@@ -139,6 +143,33 @@ class RemoteTrackingService:
         data = self._call("GET", self._kg_path(knowledge_graph) + "/observations")
         return [wire.observation_from_json(o) for o in data]
 
+    # --- Aliases and Promotion ----------------------------------------------------------
+
+    def _alias_path(self, knowledge_graph: str, name: str) -> str:
+        return f"{self._kg_path(knowledge_graph)}/aliases/{quote(name, safe='')}"
+
+    def set_alias(self, knowledge_graph: str, name: str, version: int, actor: str) -> Alias:
+        validate_alias_name(name)  # a name like "a/b" would not even reach its route
+        body = {"version": version, "actor": actor}
+        return wire.alias_from_json(self._call("PUT", self._alias_path(knowledge_graph, name), body))
+
+    def get_alias(self, knowledge_graph: str, name: str) -> Alias:
+        return wire.alias_from_json(self._call("GET", self._alias_path(knowledge_graph, name)))
+
+    def list_aliases(self, knowledge_graph: str) -> list[Alias]:
+        data = self._call("GET", self._kg_path(knowledge_graph) + "/aliases")
+        return [wire.alias_from_json(a) for a in data]
+
+    def list_promotions(self, knowledge_graph: str) -> list[Promotion]:
+        data = self._call("GET", self._kg_path(knowledge_graph) + "/promotions")
+        return [wire.promotion_from_json(p) for p in data]
+
+    def set_contract_alias(self, knowledge_graph: str, alias: str) -> None:
+        self._call("PUT", self._kg_path(knowledge_graph) + "/contract-alias", {"alias": alias})
+
+    def get_contract_alias(self, knowledge_graph: str) -> str:
+        return self._call("GET", self._kg_path(knowledge_graph) + "/contract-alias")["alias"]
+
     def _subject_path(self, knowledge_graph: str, subject_kind: SubjectKind, subject_id: str) -> str:
         if subject_kind == "ontology_version":
             return f"{self._kg_path(knowledge_graph)}/ontology-versions/{quote(subject_id, safe='')}"
@@ -157,9 +188,14 @@ class RemoteTrackingService:
         subject_id: str,
         evaluator: str,
         evaluation: Evaluation,
+        parameters: Mapping[str, ParameterValue] | None = None,
     ) -> EvaluationResult:
         path = self._subject_path(knowledge_graph, subject_kind, subject_id) + "/evaluations"
-        body = {"evaluator": evaluator, **wire.evaluation_to_json(evaluation)}
+        body = {
+            "evaluator": evaluator,
+            **wire.evaluation_to_json(evaluation),
+            "parameters": dict(parameters or {}),
+        }
         return wire.evaluation_result_from_json(self._call("POST", path, body))
 
     def get_evaluation_results(

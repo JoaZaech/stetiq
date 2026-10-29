@@ -6,6 +6,8 @@ from stetiq.errors import (
     EvaluatorError,
     GraphSourceNotBoundError,
     GraphSourceUnavailableError,
+    GraphSourceWriteRejectedError,
+    InvalidAliasNameError,
     InvalidEvolutionModeError,
     KnowledgeGraphAlreadyExistsError,
     MissingDeclaredOntologyError,
@@ -18,20 +20,26 @@ from stetiq.evaluation import (
     ConstructionRunEvaluator,
     Detail,
     Evaluation,
+    GoldOntologyAlignment,
     OntologyVersionEvaluator,
 )
 from stetiq.graph_source import GraphSource, GraphSourceScope, InMemoryGraphSource
 from stetiq.ontology.diff import Change, ChangeKind, Classification, OntologyDiff
 from stetiq.tracking import (
+    Alias,
     ConstructionRun,
     EvaluationResult,
     KnowledgeGraph,
     Observation,
     OntologyVersion,
+    Promotion,
     RunComparison,
 )
 
 __all__ = [
+    "Alias",
+    "InvalidAliasNameError",
+    "Promotion",
     "ActiveRun",
     "Change",
     "ChangeKind",
@@ -47,10 +55,12 @@ __all__ = [
     "Mismatch",
     "MismatchKind",
     "ConstructionRun",
+    "GoldOntologyAlignment",
     "GraphSource",
     "GraphSourceNotBoundError",
     "GraphSourceScope",
     "GraphSourceUnavailableError",
+    "GraphSourceWriteRejectedError",
     "InMemoryGraphSource",
     "InvalidEvolutionModeError",
     "KnowledgeGraph",

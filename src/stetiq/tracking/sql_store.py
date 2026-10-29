@@ -48,12 +48,14 @@ from stetiq.evaluation.framework import Detail
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import canonical_json, from_canonical_json
 from stetiq.tracking.entities import (
+    Alias,
     ConstructionRun,
     EvaluationResult,
     EvolutionMode,
     KnowledgeGraph,
     Observation,
     OntologyVersion,
+    Promotion,
     RunStatus,
 )
 
@@ -135,6 +137,44 @@ observations = Table(
     Column("schema_json", Text, nullable=False),
 )
 
+# --- Aliases and Promotion (ticket #9) ---------------------------------------------------
+
+aliases = Table(
+    "aliases",
+    metadata,
+    Column("knowledge_graph", Text, ForeignKey("knowledge_graphs.name"), nullable=False),
+    Column("name", Text, nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("updated_at", Text, nullable=False),
+    PrimaryKeyConstraint("knowledge_graph", "name"),
+    ForeignKeyConstraint(
+        ["knowledge_graph", "version"],
+        ["ontology_versions.knowledge_graph", "ontology_versions.number"],
+    ),
+)
+
+# The Alias audit log: one row per move, never updated.
+promotions = Table(
+    "promotions",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("knowledge_graph", Text, ForeignKey("knowledge_graphs.name"), nullable=False),
+    Column("alias", Text, nullable=False),
+    Column("from_version", Integer, nullable=True),
+    Column("to_version", Integer, nullable=False),
+    Column("actor", Text, nullable=False),
+    Column("promoted_at", Text, nullable=False),
+    Column("gate_result", Text, nullable=True),  # filled once Gates exist (#14)
+)
+
+# Only Knowledge Graphs that designated a non-default Contract Alias have a row.
+contract_aliases = Table(
+    "contract_aliases",
+    metadata,
+    Column("knowledge_graph", Text, ForeignKey("knowledge_graphs.name"), primary_key=True),
+    Column("alias", Text, nullable=False),
+)
+
 # --- Conformance, Evolution Mode, Candidates (ticket #8): new tables only, so stores
 # created before them keep working (create_all adds missing tables).
 
@@ -180,6 +220,8 @@ evaluation_results = Table(
     Column("metrics_json", Text, nullable=False),
     Column("details_json", Text, nullable=False),
     Column("created_at", Text, nullable=False),
+    # The Evaluator's parameters (e.g. its reference Ontology Version), JSON; "{}" if none.
+    Column("parameters_json", Text, nullable=False, server_default="{}"),
 )
 Index(
     "ix_evaluation_results_subject",
@@ -510,6 +552,95 @@ class SqlStore:
     def list_observations(self, knowledge_graph: str) -> list[Observation]:
         return self._observations(observations.c.knowledge_graph == knowledge_graph)
 
+    # --- Aliases and Promotion ------------------------------------------------------
+
+    def set_alias(self, alias: Alias) -> None:
+        with self._connection() as conn:
+            conn.execute(
+                delete(aliases).where(
+                    aliases.c.knowledge_graph == alias.knowledge_graph,
+                    aliases.c.name == alias.name,
+                )
+            )
+            conn.execute(
+                insert(aliases).values(
+                    knowledge_graph=alias.knowledge_graph,
+                    name=alias.name,
+                    version=alias.version,
+                    updated_at=alias.updated_at.isoformat(),
+                )
+            )
+
+    def _aliases(self, *where) -> list[Alias]:
+        query = select(aliases).where(*where).order_by(aliases.c.name)
+        with self._connection() as conn:
+            rows = conn.execute(query).mappings().all()
+        return [
+            Alias(
+                knowledge_graph=r["knowledge_graph"],
+                name=r["name"],
+                version=r["version"],
+                updated_at=datetime.fromisoformat(r["updated_at"]),
+            )
+            for r in rows
+        ]
+
+    def get_alias(self, knowledge_graph: str, name: str) -> Alias | None:
+        found = self._aliases(aliases.c.knowledge_graph == knowledge_graph, aliases.c.name == name)
+        return found[0] if found else None
+
+    def list_aliases(self, knowledge_graph: str) -> list[Alias]:
+        return self._aliases(aliases.c.knowledge_graph == knowledge_graph)
+
+    def add_promotion(self, promotion: Promotion) -> None:
+        with self._connection() as conn:
+            conn.execute(
+                insert(promotions).values(
+                    knowledge_graph=promotion.knowledge_graph,
+                    alias=promotion.alias,
+                    from_version=promotion.from_version,
+                    to_version=promotion.to_version,
+                    actor=promotion.actor,
+                    promoted_at=promotion.promoted_at.isoformat(),
+                    gate_result=promotion.gate_result,
+                )
+            )
+
+    def list_promotions(self, knowledge_graph: str) -> list[Promotion]:
+        query = (
+            select(promotions)
+            .where(promotions.c.knowledge_graph == knowledge_graph)
+            .order_by(promotions.c.id)
+        )
+        with self._connection() as conn:
+            rows = conn.execute(query).mappings().all()
+        return [
+            Promotion(
+                knowledge_graph=r["knowledge_graph"],
+                alias=r["alias"],
+                from_version=r["from_version"],
+                to_version=r["to_version"],
+                actor=r["actor"],
+                promoted_at=datetime.fromisoformat(r["promoted_at"]),
+                gate_result=r["gate_result"],
+            )
+            for r in rows
+        ]
+
+    def set_contract_alias(self, knowledge_graph: str, alias: str) -> None:
+        with self._connection() as conn:
+            conn.execute(
+                delete(contract_aliases).where(contract_aliases.c.knowledge_graph == knowledge_graph)
+            )
+            conn.execute(insert(contract_aliases).values(knowledge_graph=knowledge_graph, alias=alias))
+
+    def get_contract_alias(self, knowledge_graph: str) -> str | None:
+        query = select(contract_aliases.c.alias).where(
+            contract_aliases.c.knowledge_graph == knowledge_graph
+        )
+        with self._connection() as conn:
+            return conn.execute(query).scalar()
+
     def add_evaluation_result(self, result: EvaluationResult) -> None:
         with self._connection() as conn:
             conn.execute(
@@ -526,6 +657,7 @@ class SqlStore:
                         ]
                     ),
                     created_at=result.created_at.isoformat(),
+                    parameters_json=json.dumps(result.parameters, sort_keys=True),
                 )
             )
 
@@ -555,6 +687,7 @@ def _evaluation_from_row(row) -> EvaluationResult:
         metrics=json.loads(row["metrics_json"]),
         details=tuple(Detail(**d) for d in json.loads(row["details_json"])),
         created_at=datetime.fromisoformat(row["created_at"]),
+        parameters=json.loads(row["parameters_json"]),
     )
 
 

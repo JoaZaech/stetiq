@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import getpass
 import os
+from collections.abc import Sequence
 from pathlib import Path
 
 from stetiq.errors import EvaluatorError, GraphSourceUnavailableError
@@ -13,10 +15,12 @@ from stetiq.evaluation.framework import (
     check_evaluator,
 )
 from stetiq.evaluation.structural import BUILT_IN_EVALUATORS
-from stetiq.graph_source import GraphSource, GraphSourceScope
+from stetiq.graph_source import GraphSource, GraphSourceScope, graph_source_from_env
 from stetiq.ontology import Ontology, parse_yaml
 from stetiq.ontology.diff import OntologyDiff, diff_ontologies
 from stetiq.tracking import (
+    Alias,
+    Promotion,
     ConstructionRun,
     EvaluationResult,
     KnowledgeGraph,
@@ -32,6 +36,18 @@ from stetiq.tracking.entities import EvolutionMode
 
 TRACKING_URI_ENV = "STETIQ_TRACKING_URI"
 DEFAULT_TRACKING_URI = "sqlite:///.stetiq/stetiq.db"
+ACTOR_ENV = "STETIQ_ACTOR"
+
+
+def resolve_actor(actor: str | None = None) -> str:
+    """Who the audit log records for Alias moves: `actor`, else $STETIQ_ACTOR, else the OS user.
+    (Until API-token auth exists the server trusts what the SDK sends.)"""
+    if actor or os.environ.get(ACTOR_ENV):
+        return actor or os.environ[ACTOR_ENV]
+    try:
+        return getpass.getuser()
+    except Exception:
+        return "unknown"
 
 # A Declared Ontology given to the SDK: stetiq YAML text, a path to a YAML file,
 # or an already-built Ontology model.
@@ -76,13 +92,17 @@ class Client:
         *,
         service: TrackingService | None = None,
         graph_source: GraphSource | None = None,
+        actor: str | None = None,
     ) -> None:
         """`graph_source` is the adapter (e.g. Neo4j, with its credentials) used to observe
         the bound Graph Source scope when a Construction Run ends. It runs in this
-        process: the stetiq server never connects to the graph database."""
+        process: the stetiq server never connects to the graph database. Without it, a
+        Neo4j adapter is built on first use from `$STETIQ_GRAPH_SOURCE_URI` (plus
+        `$STETIQ_GRAPH_SOURCE_USER` / `$STETIQ_GRAPH_SOURCE_PASSWORD`)."""
         self.tracking_uri = resolve_tracking_uri(tracking_uri)
         self._service = service or service_for_uri(self.tracking_uri)
         self._graph_source = graph_source
+        self.actor = resolve_actor(actor)
         # Custom Evaluators run in this process (the user's code), in every mode;
         # only their results go to the tracking service.
         self._evaluators: dict[str, Evaluator] = {}
@@ -122,14 +142,34 @@ class Client:
         """The latest result of every Evaluator (built-in and custom) for an Ontology Version."""
         return self._service.get_evaluation_results(knowledge_graph, "ontology_version", str(version))
 
-    def evaluate(self, knowledge_graph: str, version: int) -> list[EvaluationResult]:
+    def evaluate(
+        self,
+        knowledge_graph: str,
+        version: int,
+        *,
+        evaluators: Sequence[OntologyVersionEvaluator] = (),
+    ) -> list[EvaluationResult]:
         """Re-run every Evaluator (built-in and this client's custom ones) on a version.
 
-        Results are stored as the newest per Evaluator; returns the latest of all.
+        `evaluators` are extra, one-off Evaluators for this call only (not
+        registered), e.g. a parameterised `GoldOntologyAlignment(gold_version)`
+        whose reference is chosen per evaluation.
+
+        Results are stored as the newest per Evaluator (and parameters); returns
+        the latest of all.
         """
+        for evaluator in evaluators:
+            check_evaluator(evaluator)
+            if not isinstance(evaluator, OntologyVersionEvaluator):
+                raise EvaluatorError(f"{evaluator.name!r} is not an OntologyVersionEvaluator")
+            if evaluator.name in {e.name for e in BUILT_IN_EVALUATORS}:
+                raise EvaluatorError(f"An Evaluator named {evaluator.name!r} is already registered")
         self._service.evaluate_ontology_version(knowledge_graph, version)
-        if self._evaluators:
-            self._run_custom_evaluators(self._service.get_ontology_version(knowledge_graph, version))
+        extra = list(evaluators)
+        if self._evaluators or extra:
+            self._run_custom_evaluators(
+                self._service.get_ontology_version(knowledge_graph, version), extra=extra
+            )
         return self.get_evaluation_results(knowledge_graph, version)
 
     def register_evaluator(self, evaluator: Evaluator) -> None:
@@ -146,11 +186,15 @@ class Client:
         self._evaluators[evaluator.name] = evaluator
 
     def _run_custom_evaluators(
-        self, version: OntologyVersion, *, only_missing: bool = False
+        self,
+        version: OntologyVersion,
+        *,
+        only_missing: bool = False,
+        extra: Sequence[OntologyVersionEvaluator] = (),
     ) -> list[EvaluationResult]:
         evaluators = [
             e for e in self._evaluators.values() if isinstance(e, OntologyVersionEvaluator)
-        ]
+        ] + list(extra)
         if not evaluators:
             return []
         subject_id = str(version.number)
@@ -178,12 +222,22 @@ class Client:
                     subject_id,
                     evaluator.name,
                     check_evaluation(evaluator.name, outcome),
+                    evaluator.parameters,
                 )
             )
         return results
 
-    def diff_ontology_versions(self, knowledge_graph: str, base: int, target: int) -> OntologyDiff:
-        """The Ontology Diff from version `base` to version `target`, each change classified."""
+    def diff_ontology_versions(
+        self, knowledge_graph: str, base: int | None = None, target: int | None = None
+    ) -> OntologyDiff:
+        """The Ontology Diff from version `base` to version `target`, each change classified.
+
+        `base` defaults to the Contract Alias's version and `target` to the latest
+        version, so a bare call answers "what would promoting the newest version change"."""
+        if base is None:
+            base = self.get_contract_version(knowledge_graph).number
+        if target is None:
+            target = self.list_ontology_versions(knowledge_graph)[-1].number
         return diff_ontologies(
             self.get_ontology_version(knowledge_graph, base).ontology,
             self.get_ontology_version(knowledge_graph, target).ontology,
@@ -192,6 +246,42 @@ class Client:
     def diff_ontologies(self, base: OntologyInput, target: OntologyInput) -> OntologyDiff:
         """The Ontology Diff between two Ontologies that need not be registered (e.g. files in a repo)."""
         return diff_ontologies(_to_ontology(base), _to_ontology(target))
+
+    # --- Aliases and Promotion ------------------------------------------------------
+
+    def set_alias(self, knowledge_graph: str, alias: str, version: int) -> Alias:
+        """Create `alias` or move it to `version` (Promotion, or rollback to an earlier
+        version). Never blocked by Gates; every move is audit-logged with this
+        client's actor."""
+        return self._service.set_alias(knowledge_graph, alias, version, self.actor)
+
+    def get_alias(self, knowledge_graph: str, alias: str) -> Alias:
+        return self._service.get_alias(knowledge_graph, alias)
+
+    def list_aliases(self, knowledge_graph: str) -> list[Alias]:
+        """The Knowledge Graph's Aliases, by name."""
+        return self._service.list_aliases(knowledge_graph)
+
+    def get_ontology_version_by_alias(self, knowledge_graph: str, alias: str) -> OntologyVersion:
+        """The Ontology Version `alias` currently points to, e.g. for a downstream consumer."""
+        return self.get_ontology_version(knowledge_graph, self.get_alias(knowledge_graph, alias).version)
+
+    def list_promotions(self, knowledge_graph: str) -> list[Promotion]:
+        """The Alias audit log: every Alias move, oldest first."""
+        return self._service.list_promotions(knowledge_graph)
+
+    def set_contract_alias(self, knowledge_graph: str, alias: str) -> None:
+        """Designate which existing Alias is the Contract Alias (default `production`)."""
+        self._service.set_contract_alias(knowledge_graph, alias)
+
+    def get_contract_alias(self, knowledge_graph: str) -> str:
+        return self._service.get_contract_alias(knowledge_graph)
+
+    def get_contract_version(self, knowledge_graph: str) -> OntologyVersion:
+        """The Ontology Version the Contract Alias points to."""
+        return self.get_ontology_version_by_alias(
+            knowledge_graph, self.get_contract_alias(knowledge_graph)
+        )
 
     # --- Graph Sources --------------------------------------------------------------
 
@@ -214,15 +304,30 @@ class Client:
 
     # --- Construction Runs ----------------------------------------------------------
 
-    def start_run(self, knowledge_graph: str, *, ontology_version: int) -> ActiveRun:
-        """Start a Construction Run consuming `ontology_version` as its Declared Ontology.
+    def start_run(
+        self,
+        knowledge_graph: str,
+        *,
+        ontology_version: int | None = None,
+        alias: str | None = None,
+    ) -> ActiveRun:
+        """Start a Construction Run. Its Declared Ontology is `ontology_version`, or the
+        version `alias` points to, or by default the Contract Alias's version.
 
         Use the result as a context manager: leaving the block ends the run (which
         observes the Graph Source); an exception inside it marks the run failed."""
+        if ontology_version is not None and alias is not None:
+            raise ValueError("start_run takes ontology_version or alias, not both")
+        if self._graph_source is None:
+            self._graph_source = graph_source_from_env()
         if self._graph_source is None:
             raise GraphSourceUnavailableError(
-                "Client has no Graph Source adapter to observe with; pass graph_source=..."
+                "Client has no Graph Source adapter to observe with; pass graph_source=... "
+                "or set STETIQ_GRAPH_SOURCE_URI"
             )
+        if ontology_version is None:
+            alias = alias or self.get_contract_alias(knowledge_graph)
+            ontology_version = self.get_alias(knowledge_graph, alias).version
         run = self._service.start_run(knowledge_graph, ontology_version)
         declared = self._service.get_ontology_version(knowledge_graph, ontology_version)
         return ActiveRun(self._service, self._graph_source, run, declared.ontology)
