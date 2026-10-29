@@ -93,3 +93,50 @@ patterns:
 @pytest.fixture
 def support_ontology():
     return SUPPORT_ONTOLOGY
+
+
+# --- Neo4j (testcontainers) -------------------------------------------------------------
+
+NEO4J_IMAGE_ENV = "STETIQ_TEST_NEO4J_IMAGE"
+# Enterprise (evaluation licence) so tests can create a second database for scoping.
+NEO4J_DEFAULT_IMAGE = "neo4j:2026.10-enterprise"
+NEO4J_DATABASES = ("neo4j", "other")
+
+
+@pytest.fixture(scope="session")
+def neo4j_container():
+    """A throwaway Neo4j server for the whole session; skipped when Docker is unavailable."""
+    try:
+        import docker
+        from testcontainers.community.neo4j import Neo4jContainer
+    except ImportError:
+        pytest.skip("testcontainers[neo4j] is not installed")
+    try:
+        docker.from_env().ping()
+    except Exception as exc:  # noqa: BLE001 - any failure means "no Docker here"
+        pytest.skip(f"Docker is unavailable: {exc}")
+    container = Neo4jContainer(
+        os.environ.get(NEO4J_IMAGE_ENV, NEO4J_DEFAULT_IMAGE), password="testpassword"
+    ).with_env("NEO4J_ACCEPT_LICENSE_AGREEMENT", "yes")
+    with container:
+        with container.get_driver() as driver:
+            driver.execute_query("CREATE DATABASE other IF NOT EXISTS WAIT", database_="system")
+        yield container
+
+
+@pytest.fixture
+def neo4j_admin_driver(neo4j_container):
+    """A write-capable driver for seeding (the test plays the user's pipeline); every
+    test starts with empty databases."""
+    with neo4j_container.get_driver() as driver:
+        for database in NEO4J_DATABASES:
+            driver.execute_query("MATCH (n) DETACH DELETE n", database_=database)
+        yield driver
+
+
+@pytest.fixture(autouse=True)
+def _no_graph_source_from_the_environment(monkeypatch):
+    """Tests opt in to env-configured Graph Sources explicitly; the developer's own
+    STETIQ_GRAPH_SOURCE_* settings never leak into the suite."""
+    for name in ("STETIQ_GRAPH_SOURCE_URI", "STETIQ_GRAPH_SOURCE_USER", "STETIQ_GRAPH_SOURCE_PASSWORD"):
+        monkeypatch.delenv(name, raising=False)

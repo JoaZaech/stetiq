@@ -28,3 +28,7 @@ class GraphSourceUnavailableError(StetiqError):
 
 class RunNotActiveError(StetiqError):
     """The Construction Run has already ended (finished or failed)."""
+
+
+class GraphSourceWriteRejectedError(StetiqError):
+    """A query sent to a Graph Source was not read-only; adapters never issue writes."""
