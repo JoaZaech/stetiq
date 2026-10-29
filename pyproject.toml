@@ -27,10 +27,11 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "httpx2>=2.16.0",
+    "psycopg[binary]>=3.3",
     "pytest>=9.2.0",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = ["postgres: needs a Postgres database (set STETIQ_TEST_POSTGRES_URL)"]
-filterwarnings = ["ignore:Using `httpx` with `starlette.testclient` is deprecated"]
