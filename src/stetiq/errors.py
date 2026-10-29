@@ -28,3 +28,7 @@ class GraphSourceUnavailableError(StetiqError):
 
 class RunNotActiveError(StetiqError):
     """The Construction Run has already ended (finished or failed)."""
+
+
+class InvalidAliasNameError(StetiqError):
+    """An Alias name is empty or contains characters other than letters, digits, `_`, `-`, `.`."""
