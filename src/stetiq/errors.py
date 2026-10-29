@@ -16,3 +16,7 @@ class KnowledgeGraphAlreadyExistsError(StetiqError):
 
 class NotFoundError(StetiqError):
     pass
+
+
+class EvaluatorError(StetiqError):
+    """An Evaluator is malformed, failed, or returned an invalid Evaluation."""

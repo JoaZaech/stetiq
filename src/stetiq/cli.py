@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
 from stetiq.client import Client
-from stetiq.errors import StetiqError
+from stetiq.errors import EvaluatorError, StetiqError
 
 app = typer.Typer(no_args_is_help=True, help="Version, evaluate and govern knowledge-graph ontologies.")
 kg_app = typer.Typer(no_args_is_help=True, help="Knowledge Graphs.")
@@ -100,3 +101,55 @@ def ontology_get(knowledge_graph: str, version: int, tracking_uri: TrackingUri =
     except StetiqError as e:
         raise _fail(e) from None
     typer.echo(text, nl=False)
+
+
+def _load_evaluator(spec: str):
+    """`module:attr`, where attr is an Evaluator class (instantiated) or instance."""
+    module_name, _, attr = spec.partition(":")
+    if not module_name or not attr:
+        raise EvaluatorError(f"--evaluator {spec!r}: expected module:attribute")
+    try:
+        obj = getattr(importlib.import_module(module_name), attr)
+    except (ImportError, AttributeError) as e:
+        raise EvaluatorError(f"--evaluator {spec!r}: {e}") from None
+    return obj() if isinstance(obj, type) else obj
+
+
+def _echo_results(results) -> None:
+    for r in results:
+        metrics = "  ".join(f"{k}={v:g}" for k, v in sorted(r.metrics.items()))
+        typer.echo(f"{r.evaluator}: {metrics}")
+        for d in r.details:
+            metric = f" [{d.metric}]" if d.metric else ""
+            typer.echo(f"  - {d.item}{metric}: {d.message}" if d.message else f"  - {d.item}{metric}")
+
+
+@ontology_app.command("evaluations")
+def ontology_evaluations(knowledge_graph: str, version: int, tracking_uri: TrackingUri = None) -> None:
+    """Show the latest result of every Evaluator for an Ontology Version."""
+    try:
+        results = _client(tracking_uri).get_evaluation_results(knowledge_graph, version)
+    except StetiqError as e:
+        raise _fail(e) from None
+    _echo_results(results)
+
+
+@ontology_app.command("evaluate")
+def ontology_evaluate(
+    knowledge_graph: str,
+    version: int,
+    evaluator: Annotated[
+        list[str] | None,
+        typer.Option("--evaluator", help="Custom Evaluator as module:Class (repeatable)"),
+    ] = None,
+    tracking_uri: TrackingUri = None,
+) -> None:
+    """Re-run the built-in (and any given custom) Evaluators on an Ontology Version."""
+    try:
+        client = _client(tracking_uri)
+        for spec in evaluator or []:
+            client.register_evaluator(_load_evaluator(spec))
+        results = client.evaluate(knowledge_graph, version)
+    except StetiqError as e:
+        raise _fail(e) from None
+    _echo_results(results)

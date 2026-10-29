@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from stetiq.tracking.entities import KnowledgeGraph, OntologyVersion
+from stetiq.tracking.entities import EvaluationResult, KnowledgeGraph, OntologyVersion
 
 
 class Store(Protocol):
@@ -28,6 +28,14 @@ class Store(Protocol):
 
     def list_ontology_versions(self, knowledge_graph: str) -> list[OntologyVersion]:
         """Ordered by version number ascending."""
+
+    def add_evaluation_result(self, result: EvaluationResult) -> None:
+        """Insert-only: re-running an Evaluator adds a newer result."""
+
+    def list_evaluation_results(
+        self, knowledge_graph: str, subject_kind: str, subject_id: str
+    ) -> list[EvaluationResult]:
+        """Every stored result for the subject, oldest first."""
 
     def transaction(self):
         """Context manager making the enclosed store calls atomic."""

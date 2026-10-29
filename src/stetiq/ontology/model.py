@@ -19,13 +19,14 @@ class Property:
 
 @dataclass(frozen=True)
 class NodeType:
-    """A class Concept."""
+    """A class Concept. `parent` is its superclass (single inheritance), if any."""
 
     label: str
     description: str | None = None
     properties: tuple[Property, ...] = ()
     deprecated: bool = False
     replaced_by: str | None = None
+    parent: str | None = None
 
 
 @dataclass(frozen=True)
@@ -48,11 +49,25 @@ class Pattern:
     target: str
 
 
+@dataclass(frozen=True, order=True)
+class Constraint:
+    """A property constraint on a node type, in neo4j-graphrag's shape.
+
+    `property_name` may be declared on the node type or inherited from an ancestor.
+    Only `UNIQUENESS` exists so far.
+    """
+
+    type: str
+    node_type: str
+    property_name: str
+
+
 @dataclass(frozen=True)
 class Ontology:
     node_types: tuple[NodeType, ...] = ()
     relationship_types: tuple[RelationshipType, ...] = ()
     patterns: tuple[Pattern, ...] = field(default=())
+    constraints: tuple[Constraint, ...] = ()
 
     def node_type(self, label: str) -> NodeType:
         return next(n for n in self.node_types if n.label == label)

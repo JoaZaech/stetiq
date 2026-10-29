@@ -32,6 +32,39 @@ MALFORMED = {
         "      - {name: title, type: STRING}\n      - {name: title, type: STRING}",
         "Ticket.title",
     ),
+    "parent unknown node type": (
+        "node_types:\n  - {label: Customer, parent: Party}",
+        "Customer.parent",
+    ),
+    "hierarchy cycle": (
+        "node_types:\n  - {label: A, parent: B}\n  - {label: B, parent: A}",
+        "cycle",
+    ),
+    "parent on a relationship type": (
+        "node_types: [Customer]\nrelationship_types:\n  - {label: KNOWS, parent: RELATED}",
+        "parent",
+    ),
+    "constraint on unknown node type": (
+        "node_types: [Customer]\nconstraints:\n"
+        "  - {type: UNIQUENESS, node_type: Client, property_name: email}",
+        "constraints[0]",
+    ),
+    "constraint on unknown property": (
+        "node_types: [Customer]\nconstraints:\n"
+        "  - {type: UNIQUENESS, node_type: Customer, property_name: email}",
+        "Customer.email",
+    ),
+    "unknown constraint type": (
+        "node_types:\n  - {label: Customer, properties: [{name: email, type: STRING}]}\nconstraints:\n"
+        "  - {type: EXISTENCE, node_type: Customer, property_name: email}",
+        "EXISTENCE",
+    ),
+    "duplicate constraint": (
+        "node_types:\n  - {label: Customer, properties: [{name: email, type: STRING}]}\nconstraints:\n"
+        "  - {type: UNIQUENESS, node_type: Customer, property_name: email}\n"
+        "  - {type: UNIQUENESS, node_type: Customer, property_name: email}",
+        "constraints[1]",
+    ),
     "deprecated not a boolean": (
         "node_types:\n  - label: Customer\n    deprecated: maybe",
         "Customer.deprecated",
