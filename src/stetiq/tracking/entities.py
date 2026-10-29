@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Literal
 
 from stetiq.conformance import Conformance
+from stetiq.evaluation.framework import Detail, MetricValue, SubjectKind
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import Ontology, to_yaml
 
@@ -86,3 +87,21 @@ class RunComparison:
     @property
     def ontology_versions(self) -> tuple[int, ...]:
         return tuple(r.ontology_version for r in self.runs)
+
+
+@dataclass(frozen=True)
+class EvaluationResult:
+    """One Evaluator's stored result against one subject.
+
+    The subject is (`knowledge_graph`, `subject_kind`, `subject_id`): `subject_id`
+    is the version number (as text) for an Ontology Version, the run id for a
+    Construction Run.
+    """
+
+    knowledge_graph: str
+    subject_kind: SubjectKind
+    subject_id: str
+    evaluator: str
+    metrics: dict[str, MetricValue]
+    details: tuple[Detail, ...]
+    created_at: datetime

@@ -11,7 +11,14 @@ import hashlib
 import json
 from typing import Any
 
-from stetiq.ontology.model import NodeType, Ontology, Pattern, Property, RelationshipType
+from stetiq.ontology.model import (
+    Constraint,
+    NodeType,
+    Ontology,
+    Pattern,
+    Property,
+    RelationshipType,
+)
 
 
 def _property_to_dict(p: Property) -> dict[str, Any]:
@@ -35,6 +42,8 @@ def _concept_to_dict(c: NodeType | RelationshipType) -> dict[str, Any]:
         d["deprecated"] = True
     if c.replaced_by is not None:
         d["replacedBy"] = c.replaced_by
+    if isinstance(c, NodeType) and c.parent is not None:
+        d["parent"] = c.parent
     return d
 
 
@@ -50,6 +59,11 @@ def to_dict(ontology: Ontology) -> dict[str, Any]:
         ],
         "patterns": [[p.source, p.relationship, p.target] for p in sorted(ontology.patterns)],
     }
+    if ontology.constraints:  # omitted when empty, so pre-constraint hashes are unchanged
+        d["constraints"] = [
+            {"type": c.type, "node_type": c.node_type, "property_name": c.property_name}
+            for c in sorted(ontology.constraints)
+        ]
     return d
 
 
@@ -75,11 +89,14 @@ def _concept_kwargs(d: dict[str, Any]) -> dict[str, Any]:
 def from_dict(d: dict[str, Any]) -> Ontology:
     """Inverse of `to_dict`. Assumes already-validated input."""
     return Ontology(
-        node_types=tuple(NodeType(**_concept_kwargs(n)) for n in d.get("node_types", [])),
+        node_types=tuple(
+            NodeType(**_concept_kwargs(n), parent=n.get("parent")) for n in d.get("node_types", [])
+        ),
         relationship_types=tuple(
             RelationshipType(**_concept_kwargs(r)) for r in d.get("relationship_types", [])
         ),
         patterns=tuple(Pattern(*p) for p in d.get("patterns", [])),
+        constraints=tuple(Constraint(**c) for c in d.get("constraints", [])),
     )
 
 

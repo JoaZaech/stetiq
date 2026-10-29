@@ -140,5 +140,33 @@ def create_app(
     def get_observation(observation_id: str) -> dict[str, Any]:
         return wire.observation_to_json(tracking.get_observation(observation_id))
 
+    # Evaluation results. Subject paths: ontology-versions/{number} here; Construction
+    # Runs add runs/{id}/evaluations with run-level evaluation (ticket #13).
+    version_path = "/knowledge-graphs/{name}/ontology-versions/{number}"
+
+    @api.get(version_path + "/evaluations")
+    def get_version_evaluations(name: str, number: int) -> list[dict[str, Any]]:
+        results = tracking.get_evaluation_results(name, "ontology_version", str(number))
+        return [wire.evaluation_result_to_json(r) for r in results]
+
+    @api.post(version_path + "/evaluations", status_code=201)
+    def record_version_evaluation(
+        name: str,
+        number: int,
+        evaluator: str = Body(),
+        metrics: dict[str, Any] = Body(),
+        details: list[dict[str, Any]] = Body([]),
+    ) -> dict[str, Any]:
+        evaluation = wire.evaluation_from_json({"metrics": metrics, "details": details})
+        result = tracking.record_evaluation(
+            name, "ontology_version", str(number), evaluator, evaluation
+        )
+        return wire.evaluation_result_to_json(result)
+
+    @api.post(version_path + "/evaluate")
+    def evaluate_version(name: str, number: int) -> list[dict[str, Any]]:
+        results = tracking.evaluate_ontology_version(name, number)
+        return [wire.evaluation_result_to_json(r) for r in results]
+
     app.include_router(api)
     return app

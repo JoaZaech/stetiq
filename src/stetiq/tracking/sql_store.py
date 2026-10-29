@@ -24,6 +24,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     ForeignKeyConstraint,
+    Index,
     Integer,
     MetaData,
     PrimaryKeyConstraint,
@@ -43,10 +44,12 @@ from sqlalchemy.pool import StaticPool
 
 from stetiq.conformance import Conformance
 from stetiq.errors import KnowledgeGraphAlreadyExistsError
+from stetiq.evaluation.framework import Detail
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import canonical_json, from_canonical_json
 from stetiq.tracking.entities import (
     ConstructionRun,
+    EvaluationResult,
     EvolutionMode,
     KnowledgeGraph,
     Observation,
@@ -162,6 +165,27 @@ run_candidates = Table(
         ["knowledge_graph", "ontology_version"],
         ["ontology_versions.knowledge_graph", "ontology_versions.number"],
     ),
+)
+
+
+# Insert-only: a re-run adds rows; readers take the latest row per evaluator.
+evaluation_results = Table(
+    "evaluation_results",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("knowledge_graph", Text, ForeignKey("knowledge_graphs.name"), nullable=False),
+    Column("subject_kind", Text, nullable=False),  # "ontology_version" | "construction_run"
+    Column("subject_id", Text, nullable=False),  # version number as text, or run id
+    Column("evaluator", Text, nullable=False),
+    Column("metrics_json", Text, nullable=False),
+    Column("details_json", Text, nullable=False),
+    Column("created_at", Text, nullable=False),
+)
+Index(
+    "ix_evaluation_results_subject",
+    evaluation_results.c.knowledge_graph,
+    evaluation_results.c.subject_kind,
+    evaluation_results.c.subject_id,
 )
 
 
@@ -485,6 +509,53 @@ class SqlStore:
 
     def list_observations(self, knowledge_graph: str) -> list[Observation]:
         return self._observations(observations.c.knowledge_graph == knowledge_graph)
+
+    def add_evaluation_result(self, result: EvaluationResult) -> None:
+        with self._connection() as conn:
+            conn.execute(
+                insert(evaluation_results).values(
+                    knowledge_graph=result.knowledge_graph,
+                    subject_kind=result.subject_kind,
+                    subject_id=result.subject_id,
+                    evaluator=result.evaluator,
+                    metrics_json=json.dumps(result.metrics, sort_keys=True),
+                    details_json=json.dumps(
+                        [
+                            {"item": d.item, "message": d.message, "metric": d.metric}
+                            for d in result.details
+                        ]
+                    ),
+                    created_at=result.created_at.isoformat(),
+                )
+            )
+
+    def list_evaluation_results(
+        self, knowledge_graph: str, subject_kind: str, subject_id: str
+    ) -> list[EvaluationResult]:
+        query = (
+            select(evaluation_results)
+            .where(
+                evaluation_results.c.knowledge_graph == knowledge_graph,
+                evaluation_results.c.subject_kind == subject_kind,
+                evaluation_results.c.subject_id == subject_id,
+            )
+            .order_by(evaluation_results.c.id)
+        )
+        with self._connection() as conn:
+            rows = conn.execute(query).mappings().all()
+        return [_evaluation_from_row(r) for r in rows]
+
+
+def _evaluation_from_row(row) -> EvaluationResult:
+    return EvaluationResult(
+        knowledge_graph=row["knowledge_graph"],
+        subject_kind=row["subject_kind"],
+        subject_id=row["subject_id"],
+        evaluator=row["evaluator"],
+        metrics=json.loads(row["metrics_json"]),
+        details=tuple(Detail(**d) for d in json.loads(row["details_json"])),
+        created_at=datetime.fromisoformat(row["created_at"]),
+    )
 
 
 def _version_from_row(row) -> OntologyVersion:

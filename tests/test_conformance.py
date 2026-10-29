@@ -245,6 +245,14 @@ def test_a_candidate_only_adds_to_the_declared_ontology(
     assert diff.classification == "additive"
 
 
+def test_a_candidate_is_evaluated_by_the_built_in_evaluators(client, support_kg, graph_source):
+    seed_graph_with_new_concepts(graph_source)
+
+    run = run_once(client, support_kg)
+
+    assert client.get_evaluation_results(support_kg, run.candidate_version) != []
+
+
 def test_a_candidate_is_linked_to_the_run_that_produced_it(
     client_factory, support_kg, graph_source
 ):
