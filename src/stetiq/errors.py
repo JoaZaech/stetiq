@@ -16,3 +16,15 @@ class KnowledgeGraphAlreadyExistsError(StetiqError):
 
 class NotFoundError(StetiqError):
     pass
+
+
+class GraphSourceNotBoundError(StetiqError):
+    """The Knowledge Graph has no Graph Source scope bound to it."""
+
+
+class GraphSourceUnavailableError(StetiqError):
+    """The Client was built without a Graph Source adapter, so it cannot observe."""
+
+
+class RunNotActiveError(StetiqError):
+    """The Construction Run has already ended (finished or failed)."""

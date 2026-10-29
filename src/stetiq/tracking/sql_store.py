@@ -11,6 +11,7 @@ store, so existing `.stetiq/stetiq.db` files keep working.
 
 from __future__ import annotations
 
+import json
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -20,7 +21,9 @@ from pathlib import Path
 from sqlalchemy import (
     Column,
     Connection,
+    Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Integer,
     MetaData,
     PrimaryKeyConstraint,
@@ -28,17 +31,26 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     create_engine,
+    delete,
     event,
     insert,
     select,
+    update,
 )
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import StaticPool
 
 from stetiq.errors import KnowledgeGraphAlreadyExistsError
+from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import canonical_json, from_canonical_json
-from stetiq.tracking.entities import KnowledgeGraph, OntologyVersion
+from stetiq.tracking.entities import (
+    ConstructionRun,
+    KnowledgeGraph,
+    Observation,
+    OntologyVersion,
+    RunStatus,
+)
 
 metadata = MetaData()
 
@@ -60,6 +72,62 @@ ontology_versions = Table(
     Column("created_at", Text, nullable=False),
     PrimaryKeyConstraint("knowledge_graph", "number"),
     UniqueConstraint("knowledge_graph", "content_hash"),
+)
+
+# One Graph Source scope per Knowledge Graph (no credentials: those stay with the adapter).
+graph_sources = Table(
+    "graph_sources",
+    metadata,
+    Column("knowledge_graph", Text, ForeignKey("knowledge_graphs.name"), primary_key=True),
+    Column("database", Text, nullable=False),
+    Column("label", Text, nullable=True),
+    Column("namespace", Text, nullable=True),
+)
+
+construction_runs = Table(
+    "construction_runs",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("knowledge_graph", Text, ForeignKey("knowledge_graphs.name"), nullable=False),
+    Column("ontology_version", Integer, nullable=False),
+    Column("status", Text, nullable=False),  # running | finished | failed
+    Column("started_at", Text, nullable=False),
+    Column("ended_at", Text, nullable=True),
+    Column("observation_id", Text, nullable=True),
+    ForeignKeyConstraint(
+        ["knowledge_graph", "ontology_version"],
+        ["ontology_versions.knowledge_graph", "ontology_versions.number"],
+    ),
+)
+
+run_params = Table(
+    "run_params",
+    metadata,
+    Column("run_id", Text, ForeignKey("construction_runs.id"), nullable=False),
+    Column("key", Text, nullable=False),
+    Column("value", Text, nullable=False),
+    PrimaryKeyConstraint("run_id", "key"),
+)
+
+run_metrics = Table(
+    "run_metrics",
+    metadata,
+    Column("run_id", Text, ForeignKey("construction_runs.id"), nullable=False),
+    Column("key", Text, nullable=False),
+    Column("value", Float, nullable=False),
+    PrimaryKeyConstraint("run_id", "key"),
+)
+
+# Observed Schemas hold structure and aggregate statistics only (ADR 0001).
+observations = Table(
+    "observations",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("knowledge_graph", Text, ForeignKey("knowledge_graphs.name"), nullable=False),
+    Column("run_id", Text, ForeignKey("construction_runs.id"), nullable=True),
+    Column("observed_at", Text, nullable=False),
+    Column("scope_json", Text, nullable=False),
+    Column("schema_json", Text, nullable=False),
 )
 
 
@@ -191,6 +259,150 @@ class SqlStore:
         with self._connection() as conn:
             rows = conn.execute(query).mappings().all()
         return [_version_from_row(r) for r in rows]
+
+    # --- Graph Source binding -------------------------------------------------------
+
+    def set_graph_source(self, knowledge_graph: str, scope: GraphSourceScope) -> None:
+        with self._connection() as conn:
+            conn.execute(
+                delete(graph_sources).where(graph_sources.c.knowledge_graph == knowledge_graph)
+            )
+            conn.execute(
+                insert(graph_sources).values(knowledge_graph=knowledge_graph, **scope.to_dict())
+            )
+
+    def get_graph_source(self, knowledge_graph: str) -> GraphSourceScope | None:
+        query = select(graph_sources).where(graph_sources.c.knowledge_graph == knowledge_graph)
+        with self._connection() as conn:
+            row = conn.execute(query).mappings().first()
+        return None if row is None else GraphSourceScope.from_dict(dict(row))
+
+    # --- Construction Runs ----------------------------------------------------------
+
+    def add_run(self, run: ConstructionRun) -> None:
+        with self._connection() as conn:
+            conn.execute(
+                insert(construction_runs).values(
+                    id=run.id,
+                    knowledge_graph=run.knowledge_graph,
+                    ontology_version=run.ontology_version,
+                    status=run.status,
+                    started_at=run.started_at.isoformat(),
+                    ended_at=None if run.ended_at is None else run.ended_at.isoformat(),
+                    observation_id=run.observation_id,
+                )
+            )
+        self.set_run_params(run.id, run.params)
+        self.set_run_metrics(run.id, run.metrics)
+
+    def _runs(self, *where) -> list[ConstructionRun]:
+        query = (
+            select(construction_runs)
+            .where(*where)
+            .order_by(construction_runs.c.started_at, construction_runs.c.id)
+        )
+        with self._connection() as conn:
+            rows = conn.execute(query).mappings().all()
+            ids = [r["id"] for r in rows]
+            params: dict[str, dict[str, str]] = {i: {} for i in ids}
+            metrics: dict[str, dict[str, float]] = {i: {} for i in ids}
+            if ids:
+                for p in conn.execute(select(run_params).where(run_params.c.run_id.in_(ids))):
+                    params[p.run_id][p.key] = p.value
+                for m in conn.execute(select(run_metrics).where(run_metrics.c.run_id.in_(ids))):
+                    metrics[m.run_id][m.key] = m.value
+        return [
+            ConstructionRun(
+                id=r["id"],
+                knowledge_graph=r["knowledge_graph"],
+                ontology_version=r["ontology_version"],
+                status=r["status"],
+                started_at=datetime.fromisoformat(r["started_at"]),
+                ended_at=None if r["ended_at"] is None else datetime.fromisoformat(r["ended_at"]),
+                params=params[r["id"]],
+                metrics=metrics[r["id"]],
+                observation_id=r["observation_id"],
+            )
+            for r in rows
+        ]
+
+    def get_run(self, run_id: str) -> ConstructionRun | None:
+        runs = self._runs(construction_runs.c.id == run_id)
+        return runs[0] if runs else None
+
+    def list_runs(self, knowledge_graph: str) -> list[ConstructionRun]:
+        return self._runs(construction_runs.c.knowledge_graph == knowledge_graph)
+
+    def _upsert(self, table: Table, run_id: str, values: dict) -> None:
+        if not values:
+            return
+        with self._connection() as conn:
+            conn.execute(
+                delete(table).where(table.c.run_id == run_id, table.c.key.in_(list(values)))
+            )
+            conn.execute(
+                insert(table), [{"run_id": run_id, "key": k, "value": v} for k, v in values.items()]
+            )
+
+    def set_run_params(self, run_id: str, params: dict[str, str]) -> None:
+        self._upsert(run_params, run_id, params)
+
+    def set_run_metrics(self, run_id: str, metrics: dict[str, float]) -> None:
+        self._upsert(run_metrics, run_id, metrics)
+
+    def end_run(
+        self, run_id: str, status: RunStatus, ended_at: datetime, observation_id: str | None
+    ) -> None:
+        with self._connection() as conn:
+            conn.execute(
+                update(construction_runs)
+                .where(construction_runs.c.id == run_id)
+                .values(
+                    status=status, ended_at=ended_at.isoformat(), observation_id=observation_id
+                )
+            )
+
+    # --- Observations ---------------------------------------------------------------
+
+    def add_observation(self, observation: Observation) -> None:
+        with self._connection() as conn:
+            conn.execute(
+                insert(observations).values(
+                    id=observation.id,
+                    knowledge_graph=observation.knowledge_graph,
+                    run_id=observation.run_id,
+                    observed_at=observation.observed_at.isoformat(),
+                    scope_json=json.dumps(observation.scope.to_dict(), sort_keys=True),
+                    schema_json=json.dumps(observation.schema.to_dict(), sort_keys=True),
+                )
+            )
+
+    def _observations(self, *where) -> list[Observation]:
+        query = (
+            select(observations)
+            .where(*where)
+            .order_by(observations.c.observed_at, observations.c.id)
+        )
+        with self._connection() as conn:
+            rows = conn.execute(query).mappings().all()
+        return [
+            Observation(
+                id=r["id"],
+                knowledge_graph=r["knowledge_graph"],
+                scope=GraphSourceScope.from_dict(json.loads(r["scope_json"])),
+                observed_at=datetime.fromisoformat(r["observed_at"]),
+                schema=ObservedSchema.from_dict(json.loads(r["schema_json"])),
+                run_id=r["run_id"],
+            )
+            for r in rows
+        ]
+
+    def get_observation(self, observation_id: str) -> Observation | None:
+        found = self._observations(observations.c.id == observation_id)
+        return found[0] if found else None
+
+    def list_observations(self, knowledge_graph: str) -> list[Observation]:
+        return self._observations(observations.c.knowledge_graph == knowledge_graph)
 
 
 def _version_from_row(row) -> OntologyVersion:
