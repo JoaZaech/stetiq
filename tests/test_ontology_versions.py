@@ -143,6 +143,34 @@ patterns:
     assert ontology.relationship_type("OPENED").deprecated is True
 
 
+def test_node_type_hierarchy_round_trips_through_fetch(client, kg):
+    v2 = client.register_ontology(
+        kg.name, "node_types:\n  - Party\n  - {label: Customer, parent: Party}\n"
+    )
+
+    fetched = yaml.safe_load(client.get_ontology_yaml(kg.name, v2.number))
+
+    assert {"label": "Customer", "parent": "Party"} in fetched["node_types"]
+    assert client.get_ontology_version(kg.name, v2.number).ontology.node_type("Customer").parent == "Party"
+    again = client.register_ontology(kg.name, client.get_ontology_yaml(kg.name, v2.number))
+    assert (again.number, again.content_hash) == (v2.number, v2.content_hash)
+
+
+def test_constraints_round_trip_through_fetch(client, kg, support_ontology):
+    constrained = support_ontology + (
+        "constraints:\n  - {type: UNIQUENESS, node_type: Customer, property_name: name}\n"
+    )
+    v2 = client.register_ontology(kg.name, constrained)
+
+    fetched = yaml.safe_load(client.get_ontology_yaml(kg.name, v2.number))
+
+    assert fetched["constraints"] == [
+        {"type": "UNIQUENESS", "node_type": "Customer", "property_name": "name"}
+    ]
+    again = client.register_ontology(kg.name, client.get_ontology_yaml(kg.name, v2.number))
+    assert (again.number, again.content_hash) == (2, v2.content_hash)
+
+
 def test_deprecating_a_concept_creates_a_new_version(client, kg, support_ontology):
     deprecated = support_ontology.replace("  - label: Ticket\n", "  - label: Ticket\n    deprecated: true\n")
 

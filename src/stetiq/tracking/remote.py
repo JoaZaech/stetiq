@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 from urllib.parse import quote
 
 import httpx
 
-from stetiq.errors import StetiqError
+from stetiq.errors import EvaluatorError, StetiqError
+from stetiq.evaluation.framework import Evaluation, ParameterValue, SubjectKind
 from stetiq.graph_source import GraphSourceScope
 from stetiq.ontology import Ontology, to_dict
 from stetiq.tracking import wire
 from stetiq.tracking.entities import (
     ConstructionRun,
+    EvaluationResult,
     KnowledgeGraph,
     Observation,
     OntologyVersion,
@@ -127,3 +130,37 @@ class RemoteTrackingService:
     def list_observations(self, knowledge_graph: str) -> list[Observation]:
         data = self._call("GET", self._kg_path(knowledge_graph) + "/observations")
         return [wire.observation_from_json(o) for o in data]
+
+    def _subject_path(self, knowledge_graph: str, subject_kind: SubjectKind, subject_id: str) -> str:
+        if subject_kind == "ontology_version":
+            return f"{self._kg_path(knowledge_graph)}/ontology-versions/{quote(subject_id, safe='')}"
+        raise EvaluatorError(f"Unsupported evaluation subject kind {subject_kind!r}")
+
+    def evaluate_ontology_version(
+        self, knowledge_graph: str, number: int
+    ) -> list[EvaluationResult]:
+        path = self._subject_path(knowledge_graph, "ontology_version", str(number))
+        return [wire.evaluation_result_from_json(r) for r in self._call("POST", path + "/evaluate")]
+
+    def record_evaluation(
+        self,
+        knowledge_graph: str,
+        subject_kind: SubjectKind,
+        subject_id: str,
+        evaluator: str,
+        evaluation: Evaluation,
+        parameters: Mapping[str, ParameterValue] | None = None,
+    ) -> EvaluationResult:
+        path = self._subject_path(knowledge_graph, subject_kind, subject_id) + "/evaluations"
+        body = {
+            "evaluator": evaluator,
+            **wire.evaluation_to_json(evaluation),
+            "parameters": dict(parameters or {}),
+        }
+        return wire.evaluation_result_from_json(self._call("POST", path, body))
+
+    def get_evaluation_results(
+        self, knowledge_graph: str, subject_kind: SubjectKind, subject_id: str
+    ) -> list[EvaluationResult]:
+        path = self._subject_path(knowledge_graph, subject_kind, subject_id) + "/evaluations"
+        return [wire.evaluation_result_from_json(r) for r in self._call("GET", path)]

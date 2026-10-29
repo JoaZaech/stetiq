@@ -2,8 +2,10 @@
 
 from stetiq.client import ActiveRun, Client
 from stetiq.errors import (
+    EvaluatorError,
     GraphSourceNotBoundError,
     GraphSourceUnavailableError,
+    GraphSourceWriteRejectedError,
     KnowledgeGraphAlreadyExistsError,
     MissingDeclaredOntologyError,
     NotFoundError,
@@ -11,10 +13,18 @@ from stetiq.errors import (
     RunNotActiveError,
     StetiqError,
 )
+from stetiq.evaluation import (
+    ConstructionRunEvaluator,
+    Detail,
+    Evaluation,
+    GoldOntologyAlignment,
+    OntologyVersionEvaluator,
+)
 from stetiq.graph_source import GraphSource, GraphSourceScope, InMemoryGraphSource
 from stetiq.ontology.diff import Change, ChangeKind, Classification, OntologyDiff
 from stetiq.tracking import (
     ConstructionRun,
+    EvaluationResult,
     KnowledgeGraph,
     Observation,
     OntologyVersion,
@@ -28,11 +38,18 @@ __all__ = [
     "Classification",
     "OntologyDiff",
     "Client",
+    "ConstructionRunEvaluator",
+    "Detail",
+    "Evaluation",
+    "EvaluationResult",
+    "EvaluatorError",
     "ConstructionRun",
+    "GoldOntologyAlignment",
     "GraphSource",
     "GraphSourceNotBoundError",
     "GraphSourceScope",
     "GraphSourceUnavailableError",
+    "GraphSourceWriteRejectedError",
     "InMemoryGraphSource",
     "KnowledgeGraph",
     "KnowledgeGraphAlreadyExistsError",
@@ -41,6 +58,7 @@ __all__ = [
     "Observation",
     "OntologyValidationError",
     "OntologyVersion",
+    "OntologyVersionEvaluator",
     "RunComparison",
     "RunNotActiveError",
     "StetiqError",

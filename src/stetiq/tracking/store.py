@@ -12,6 +12,7 @@ from typing import Protocol
 from stetiq.graph_source import GraphSourceScope
 from stetiq.tracking.entities import (
     ConstructionRun,
+    EvaluationResult,
     KnowledgeGraph,
     Observation,
     OntologyVersion,
@@ -65,6 +66,14 @@ class Store(Protocol):
 
     def list_observations(self, knowledge_graph: str) -> list[Observation]:
         """Ordered by observation time ascending."""
+
+    def add_evaluation_result(self, result: EvaluationResult) -> None:
+        """Insert-only: re-running an Evaluator adds a newer result."""
+
+    def list_evaluation_results(
+        self, knowledge_graph: str, subject_kind: str, subject_id: str
+    ) -> list[EvaluationResult]:
+        """Every stored result for the subject, oldest first."""
 
     def transaction(self):
         """Context manager making the enclosed store calls atomic."""

@@ -12,20 +12,32 @@ store rows); format conversion is the SDK's job.
 
 from __future__ import annotations
 
+import json
 import uuid
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Protocol
 
 from stetiq.errors import (
+    EvaluatorError,
     GraphSourceNotBoundError,
     MissingDeclaredOntologyError,
     NotFoundError,
     RunNotActiveError,
 )
+from stetiq.evaluation.framework import (
+    Evaluation,
+    ParameterValue,
+    SubjectKind,
+    check_evaluation,
+    check_parameters,
+)
+from stetiq.evaluation.structural import BUILT_IN_EVALUATORS
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import Ontology, content_hash
 from stetiq.tracking.entities import (
     ConstructionRun,
+    EvaluationResult,
     KnowledgeGraph,
     Observation,
     OntologyVersion,
@@ -76,6 +88,34 @@ class TrackingService(Protocol):
 
     def list_observations(self, knowledge_graph: str) -> list[Observation]: ...
 
+    def evaluate_ontology_version(
+        self, knowledge_graph: str, number: int
+    ) -> list[EvaluationResult]:
+        """(Re-)run the built-in Evaluators on an Ontology Version and store the results."""
+        ...
+
+    def record_evaluation(
+        self,
+        knowledge_graph: str,
+        subject_kind: SubjectKind,
+        subject_id: str,
+        evaluator: str,
+        evaluation: Evaluation,
+        parameters: Mapping[str, ParameterValue] | None = None,
+    ) -> EvaluationResult:
+        """Store a result computed elsewhere (a custom Evaluator run by the SDK).
+
+        `parameters` is the Evaluator's configuration; results are kept per
+        (evaluator, parameters)."""
+        ...
+
+    def get_evaluation_results(
+        self, knowledge_graph: str, subject_kind: SubjectKind, subject_id: str
+    ) -> list[EvaluationResult]:
+        """The latest result per (Evaluator, parameters) for the subject, ordered by
+        Evaluator name then parameters."""
+        ...
+
 
 class LocalTrackingService:
     def __init__(self, store: Store) -> None:
@@ -122,7 +162,90 @@ class LocalTrackingService:
             ontology=ontology,
         )
         self._store.add_ontology_version(version)
+        self._run_built_ins(version)
         return version
+
+    def _run_built_ins(self, version: OntologyVersion) -> list[EvaluationResult]:
+        return [
+            self._store_result(
+                version.knowledge_graph,
+                "ontology_version",
+                str(version.number),
+                evaluator.name,
+                check_evaluation(evaluator.name, evaluator.evaluate(version)),
+            )
+            for evaluator in BUILT_IN_EVALUATORS
+        ]
+
+    def _store_result(
+        self,
+        knowledge_graph: str,
+        subject_kind: SubjectKind,
+        subject_id: str,
+        evaluator: str,
+        evaluation: Evaluation,
+        parameters: Mapping[str, ParameterValue] | None = None,
+    ) -> EvaluationResult:
+        result = EvaluationResult(
+            knowledge_graph=knowledge_graph,
+            subject_kind=subject_kind,
+            subject_id=subject_id,
+            evaluator=evaluator,
+            metrics=dict(evaluation.metrics),
+            details=tuple(evaluation.details),
+            created_at=_now(),
+            parameters=dict(parameters or {}),
+        )
+        self._store.add_evaluation_result(result)
+        return result
+
+    def _check_subject(
+        self, knowledge_graph: str, subject_kind: SubjectKind, subject_id: str
+    ) -> None:
+        if subject_kind == "ontology_version":
+            if not subject_id.isdigit():
+                raise NotFoundError(
+                    f"Knowledge Graph {knowledge_graph!r} has no Ontology Version {subject_id!r}"
+                )
+            self.get_ontology_version(knowledge_graph, int(subject_id))
+        else:
+            # Construction Run subjects arrive with run-level evaluation (ticket #13).
+            raise EvaluatorError(f"Unsupported evaluation subject kind {subject_kind!r}")
+
+    def evaluate_ontology_version(
+        self, knowledge_graph: str, number: int
+    ) -> list[EvaluationResult]:
+        with self._store.transaction():
+            return self._run_built_ins(self.get_ontology_version(knowledge_graph, number))
+
+    def record_evaluation(
+        self,
+        knowledge_graph: str,
+        subject_kind: SubjectKind,
+        subject_id: str,
+        evaluator: str,
+        evaluation: Evaluation,
+        parameters: Mapping[str, ParameterValue] | None = None,
+    ) -> EvaluationResult:
+        if evaluator in {e.name for e in BUILT_IN_EVALUATORS}:
+            raise EvaluatorError(f"{evaluator!r} is a built-in Evaluator; its results are computed by stetiq")
+        evaluation = check_evaluation(evaluator, evaluation)
+        parameters = check_parameters(evaluator, parameters or {})
+        with self._store.transaction():
+            self._check_subject(knowledge_graph, subject_kind, subject_id)
+            return self._store_result(
+                knowledge_graph, subject_kind, subject_id, evaluator, evaluation, parameters
+            )
+
+    def get_evaluation_results(
+        self, knowledge_graph: str, subject_kind: SubjectKind, subject_id: str
+    ) -> list[EvaluationResult]:
+        self._check_subject(knowledge_graph, subject_kind, subject_id)
+        latest = {
+            (r.evaluator, json.dumps(r.parameters, sort_keys=True)): r
+            for r in self._store.list_evaluation_results(knowledge_graph, subject_kind, subject_id)
+        }
+        return [latest[key] for key in sorted(latest)]
 
     def list_ontology_versions(self, knowledge_graph: str) -> list[OntologyVersion]:
         self.get_knowledge_graph(knowledge_graph)

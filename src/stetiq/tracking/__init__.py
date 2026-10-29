@@ -2,6 +2,7 @@
 
 from stetiq.tracking.entities import (
     ConstructionRun,
+    EvaluationResult,
     KnowledgeGraph,
     Observation,
     OntologyVersion,
@@ -13,6 +14,7 @@ from stetiq.tracking.sql_store import SqlStore
 from stetiq.tracking.store import Store
 
 __all__ = [
+    "EvaluationResult",
     "ConstructionRun",
     "KnowledgeGraph",
     "LocalTrackingService",
