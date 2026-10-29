@@ -95,7 +95,32 @@ def diff_ontologies(base: Ontology, target: Ontology) -> OntologyDiff:
     changes += _diff_concepts(
         "relationship_type", base.relationship_types, target.relationship_types, base, target
     )
+    changes += _diff_constraints(base, target)
     return OntologyDiff(tuple(changes))
+
+
+def _diff_constraints(base: Ontology, target: Ontology) -> list[Change]:
+    """A new constraint may reject existing data (breaking); dropping one only relaxes (additive)."""
+    old, new = set(base.constraints), set(target.constraints)
+    changes = [
+        Change(f"{c.node_type}.{c.property_name}", "property", ChangeKind.CHANGED, Classification.BREAKING, f"{c.type} constraint added")
+        for c in sorted(new - old)
+    ]
+    changes += [
+        Change(f"{c.node_type}.{c.property_name}", "property", ChangeKind.CHANGED, Classification.ADDITIVE, f"{c.type} constraint removed")
+        for c in sorted(old - new)
+    ]
+    return changes
+
+
+def _diff_parent(old: NodeType, new: NodeType) -> list[Change]:
+    """Giving a root a parent only adds a supertype (additive); moving or removing one
+    drops it from queries over the old supertype (breaking)."""
+    if old.parent == new.parent:
+        return []
+    classification = Classification.ADDITIVE if old.parent is None else Classification.BREAKING
+    detail = f"parent {old.parent or '(none)'} -> {new.parent or '(none)'}"
+    return [Change(new.label, "node_type", ChangeKind.CHANGED, classification, detail)]
 
 
 def _diff_concepts(
@@ -119,6 +144,8 @@ def _diff_concepts(
             if old[label].description != new[label].description:
                 changes.append(Change(label, kind, ChangeKind.CHANGED, Classification.ADDITIVE, "description changed"))
             changes += _diff_properties(old[label], new[label])
+            if kind == "node_type":
+                changes += _diff_parent(old[label], new[label])
             if kind == "relationship_type":
                 changes += _diff_patterns(label, base_ontology, target_ontology)
     return changes

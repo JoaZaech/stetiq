@@ -160,3 +160,21 @@ def test_changing_a_description_is_additive(diff):
              .replace("{name: opened_at, type: DATE}", "{name: opened_at, type: DATE, description: When it was opened}"))
 
     assert summary(d) == [("Ticket", "changed", "additive"), ("Ticket.opened_at", "changed", "additive")]
+
+
+def test_giving_a_root_node_type_a_parent_is_additive_but_moving_it_is_breaking(client):
+    flat = "node_types: [Party, Organisation, Customer]\n"
+    under_party = "node_types: [Party, Organisation, {label: Customer, parent: Party}]\n"
+    moved = "node_types: [Party, Organisation, {label: Customer, parent: Organisation}]\n"
+
+    assert summary(client.diff_ontologies(flat, under_party)) == [("Customer", "changed", "additive")]
+    assert summary(client.diff_ontologies(under_party, moved)) == [("Customer", "changed", "breaking")]
+    assert summary(client.diff_ontologies(under_party, flat)) == [("Customer", "changed", "breaking")]
+
+
+def test_adding_a_constraint_is_breaking_and_dropping_one_is_additive(client):
+    plain = "node_types:\n  - {label: Customer, properties: [{name: email, type: STRING}]}\n"
+    unique = plain + "constraints:\n  - {type: UNIQUENESS, node_type: Customer, property_name: email}\n"
+
+    assert summary(client.diff_ontologies(plain, unique)) == [("Customer.email", "changed", "breaking")]
+    assert summary(client.diff_ontologies(unique, plain)) == [("Customer.email", "changed", "additive")]
