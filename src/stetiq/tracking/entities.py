@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
+from stetiq.errors import InvalidAliasNameError
 from stetiq.evaluation.framework import Detail, MetricValue, ParameterValue, SubjectKind
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import Ontology, to_yaml
@@ -76,6 +78,44 @@ class RunComparison:
     @property
     def ontology_versions(self) -> tuple[int, ...]:
         return tuple(r.ontology_version for r in self.runs)
+
+
+# --- Aliases and Promotion (ticket #9) ---------------------------------------------------
+
+DEFAULT_CONTRACT_ALIAS = "production"
+_ALIAS_NAME = re.compile(r"[A-Za-z0-9_.-]+")
+
+
+def validate_alias_name(name: str) -> None:
+    """Alias names are URL-path safe: letters, digits, `_`, `-`, `.`."""
+    if not _ALIAS_NAME.fullmatch(name):
+        raise InvalidAliasNameError(f"Alias name {name!r} must be letters, digits, '_', '-' or '.'")
+
+
+@dataclass(frozen=True)
+class Alias:
+    """A named, movable pointer to one Ontology Version of a Knowledge Graph."""
+
+    knowledge_graph: str
+    name: str
+    version: int
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
+class Promotion:
+    """One audit-log entry: an Alias moved (or created, `from_version` None) by `actor`.
+
+    `gate_result` is the target version's latest Gate result at the time of the move;
+    it stays None until Gates exist."""
+
+    knowledge_graph: str
+    alias: str
+    from_version: int | None
+    to_version: int
+    actor: str
+    promoted_at: datetime
+    gate_result: str | None = None
 
 
 @dataclass(frozen=True)

@@ -22,6 +22,7 @@ from stetiq.tracking.entities import (
     Observation,
     OntologyVersion,
 )
+from stetiq.tracking.entities import Alias, Promotion
 
 API_PREFIX = "/api/v1"
 
@@ -196,4 +197,51 @@ def observation_from_json(d: dict[str, Any]) -> Observation:
         observed_at=datetime.fromisoformat(d["observed_at"]),
         scope=graph_source_scope_from_json(d["scope"]),
         schema=observed_schema_from_json(d["schema"]),
+    )
+
+
+# --- Aliases and Promotion (ticket #9) ---------------------------------------------------
+
+ERROR_STATUS[errors.InvalidAliasNameError] = 422
+
+
+def alias_to_json(alias: Alias) -> dict[str, Any]:
+    return {
+        "knowledge_graph": alias.knowledge_graph,
+        "name": alias.name,
+        "version": alias.version,
+        "updated_at": alias.updated_at.isoformat(),
+    }
+
+
+def alias_from_json(d: dict[str, Any]) -> Alias:
+    return Alias(
+        knowledge_graph=d["knowledge_graph"],
+        name=d["name"],
+        version=d["version"],
+        updated_at=datetime.fromisoformat(d["updated_at"]),
+    )
+
+
+def promotion_to_json(p: Promotion) -> dict[str, Any]:
+    return {
+        "knowledge_graph": p.knowledge_graph,
+        "alias": p.alias,
+        "from_version": p.from_version,
+        "to_version": p.to_version,
+        "actor": p.actor,
+        "promoted_at": p.promoted_at.isoformat(),
+        "gate_result": p.gate_result,
+    }
+
+
+def promotion_from_json(d: dict[str, Any]) -> Promotion:
+    return Promotion(
+        knowledge_graph=d["knowledge_graph"],
+        alias=d["alias"],
+        from_version=d["from_version"],
+        to_version=d["to_version"],
+        actor=d["actor"],
+        promoted_at=datetime.fromisoformat(d["promoted_at"]),
+        gate_result=d["gate_result"],
     )

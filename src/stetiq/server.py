@@ -129,6 +129,34 @@ def create_app(
     def get_observation(observation_id: str) -> dict[str, Any]:
         return wire.observation_to_json(tracking.get_observation(observation_id))
 
+    # --- Aliases and Promotion -----------------------------------------------------
+
+    @api.put("/knowledge-graphs/{name}/aliases/{alias}")
+    def set_alias(
+        name: str, alias: str, version: int = Body(), actor: str = Body()
+    ) -> dict[str, Any]:
+        return wire.alias_to_json(tracking.set_alias(name, alias, version, actor))
+
+    @api.get("/knowledge-graphs/{name}/aliases/{alias}")
+    def get_alias(name: str, alias: str) -> dict[str, Any]:
+        return wire.alias_to_json(tracking.get_alias(name, alias))
+
+    @api.get("/knowledge-graphs/{name}/aliases")
+    def list_aliases(name: str) -> list[dict[str, Any]]:
+        return [wire.alias_to_json(a) for a in tracking.list_aliases(name)]
+
+    @api.get("/knowledge-graphs/{name}/promotions")
+    def list_promotions(name: str) -> list[dict[str, Any]]:
+        return [wire.promotion_to_json(p) for p in tracking.list_promotions(name)]
+
+    @api.put("/knowledge-graphs/{name}/contract-alias")
+    def set_contract_alias(name: str, alias: str = Body(embed=True)) -> dict[str, str]:
+        tracking.set_contract_alias(name, alias)
+        return {"alias": alias}
+
+    @api.get("/knowledge-graphs/{name}/contract-alias")
+    def get_contract_alias(name: str) -> dict[str, str]:
+        return {"alias": tracking.get_contract_alias(name)}
     # Evaluation results. Subject paths: ontology-versions/{number} here; Construction
     # Runs add runs/{id}/evaluations with run-level evaluation (ticket #13).
     version_path = "/knowledge-graphs/{name}/ontology-versions/{number}"

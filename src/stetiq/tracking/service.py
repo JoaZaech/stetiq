@@ -36,6 +36,10 @@ from stetiq.evaluation.structural import BUILT_IN_EVALUATORS
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import Ontology, content_hash
 from stetiq.tracking.entities import (
+    DEFAULT_CONTRACT_ALIAS,
+    Alias,
+    Promotion,
+    validate_alias_name,
     ConstructionRun,
     EvaluationResult,
     KnowledgeGraph,
@@ -49,6 +53,9 @@ from stetiq.tracking.store import Store
 # The Observation itself happens SDK-side (the Graph Source adapter and its credentials
 # live with the user's process, never on the stetiq server).
 ObservationInput = tuple[GraphSourceScope, ObservedSchema]
+
+# The audit-log actor for Alias moves stetiq makes itself (the Contract Alias on creation).
+SYSTEM_ACTOR = "stetiq"
 
 
 class TrackingService(Protocol):
@@ -87,6 +94,20 @@ class TrackingService(Protocol):
     def get_observation(self, observation_id: str) -> Observation: ...
 
     def list_observations(self, knowledge_graph: str) -> list[Observation]: ...
+
+    def set_alias(
+        self, knowledge_graph: str, name: str, version: int, actor: str
+    ) -> Alias: ...
+
+    def get_alias(self, knowledge_graph: str, name: str) -> Alias: ...
+
+    def list_aliases(self, knowledge_graph: str) -> list[Alias]: ...
+
+    def list_promotions(self, knowledge_graph: str) -> list[Promotion]: ...
+
+    def set_contract_alias(self, knowledge_graph: str, alias: str) -> None: ...
+
+    def get_contract_alias(self, knowledge_graph: str) -> str: ...
 
     def evaluate_ontology_version(
         self, knowledge_graph: str, number: int
@@ -131,7 +152,9 @@ class LocalTrackingService:
         kg = KnowledgeGraph(name=name, created_at=_now())
         with self._store.transaction():
             self._store.add_knowledge_graph(kg)
-            self._register(name, declared_ontology, "registered")
+            v1 = self._register(name, declared_ontology, "registered")
+            # The initial Declared Ontology is the contract until something is promoted.
+            self._move_alias(name, DEFAULT_CONTRACT_ALIAS, v1.number, SYSTEM_ACTOR)
         return kg
 
     def get_knowledge_graph(self, name: str) -> KnowledgeGraph:
@@ -351,6 +374,63 @@ class LocalTrackingService:
     def list_observations(self, knowledge_graph: str) -> list[Observation]:
         self.get_knowledge_graph(knowledge_graph)
         return self._store.list_observations(knowledge_graph)
+
+    # --- Aliases and Promotion ------------------------------------------------------
+
+    def set_alias(self, knowledge_graph: str, name: str, version: int, actor: str) -> Alias:
+        """Create the Alias or move it (a Promotion); every move is audit-logged.
+
+        Pointing an Alias at the version it already points to changes nothing and
+        logs nothing. Promotion is never blocked: Gates only show up in the log."""
+        validate_alias_name(name)
+        with self._store.transaction():
+            self.get_ontology_version(knowledge_graph, version)
+            return self._move_alias(knowledge_graph, name, version, actor)
+
+    def _move_alias(self, knowledge_graph: str, name: str, version: int, actor: str) -> Alias:
+        with self._store.transaction():
+            current = self._store.get_alias(knowledge_graph, name)
+            if current is not None and current.version == version:
+                return current
+            moved = _now()
+            alias = Alias(knowledge_graph=knowledge_graph, name=name, version=version, updated_at=moved)
+            self._store.set_alias(alias)
+            self._store.add_promotion(
+                Promotion(
+                    knowledge_graph=knowledge_graph,
+                    alias=name,
+                    from_version=None if current is None else current.version,
+                    to_version=version,
+                    actor=actor,
+                    promoted_at=moved,
+                    gate_result=None,  # Gates (#14) fill in the target's latest result
+                )
+            )
+            return alias
+
+    def get_alias(self, knowledge_graph: str, name: str) -> Alias:
+        self.get_knowledge_graph(knowledge_graph)
+        alias = self._store.get_alias(knowledge_graph, name)
+        if alias is None:
+            raise NotFoundError(f"Knowledge Graph {knowledge_graph!r} has no Alias {name!r}")
+        return alias
+
+    def list_aliases(self, knowledge_graph: str) -> list[Alias]:
+        self.get_knowledge_graph(knowledge_graph)
+        return self._store.list_aliases(knowledge_graph)
+
+    def list_promotions(self, knowledge_graph: str) -> list[Promotion]:
+        self.get_knowledge_graph(knowledge_graph)
+        return self._store.list_promotions(knowledge_graph)
+
+    def set_contract_alias(self, knowledge_graph: str, alias: str) -> None:
+        with self._store.transaction():
+            self.get_alias(knowledge_graph, alias)
+            self._store.set_contract_alias(knowledge_graph, alias)
+
+    def get_contract_alias(self, knowledge_graph: str) -> str:
+        self.get_knowledge_graph(knowledge_graph)
+        return self._store.get_contract_alias(knowledge_graph) or DEFAULT_CONTRACT_ALIAS
 
 
 def _now() -> datetime:

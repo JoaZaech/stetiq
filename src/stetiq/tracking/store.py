@@ -11,6 +11,8 @@ from typing import Protocol
 
 from stetiq.graph_source import GraphSourceScope
 from stetiq.tracking.entities import (
+    Alias,
+    Promotion,
     ConstructionRun,
     EvaluationResult,
     KnowledgeGraph,
@@ -66,6 +68,25 @@ class Store(Protocol):
 
     def list_observations(self, knowledge_graph: str) -> list[Observation]:
         """Ordered by observation time ascending."""
+
+    def set_alias(self, alias: Alias) -> None:
+        """Create the Alias or move it (upsert on knowledge graph + name)."""
+
+    def get_alias(self, knowledge_graph: str, name: str) -> Alias | None: ...
+
+    def list_aliases(self, knowledge_graph: str) -> list[Alias]:
+        """Ordered by name."""
+
+    def add_promotion(self, promotion: Promotion) -> None:
+        """Append to the Alias audit log (insert-only)."""
+
+    def list_promotions(self, knowledge_graph: str) -> list[Promotion]:
+        """Ordered oldest first."""
+
+    def set_contract_alias(self, knowledge_graph: str, alias: str) -> None: ...
+
+    def get_contract_alias(self, knowledge_graph: str) -> str | None:
+        """None when never designated (the service then uses the default)."""
 
     def add_evaluation_result(self, result: EvaluationResult) -> None:
         """Insert-only: re-running an Evaluator adds a newer result."""

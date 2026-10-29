@@ -5,6 +5,7 @@ from stetiq.errors import (
     EvaluatorError,
     GraphSourceNotBoundError,
     GraphSourceUnavailableError,
+    InvalidAliasNameError,
     KnowledgeGraphAlreadyExistsError,
     MissingDeclaredOntologyError,
     NotFoundError,
@@ -22,6 +23,8 @@ from stetiq.evaluation import (
 from stetiq.graph_source import GraphSource, GraphSourceScope, InMemoryGraphSource
 from stetiq.ontology.diff import Change, ChangeKind, Classification, OntologyDiff
 from stetiq.tracking import (
+    Alias,
+    Promotion,
     ConstructionRun,
     EvaluationResult,
     KnowledgeGraph,
@@ -31,6 +34,9 @@ from stetiq.tracking import (
 )
 
 __all__ = [
+    "Alias",
+    "InvalidAliasNameError",
+    "Promotion",
     "ActiveRun",
     "Change",
     "ChangeKind",
