@@ -8,9 +8,14 @@ from stetiq.errors import (
     OntologyValidationError,
     StetiqError,
 )
+from stetiq.ontology.diff import Change, ChangeKind, Classification, OntologyDiff
 from stetiq.tracking import KnowledgeGraph, OntologyVersion
 
 __all__ = [
+    "Change",
+    "ChangeKind",
+    "Classification",
+    "OntologyDiff",
     "Client",
     "KnowledgeGraph",
     "KnowledgeGraphAlreadyExistsError",

@@ -37,3 +37,25 @@ def test_cli_reports_malformed_ontology_and_exits_non_zero(tmp_path, monkeypatch
 
     assert result.exit_code == 1
     assert "Customer" in result.output
+
+
+def test_cli_diffs_two_ontology_versions(tmp_path, monkeypatch, support_ontology):
+    monkeypatch.setenv("STETIQ_TRACKING_URI", f"sqlite:///{tmp_path / 'stetiq.db'}")
+    ontology = tmp_path / "ontology.yaml"
+    ontology.write_text(support_ontology)
+    evolved = tmp_path / "evolved.yaml"
+    evolved.write_text(support_ontology.replace("  - label: OPENED", "  - label: CLOSED").replace("OPENED", "CLOSED"))
+    runner = CliRunner()
+    runner.invoke(app, ["kg", "create", "customer-support-kg", "--ontology", str(ontology)])
+    runner.invoke(app, ["ontology", "register", "customer-support-kg", str(evolved)])
+
+    result = runner.invoke(app, ["ontology", "diff", "customer-support-kg", "1", "2"])
+    unchanged = runner.invoke(app, ["ontology", "diff", "customer-support-kg", "1", "1"])
+
+    assert result.exit_code == 0, result.output
+    lines = [line.split()[:3] for line in result.output.strip().splitlines()]
+    assert ["additive", "added", "CLOSED"] in lines
+    assert ["breaking", "removed", "OPENED"] in lines
+    assert "Overall: breaking" in result.output
+    assert unchanged.exit_code == 0
+    assert "No changes" in unchanged.output

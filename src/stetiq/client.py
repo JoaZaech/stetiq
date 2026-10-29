@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 
 from stetiq.ontology import Ontology, parse_yaml
+from stetiq.ontology.diff import OntologyDiff, diff_ontologies
 from stetiq.tracking import (
     KnowledgeGraph,
     LocalTrackingService,
@@ -83,3 +84,14 @@ class Client:
 
     def get_ontology_yaml(self, knowledge_graph: str, number: int) -> str:
         return self.get_ontology_version(knowledge_graph, number).to_yaml()
+
+    def diff_ontology_versions(self, knowledge_graph: str, base: int, target: int) -> OntologyDiff:
+        """The Ontology Diff from version `base` to version `target`, each change classified."""
+        return diff_ontologies(
+            self.get_ontology_version(knowledge_graph, base).ontology,
+            self.get_ontology_version(knowledge_graph, target).ontology,
+        )
+
+    def diff_ontologies(self, base: OntologyInput, target: OntologyInput) -> OntologyDiff:
+        """The Ontology Diff between two Ontologies that need not be registered (e.g. files in a repo)."""
+        return diff_ontologies(_to_ontology(base), _to_ontology(target))
