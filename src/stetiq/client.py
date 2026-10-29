@@ -15,7 +15,7 @@ from stetiq.evaluation.framework import (
     check_evaluator,
 )
 from stetiq.evaluation.structural import BUILT_IN_EVALUATORS
-from stetiq.graph_source import GraphSource, GraphSourceScope
+from stetiq.graph_source import GraphSource, GraphSourceScope, graph_source_from_env
 from stetiq.ontology import Ontology, parse_yaml
 from stetiq.ontology.diff import OntologyDiff, diff_ontologies
 from stetiq.tracking import (
@@ -95,7 +95,9 @@ class Client:
     ) -> None:
         """`graph_source` is the adapter (e.g. Neo4j, with its credentials) used to observe
         the bound Graph Source scope when a Construction Run ends. It runs in this
-        process: the stetiq server never connects to the graph database."""
+        process: the stetiq server never connects to the graph database. Without it, a
+        Neo4j adapter is built on first use from `$STETIQ_GRAPH_SOURCE_URI` (plus
+        `$STETIQ_GRAPH_SOURCE_USER` / `$STETIQ_GRAPH_SOURCE_PASSWORD`)."""
         self.tracking_uri = resolve_tracking_uri(tracking_uri)
         self._service = service or service_for_uri(self.tracking_uri)
         self._graph_source = graph_source
@@ -306,8 +308,11 @@ class Client:
         if ontology_version is not None and alias is not None:
             raise ValueError("start_run takes ontology_version or alias, not both")
         if self._graph_source is None:
+            self._graph_source = graph_source_from_env()
+        if self._graph_source is None:
             raise GraphSourceUnavailableError(
-                "Client has no Graph Source adapter to observe with; pass graph_source=..."
+                "Client has no Graph Source adapter to observe with; pass graph_source=... "
+                "or set STETIQ_GRAPH_SOURCE_URI"
             )
         if ontology_version is None:
             alias = alias or self.get_contract_alias(knowledge_graph)

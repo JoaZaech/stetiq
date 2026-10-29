@@ -36,3 +36,7 @@ class RunNotActiveError(StetiqError):
 
 class InvalidAliasNameError(StetiqError):
     """An Alias name is empty or contains characters other than letters, digits, `_`, `-`, `.`."""
+
+
+class GraphSourceWriteRejectedError(StetiqError):
+    """A query sent to a Graph Source was not read-only; adapters never issue writes."""
