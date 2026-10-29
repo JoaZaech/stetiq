@@ -12,9 +12,16 @@ from datetime import datetime
 from typing import Any
 
 from stetiq import errors
+from stetiq.evaluation.framework import Detail, Evaluation
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import from_dict, to_dict
-from stetiq.tracking.entities import ConstructionRun, KnowledgeGraph, Observation, OntologyVersion
+from stetiq.tracking.entities import (
+    ConstructionRun,
+    EvaluationResult,
+    KnowledgeGraph,
+    Observation,
+    OntologyVersion,
+)
 from stetiq.tracking.entities import Alias, Promotion
 
 API_PREFIX = "/api/v1"
@@ -25,6 +32,7 @@ ERROR_STATUS: dict[type[errors.StetiqError], int] = {
     errors.KnowledgeGraphAlreadyExistsError: 409,
     errors.OntologyValidationError: 422,
     errors.MissingDeclaredOntologyError: 422,
+    errors.EvaluatorError: 422,
 }
 
 
@@ -55,6 +63,49 @@ def ontology_version_from_json(d: dict[str, Any]) -> OntologyVersion:
         origin=d["origin"],
         created_at=datetime.fromisoformat(d["created_at"]),
         ontology=from_dict(d["ontology"]),
+    )
+
+
+def _detail_to_json(d: Detail) -> dict[str, Any]:
+    return {"item": d.item, "message": d.message, "metric": d.metric}
+
+
+def _detail_from_json(d: dict[str, Any]) -> Detail:
+    return Detail(item=d["item"], message=d.get("message", ""), metric=d.get("metric"))
+
+
+def evaluation_to_json(e: Evaluation) -> dict[str, Any]:
+    return {"metrics": dict(e.metrics), "details": [_detail_to_json(d) for d in e.details]}
+
+
+def evaluation_from_json(d: dict[str, Any]) -> Evaluation:
+    return Evaluation(
+        metrics=dict(d["metrics"]),
+        details=tuple(_detail_from_json(x) for x in d.get("details", [])),
+    )
+
+
+def evaluation_result_to_json(r: EvaluationResult) -> dict[str, Any]:
+    return {
+        "knowledge_graph": r.knowledge_graph,
+        "subject_kind": r.subject_kind,
+        "subject_id": r.subject_id,
+        "evaluator": r.evaluator,
+        "metrics": r.metrics,
+        "details": [_detail_to_json(d) for d in r.details],
+        "created_at": r.created_at.isoformat(),
+    }
+
+
+def evaluation_result_from_json(d: dict[str, Any]) -> EvaluationResult:
+    return EvaluationResult(
+        knowledge_graph=d["knowledge_graph"],
+        subject_kind=d["subject_kind"],
+        subject_id=d["subject_id"],
+        evaluator=d["evaluator"],
+        metrics=dict(d["metrics"]),
+        details=tuple(_detail_from_json(x) for x in d["details"]),
+        created_at=datetime.fromisoformat(d["created_at"]),
     )
 
 

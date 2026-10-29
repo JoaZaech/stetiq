@@ -39,6 +39,43 @@ def test_cli_reports_malformed_ontology_and_exits_non_zero(tmp_path, monkeypatch
     assert "Customer" in result.output
 
 
+CUSTOM_EVALUATOR_MODULE = '''
+from stetiq import Evaluation, OntologyVersionEvaluator
+
+class NodeTypeCount(OntologyVersionEvaluator):
+    name = "node_type_count"
+
+    def evaluate(self, version):
+        return Evaluation(metrics={"node_types": len(version.ontology.node_types)})
+'''
+
+
+def test_cli_shows_and_re_runs_evaluations_with_a_custom_evaluator(
+    tmp_path, monkeypatch, support_ontology
+):
+    monkeypatch.setenv("STETIQ_TRACKING_URI", f"sqlite:///{tmp_path / 'stetiq.db'}")
+    (tmp_path / "my_evaluators.py").write_text(CUSTOM_EVALUATOR_MODULE)
+    monkeypatch.syspath_prepend(str(tmp_path))
+    ontology = tmp_path / "ontology.yaml"
+    ontology.write_text(support_ontology)
+    runner = CliRunner()
+    runner.invoke(app, ["kg", "create", "customer-support-kg", "--ontology", str(ontology)])
+
+    shown = runner.invoke(app, ["ontology", "evaluations", "customer-support-kg", "1"])
+    rerun = runner.invoke(
+        app,
+        ["ontology", "evaluate", "customer-support-kg", "1",
+         "--evaluator", "my_evaluators:NodeTypeCount"],
+    )
+
+    assert shown.exit_code == 0, shown.output
+    assert "isolated_node_types" in shown.output
+    assert "max_depth" in shown.output
+    assert rerun.exit_code == 0, rerun.output
+    assert "node_type_count" in rerun.output
+    assert "isolated_node_types" in rerun.output
+
+
 def test_cli_diffs_two_ontology_versions(tmp_path, monkeypatch, support_ontology):
     monkeypatch.setenv("STETIQ_TRACKING_URI", f"sqlite:///{tmp_path / 'stetiq.db'}")
     ontology = tmp_path / "ontology.yaml"

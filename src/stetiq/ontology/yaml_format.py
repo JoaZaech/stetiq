@@ -8,11 +8,14 @@
           - {name: opened_at, type: DATE, required: true}
         deprecated: true              # optional
         replacedBy: Case              # optional, a Concept of the same kind
+        parent: Case                  # optional (node types only): superclass, single inheritance
     relationship_types:
       - OPENED
     patterns:
       - [Customer, OPENED, Ticket]    # (source, relationship type, target)
       # or neo4j-graphrag's mapping form: {source: ..., relationship: ..., target: ...}
+    constraints:                      # optional, neo4j-graphrag's shape
+      - {type: UNIQUENESS, node_type: Ticket, property_name: opened_at}
 
 `parse_yaml` validates and raises `OntologyValidationError` naming the
 offending element; `to_yaml` emits the canonical (sorted, defaults omitted) form.
@@ -26,7 +29,14 @@ import yaml
 
 from stetiq.errors import OntologyValidationError
 from stetiq.ontology import canonical
-from stetiq.ontology.model import NodeType, Ontology, Pattern, Property, RelationshipType
+from stetiq.ontology.model import (
+    Constraint,
+    NodeType,
+    Ontology,
+    Pattern,
+    Property,
+    RelationshipType,
+)
 
 # neo4j-graphrag's property types.
 PROPERTY_TYPES = frozenset(
@@ -46,8 +56,11 @@ PROPERTY_TYPES = frozenset(
     }
 )
 
-_TOP_LEVEL_KEYS = {"node_types", "relationship_types", "patterns"}
+_TOP_LEVEL_KEYS = {"node_types", "relationship_types", "patterns", "constraints"}
+_CONSTRAINT_KEYS = {"type", "node_type", "property_name"}
+CONSTRAINT_TYPES = frozenset({"UNIQUENESS"})
 _CONCEPT_KEYS = {"label", "description", "properties", "deprecated", "replacedBy"}
+_NODE_TYPE_KEYS = _CONCEPT_KEYS | {"parent"}
 _PROPERTY_KEYS = {"name", "type", "description", "required"}
 
 
@@ -107,7 +120,7 @@ def _parse_concept(section: str, index: int, raw: Any) -> dict[str, Any]:
     if "label" not in raw:
         raise _fail(element, "needs a label")
     label = _label(element, raw["label"])
-    _check_keys(label, raw, _CONCEPT_KEYS)
+    _check_keys(label, raw, _NODE_TYPE_KEYS if section == "node_types" else _CONCEPT_KEYS)
     raw_props = raw.get("properties") or []
     if not isinstance(raw_props, list):
         raise _fail(f"{label}.properties", "must be a list")
@@ -119,13 +132,31 @@ def _parse_concept(section: str, index: int, raw: Any) -> dict[str, Any]:
         if p.name in seen:
             raise _fail(f"{label}.{p.name}", "property is declared more than once")
         seen.add(p.name)
-    return {
+    concept = {
         "label": label,
         "description": _optional_str(f"{label}.description", raw.get("description")),
         "properties": properties,
         "deprecated": _bool(f"{label}.deprecated", raw.get("deprecated", False)),
         "replaced_by": _optional_str(f"{label}.replacedBy", raw.get("replacedBy")),
     }
+    if section == "node_types":
+        concept["parent"] = _optional_str(f"{label}.parent", raw.get("parent"))
+    return concept
+
+
+def _check_hierarchy(nodes: list[dict[str, Any]]) -> None:
+    parents = {n["label"]: n["parent"] for n in nodes}
+    for label, parent in parents.items():
+        if parent is not None and (parent not in parents or parent == label):
+            raise _fail(f"{label}.parent", f"{parent!r} is not another node type declared in node_types")
+    for start in parents:
+        seen, current = [start], parents[start]
+        while current is not None:
+            if current in seen:
+                cycle = " -> ".join([*seen[seen.index(current):], current])
+                raise _fail(f"{start}.parent", f"hierarchy cycle {cycle}")
+            seen.append(current)
+            current = parents[current]
 
 
 def _parse_section(doc: dict[str, Any], section: str) -> list[dict[str, Any]]:
@@ -169,6 +200,43 @@ def _parse_patterns(doc: dict[str, Any], node_labels: set[str], rel_labels: set[
     return patterns
 
 
+def _parse_constraints(doc: dict[str, Any], nodes: list[dict[str, Any]]) -> list[Constraint]:
+    raw = doc.get("constraints") or []
+    if not isinstance(raw, list):
+        raise _fail("constraints", "must be a list")
+    by_label = {n["label"]: n for n in nodes}
+
+    def properties_of(label: str) -> set[str]:
+        names: set[str] = set()
+        while label is not None:
+            names |= {p.name for p in by_label[label]["properties"]}
+            label = by_label[label]["parent"]
+        return names
+
+    constraints: list[Constraint] = []
+    for i, c in enumerate(raw):
+        element = f"constraints[{i}]"
+        if not isinstance(c, dict):
+            raise _fail(element, "must be a mapping with type, node_type and property_name")
+        _check_keys(element, c, _CONSTRAINT_KEYS)
+        if c.get("type") not in CONSTRAINT_TYPES:
+            raise _fail(
+                element,
+                f"unknown constraint type {c.get('type')!r}; allowed: {', '.join(sorted(CONSTRAINT_TYPES))}",
+            )
+        node_type = c.get("node_type")
+        if node_type not in by_label:
+            raise _fail(element, f"node type {node_type!r} is not declared in node_types")
+        prop = c.get("property_name")
+        if prop not in properties_of(node_type):
+            raise _fail(f"{element} {node_type}.{prop}", "property is not declared on the node type or its ancestors")
+        constraint = Constraint(c["type"], node_type, prop)
+        if constraint in constraints:
+            raise _fail(element, "constraint is declared more than once")
+        constraints.append(constraint)
+    return constraints
+
+
 def parse_yaml(text: str) -> Ontology:
     try:
         doc = yaml.safe_load(text)
@@ -189,12 +257,14 @@ def parse_dict(doc: Any) -> Ontology:
     nodes = _parse_section(doc, "node_types")
     if not nodes:
         raise _fail("node_types", "a Declared Ontology needs at least one node type")
+    _check_hierarchy(nodes)
     rels = _parse_section(doc, "relationship_types")
     patterns = _parse_patterns(doc, {n["label"] for n in nodes}, {r["label"] for r in rels})
     return Ontology(
         node_types=tuple(NodeType(**n) for n in nodes),
         relationship_types=tuple(RelationshipType(**r) for r in rels),
         patterns=tuple(patterns),
+        constraints=tuple(_parse_constraints(doc, nodes)),
     )
 
 

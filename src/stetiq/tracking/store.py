@@ -14,6 +14,7 @@ from stetiq.tracking.entities import (
     Alias,
     Promotion,
     ConstructionRun,
+    EvaluationResult,
     KnowledgeGraph,
     Observation,
     OntologyVersion,
@@ -86,6 +87,14 @@ class Store(Protocol):
 
     def get_contract_alias(self, knowledge_graph: str) -> str | None:
         """None when never designated (the service then uses the default)."""
+
+    def add_evaluation_result(self, result: EvaluationResult) -> None:
+        """Insert-only: re-running an Evaluator adds a newer result."""
+
+    def list_evaluation_results(
+        self, knowledge_graph: str, subject_kind: str, subject_id: str
+    ) -> list[EvaluationResult]:
+        """Every stored result for the subject, oldest first."""
 
     def transaction(self):
         """Context manager making the enclosed store calls atomic."""

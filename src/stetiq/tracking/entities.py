@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Literal
 
 from stetiq.errors import InvalidAliasNameError
+from stetiq.evaluation.framework import Detail, MetricValue, SubjectKind
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import Ontology, to_yaml
 
@@ -115,3 +116,21 @@ class Promotion:
     actor: str
     promoted_at: datetime
     gate_result: str | None = None
+
+
+@dataclass(frozen=True)
+class EvaluationResult:
+    """One Evaluator's stored result against one subject.
+
+    The subject is (`knowledge_graph`, `subject_kind`, `subject_id`): `subject_id`
+    is the version number (as text) for an Ontology Version, the run id for a
+    Construction Run.
+    """
+
+    knowledge_graph: str
+    subject_kind: SubjectKind
+    subject_id: str
+    evaluator: str
+    metrics: dict[str, MetricValue]
+    details: tuple[Detail, ...]
+    created_at: datetime

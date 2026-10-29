@@ -2,6 +2,7 @@
 
 from stetiq.client import ActiveRun, Client
 from stetiq.errors import (
+    EvaluatorError,
     GraphSourceNotBoundError,
     GraphSourceUnavailableError,
     InvalidAliasNameError,
@@ -12,12 +13,19 @@ from stetiq.errors import (
     RunNotActiveError,
     StetiqError,
 )
+from stetiq.evaluation import (
+    ConstructionRunEvaluator,
+    Detail,
+    Evaluation,
+    OntologyVersionEvaluator,
+)
 from stetiq.graph_source import GraphSource, GraphSourceScope, InMemoryGraphSource
 from stetiq.ontology.diff import Change, ChangeKind, Classification, OntologyDiff
 from stetiq.tracking import (
     Alias,
     Promotion,
     ConstructionRun,
+    EvaluationResult,
     KnowledgeGraph,
     Observation,
     OntologyVersion,
@@ -34,6 +42,11 @@ __all__ = [
     "Classification",
     "OntologyDiff",
     "Client",
+    "ConstructionRunEvaluator",
+    "Detail",
+    "Evaluation",
+    "EvaluationResult",
+    "EvaluatorError",
     "ConstructionRun",
     "GraphSource",
     "GraphSourceNotBoundError",
@@ -47,6 +60,7 @@ __all__ = [
     "Observation",
     "OntologyValidationError",
     "OntologyVersion",
+    "OntologyVersionEvaluator",
     "RunComparison",
     "RunNotActiveError",
     "StetiqError",
