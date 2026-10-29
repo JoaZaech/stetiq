@@ -1,0 +1,27 @@
+[project]
+name = "stetiq"
+version = "0.1.0"
+description = "Versioning, evaluation and governance of knowledge-graph ontologies"
+authors = [
+    { name = "Zäch", email = "60199908+JoaZaech@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "pyyaml>=6.0.3",
+    "typer>=0.27.3",
+]
+
+[project.scripts]
+stetiq = "stetiq.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.12.10,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
