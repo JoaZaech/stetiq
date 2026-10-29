@@ -5,13 +5,14 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from stetiq.errors import EvaluatorError, GraphSourceUnavailableError
+from stetiq.errors import EvaluatorError, GraphSourceUnavailableError, UseCaseValidationError
 from stetiq.evaluation.framework import (
     Evaluator,
     OntologyVersionEvaluator,
     check_evaluation,
     check_evaluator,
 )
+from stetiq.evaluation.answerability import ANSWERABILITY_EVALUATOR
 from stetiq.evaluation.structural import BUILT_IN_EVALUATORS
 from stetiq.graph_source import GraphSource, GraphSourceScope
 from stetiq.ontology import Ontology, parse_yaml
@@ -27,6 +28,14 @@ from stetiq.tracking import (
     RemoteTrackingService,
     SqlStore,
     TrackingService,
+    UseCaseVersion,
+)
+from stetiq.use_case import (
+    CompetencyQuestion,
+    UseCase,
+    check_question,
+    parse_use_case_dict,
+    parse_use_case_yaml,
 )
 
 TRACKING_URI_ENV = "STETIQ_TRACKING_URI"
@@ -64,6 +73,26 @@ def _to_ontology(ontology: OntologyInput) -> Ontology:
     if isinstance(ontology, os.PathLike):
         return parse_yaml(Path(ontology).read_text(encoding="utf-8"))
     return parse_yaml(ontology)
+
+# A Use Case given to the SDK: Use Case YAML text, a path to a YAML file, a `UseCase`,
+# or just its Competency Questions.
+UseCaseInput = str | os.PathLike[str] | UseCase | list[CompetencyQuestion] | tuple[CompetencyQuestion, ...]
+
+
+def _to_use_case(use_case: UseCaseInput) -> UseCase:
+    if isinstance(use_case, UseCase):
+        return use_case
+    if isinstance(use_case, (list, tuple)):
+        return UseCase(competency_questions=tuple(use_case))
+    if isinstance(use_case, os.PathLike):
+        return parse_use_case_yaml(Path(use_case).read_text(encoding="utf-8"))
+    return parse_use_case_yaml(use_case)
+
+
+def _to_question(question: CompetencyQuestion | dict) -> CompetencyQuestion:
+    if isinstance(question, CompetencyQuestion):
+        return check_question(question)
+    return parse_use_case_dict({"competency_questions": [question]}).competency_questions[0]
 
 
 class Client:
@@ -121,12 +150,16 @@ class Client:
         """The latest result of every Evaluator (built-in and custom) for an Ontology Version."""
         return self._service.get_evaluation_results(knowledge_graph, "ontology_version", str(version))
 
-    def evaluate(self, knowledge_graph: str, version: int) -> list[EvaluationResult]:
+    def evaluate(
+        self, knowledge_graph: str, version: int, *, use_case_version: int | None = None
+    ) -> list[EvaluationResult]:
         """Re-run every Evaluator (built-in and this client's custom ones) on a version.
 
+        Structural answerability is judged against `use_case_version` (default: the
+        Knowledge Graph's latest Use Case version), which its result records.
         Results are stored as the newest per Evaluator; returns the latest of all.
         """
-        self._service.evaluate_ontology_version(knowledge_graph, version)
+        self._service.evaluate_ontology_version(knowledge_graph, version, use_case_version)
         if self._evaluators:
             self._run_custom_evaluators(self._service.get_ontology_version(knowledge_graph, version))
         return self.get_evaluation_results(knowledge_graph, version)
@@ -139,7 +172,7 @@ class Client:
         built-ins. `ConstructionRunEvaluator`s are accepted for run-level evaluation.
         """
         check_evaluator(evaluator)
-        taken = {e.name for e in BUILT_IN_EVALUATORS} | set(self._evaluators)
+        taken = {e.name for e in BUILT_IN_EVALUATORS} | {ANSWERABILITY_EVALUATOR} | set(self._evaluators)
         if evaluator.name in taken:
             raise EvaluatorError(f"An Evaluator named {evaluator.name!r} is already registered")
         self._evaluators[evaluator.name] = evaluator
@@ -191,6 +224,41 @@ class Client:
     def diff_ontologies(self, base: OntologyInput, target: OntologyInput) -> OntologyDiff:
         """The Ontology Diff between two Ontologies that need not be registered (e.g. files in a repo)."""
         return diff_ontologies(_to_ontology(base), _to_ontology(target))
+
+    # --- Use Cases ------------------------------------------------------------------
+
+    def register_use_case(self, knowledge_graph: str, use_case: UseCaseInput) -> UseCaseVersion:
+        """Register the Knowledge Graph's Use Case as a new Use Case version.
+
+        Use Case versions are numbered independently of Ontology Versions; identical
+        content returns the existing version."""
+        return self._service.register_use_case(knowledge_graph, _to_use_case(use_case))
+
+    def add_competency_question(
+        self, knowledge_graph: str, question: CompetencyQuestion | dict
+    ) -> UseCaseVersion:
+        """Add a Competency Question to the latest Use Case, creating a new Use Case version
+        (version 1 if the Knowledge Graph has no Use Case yet)."""
+        question = _to_question(question)
+        versions = self._service.list_use_case_versions(knowledge_graph)
+        current = versions[-1].use_case if versions else UseCase(competency_questions=())
+        if any(q.id == question.id for q in current.competency_questions):
+            raise UseCaseValidationError(
+                f"{question.id}: the Use Case already has a Competency Question with this id"
+            )
+        return self._service.register_use_case(
+            knowledge_graph,
+            UseCase(
+                competency_questions=(*current.competency_questions, question),
+                description=current.description,
+            ),
+        )
+
+    def list_use_case_versions(self, knowledge_graph: str) -> list[UseCaseVersion]:
+        return self._service.list_use_case_versions(knowledge_graph)
+
+    def get_use_case_version(self, knowledge_graph: str, number: int) -> UseCaseVersion:
+        return self._service.get_use_case_version(knowledge_graph, number)
 
     # --- Graph Sources --------------------------------------------------------------
 

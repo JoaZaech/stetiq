@@ -17,6 +17,7 @@ from stetiq.tracking.entities import (
     Observation,
     OntologyVersion,
     RunStatus,
+    UseCaseVersion,
 )
 
 
@@ -74,6 +75,18 @@ class Store(Protocol):
         self, knowledge_graph: str, subject_kind: str, subject_id: str
     ) -> list[EvaluationResult]:
         """Every stored result for the subject, oldest first."""
+
+    def add_use_case_version(self, version: UseCaseVersion) -> None:
+        """Insert-only: Use Case versions are immutable."""
+
+    def get_use_case_version(self, knowledge_graph: str, number: int) -> UseCaseVersion | None: ...
+
+    def find_use_case_version_by_hash(
+        self, knowledge_graph: str, content_hash: str
+    ) -> UseCaseVersion | None: ...
+
+    def list_use_case_versions(self, knowledge_graph: str) -> list[UseCaseVersion]:
+        """Ordered by version number ascending."""
 
     def transaction(self):
         """Context manager making the enclosed store calls atomic."""

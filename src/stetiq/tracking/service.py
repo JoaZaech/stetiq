@@ -24,6 +24,11 @@ from stetiq.errors import (
     RunNotActiveError,
 )
 from stetiq.evaluation.framework import Evaluation, SubjectKind, check_evaluation
+from stetiq.evaluation.answerability import (
+    ANSWERABILITY_EVALUATOR,
+    CompetencyQuestionMapper,
+    StructuralAnswerability,
+)
 from stetiq.evaluation.structural import BUILT_IN_EVALUATORS
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import Ontology, content_hash
@@ -34,8 +39,11 @@ from stetiq.tracking.entities import (
     Observation,
     OntologyVersion,
     Origin,
+    UseCaseVersion,
 )
 from stetiq.tracking.store import Store
+from stetiq import use_case as use_case_format
+from stetiq.use_case import UseCase
 
 # What the SDK observed at the end of a run: the scope it read and the Observed Schema.
 # The Observation itself happens SDK-side (the Graph Source adapter and its credentials
@@ -81,9 +89,12 @@ class TrackingService(Protocol):
     def list_observations(self, knowledge_graph: str) -> list[Observation]: ...
 
     def evaluate_ontology_version(
-        self, knowledge_graph: str, number: int
+        self, knowledge_graph: str, number: int, use_case_version: int | None = None
     ) -> list[EvaluationResult]:
-        """(Re-)run the built-in Evaluators on an Ontology Version and store the results."""
+        """(Re-)run the built-in Evaluators on an Ontology Version and store the results.
+
+        Structural answerability is judged against `use_case_version` (default: the
+        latest Use Case version; skipped when the Knowledge Graph has no Use Case)."""
         ...
 
     def record_evaluation(
@@ -103,10 +114,24 @@ class TrackingService(Protocol):
         """The latest result per Evaluator for the subject, ordered by Evaluator name."""
         ...
 
+    def register_use_case(self, knowledge_graph: str, use_case: UseCase) -> UseCaseVersion:
+        """Store a new Use Case version (identical content returns the existing one).
+        Never creates an Ontology Version."""
+        ...
+
+    def list_use_case_versions(self, knowledge_graph: str) -> list[UseCaseVersion]: ...
+
+    def get_use_case_version(self, knowledge_graph: str, number: int) -> UseCaseVersion: ...
+
 
 class LocalTrackingService:
-    def __init__(self, store: Store) -> None:
+    def __init__(
+        self, store: Store, *, question_mapper: CompetencyQuestionMapper | None = None
+    ) -> None:
+        """`question_mapper` is the model interface structural answerability uses for
+        Competency Questions with neither a Concept mapping nor a query (ticket #12)."""
         self._store = store
+        self._question_mapper = question_mapper
 
     def create_knowledge_graph(
         self, name: str, declared_ontology: Ontology | None
@@ -150,7 +175,31 @@ class LocalTrackingService:
         )
         self._store.add_ontology_version(version)
         self._run_built_ins(version)
+        self._run_answerability(version)
         return version
+
+    def _run_answerability(
+        self, version: OntologyVersion, use_case_version: int | None = None
+    ) -> list[EvaluationResult]:
+        """Structural answerability against a Use Case version (default: the latest)."""
+        if use_case_version is None:
+            versions = self._store.list_use_case_versions(version.knowledge_graph)
+            if not versions:
+                return []
+            use_case = versions[-1]
+        else:
+            use_case = self.get_use_case_version(version.knowledge_graph, use_case_version)
+        evaluator = StructuralAnswerability(use_case.use_case, self._question_mapper)
+        return [
+            self._store_result(
+                version.knowledge_graph,
+                "ontology_version",
+                str(version.number),
+                evaluator.name,
+                check_evaluation(evaluator.name, evaluator.evaluate(version)),
+                use_case_version=use_case.number,
+            )
+        ]
 
     def _run_built_ins(self, version: OntologyVersion) -> list[EvaluationResult]:
         return [
@@ -171,6 +220,8 @@ class LocalTrackingService:
         subject_id: str,
         evaluator: str,
         evaluation: Evaluation,
+        *,
+        use_case_version: int | None = None,
     ) -> EvaluationResult:
         result = EvaluationResult(
             knowledge_graph=knowledge_graph,
@@ -180,6 +231,7 @@ class LocalTrackingService:
             metrics=dict(evaluation.metrics),
             details=tuple(evaluation.details),
             created_at=_now(),
+            use_case_version=use_case_version,
         )
         self._store.add_evaluation_result(result)
         return result
@@ -198,10 +250,13 @@ class LocalTrackingService:
             raise EvaluatorError(f"Unsupported evaluation subject kind {subject_kind!r}")
 
     def evaluate_ontology_version(
-        self, knowledge_graph: str, number: int
+        self, knowledge_graph: str, number: int, use_case_version: int | None = None
     ) -> list[EvaluationResult]:
         with self._store.transaction():
-            return self._run_built_ins(self.get_ontology_version(knowledge_graph, number))
+            version = self.get_ontology_version(knowledge_graph, number)
+            return self._run_built_ins(version) + self._run_answerability(
+                version, use_case_version
+            )
 
     def record_evaluation(
         self,
@@ -211,7 +266,7 @@ class LocalTrackingService:
         evaluator: str,
         evaluation: Evaluation,
     ) -> EvaluationResult:
-        if evaluator in {e.name for e in BUILT_IN_EVALUATORS}:
+        if evaluator in {e.name for e in BUILT_IN_EVALUATORS} | {ANSWERABILITY_EVALUATOR}:
             raise EvaluatorError(f"{evaluator!r} is a built-in Evaluator; its results are computed by stetiq")
         evaluation = check_evaluation(evaluator, evaluation)
         with self._store.transaction():
@@ -334,6 +389,40 @@ class LocalTrackingService:
     def list_observations(self, knowledge_graph: str) -> list[Observation]:
         self.get_knowledge_graph(knowledge_graph)
         return self._store.list_observations(knowledge_graph)
+
+    # --- Use Cases ------------------------------------------------------------------
+
+    def register_use_case(self, knowledge_graph: str, use_case: UseCase) -> UseCaseVersion:
+        use_case = use_case_format.canonicalize(use_case_format.check_use_case(use_case))
+        digest = use_case_format.content_hash(use_case)
+        with self._store.transaction():
+            self.get_knowledge_graph(knowledge_graph)
+            existing = self._store.find_use_case_version_by_hash(knowledge_graph, digest)
+            if existing is not None:
+                return existing
+            versions = self._store.list_use_case_versions(knowledge_graph)
+            version = UseCaseVersion(
+                knowledge_graph=knowledge_graph,
+                number=(versions[-1].number + 1) if versions else 1,
+                content_hash=digest,
+                created_at=_now(),
+                use_case=use_case,
+            )
+            self._store.add_use_case_version(version)
+            return version
+
+    def list_use_case_versions(self, knowledge_graph: str) -> list[UseCaseVersion]:
+        self.get_knowledge_graph(knowledge_graph)
+        return self._store.list_use_case_versions(knowledge_graph)
+
+    def get_use_case_version(self, knowledge_graph: str, number: int) -> UseCaseVersion:
+        self.get_knowledge_graph(knowledge_graph)
+        version = self._store.get_use_case_version(knowledge_graph, number)
+        if version is None:
+            raise NotFoundError(
+                f"Knowledge Graph {knowledge_graph!r} has no Use Case version {number}"
+            )
+        return version
 
 
 def _now() -> datetime:

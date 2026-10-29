@@ -11,6 +11,7 @@ from stetiq.errors import (
     OntologyValidationError,
     RunNotActiveError,
     StetiqError,
+    UseCaseValidationError,
 )
 from stetiq.evaluation import (
     ConstructionRunEvaluator,
@@ -27,7 +28,9 @@ from stetiq.tracking import (
     Observation,
     OntologyVersion,
     RunComparison,
+    UseCaseVersion,
 )
+from stetiq.use_case import CompetencyQuestion, UseCase
 
 __all__ = [
     "ActiveRun",
@@ -58,4 +61,8 @@ __all__ = [
     "RunComparison",
     "RunNotActiveError",
     "StetiqError",
+    "CompetencyQuestion",
+    "UseCase",
+    "UseCaseValidationError",
+    "UseCaseVersion",
 ]
