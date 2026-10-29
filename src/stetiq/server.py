@@ -71,6 +71,64 @@ def create_app(
     def get_ontology_version(name: str, number: int) -> dict[str, Any]:
         return wire.ontology_version_to_json(tracking.get_ontology_version(name, number))
 
+    # --- Graph Sources -------------------------------------------------------------
+
+    @api.put("/knowledge-graphs/{name}/graph-source")
+    def bind_graph_source(name: str, scope: dict[str, Any] = Body(embed=True)) -> dict[str, Any]:
+        bound = wire.graph_source_scope_from_json(scope)
+        tracking.bind_graph_source(name, bound)
+        return wire.graph_source_scope_to_json(bound)
+
+    @api.get("/knowledge-graphs/{name}/graph-source")
+    def get_graph_source(name: str) -> dict[str, Any]:
+        return wire.graph_source_scope_to_json(tracking.get_graph_source(name))
+
+    # --- Construction Runs and Observations -------------------------------------------
+
+    @api.post("/knowledge-graphs/{name}/runs", status_code=201)
+    def start_run(name: str, ontology_version: int = Body(embed=True)) -> dict[str, Any]:
+        return wire.run_to_json(tracking.start_run(name, ontology_version))
+
+    @api.get("/knowledge-graphs/{name}/runs")
+    def list_runs(name: str) -> list[dict[str, Any]]:
+        return [wire.run_to_json(r) for r in tracking.list_runs(name)]
+
+    @api.get("/runs/{run_id}")
+    def get_run(run_id: str) -> dict[str, Any]:
+        return wire.run_to_json(tracking.get_run(run_id))
+
+    @api.post("/runs/{run_id}/params")
+    def log_params(run_id: str, params: dict[str, str] = Body(embed=True)) -> dict[str, bool]:
+        tracking.log_params(run_id, params)
+        return {"ok": True}
+
+    @api.post("/runs/{run_id}/metrics")
+    def log_metrics(run_id: str, metrics: dict[str, float] = Body(embed=True)) -> dict[str, bool]:
+        tracking.log_metrics(run_id, metrics)
+        return {"ok": True}
+
+    @api.post("/runs/{run_id}/end")
+    def end_run(
+        run_id: str, scope: dict[str, Any] = Body(), observed_schema: dict[str, Any] = Body()
+    ) -> dict[str, Any]:
+        observation = (
+            wire.graph_source_scope_from_json(scope),
+            wire.observed_schema_from_json(observed_schema),
+        )
+        return wire.run_to_json(tracking.end_run(run_id, observation))
+
+    @api.post("/runs/{run_id}/fail")
+    def fail_run(run_id: str) -> dict[str, Any]:
+        return wire.run_to_json(tracking.fail_run(run_id))
+
+    @api.get("/knowledge-graphs/{name}/observations")
+    def list_observations(name: str) -> list[dict[str, Any]]:
+        return [wire.observation_to_json(o) for o in tracking.list_observations(name)]
+
+    @api.get("/observations/{observation_id}")
+    def get_observation(observation_id: str) -> dict[str, Any]:
+        return wire.observation_to_json(tracking.get_observation(observation_id))
+
     # Evaluation results. Subject paths: ontology-versions/{number} here; Construction
     # Runs add runs/{id}/evaluations with run-level evaluation (ticket #13).
     version_path = "/knowledge-graphs/{name}/ontology-versions/{number}"

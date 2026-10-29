@@ -20,3 +20,15 @@ class NotFoundError(StetiqError):
 
 class EvaluatorError(StetiqError):
     """An Evaluator is malformed, failed, or returned an invalid Evaluation."""
+
+
+class GraphSourceNotBoundError(StetiqError):
+    """The Knowledge Graph has no Graph Source scope bound to it."""
+
+
+class GraphSourceUnavailableError(StetiqError):
+    """The Client was built without a Graph Source adapter, so it cannot observe."""
+
+
+class RunNotActiveError(StetiqError):
+    """The Construction Run has already ended (finished or failed)."""

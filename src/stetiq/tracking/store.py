@@ -6,9 +6,18 @@ Implementation: `SqlStore` (SQLite or Postgres; used by local mode and the serve
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Protocol
 
-from stetiq.tracking.entities import EvaluationResult, KnowledgeGraph, OntologyVersion
+from stetiq.graph_source import GraphSourceScope
+from stetiq.tracking.entities import (
+    ConstructionRun,
+    EvaluationResult,
+    KnowledgeGraph,
+    Observation,
+    OntologyVersion,
+    RunStatus,
+)
 
 
 class Store(Protocol):
@@ -28,6 +37,35 @@ class Store(Protocol):
 
     def list_ontology_versions(self, knowledge_graph: str) -> list[OntologyVersion]:
         """Ordered by version number ascending."""
+
+    def set_graph_source(self, knowledge_graph: str, scope: GraphSourceScope) -> None:
+        """Bind (or rebind) the Knowledge Graph's Graph Source scope."""
+
+    def get_graph_source(self, knowledge_graph: str) -> GraphSourceScope | None: ...
+
+    def add_run(self, run: ConstructionRun) -> None: ...
+
+    def get_run(self, run_id: str) -> ConstructionRun | None: ...
+
+    def list_runs(self, knowledge_graph: str) -> list[ConstructionRun]:
+        """Ordered by start time ascending."""
+
+    def set_run_params(self, run_id: str, params: dict[str, str]) -> None:
+        """Upsert: a key logged again takes the new value."""
+
+    def set_run_metrics(self, run_id: str, metrics: dict[str, float]) -> None:
+        """Upsert: a key logged again takes the new value."""
+
+    def end_run(
+        self, run_id: str, status: RunStatus, ended_at: datetime, observation_id: str | None
+    ) -> None: ...
+
+    def add_observation(self, observation: Observation) -> None: ...
+
+    def get_observation(self, observation_id: str) -> Observation | None: ...
+
+    def list_observations(self, knowledge_graph: str) -> list[Observation]:
+        """Ordered by observation time ascending."""
 
     def add_evaluation_result(self, result: EvaluationResult) -> None:
         """Insert-only: re-running an Evaluator adds a newer result."""

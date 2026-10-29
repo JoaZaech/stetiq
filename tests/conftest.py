@@ -15,6 +15,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import stetiq
+from stetiq.graph_source import InMemoryGraphSource
 from stetiq.server import create_app
 from stetiq.tracking import RemoteTrackingService
 
@@ -37,24 +38,31 @@ def tracking_mode(request):
 
 
 @pytest.fixture
-def client_factory(tracking_mode, tmp_path):
+def graph_source():
+    """The in-memory fake Graph Source every `client` observes; seed it in the test."""
+    return InMemoryGraphSource()
+
+
+@pytest.fixture
+def client_factory(tracking_mode, tmp_path, graph_source):
     """Returns a function building a new `stetiq.Client` on the same backing store.
 
     Calling it twice gives two independent clients that see the same data, the way
-    two processes sharing a tracking URI would.
+    two processes sharing a tracking URI would. All of them use `graph_source`.
     """
     if tracking_mode == "local":
         uri = f"sqlite:///{tmp_path / 'stetiq.db'}"
-        yield lambda: stetiq.Client(uri)
+        yield lambda: stetiq.Client(uri, graph_source=graph_source)
     elif tracking_mode == "postgres":
         uri = _postgres_url()
-        yield lambda: stetiq.Client(uri)
+        yield lambda: stetiq.Client(uri, graph_source=graph_source)
     else:
         app = create_app(database_url=f"sqlite:///{tmp_path / 'server.db'}")
         with TestClient(app) as http:
             yield lambda: stetiq.Client(
                 str(http.base_url),
                 service=RemoteTrackingService(str(http.base_url), http=http),
+                graph_source=graph_source,
             )
 
 

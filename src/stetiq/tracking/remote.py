@@ -9,9 +9,18 @@ import httpx
 
 from stetiq.errors import EvaluatorError, StetiqError
 from stetiq.evaluation.framework import Evaluation, SubjectKind
+from stetiq.graph_source import GraphSourceScope
 from stetiq.ontology import Ontology, to_dict
 from stetiq.tracking import wire
-from stetiq.tracking.entities import EvaluationResult, KnowledgeGraph, OntologyVersion, Origin
+from stetiq.tracking.entities import (
+    ConstructionRun,
+    EvaluationResult,
+    KnowledgeGraph,
+    Observation,
+    OntologyVersion,
+    Origin,
+)
+from stetiq.tracking.service import ObservationInput
 
 
 class RemoteTrackingService:
@@ -68,6 +77,58 @@ class RemoteTrackingService:
     def get_ontology_version(self, knowledge_graph: str, number: int) -> OntologyVersion:
         data = self._call("GET", f"{self._kg_path(knowledge_graph)}/ontology-versions/{number}")
         return wire.ontology_version_from_json(data)
+
+    # --- Graph Sources ------------------------------------------------------------------
+
+    def bind_graph_source(self, knowledge_graph: str, scope: GraphSourceScope) -> None:
+        body = {"scope": wire.graph_source_scope_to_json(scope)}
+        self._call("PUT", self._kg_path(knowledge_graph) + "/graph-source", body)
+
+    def get_graph_source(self, knowledge_graph: str) -> GraphSourceScope:
+        data = self._call("GET", self._kg_path(knowledge_graph) + "/graph-source")
+        return wire.graph_source_scope_from_json(data)
+
+    # --- Construction Runs and Observations -------------------------------------------
+
+    @staticmethod
+    def _run_path(run_id: str) -> str:
+        return f"/runs/{quote(run_id, safe='')}"
+
+    def start_run(self, knowledge_graph: str, ontology_version: int) -> ConstructionRun:
+        body = {"ontology_version": ontology_version}
+        return wire.run_from_json(self._call("POST", self._kg_path(knowledge_graph) + "/runs", body))
+
+    def get_run(self, run_id: str) -> ConstructionRun:
+        return wire.run_from_json(self._call("GET", self._run_path(run_id)))
+
+    def list_runs(self, knowledge_graph: str) -> list[ConstructionRun]:
+        data = self._call("GET", self._kg_path(knowledge_graph) + "/runs")
+        return [wire.run_from_json(r) for r in data]
+
+    def log_params(self, run_id: str, params: dict[str, str]) -> None:
+        self._call("POST", self._run_path(run_id) + "/params", {"params": params})
+
+    def log_metrics(self, run_id: str, metrics: dict[str, float]) -> None:
+        self._call("POST", self._run_path(run_id) + "/metrics", {"metrics": metrics})
+
+    def end_run(self, run_id: str, observation: ObservationInput) -> ConstructionRun:
+        scope, schema = observation
+        body = {
+            "scope": wire.graph_source_scope_to_json(scope),
+            "observed_schema": wire.observed_schema_to_json(schema),
+        }
+        return wire.run_from_json(self._call("POST", self._run_path(run_id) + "/end", body))
+
+    def fail_run(self, run_id: str) -> ConstructionRun:
+        return wire.run_from_json(self._call("POST", self._run_path(run_id) + "/fail"))
+
+    def get_observation(self, observation_id: str) -> Observation:
+        data = self._call("GET", f"/observations/{quote(observation_id, safe='')}")
+        return wire.observation_from_json(data)
+
+    def list_observations(self, knowledge_graph: str) -> list[Observation]:
+        data = self._call("GET", self._kg_path(knowledge_graph) + "/observations")
+        return [wire.observation_from_json(o) for o in data]
 
     def _subject_path(self, knowledge_graph: str, subject_kind: SubjectKind, subject_id: str) -> str:
         if subject_kind == "ontology_version":

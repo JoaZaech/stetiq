@@ -6,8 +6,9 @@ per-item details. There are two subject kinds:
 - `"ontology_version"`: `OntologyVersionEvaluator.evaluate(version)` gets the
   `OntologyVersion` only, with no Graph Source access. Pure function of the Ontology.
 - `"construction_run"`: `ConstructionRunEvaluator.evaluate(run)` gets a
-  `ConstructionRunSubject`: the run, its Declared Ontology, its Observed Schema
-  and read-only Graph Source access. Invoked at the end of a run (ticket #13).
+  `ConstructionRunSubject`: the run, its Declared Ontology, its Observation
+  (Observed Schema) and read-only Graph Source access. Invoked at the end of a
+  run (ticket #13).
 
 Write a custom Evaluator by subclassing one of the two base classes, set a
 unique `name`, and register it with `Client.register_evaluator`.
@@ -24,7 +25,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol
 from stetiq.errors import EvaluatorError
 
 if TYPE_CHECKING:
-    from stetiq.tracking.entities import OntologyVersion
+    from stetiq.tracking.entities import ConstructionRun, Observation, OntologyVersion
 
 SubjectKind = Literal["ontology_version", "construction_run"]
 MetricValue = int | float
@@ -62,26 +63,35 @@ class OntologyVersionEvaluator(ABC):
 
 
 class ReadOnlyGraphSource(Protocol):
-    """Read-only access to a Construction Run's Graph Source.
+    """A Graph Source narrowed to the run's scope, read-only (executed Competency Questions).
 
-    Defined by the Graph Source adapter (ticket #4/#7); evaluators must never write.
+    Ticket #13 binds `GraphSource.execute_read(scope, ...)` to the run's Observation
+    scope. Results are evaluated and discarded, never stored (ADR 0001).
     """
+
+    def execute_read(
+        self, query: str, parameters: Mapping[str, Any] | None = None
+    ) -> list[dict[str, Any]]: ...
 
 
 class ConstructionRunSubject(Protocol):
-    """What a run-level Evaluator sees. Concrete type supplied by ticket #13."""
+    """What a run-level Evaluator sees; the concrete value is built by ticket #13.
+
+    Results are stored with subject_kind "construction_run", subject_id `run.id`.
+    """
 
     @property
-    def knowledge_graph(self) -> str: ...
+    def run(self) -> ConstructionRun: ...
 
     @property
-    def run_id(self) -> str: ...
+    def declared_ontology(self) -> OntologyVersion:
+        """The Ontology Version the run consumed (`run.ontology_version`)."""
+        ...
 
     @property
-    def declared_ontology(self) -> OntologyVersion: ...
-
-    @property
-    def observed_schema(self) -> Any: ...
+    def observation(self) -> Observation:
+        """The Observation made at the end of the run; `.schema` is the Observed Schema."""
+        ...
 
     @property
     def graph_source(self) -> ReadOnlyGraphSource: ...

@@ -13,8 +13,15 @@ from typing import Any
 
 from stetiq import errors
 from stetiq.evaluation.framework import Detail, Evaluation
+from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import from_dict, to_dict
-from stetiq.tracking.entities import EvaluationResult, KnowledgeGraph, OntologyVersion
+from stetiq.tracking.entities import (
+    ConstructionRun,
+    EvaluationResult,
+    KnowledgeGraph,
+    Observation,
+    OntologyVersion,
+)
 
 API_PREFIX = "/api/v1"
 
@@ -110,3 +117,81 @@ def error_from_json(d: dict[str, Any]) -> errors.StetiqError:
     if not (isinstance(cls, type) and issubclass(cls, errors.StetiqError)):
         cls = errors.StetiqError
     return cls(d["error"]["message"])
+
+
+# --- Graph Sources, Construction Runs, Observations (ticket #4) -------------------------
+
+ERROR_STATUS[errors.GraphSourceNotBoundError] = 409
+
+
+def graph_source_scope_to_json(scope: GraphSourceScope) -> dict[str, Any]:
+    return scope.to_dict()
+
+
+def graph_source_scope_from_json(d: dict[str, Any]) -> GraphSourceScope:
+    return GraphSourceScope.from_dict(d)
+
+
+ERROR_STATUS[errors.RunNotActiveError] = 409
+
+
+def _dt(value: str | None) -> datetime | None:
+    return None if value is None else datetime.fromisoformat(value)
+
+
+def run_to_json(run: ConstructionRun) -> dict[str, Any]:
+    return {
+        "id": run.id,
+        "knowledge_graph": run.knowledge_graph,
+        "ontology_version": run.ontology_version,
+        "status": run.status,
+        "started_at": run.started_at.isoformat(),
+        "ended_at": None if run.ended_at is None else run.ended_at.isoformat(),
+        "params": dict(run.params),
+        "metrics": dict(run.metrics),
+        "observation_id": run.observation_id,
+    }
+
+
+def run_from_json(d: dict[str, Any]) -> ConstructionRun:
+    return ConstructionRun(
+        id=d["id"],
+        knowledge_graph=d["knowledge_graph"],
+        ontology_version=d["ontology_version"],
+        status=d["status"],
+        started_at=datetime.fromisoformat(d["started_at"]),
+        ended_at=_dt(d["ended_at"]),
+        params=dict(d["params"]),
+        metrics={k: float(v) for k, v in d["metrics"].items()},
+        observation_id=d["observation_id"],
+    )
+
+
+def observed_schema_to_json(schema: ObservedSchema) -> dict[str, Any]:
+    return schema.to_dict()
+
+
+def observed_schema_from_json(d: dict[str, Any]) -> ObservedSchema:
+    return ObservedSchema.from_dict(d)
+
+
+def observation_to_json(obs: Observation) -> dict[str, Any]:
+    return {
+        "id": obs.id,
+        "knowledge_graph": obs.knowledge_graph,
+        "run_id": obs.run_id,
+        "observed_at": obs.observed_at.isoformat(),
+        "scope": graph_source_scope_to_json(obs.scope),
+        "schema": observed_schema_to_json(obs.schema),
+    }
+
+
+def observation_from_json(d: dict[str, Any]) -> Observation:
+    return Observation(
+        id=d["id"],
+        knowledge_graph=d["knowledge_graph"],
+        run_id=d["run_id"],
+        observed_at=datetime.fromisoformat(d["observed_at"]),
+        scope=graph_source_scope_from_json(d["scope"]),
+        schema=observed_schema_from_json(d["schema"]),
+    )
