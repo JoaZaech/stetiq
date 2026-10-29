@@ -100,3 +100,19 @@ def ontology_get(knowledge_graph: str, version: int, tracking_uri: TrackingUri =
     except StetiqError as e:
         raise _fail(e) from None
     typer.echo(text, nl=False)
+
+
+@ontology_app.command("diff")
+def ontology_diff(knowledge_graph: str, base: int, target: int, tracking_uri: TrackingUri = None) -> None:
+    """Show the Ontology Diff from version BASE to TARGET, each change additive, deprecating or breaking."""
+    try:
+        d = _client(tracking_uri).diff_ontology_versions(knowledge_graph, base, target)
+    except StetiqError as e:
+        raise _fail(e) from None
+    if not d.changes:
+        typer.echo(f"No changes between Ontology Versions {base} and {target}")
+        return
+    width = max(len(c.concept) for c in d.changes)
+    for c in d.changes:
+        typer.echo(f"{c.classification:<12} {c.kind:<11} {c.concept:<{width}}  {c.detail}")
+    typer.echo(f"Overall: {d.classification}")
