@@ -1,7 +1,7 @@
 """Metadata store interface: persistence only, no domain rules.
 
 Domain rules (dedupe, numbering, validation) live in `LocalTrackingService`.
-Implementations: `SqliteStore` (local mode); Postgres comes with the server.
+Implementation: `SqlStore` (SQLite or Postgres; used by local mode and the server).
 """
 
 from __future__ import annotations

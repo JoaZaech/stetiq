@@ -18,7 +18,7 @@ app.add_typer(ontology_app, name="ontology")
 
 TrackingUri = Annotated[
     str | None,
-    typer.Option("--tracking-uri", envvar="STETIQ_TRACKING_URI", help="e.g. sqlite:///stetiq.db"),
+    typer.Option("--tracking-uri", envvar="STETIQ_TRACKING_URI", help="http(s)://<server> (remote) or sqlite:///<path> (local)"),
 ]
 OntologyFile = Annotated[Path, typer.Argument(exists=True, dir_okay=False, help="stetiq YAML file")]
 
@@ -30,6 +30,27 @@ def _client(tracking_uri: str | None) -> Client:
 def _fail(e: StetiqError) -> typer.Exit:
     typer.echo(f"error: {e}", err=True)
     return typer.Exit(code=1)
+
+
+@app.command("server")
+def server(
+    database_url: Annotated[
+        str | None,
+        typer.Option(
+            "--database-url",
+            envvar="STETIQ_DATABASE_URL",
+            help="sqlite:///<path> or postgresql+psycopg://user@host/db (default sqlite:///.stetiq/server.db)",
+        ),
+    ] = None,
+    host: Annotated[str, typer.Option(help="Interface to bind")] = "127.0.0.1",
+    port: Annotated[int, typer.Option(help="Port to listen on")] = 5000,
+) -> None:
+    """Run the self-hosted stetiq server; point clients at it with --tracking-uri http://HOST:PORT."""
+    import uvicorn
+
+    from stetiq.server import create_app
+
+    uvicorn.run(create_app(database_url), host=host, port=port)
 
 
 @kg_app.command("create")

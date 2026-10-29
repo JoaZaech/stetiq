@@ -38,10 +38,9 @@ def test_knowledge_graph_with_malformed_ontology_is_not_created(client):
         client.get_knowledge_graph("customer-support-kg")
 
 
-def test_knowledge_graphs_persist_across_clients(tmp_path, support_ontology):
-    uri = f"sqlite:///{tmp_path / 'stetiq.db'}"
-    stetiq.Client(uri).create_knowledge_graph("customer-support-kg", ontology=support_ontology)
+def test_knowledge_graphs_persist_across_clients(client_factory, support_ontology):
+    client_factory().create_knowledge_graph("customer-support-kg", ontology=support_ontology)
 
-    versions = stetiq.Client(uri).list_ontology_versions("customer-support-kg")
+    versions = client_factory().list_ontology_versions("customer-support-kg")
 
     assert [v.number for v in versions] == [1]

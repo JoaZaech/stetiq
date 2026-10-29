@@ -174,6 +174,15 @@ def parse_yaml(text: str) -> Ontology:
         doc = yaml.safe_load(text)
     except yaml.YAMLError as e:
         raise OntologyValidationError(f"Invalid YAML: {e}") from None
+    return parse_dict(doc)
+
+
+def parse_dict(doc: Any) -> Ontology:
+    """Validate a stetiq-format document already parsed from YAML or JSON.
+
+    The canonical dict form (`canonical.to_dict`) is a valid input, which is how
+    the server re-validates Ontologies arriving over HTTP.
+    """
     if not isinstance(doc, dict):
         raise _fail("top level", "must be a mapping with node_types, relationship_types, patterns")
     _check_keys("top level", doc, _TOP_LEVEL_KEYS)

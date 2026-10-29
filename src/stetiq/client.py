@@ -10,7 +10,8 @@ from stetiq.tracking import (
     KnowledgeGraph,
     LocalTrackingService,
     OntologyVersion,
-    SqliteStore,
+    RemoteTrackingService,
+    SqlStore,
     TrackingService,
 )
 
@@ -27,9 +28,20 @@ def resolve_tracking_uri(tracking_uri: str | None = None) -> str:
 
 
 def service_for_uri(tracking_uri: str) -> TrackingService:
-    if tracking_uri.startswith("sqlite:///"):
-        return LocalTrackingService(SqliteStore(tracking_uri.removeprefix("sqlite:///")))
-    raise ValueError(f"Unsupported tracking URI {tracking_uri!r} (expected sqlite:///<path>)")
+    """Pick the mode from the tracking URI.
+
+    - `http://` / `https://`: remote mode, talking to a stetiq server
+    - `sqlite:///<path>`, `postgresql[+psycopg]://...`: local mode, in-process over that database
+    """
+    scheme = tracking_uri.split(":", 1)[0].lower()
+    if scheme in ("http", "https"):
+        return RemoteTrackingService(tracking_uri)
+    if scheme == "sqlite" or scheme.startswith("postgresql"):
+        return LocalTrackingService(SqlStore(tracking_uri))
+    raise ValueError(
+        f"Unsupported tracking URI {tracking_uri!r} "
+        "(expected http(s)://<server>, sqlite:///<path> or postgresql://...)"
+    )
 
 
 def _to_ontology(ontology: OntologyInput) -> Ontology:
@@ -41,7 +53,7 @@ def _to_ontology(ontology: OntologyInput) -> Ontology:
 
 
 class Client:
-    """Entry point to stetiq. Local mode (in-process SQLite) for `sqlite:///` URIs."""
+    """Entry point to stetiq: remote mode for `http(s)://` tracking URIs, else local mode."""
 
     def __init__(
         self, tracking_uri: str | None = None, *, service: TrackingService | None = None
