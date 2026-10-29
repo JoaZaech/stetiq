@@ -2,6 +2,8 @@
 
 from stetiq.client import ActiveRun, Client
 from stetiq.errors import (
+    AuthenticationError,
+    PermissionDeniedError,
     EvaluatorError,
     GraphSourceNotBoundError,
     GraphSourceUnavailableError,
@@ -34,6 +36,8 @@ from stetiq.tracking import (
 )
 
 __all__ = [
+    "AuthenticationError",
+    "PermissionDeniedError",
     "Alias",
     "InvalidAliasNameError",
     "Promotion",

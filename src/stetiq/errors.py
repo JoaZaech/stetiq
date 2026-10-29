@@ -36,3 +36,11 @@ class RunNotActiveError(StetiqError):
 
 class InvalidAliasNameError(StetiqError):
     """An Alias name is empty or contains characters other than letters, digits, `_`, `-`, `.`."""
+
+
+class AuthenticationError(StetiqError):
+    """Server mode: the request carried no API token, or one that is unknown or revoked."""
+
+
+class PermissionDeniedError(StetiqError):
+    """Server mode: the API token lacks the permission this Knowledge Graph operation needs."""
