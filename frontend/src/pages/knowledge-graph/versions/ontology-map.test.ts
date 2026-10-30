@@ -7,6 +7,7 @@ import {
   neighboursOf,
   NODE_SIZE,
   ontologyMap,
+  searchMap,
   type Point,
 } from './ontology-map'
 
@@ -200,6 +201,22 @@ describe('detailsOf', () => {
     expect(detailsOf(HIERARCHY, null)).toBeNull()
     expect(detailsOf(HIERARCHY, { kind: 'class', label: 'Agent' })).toBeNull()
     expect(detailsOf(HIERARCHY, { kind: 'link', id: '(Ticket)-[OPENED]->(Customer)' })).toBeNull()
+  })
+})
+
+describe('searchMap', () => {
+  it('matches the classes and links whose Concept the tables would find', () => {
+    // "open" is in Customer's description and is the OPENED relation; "tier" is a VipCustomer attribute.
+    expect(searchMap(HIERARCHY, ' OPEN ')).toEqual({
+      classes: new Set(['Customer']),
+      links: new Set(['(Customer)-[OPENED]->(Ticket)']),
+    })
+    expect(searchMap(HIERARCHY, 'tier')).toEqual({ classes: new Set(['VipCustomer']), links: new Set() })
+    expect(searchMap(HIERARCHY, 'nothing like it')).toEqual({ classes: new Set(), links: new Set() })
+  })
+
+  it('matches nothing in particular for an empty search', () => {
+    expect(searchMap(HIERARCHY, '  ')).toBeNull()
   })
 })
 

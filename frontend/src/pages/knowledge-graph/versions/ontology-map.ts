@@ -5,6 +5,7 @@
  */
 import ELK from 'elkjs/lib/elk.bundled.js'
 import type { Ontology, OntologyProperty } from '@/api/ontology-versions'
+import { conceptTables, searchConcepts } from './concepts'
 
 export interface MapNode {
   /** The class label, also the node's key. */
@@ -203,6 +204,28 @@ export function detailsOf(ontology: Ontology, selection: MapSelection | null): M
     }
   }
   return null
+}
+
+/**
+ * The classes and links the Concept search `query` matches, the same Concepts the tables
+ * find: a class by its name, description or one of its attributes, and a link by its
+ * relation's. Null for an empty search, which matches nothing in particular.
+ */
+export function searchMap(ontology: Ontology, query: string): MapFocus | null {
+  if (query.trim() === '') return null
+  const { classes, relations, attributes } = searchConcepts(conceptTables(ontology), query)
+  const owners = new Set(attributes.map((a) => a.owner))
+  const matchedRelations = new Set([...relations.map((r) => r.label), ...owners])
+  return {
+    classes: new Set(
+      ontology.node_types.map((n) => n.label).filter((l) => owners.has(l) || classes.some((c) => c.label === l)),
+    ),
+    links: new Set(
+      ontologyMap(ontology)
+        .links.filter((l) => matchedRelations.has(l.relation))
+        .map((l) => l.id),
+    ),
+  }
 }
 
 export interface Point {
