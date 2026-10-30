@@ -101,3 +101,36 @@ test('a run-originated version links its Construction Run; an ungated version ha
   )
   await expect(page.getByRole('region', { name: 'Latest Gate result' })).toContainText('None')
 })
+
+test('the Ontology tab lists Concepts grouped, with hierarchy and constraints, and searchable', async ({
+  page,
+}) => {
+  await page.goto('/ui/kg/support/versions/3')
+  await page.getByRole('navigation', { name: 'Ontology Version' }).getByRole('link', { name: 'Ontology' }).click()
+  await expect(page).toHaveURL('/ui/kg/support/versions/3/ontology')
+
+  const classes = page.getByRole('table', { name: 'Classes' })
+  const relations = page.getByRole('table', { name: 'Relations' })
+  const attributes = page.getByRole('table', { name: 'Attributes' })
+  await expect(classes.getByRole('row')).toHaveText([
+    /Class.*Superclass.*Constraints/,
+    /^Party/,
+    /^Agent\s*Party/,
+    /^Customer\s*Someone who opens tickets\s*Party\s*UNIQUENESS \(name\)/,
+    /^Ticket/,
+  ])
+  await expect(relations.getByRole('row').nth(1)).toHaveText(/OPENED.*\(Customer\)-\[OPENED\]->\(Ticket\)/)
+  await expect(attributes.getByRole('row')).toHaveText([
+    /Class or relation.*Attribute.*Type.*Required/,
+    /Party\s*name\s*STRING\s*Required/,
+    /Ticket\s*opened_at\s*DATE/,
+    /Ticket\s*priority\s*INTEGER/,
+  ])
+
+  await page.getByRole('searchbox', { name: 'Search Concepts' }).fill('ticket')
+
+  await expect(classes.getByRole('row')).toHaveText([/Class/, /^Customer/, /^Ticket/])
+  await expect(relations).toHaveCount(0)
+  await expect(page.getByText('No relations match “ticket”.')).toBeVisible()
+  await expect(attributes.getByRole('row')).toHaveCount(3)
+})
