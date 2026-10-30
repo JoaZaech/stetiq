@@ -61,7 +61,7 @@ export interface ChangeSummary {
 }
 
 /** The words for a class and a relation, as the Map says them. */
-const CONCEPT_NOUN: Record<OwnerKind, string> = { node_type: 'class', relationship_type: 'relation' }
+export const CONCEPT_NOUN: Record<OwnerKind, string> = { node_type: 'class', relationship_type: 'relation' }
 /** How the Diff words them (`_KIND_NAMES` in ontology/diff.py). */
 const DIFF_NOUN: Record<OwnerKind, string> = { node_type: 'node type', relationship_type: 'relationship type' }
 
