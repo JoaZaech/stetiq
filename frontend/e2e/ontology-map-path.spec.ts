@@ -11,6 +11,14 @@ const item = (map: Locator, name: string) => map.getByRole('group', { name, exac
 /** The drawn shape of a class's node, which carries its highlight state. */
 const shape = (map: Locator, label: string) => item(map, label).locator('[data-class]')
 
+/**
+ * Zoom out until the whole Map is in view: it opens at the readable zoom, at which this
+ * Ontology's far classes lie outside the Map, too far to click.
+ */
+async function zoomOutToAll(map: Locator) {
+  for (let i = 0; i < 2; i++) await map.getByRole('button', { name: 'Zoom Out' }).click()
+}
+
 test('selecting two classes highlights the shortest path between them', async ({ page }) => {
   await page.goto('/ui/kg/support/versions/1/ontology')
   const map = ontologyMap(page)
@@ -31,6 +39,7 @@ test("a path through a superclass's Pattern is found", async ({ page }) => {
   await page.goto('/ui/kg/support/versions/1/ontology')
   const map = ontologyMap(page)
 
+  await zoomOutToAll(map)
   await item(map, 'Ticket').click()
   await item(map, 'Address').click({ modifiers: ['Shift'] })
 
@@ -47,6 +56,7 @@ test('the Map says so when no path connects two classes', async ({ page }) => {
   await page.goto('/ui/kg/support/versions/1/ontology')
   const map = ontologyMap(page)
 
+  await zoomOutToAll(map)
   await item(map, 'Customer').click()
   await item(map, 'Agent').click({ modifiers: ['Shift'] })
 

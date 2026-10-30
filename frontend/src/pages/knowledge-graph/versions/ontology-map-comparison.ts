@@ -67,7 +67,7 @@ const mostSevere = (classifications: Classification[]): Classification | null =>
 type ComparedOntologies = Pick<OntologyComparison, 'base' | 'target' | 'diff'>
 
 /** A class's or a relation's Concept kind: the Concepts that own attributes. */
-type OwnerKind = Exclude<OntologyChange['concept_kind'], 'property'>
+export type OwnerKind = Exclude<OntologyChange['concept_kind'], 'property'>
 
 /**
  * The Diff's changes to one class or relation: those to the Concept itself and to its

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Ontology } from '@/api/ontology-versions'
-import { conceptTables, searchConcepts } from './concepts'
+import { conceptTables } from './concepts'
 
 // Canonical form, as the server sends it: Concepts sorted by label.
 const ONTOLOGY: Ontology = {
@@ -48,6 +48,7 @@ describe('conceptTables', () => {
         description: undefined,
         deprecated: false,
         patterns: ['(Agent)-[OPENED]->(Ticket)', '(Customer)-[OPENED]->(Ticket)'],
+        attributes: 1,
       },
     ])
     expect(attributes.map((a) => [a.owner, a.name, a.type, a.required])).toEqual([
@@ -112,27 +113,26 @@ describe('conceptTables', () => {
       ['Person', ['WROTE → Paper'], []],
     ])
   })
-})
 
-describe('searchConcepts', () => {
-  it('keeps Concepts whose name or description contains the query, ignoring case', () => {
-    const found = searchConcepts(conceptTables(ONTOLOGY), 'TICKETS')
+  it('counts each relation’s attributes, keeping a relation without Patterns or attributes', () => {
+    const { relations } = conceptTables({
+      node_types: [{ label: 'Paper' }],
+      relationship_types: [
+        {
+          label: 'CITES',
+          properties: [
+            { name: 'page', type: 'INTEGER' },
+            { name: 'since', type: 'DATE' },
+          ],
+        },
+        { label: 'UNUSED', deprecated: true },
+      ],
+      patterns: [['Paper', 'CITES', 'Paper']],
+    })
 
-    expect(found.classes.map((c) => c.label)).toEqual(['Customer'])
-    expect(found.relations).toEqual([])
-    expect(found.attributes).toEqual([])
-  })
-
-  it('matches attributes by their owner too', () => {
-    const found = searchConcepts(conceptTables(ONTOLOGY), 'ticket')
-
-    expect(found.classes.map((c) => c.label)).toEqual(['Customer', 'Ticket'])
-    expect(found.attributes.map((a) => `${a.owner}.${a.name}`)).toEqual(['Ticket.opened_at'])
-  })
-
-  it('returns everything for a blank query', () => {
-    const tables = conceptTables(ONTOLOGY)
-
-    expect(searchConcepts(tables, '  ')).toBe(tables)
+    expect(relations.map((r) => [r.label, r.patterns, r.attributes, r.deprecated])).toEqual([
+      ['CITES', ['(Paper)-[CITES]->(Paper)'], 2, false],
+      ['UNUSED', [], 0, true],
+    ])
   })
 })

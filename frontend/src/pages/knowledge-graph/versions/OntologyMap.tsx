@@ -4,7 +4,6 @@ import { useQuery } from '@tanstack/react-query'
 import {
   BaseEdge,
   Controls,
-  EdgeLabelRenderer,
   Handle,
   MarkerType,
   Panel,
@@ -13,6 +12,7 @@ import {
   useInternalNode,
   useReactFlow,
   useStore,
+  ViewportPortal,
   type Edge,
   type EdgeProps,
   type InternalNode,
@@ -27,6 +27,7 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
+import { MapChangeSummary } from './MapChangeSummary'
 import { MapDetailsPanel } from './MapDetailsPanel'
 import { MapPathPanel } from './MapPathPanel'
 import { MapSearchResults } from './MapSearchResults'
@@ -40,6 +41,7 @@ import {
 } from './ontology-map-comparison'
 import { detailsOf, focusOf, searchMap, type MapSelection } from './ontology-map-focus'
 import { layoutOntologyMap, NODE_SIZE, type Point, type Size } from './ontology-map-layout'
+import { LABEL_FONT_SIZE, labelShown, linkShape, READABLE_ZOOM, straightPath, type Box } from './ontology-map-links'
 import { shortestPaths } from './ontology-map-paths'
 import { searchOntology, type SearchResult } from './ontology-map-search'
 
@@ -67,7 +69,11 @@ type ClassNode = Node<
     MapChangeData,
   'class'
 >
-type PatternEdge = Edge<{ relation: string; route: LinkRoute; deprecated: boolean } & Emphasis & MapChangeData, 'pattern'>
+/** `focused`: in the selection's focus, so its label shows at any zoom. */
+type PatternEdge = Edge<
+  { relation: string; route: LinkRoute; deprecated: boolean; focused: boolean } & Emphasis & MapChangeData,
+  'pattern'
+>
 type SubclassEdge = Edge<MapChangeData, 'subclass'>
 
 const NODE_TYPES = { class: ClassNodeView }
@@ -76,11 +82,8 @@ const EDGE_TYPES = { pattern: PatternEdgeView, subclass: SubclassEdgeView }
 /** The hollow triangle at the superclass end of a subclass link (see `SubclassArrowhead`). */
 const SUBCLASS_ARROWHEAD = 'ontology-map-subclass-arrowhead'
 
-/** Pixels between parallel links, per unit of a `line` route's bend. */
-const BEND_SPACING = 48
-/** How far the smallest self-loop reaches out of its class, and how much each further loop adds. */
-const LOOP_REACH = 48
-const LOOP_STEP = 24
+/** Fit-to-view never zooms out so far that link labels can no longer be read. */
+const FIT_VIEW_OPTIONS = { minZoom: READABLE_ZOOM }
 
 /** Severity's channel: the Diff colours, as Tailwind classes for each part of a mark, and as a stroke. */
 const SEVERITY: Record<'border' | 'fill' | 'ring' | 'text', Record<Classification, string>> = {
@@ -213,16 +216,23 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
   const [filters, setFilters] = useState<MapFilters>({ hideDeprecated: false, hideSubclassLinks: false })
   const shown = useMemo(() => filterOntologyMap(map, filters), [map, filters])
   const [selection, setSelection] = useState<MapSelection | null>(null)
+  // What the change summary points at: its focus shows, without selecting it.
+  const [preview, setPreview] = useState<MapSelection | null>(null)
   // Focus is over what is shown, so a selection a filter hides is no selection. Hiding
   // subclass links only declutters: a path through an inherited Pattern still counts.
   const reachable = useMemo(
     () => (filters.hideSubclassLinks ? filterOntologyMap(map, { ...filters, hideSubclassLinks: false }) : shown),
     [map, filters, shown],
   )
-  const focus = useMemo(() => focusOf(reachable, selection), [reachable, selection])
+  const selectedFocus = useMemo(() => focusOf(reachable, selection), [reachable, selection])
+  const focus = useMemo(
+    () => (preview ? focusOf(reachable, preview) : selectedFocus),
+    [preview, reachable, selectedFocus],
+  )
   const paths = useMemo(
-    () => (focus && selection?.kind === 'path' ? shortestPaths(reachable, selection.from, selection.to) : null),
-    [focus, reachable, selection],
+    () =>
+      selectedFocus && selection?.kind === 'path' ? shortestPaths(reachable, selection.from, selection.to) : null,
+    [selectedFocus, reachable, selection],
   )
   const matches = useMemo(() => searchMap(ontology, query), [ontology, query])
   const results = useMemo(() => searchOntology(ontology, query), [ontology, query])
@@ -235,7 +245,10 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
     const link = shown.links.find((l) => l.relation === result.label)
     return link ? { kind: 'link', id: link.id } : null
   }
-  const details = useMemo(() => (focus ? detailsOf(ontology, selection) : null), [focus, ontology, selection])
+  const details = useMemo(
+    () => (selectedFocus ? detailsOf(ontology, selection) : null),
+    [selectedFocus, ontology, selection],
+  )
 
   useEffect(() => {
     if (!selection) return
@@ -306,6 +319,7 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
         relation: l.relation,
         route: l.route,
         deprecated: l.deprecated,
+        focused: focus?.links.has(l.id) ?? false,
         change: comparison?.changes.links[l.id],
         ...linkEmphasis(l.id),
       },
@@ -334,7 +348,10 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
 
   const centre = useMemo(() => {
     if (!layout.data || !located || located !== selection) return null
-    const centreOf = (label: string) => boxAt(layout.data[label], sizes[label] ?? NODE_SIZE).center
+    const centreOf = (label: string): Point => {
+      const { width, height } = sizes[label] ?? NODE_SIZE
+      return { x: layout.data[label].x + width / 2, y: layout.data[label].y + height / 2 }
+    }
     if (located.kind === 'class') return centreOf(located.label)
     if (located.kind !== 'link') return null
     const link = map.links.find((l) => l.id === located.id)
@@ -347,6 +364,14 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
   if (!elements) return <Skeleton className="h-[32rem] w-full" />
   return (
     <div className="flex h-[32rem] overflow-hidden rounded-md border">
+      {comparison && (
+        <MapChangeSummary
+          comparison={comparison}
+          selection={selection}
+          onPreview={setPreview}
+          onSelect={setSelection}
+        />
+      )}
       {query.trim() !== '' && (
         <MapSearchResults
           query={query}
@@ -382,8 +407,9 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
         onPaneClick={() => setSelection(null)}
         minZoom={0.2}
         fitView
+        fitViewOptions={FIT_VIEW_OPTIONS}
       >
-        <Controls showInteractive={false} />
+        <Controls showInteractive={false} fitViewOptions={FIT_VIEW_OPTIONS} />
         <Panel position="top-right" className="flex gap-4 rounded-md border bg-card px-3 py-2 text-sm shadow-xs">
           <FilterSwitch
             id="map-hide-deprecated"
@@ -584,13 +610,10 @@ function ChangedAttributes({ attributes }: { attributes: AttributeChange[] }) {
 function PatternEdgeView({ id, source, target, data, markerEnd }: EdgeProps<PatternEdge>) {
   const from = useInternalNode(source)
   const to = useInternalNode(target)
+  // Re-rendered only when the label shows or hides, not on every step of a zoom.
+  const shown = useStore((s) => labelShown(s.transform[2], { focused: data?.focused ?? false, change: data?.change }))
   if (!from || !to || !data) return null
-  const a = box(from)
-  const b = box(to)
-  const { path, label, labelAlign } =
-    data.route.kind === 'loop' ? loopPath(a, data.route.size) : linePath(a, b, data.route.bend)
-  // A link's label is centred on it; a loop's sits just outside the arc.
-  const anchor = labelAlign === 'start' ? 'translate(0, -50%)' : 'translate(-50%, -50%)'
+  const { path, label } = linkShape(data, box(from), box(to))
 
   const severity = data.change?.severity ?? null
   const style = changeStyle(data.change)
@@ -614,22 +637,32 @@ function PatternEdgeView({ id, source, target, data, markerEnd }: EdgeProps<Patt
           cursor: 'pointer',
         }}
       />
-      <EdgeLabelRenderer>
-        {/* Relation names are text only: hue is reserved for severity. */}
-        <div
-          className={cn(
-            'nodrag nopan pointer-events-none absolute rounded-sm bg-background/90 px-1 font-mono text-[10px] text-muted-foreground',
-            data.deprecated && 'line-through opacity-50',
-            style.muted && 'opacity-60',
-            style.outlined && ['border', severity && SEVERITY.border[severity]],
-            (emphasized || style.outlined) && 'font-semibold text-foreground',
-            data.faded && 'opacity-30',
-          )}
-          style={{ transform: `translate(${label.x}px, ${label.y}px) ${anchor}` }}
-        >
-          {data.relation}
-        </div>
-      </EdgeLabelRenderer>
+      {shown && (
+        // The top layer, above every node and link. The pill stays solid, so a link or a
+        // faded item never shows through; only its text fades.
+        <ViewportPortal>
+          {/* Relation names are text only: hue is reserved for severity. */}
+          <div
+            data-link-label
+            className={cn(
+              'nodrag nopan pointer-events-none absolute flex items-center justify-center whitespace-nowrap rounded-full border bg-background font-mono text-muted-foreground shadow-xs',
+              style.outlined && severity && SEVERITY.border[severity],
+              (emphasized || style.outlined) && 'font-semibold text-foreground',
+            )}
+            style={{ left: label.x, top: label.y, width: label.width, height: label.height, fontSize: LABEL_FONT_SIZE }}
+          >
+            <span
+              className={cn(
+                data.deprecated && 'line-through opacity-50',
+                style.muted && 'opacity-60',
+                data.faded && 'opacity-30',
+              )}
+            >
+              {data.relation}
+            </span>
+          </div>
+        </ViewportPortal>
+      )}
     </>
   )
 }
@@ -639,7 +672,7 @@ function SubclassEdgeView({ id, source, target, markerEnd, data }: EdgeProps<Sub
   const from = useInternalNode(source)
   const to = useInternalNode(target)
   if (!from || !to) return null
-  const { path } = linePath(box(from), box(to), 0)
+  const path = straightPath(box(from), box(to))
   const style = changeStyle(data?.change)
   return (
     <BaseEdge
@@ -657,67 +690,9 @@ function SubclassEdgeView({ id, source, target, markerEnd, data }: EdgeProps<Sub
   )
 }
 
-/** A class's node as links attach to it: its centre and its size, which a comparison may grow. */
-type Box = Size & { center: Point }
-
-/** The box of a class's node of `size` placed at `topLeft`. */
-const boxAt = (topLeft: Point, { width, height }: Size): Box => ({
-  width,
-  height,
-  center: { x: topLeft.x + width / 2, y: topLeft.y + height / 2 },
+/** A drawn class node's box, at its size on the Map, which a comparison may grow. */
+const box = (node: InternalNode): Box => ({
+  ...node.internals.positionAbsolute,
+  width: node.width ?? NODE_SIZE.width,
+  height: node.height ?? NODE_SIZE.height,
 })
-
-/** A drawn class node's box, at its size on the Map. */
-const box = (node: InternalNode): Box =>
-  boxAt(node.internals.positionAbsolute, {
-    width: node.width ?? NODE_SIZE.width,
-    height: node.height ?? NODE_SIZE.height,
-  })
-
-/** Where the ray from a node's centre towards `toward` leaves the node's box. */
-function boundary({ center: c, width, height }: Box, toward: Point): Point {
-  const dx = toward.x - c.x
-  const dy = toward.y - c.y
-  if (dx === 0 && dy === 0) return c
-  const scale = 1 / Math.max(Math.abs(dx) / (width / 2), Math.abs(dy) / (height / 2))
-  return { x: c.x + dx * scale, y: c.y + dy * scale }
-}
-
-/** A quadratic curve between two classes' boxes, bent `bend` spacings to the left of a → b. */
-function linePath(from: Box, to: Box, bend: number) {
-  const [a, b] = [from.center, to.center]
-  const length = Math.hypot(b.x - a.x, b.y - a.y) || 1
-  // Left of a → b in screen coordinates, where y grows downwards.
-  const normal = { x: (b.y - a.y) / length, y: -(b.x - a.x) / length }
-  // A quadratic's midpoint lies halfway to its control point: twice the offset bends it by one.
-  const control = {
-    x: (a.x + b.x) / 2 + normal.x * bend * BEND_SPACING * 2,
-    y: (a.y + b.y) / 2 + normal.y * bend * BEND_SPACING * 2,
-  }
-  const start = boundary(from, control)
-  const end = boundary(to, control)
-  return {
-    path: `M ${start.x} ${start.y} Q ${control.x} ${control.y} ${end.x} ${end.y}`,
-    // The curve's midpoint.
-    label: { x: (start.x + 2 * control.x + end.x) / 4, y: (start.y + 2 * control.y + end.y) / 4 },
-    labelAlign: 'center' as const,
-  }
-}
-
-/**
- * An arc out of a class's right end and back, where links between classes (centre to
- * centre, through the wide node's top or bottom) rarely leave; larger loops nest outside
- * smaller ones.
- */
-function loopPath({ center: c, width }: Box, size: number) {
-  const right = c.x + width / 2
-  const reach = LOOP_REACH + LOOP_STEP * (size - 1)
-  const spread = 8 + 6 * (size - 1)
-  const [y0, y1] = [c.y - spread, c.y + spread]
-  return {
-    path: `M ${right} ${y0} C ${right + reach} ${y0 - spread * 2}, ${right + reach} ${y1 + spread * 2}, ${right} ${y1}`,
-    // A cubic's midpoint: 3/4 of the way to its control points, here just outside the arc.
-    label: { x: right + reach * 0.75 + 4, y: c.y },
-    labelAlign: 'start' as const,
-  }
-}

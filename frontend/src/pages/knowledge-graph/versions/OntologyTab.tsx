@@ -8,20 +8,12 @@ import { ViewToggle } from '@/components/ViewToggle'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { createDataTableColumnHelper, filterColumn, useDataTable } from '@/lib/data-table'
 import { type DataTableParamsOptions, useDataTableParams } from '@/lib/data-table-params'
 import { useViewParam } from '@/lib/view-param'
 import { attributeRows } from './attribute-rows'
 import { AttributesGrid } from './AttributesGrid'
-import { type ClassRow, type ConceptTables, conceptTables, searchConcepts } from './concepts'
+import { type ClassRow, type RelationRow, conceptTables } from './concepts'
 import { MAP_VIEW_OPTIONS, MAP_VIEWS } from './map-view'
 import { OntologyMap } from './OntologyMap'
 import { useOntologyVersionTab } from './version-context'
@@ -66,7 +58,7 @@ export function OntologyTab() {
       {view === 'map' ? (
         <OntologyMap ontology={version.ontology} query={query} />
       ) : (
-        <OntologyTables ontology={version.ontology} query={query} />
+        <OntologyTables ontology={version.ontology} />
       )}
     </div>
   )
@@ -94,9 +86,8 @@ const SECTIONS: readonly { id: SectionId; title: string; purpose: string }[] = [
   },
 ]
 
-function OntologyTables({ ontology, query }: { ontology: Ontology; query: string }) {
+function OntologyTables({ ontology }: { ontology: Ontology }) {
   const all = useMemo(() => conceptTables(ontology), [ontology])
-  const { relations } = searchConcepts(all, query)
   const attributes = useMemo(() => attributeRows(ontology), [ontology])
   const [collapsed, setCollapsed] = useState<ReadonlySet<SectionId>>(new Set())
   const sections = useRef(new Map<SectionId, HTMLElement>())
@@ -114,7 +105,7 @@ function OntologyTables({ ontology, query }: { ontology: Ontology; query: string
   }
   const body: Record<SectionId, ReactNode> = {
     classes: <ClassesGrid classes={all.classes} />,
-    relations: <RelationsTable relations={relations} query={query} />,
+    relations: <RelationsGrid relations={all.relations} />,
     attributes: <AttributesGrid attributes={attributes} />,
   }
 
@@ -323,43 +314,104 @@ function ClassesGrid({ classes }: { classes: ClassRow[] }) {
   )
 }
 
-function RelationsTable({ relations, query }: { relations: ConceptTables['relations']; query: string }) {
-  if (relations.length === 0) return <Empty title="relations" query={query} />
+const relationColumn = createDataTableColumnHelper<RelationRow>()
+
+/** A Pattern `(Source)-[REL]->(Target)`, its two class names set apart from the syntax. */
+const PATTERN = /^\((.*)\)-\[(.*)\]->\((.*)\)$/
+
+function PatternText({ pattern }: { pattern: string }) {
+  const [, source, relation, target] = PATTERN.exec(pattern) ?? []
+  if (source === undefined) return <div>{pattern}</div>
+  const syntax = (text: string) => <span className="text-muted-foreground">{text}</span>
   return (
-    <Table aria-label="Relations">
-      <TableHeader>
-        <TableRow>
-          <TableHead>Relation</TableHead>
-          <TableHead>Patterns</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {relations.map((r) => (
-          <TableRow key={r.label}>
-            <TableCell>
-              <ConceptName label={r.label} description={r.description} deprecated={r.deprecated} />
-            </TableCell>
-            <TableCell className="font-mono text-xs">
-              {r.patterns.map((p) => (
-                <div key={p}>{p}</div>
-              ))}
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <div>
+      {syntax('(')}
+      <span className="font-semibold">{source}</span>
+      {syntax(`)-[${relation}]->(`)}
+      <span className="font-semibold">{target}</span>
+      {syntax(')')}
+    </div>
   )
 }
 
-function Empty({ title, query }: { title: string; query: string }) {
+const relationColumns = relationColumn.columns([
+  relationColumn.accessor('label', {
+    header: 'Relation',
+    ...filterColumn('text'),
+    cell: ({ row }) => <ConceptName label={row.original.label} deprecated={row.original.deprecated} />,
+  }),
+  relationColumn.accessor('patterns', {
+    header: 'Patterns',
+    ...filterColumn('text'),
+    enableSorting: false,
+    enableGlobalFilter: false,
+    cell: ({ getValue }) =>
+      getValue().length === 0 ? (
+        none
+      ) : (
+        <div className="font-mono text-xs">
+          {getValue().map((p) => (
+            <PatternText key={p} pattern={p} />
+          ))}
+        </div>
+      ),
+  }),
+  relationColumn.accessor('attributes', {
+    header: 'Attributes',
+    sortFn: 'basic',
+    enableGlobalFilter: false,
+    cell: ({ getValue }) => <span className="tabular-nums">{getValue()}</span>,
+  }),
+  relationColumn.accessor('description', {
+    header: 'Description',
+    ...filterColumn('text'),
+    enableSorting: false,
+    cell: ({ getValue }) => <span className="text-muted-foreground">{getValue()}</span>,
+  }),
+  relationColumn.accessor('deprecated', {
+    header: 'Deprecated',
+    ...filterColumn('toggle'),
+    enableGlobalFilter: false,
+    cell: ({ getValue }) => (getValue() ? 'Deprecated' : ''),
+  }),
+])
+
+/**
+ * The Relations grid's URL state. The search is the Concept search (`?q=`), matching a
+ * relation's name or description as the Map's search does.
+ */
+const RELATIONS_GRID: DataTableParamsOptions = {
+  key: 'relations',
+  filters: { label: 'text', patterns: 'text', description: 'text', deprecated: 'toggle' },
+  optional: ['deprecated'],
+  search: 'q',
+}
+
+function RelationsGrid({ relations }: { relations: RelationRow[] }) {
+  const grid = useDataTableParams(RELATIONS_GRID)
+  const table = useDataTable({
+    data: relations,
+    columns: relationColumns,
+    getRowId: (row) => row.label,
+    globalFilterFn: 'includesString',
+    ...grid.tableOptions,
+  })
   return (
-    <p className="text-sm text-muted-foreground">
-      {query.trim() ? `No ${title} match “${query.trim()}”.` : `This Ontology has no ${title}.`}
-    </p>
+    <>
+      <div className="flex items-center justify-between gap-4">
+        <DataTableRowCount table={table} noun="relations" />
+        <ColumnPicker
+          groups={[{ label: 'Columns', columns: [{ id: 'deprecated', label: 'Deprecated' }] }]}
+          visible={grid.shown}
+          onToggle={grid.setShown}
+        />
+      </div>
+      <DataTable table={table} label="Relations" empty="No relations match." />
+    </>
   )
 }
 
-function ConceptName({
+export function ConceptName({
   label,
   description,
   deprecated = false,
