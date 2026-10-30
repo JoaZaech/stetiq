@@ -4,7 +4,7 @@
  * (source, relation, target); relations are not nodes. No React and no I/O here.
  */
 import ELK from 'elkjs/lib/elk.bundled.js'
-import type { Ontology } from '@/api/ontology-versions'
+import type { Ontology, OntologyProperty } from '@/api/ontology-versions'
 
 export interface MapNode {
   /** The class label, also the node's key. */
@@ -107,6 +107,100 @@ export function focusOf(map: OntologyMap, selection: MapSelection | null): MapFo
     const link = map.links.find((l) => l.id === selection.id)
     if (!link) return null
     return { classes: new Set([link.source, link.target]), links: new Set([link.id]) }
+  }
+  return null
+}
+
+/** A property as the details panel lists it. */
+export interface DetailProperty {
+  name: string
+  type: string
+  description?: string
+  required: boolean
+  /** The ancestor class that declares it, when the class inherits it; absent when its own. */
+  inheritedFrom?: string
+}
+
+export interface ClassDetails {
+  kind: 'class'
+  label: string
+  description?: string
+  deprecated: boolean
+  parent?: string
+  /** Its own properties, then each ancestor's, nearest first; a redeclared one is listed once, as the nearest. */
+  properties: DetailProperty[]
+  /** Constraints declared on the class, e.g. `UNIQUENESS (name)`. */
+  constraints: string[]
+}
+
+export interface LinkDetails {
+  kind: 'link'
+  id: string
+  source: string
+  relation: string
+  target: string
+  /** The relation's description, deprecation and properties: every Pattern of a relation shares them. */
+  description?: string
+  deprecated: boolean
+  properties: DetailProperty[]
+}
+
+/** What the details panel shows for a selection. */
+export type MapDetails = ClassDetails | LinkDetails
+
+const detailProperty = (p: OntologyProperty, inheritedFrom?: string): DetailProperty => ({
+  name: p.name,
+  type: p.type,
+  description: p.description,
+  required: p.required ?? false,
+  ...(inheritedFrom !== undefined && { inheritedFrom }),
+})
+
+/**
+ * The details of a selected class or link, or null when nothing (that the Ontology has)
+ * is selected. A class's inherited properties come from its superclass chain, which stops
+ * at a superclass the Ontology does not declare and never revisits a class.
+ */
+export function detailsOf(ontology: Ontology, selection: MapSelection | null): MapDetails | null {
+  if (selection?.kind === 'class') {
+    const classes = new Map(ontology.node_types.map((n) => [n.label, n]))
+    const node = classes.get(selection.label)
+    if (!node) return null
+    const properties: DetailProperty[] = []
+    const seen = new Set<string>()
+    for (let c = node; c && !seen.has(c.label); c = c.parent === undefined ? undefined : classes.get(c.parent)) {
+      seen.add(c.label)
+      for (const p of c.properties ?? []) {
+        if (properties.some((q) => q.name === p.name)) continue
+        properties.push(detailProperty(p, c === node ? undefined : c.label))
+      }
+    }
+    return {
+      kind: 'class',
+      label: node.label,
+      description: node.description,
+      deprecated: node.deprecated ?? false,
+      parent: node.parent,
+      properties,
+      constraints: (ontology.constraints ?? [])
+        .filter((c) => c.node_type === node.label)
+        .map((c) => `${c.type} (${c.property_name})`),
+    }
+  }
+  if (selection?.kind === 'link') {
+    const link = ontologyMap(ontology).links.find((l) => l.id === selection.id)
+    if (!link) return null
+    const relation = ontology.relationship_types.find((r) => r.label === link.relation)
+    return {
+      kind: 'link',
+      id: link.id,
+      source: link.source,
+      relation: link.relation,
+      target: link.target,
+      description: relation?.description,
+      deprecated: relation?.deprecated ?? false,
+      properties: (relation?.properties ?? []).map((p) => detailProperty(p)),
+    }
   }
   return null
 }

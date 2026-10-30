@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Ontology } from '@/api/ontology-versions'
 import {
+  detailsOf,
   focusOf,
   layoutOntologyMap,
   neighboursOf,
@@ -108,6 +109,97 @@ describe('focusOf', () => {
     expect(focusOf(map, null)).toBeNull()
     expect(focusOf(map, { kind: 'class', label: 'Agent' })).toBeNull()
     expect(focusOf(map, { kind: 'link', id: '(Agent)-[OPENED]->(Ticket)' })).toBeNull()
+  })
+})
+
+// A class hierarchy, Party > Customer > VipCustomer, with properties at each level.
+const HIERARCHY: Ontology = {
+  node_types: [
+    {
+      label: 'Customer',
+      description: 'Someone who opens tickets',
+      parent: 'Party',
+      properties: [{ name: 'email', type: 'STRING' }],
+    },
+    { label: 'Party', properties: [{ name: 'name', type: 'STRING', required: true }] },
+    { label: 'Ticket' },
+    { label: 'VipCustomer', parent: 'Customer', properties: [{ name: 'tier', type: 'INTEGER', description: '1 to 3' }] },
+  ],
+  relationship_types: [
+    {
+      label: 'OPENED',
+      description: 'The customer opened the ticket',
+      properties: [{ name: 'at', type: 'DATE_TIME', required: true }],
+    },
+  ],
+  patterns: [['Customer', 'OPENED', 'Ticket']],
+  constraints: [
+    { type: 'UNIQUENESS', node_type: 'VipCustomer', property_name: 'tier' },
+    { type: 'UNIQUENESS', node_type: 'Party', property_name: 'name' },
+  ],
+}
+
+describe('detailsOf', () => {
+  it('details a class: its own properties, then those it inherits, marked with the ancestor that declares them', () => {
+    expect(detailsOf(HIERARCHY, { kind: 'class', label: 'VipCustomer' })).toEqual({
+      kind: 'class',
+      label: 'VipCustomer',
+      description: undefined,
+      deprecated: false,
+      parent: 'Customer',
+      properties: [
+        { name: 'tier', type: 'INTEGER', description: '1 to 3', required: false },
+        { name: 'email', type: 'STRING', description: undefined, required: false, inheritedFrom: 'Customer' },
+        { name: 'name', type: 'STRING', description: undefined, required: true, inheritedFrom: 'Party' },
+      ],
+      constraints: ['UNIQUENESS (tier)'],
+    })
+  })
+
+  it('takes a property a class redeclares from the class, not from its ancestor', () => {
+    const ontology: Ontology = {
+      ...HIERARCHY,
+      node_types: HIERARCHY.node_types.map((n) =>
+        n.label === 'Customer' ? { ...n, properties: [{ name: 'name', type: 'STRING' }] } : n,
+      ),
+    }
+
+    expect(detailsOf(ontology, { kind: 'class', label: 'Customer' })?.properties).toEqual([
+      { name: 'name', type: 'STRING', description: undefined, required: false },
+    ])
+  })
+
+  it('stops at a superclass the Ontology does not declare, and at a cycle', () => {
+    const ontology: Ontology = {
+      ...HIERARCHY,
+      node_types: [
+        { label: 'A', parent: 'B', properties: [{ name: 'a', type: 'STRING' }] },
+        { label: 'B', parent: 'A', properties: [{ name: 'b', type: 'STRING' }] },
+        { label: 'C', parent: 'Missing' },
+      ],
+    }
+
+    expect(detailsOf(ontology, { kind: 'class', label: 'A' })?.properties.map((p) => p.name)).toEqual(['a', 'b'])
+    expect(detailsOf(ontology, { kind: 'class', label: 'C' })?.properties).toEqual([])
+  })
+
+  it("details a link: its Pattern, and its relation's description and properties", () => {
+    expect(detailsOf(HIERARCHY, { kind: 'link', id: '(Customer)-[OPENED]->(Ticket)' })).toEqual({
+      kind: 'link',
+      id: '(Customer)-[OPENED]->(Ticket)',
+      source: 'Customer',
+      relation: 'OPENED',
+      target: 'Ticket',
+      description: 'The customer opened the ticket',
+      deprecated: false,
+      properties: [{ name: 'at', type: 'DATE_TIME', description: undefined, required: true }],
+    })
+  })
+
+  it('has nothing to detail for no selection, or one the Ontology does not have', () => {
+    expect(detailsOf(HIERARCHY, null)).toBeNull()
+    expect(detailsOf(HIERARCHY, { kind: 'class', label: 'Agent' })).toBeNull()
+    expect(detailsOf(HIERARCHY, { kind: 'link', id: '(Ticket)-[OPENED]->(Customer)' })).toBeNull()
   })
 })
 
