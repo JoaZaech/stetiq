@@ -3,9 +3,7 @@ import { isNotFound } from '@/api/client'
 import { useOntologyDiff } from '@/api/ontology-diff'
 import { kgUrl } from '@/app/knowledge-graph-sections'
 import { ErrorAlert } from '@/components/ErrorAlert'
-import { OntologyDiffView } from '@/components/OntologyDiff'
 import { PageHeader } from '@/components/PageHeader'
-import { Skeleton } from '@/components/ui/skeleton'
 import { ViewToggle } from '@/components/ViewToggle'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { parseVersionNumber } from '@/lib/version-number'
@@ -13,11 +11,13 @@ import { useComparedIds, useKnowledgeGraphName } from '../params'
 import { useComparisonView } from './comparison-view'
 import { MAP_VIEW_OPTIONS } from './map-view'
 import { OntologyComparisonMap } from './OntologyComparisonMap'
+import { OntologyComparisonTable } from './OntologyComparisonTable'
 
 /**
  * `/kg/:name/versions/compare?id=<base>&id=<target>`: the Ontology Diff between two versions,
  * reached by selecting two rows of the version table, as both versions superimposed on a
- * Map or, at `&view=table`, as a list. The URL alone reproduces it.
+ * Map or, at `&view=table`, as a grid of its changes, whose sort, filters and search
+ * (`?changes.…`) sit beside the chosen versions. The URL alone reproduces it.
  */
 export function OntologyDiffPage() {
   const name = useKnowledgeGraphName()
@@ -50,10 +50,8 @@ export function OntologyDiffPage() {
         <ErrorAlert error={diff.error} />
       ) : view === 'map' ? (
         <OntologyComparisonMap knowledgeGraph={name} base={base} target={target} />
-      ) : diff.isPending ? (
-        <Skeleton className="h-32 w-full" />
       ) : (
-        <OntologyDiffView diff={diff.data} base={base} target={target} />
+        <OntologyComparisonTable knowledgeGraph={name} base={base} target={target} />
       )}
     </>
   )

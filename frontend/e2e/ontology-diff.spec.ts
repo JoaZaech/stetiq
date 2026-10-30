@@ -28,9 +28,10 @@ test('selecting two versions and clicking Compare shows the classified Ontology 
     await expect(diff.getByText('Overall: breaking')).toBeVisible()
     const rows = diff.getByRole('table', { name: 'Changes' }).getByRole('row')
     await expect(rows).toHaveCount(4)
-    await expect(rows.nth(1)).toHaveText(/breaking.*removed.*Ticket\.opened_at/)
-    await expect(rows.nth(2)).toHaveText(/deprecating.*deprecated.*Agent/)
-    await expect(rows.nth(3)).toHaveText(/additive.*added.*ASSIGNED/)
+    // Concept, Concept kind, Change, Severity, Detail: the most severe first.
+    await expect(rows.nth(1)).toHaveText(/Ticket\.opened_at.*attribute.*removed.*breaking/)
+    await expect(rows.nth(2)).toHaveText(/Agent.*class.*deprecated.*deprecating/)
+    await expect(rows.nth(3)).toHaveText(/ASSIGNED.*relation.*added.*additive/)
   }
   await expectDiff()
 
@@ -66,7 +67,7 @@ test('the Changes tab shows the Ontology Diff against the previous version', asy
   await expect(page).toHaveURL('/ui/kg/support/versions/4/changes?view=table')
   const diff = page.getByRole('region', { name: 'Ontology Diff' })
   await expect(diff.getByText('Overall: breaking')).toBeVisible()
-  await expect(diff.getByRole('row', { name: /Ticket\.priority/ })).toHaveText(/breaking.*removed/)
+  await expect(diff.getByRole('row', { name: /Ticket\.priority/ })).toHaveText(/removed.*breaking/)
 
   await page.goto('/ui/kg/support/versions/1/changes')
   await expect(

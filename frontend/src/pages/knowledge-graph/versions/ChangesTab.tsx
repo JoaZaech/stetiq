@@ -1,13 +1,13 @@
-import { OntologyDiffPanel } from '@/components/OntologyDiff'
 import { ViewToggle } from '@/components/ViewToggle'
 import { useComparisonView } from './comparison-view'
 import { MAP_VIEW_OPTIONS } from './map-view'
 import { OntologyComparisonMap } from './OntologyComparisonMap'
+import { OntologyComparisonTable } from './OntologyComparisonTable'
 import { useOntologyVersionTab } from './version-context'
 
 /**
  * The version page's Changes tab, against the previous version: both versions superimposed
- * on a Map (`?view=` absent), or the Ontology Diff as a list (`?view=table`).
+ * on a Map (`?view=` absent), or its changes as a grid (`?view=table`).
  */
 export function ChangesTab() {
   const version = useOntologyVersionTab()
@@ -29,7 +29,7 @@ export function ChangesTab() {
       {view === 'map' ? (
         <OntologyComparisonMap knowledgeGraph={version.knowledge_graph} base={base} target={version.number} />
       ) : (
-        <OntologyDiffPanel knowledgeGraph={version.knowledge_graph} base={base} target={version.number} />
+        <OntologyComparisonTable knowledgeGraph={version.knowledge_graph} base={base} target={version.number} />
       )}
     </div>
   )
