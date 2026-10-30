@@ -1,5 +1,5 @@
 import { useId, type KeyboardEvent } from 'react'
-import type { ClassOrRelation } from './concepts'
+import type { ClassOrRelation } from '../concepts'
 import type { SearchResults } from './ontology-map-search'
 
 /**

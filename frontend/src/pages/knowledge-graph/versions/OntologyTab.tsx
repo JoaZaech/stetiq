@@ -34,7 +34,7 @@ import {
   type RelationRow,
 } from './concepts'
 import { MAP_VIEW_OPTIONS, MAP_VIEWS } from './map-view'
-import { OntologyMap } from './OntologyMap'
+import { OntologyMap } from './map/OntologyMap'
 import { conceptRowId, selectedRowProps, type TableLinks, TableLinksContext } from './table-links'
 import { AttributeCountLink, ConceptLink, ShowOnMap } from './TableLinks'
 import { useOntologyVersionTab } from './version-context'

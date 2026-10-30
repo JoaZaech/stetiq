@@ -6,7 +6,7 @@ import { formatCount } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { CONCEPT_NOUN } from './concepts'
 import type { OntologyComparison } from './ontology-map-comparison'
-import type { MapSelection } from './ontology-map-focus'
+import type { MapSelection } from './map/ontology-map-focus'
 import {
   summarizeChanges,
   summaryConceptOf,

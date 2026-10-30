@@ -1,5 +1,5 @@
 /** Where the Map centres: on the selection it opened on, or on a search result picked. */
-import { type ConceptSelection, formatSelection } from './concept-selection'
+import { type ConceptSelection, formatSelection } from '../concept-selection'
 import type { OntologyMap } from './ontology-map'
 import type { MapSelection } from './ontology-map-focus'
 import type { Point } from './ontology-map-layout'

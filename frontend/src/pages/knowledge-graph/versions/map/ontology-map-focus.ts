@@ -3,7 +3,7 @@
  * matches.
  */
 import type { Ontology, OntologyProperty } from '@/api/ontology-versions'
-import { type ClassOrRelation, constraintsOf, superclassChain } from './concepts'
+import { type ClassOrRelation, constraintsOf, superclassChain } from '../concepts'
 import { ontologyMap, type OntologyMap, type PatternLink } from './ontology-map'
 import { shortestPaths } from './ontology-map-paths'
 import { searchOntology } from './ontology-map-search'

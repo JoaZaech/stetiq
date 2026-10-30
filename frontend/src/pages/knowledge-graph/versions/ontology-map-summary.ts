@@ -11,7 +11,7 @@ import {
   linkChanged,
   type OntologyComparison,
 } from './ontology-map-comparison'
-import { type MapSelection, relationSelection } from './ontology-map-focus'
+import { type MapSelection, relationSelection } from './map/ontology-map-focus'
 
 /**
  * How much a change weighs in a comparison: documentation-only when only a description

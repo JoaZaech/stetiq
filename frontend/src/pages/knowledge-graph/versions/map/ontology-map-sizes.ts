@@ -3,7 +3,7 @@
  * its width follows from its length, and the Map draws each at exactly the size placed
  * here, so what is laid out is what is drawn.
  */
-import type { AttributeChange, OntologyComparison } from './ontology-map-comparison'
+import type { AttributeChange, OntologyComparison } from '../ontology-map-comparison'
 
 export interface Size {
   width: number

@@ -27,11 +27,11 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
-import { type ConceptSelection, formatSelection, useConceptSelection } from './concept-selection'
-import type { ClassOrRelation } from './concepts'
-import { ChangeLevelBadge, MapChangeSummary } from './MapChangeSummary'
+import { type ConceptSelection, formatSelection, useConceptSelection } from '../concept-selection'
+import type { ClassOrRelation } from '../concepts'
+import { ChangeLevelBadge, MapChangeSummary } from '../MapChangeSummary'
 import { MapDetailsPanel } from './MapDetailsPanel'
-import { MAP_HEIGHT } from './map-view'
+import { MAP_HEIGHT } from '../map-view'
 import { MapPathPanel } from './MapPathPanel'
 import { MapSearchResults } from './MapSearchResults'
 import { filterOntologyMap, ontologyMap, type LinkRoute, type MapFilters } from './ontology-map'
@@ -42,7 +42,7 @@ import {
   type MapChange,
   type MapChangeKind,
   type OntologyComparison,
-} from './ontology-map-comparison'
+} from '../ontology-map-comparison'
 import { centreOf, locatedSelection } from './ontology-map-centre'
 import { detailsOf, focusOf, relationSelection, searchMap, type MapSelection } from './ontology-map-focus'
 import { layoutOntologyMap, type Point } from './ontology-map-layout'
@@ -57,8 +57,8 @@ import {
 } from './ontology-map-sizes'
 import { shortestPaths } from './ontology-map-paths'
 import { searchOntology } from './ontology-map-search'
-import { levelOf } from './ontology-map-summary'
-import { SEVERITY, severityStroke } from './severity-style'
+import { levelOf } from '../ontology-map-summary'
+import { SEVERITY, severityStroke } from '../severity-style'
 
 /**
  * How an item is drawn against the selection and the search: `selected` is the selection

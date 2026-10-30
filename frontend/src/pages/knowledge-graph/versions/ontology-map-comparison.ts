@@ -9,8 +9,8 @@ import {
 import type { Ontology } from '@/api/ontology-versions'
 import { codePointOrder } from '@/lib/compare'
 import { attributeReference, constraintsOn } from './concepts'
-import { ontologyMap, type OntologyMap, type PatternLink } from './ontology-map'
-import type { MapSelection } from './ontology-map-focus'
+import { ontologyMap, type OntologyMap, type PatternLink } from './map/ontology-map'
+import type { MapSelection } from './map/ontology-map-focus'
 
 /**
  * How an item of a comparison changed from the base to the target version: present in
