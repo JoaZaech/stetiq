@@ -24,12 +24,12 @@ interface DataTableProps<TData extends RowData> {
   empty: ReactNode
   /** The table's accessible name, e.g. "Ontology Versions". */
   label?: string
-  /** Extra props for a row's `<tr>`, e.g. an `id` to scroll to it. */
+  /** Extra props for a row's `<tr>`, a group's header row's included, e.g. an `id` to scroll to it. */
   rowProps?: (row: Row<DataTableFeatures, TData>) => ComponentProps<'tr'>
   /**
    * What a group's header row shows when the table is grouped (its `grouping` state):
-   * e.g. the grouped value and how many rows it holds. The header spans the row and
-   * collapses or expands the group.
+   * e.g. the grouped value and how many rows it holds. The header spans the row, beside
+   * the button that collapses or expands the group and is named by it, so it may hold links.
    */
   groupHeader?: (row: Row<DataTableFeatures, TData>) => ReactNode
 }
@@ -80,7 +80,7 @@ export function DataTable<TData extends RowData>({
         ) : (
           rows.map((row) =>
             row.getIsGrouped() ? (
-              <GroupHeaderRow key={row.id} row={row} columns={columns}>
+              <GroupHeaderRow key={row.id} row={row} columns={columns} {...rowProps?.(row)}>
                 {groupHeader?.(row) ?? String(row.groupingValue)}
               </GroupHeaderRow>
             ) : (
@@ -99,31 +99,39 @@ export function DataTable<TData extends RowData>({
   )
 }
 
-/** A group's header row: a button spanning the row that collapses or expands the group. */
+/**
+ * A group's header row: the button that collapses or expands the group, named by the
+ * header beside it.
+ */
 function GroupHeaderRow<TData extends RowData>({
   row,
   columns,
   children,
+  ...props
 }: {
   row: Row<DataTableFeatures, TData>
   columns: number
   children: ReactNode
-}) {
+} & ComponentProps<'tr'>) {
+  const id = useId()
   const open = row.getIsExpanded()
   const Chevron = open ? ChevronDown : ChevronRight
   return (
-    <TableRow className="bg-muted/50 hover:bg-muted/50">
+    <TableRow className="bg-muted/50 hover:bg-muted/50" {...props}>
       <TableCell colSpan={columns} className="py-1">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="-ml-2 h-7 px-2 font-normal"
-          aria-expanded={open}
-          onClick={row.getToggleExpandedHandler()}
-        >
-          <Chevron aria-hidden className="size-4" />
-          {children}
-        </Button>
+        <span className="-ml-2 inline-flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7"
+            aria-expanded={open}
+            aria-labelledby={id}
+            onClick={row.getToggleExpandedHandler()}
+          >
+            <Chevron aria-hidden className="size-4" />
+          </Button>
+          <span id={id}>{children}</span>
+        </span>
       </TableCell>
     </TableRow>
   )
