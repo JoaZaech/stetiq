@@ -1,7 +1,8 @@
 /** How the Map draws a Pattern link and its relation label, and when the label shows. */
 import type { PatternLink } from './ontology-map'
 import type { MapChange } from './ontology-map-comparison'
-import type { Point, Size } from './ontology-map-layout'
+import type { Point } from './ontology-map-layout'
+import { labelSize, type Size } from './ontology-map-sizes'
 
 /** A rectangle by its top-left corner: a class's node on the Map, or a label's pill. */
 export type Box = Point & Size
@@ -21,22 +22,6 @@ export function labelShown(zoom: number, link: { focused: boolean; change?: MapC
   const changed = link.change !== undefined && !['unchanged', 'documentation-only'].includes(link.change.kind)
   return zoom >= READABLE_ZOOM || link.focused || changed
 }
-
-/**
- * A label's text: monospace, so its width follows from its length. The Map draws each
- * label at exactly `labelSize`, so what is placed here is what is drawn.
- */
-export const LABEL_FONT_SIZE = 11
-/** Monospace advance per character, as a share of the font size. */
-const CHAR_WIDTH = 0.62
-const LABEL_PADDING = 8
-const LABEL_HEIGHT = 18
-
-/** The pill a relation's label is drawn on. */
-export const labelSize = (relation: string): Size => ({
-  width: Math.ceil(relation.length * LABEL_FONT_SIZE * CHAR_WIDTH) + 2 * LABEL_PADDING,
-  height: LABEL_HEIGHT,
-})
 
 /** Pixels between parallel links, per unit of a `line` route's bend. */
 const BEND_SPACING = 48

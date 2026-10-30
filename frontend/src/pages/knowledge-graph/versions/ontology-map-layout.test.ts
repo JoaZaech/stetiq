@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { Ontology } from '@/api/ontology-versions'
 import { ontologyMap } from './ontology-map'
-import { layoutOntologyMap, NODE_SIZE, type Point, type Size } from './ontology-map-layout'
+import { layoutOntologyMap, type Point } from './ontology-map-layout'
 import { linkShape, type Box } from './ontology-map-links'
+import { NODE_SIZE, type Size } from './ontology-map-sizes'
 import { HIERARCHY, ONTOLOGY, PARTIES } from './ontology-map.fixtures'
 
 describe('layoutOntologyMap', () => {

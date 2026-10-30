@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ontologyMap } from './ontology-map'
-import { NODE_SIZE, type Point } from './ontology-map-layout'
+import type { Point } from './ontology-map-layout'
+import { NODE_SIZE } from './ontology-map-sizes'
 import { labelShown, linkShape, READABLE_ZOOM, type Box } from './ontology-map-links'
 import { ONTOLOGY } from './ontology-map.fixtures'
 

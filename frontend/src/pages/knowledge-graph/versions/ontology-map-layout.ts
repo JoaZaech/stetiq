@@ -1,20 +1,12 @@
 /** Where each class of the Map goes: a seeded ELK stress layout. */
 import ELK from 'elkjs/lib/elk.bundled.js'
 import type { OntologyMap } from './ontology-map'
-import { labelSize } from './ontology-map-links'
+import { labelSize, NODE_SIZE, type Size } from './ontology-map-sizes'
 
 export interface Point {
   x: number
   y: number
 }
-
-export interface Size {
-  width: number
-  height: number
-}
-
-/** A class's node is this size unless the Map gives it another, as a comparison does a class it expands. */
-export const NODE_SIZE = { width: 160, height: 40 } as const
 
 /** How far apart, centre to centre, the layout aims to put two linked classes. */
 const EDGE_LENGTH = 220

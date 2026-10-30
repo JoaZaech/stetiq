@@ -42,8 +42,16 @@ import {
   type OntologyComparison,
 } from './ontology-map-comparison'
 import { detailsOf, focusOf, searchMap, type MapSelection } from './ontology-map-focus'
-import { layoutOntologyMap, NODE_SIZE, type Point, type Size } from './ontology-map-layout'
-import { LABEL_FONT_SIZE, labelShown, linkShape, READABLE_ZOOM, straightPath, type Box } from './ontology-map-links'
+import { layoutOntologyMap, type Point } from './ontology-map-layout'
+import { labelShown, linkShape, READABLE_ZOOM, straightPath, type Box } from './ontology-map-links'
+import {
+  ATTRIBUTE_LINE_HEIGHT,
+  ATTRIBUTE_MARKER,
+  attributeLine,
+  classSizes,
+  MONOSPACE_FONT_SIZE,
+  NODE_SIZE,
+} from './ontology-map-sizes'
 import { shortestPaths } from './ontology-map-paths'
 import { searchOntology } from './ontology-map-search'
 import { levelOf } from './ontology-map-summary'
@@ -181,30 +189,6 @@ function DocumentationDot({ className }: { className?: string }) {
 /** How `change` is drawn, or nothing outside a comparison. */
 const changeStyle = (change?: MapChange): Partial<ChangeStyle> => (change ? CHANGE_STYLE[change.kind] : {})
 
-/** A changed attribute's marker, diff-style. */
-const ATTRIBUTE_MARKER: Record<AttributeChange['kind'], string> = { removed: '−', added: '+', modified: '~' }
-
-/** A changed attribute's line on its class: marker, name, and a modified one's changes. */
-const attributeLine = (a: AttributeChange) =>
-  [ATTRIBUTE_MARKER[a.kind], a.name, ...(a.details.length > 0 ? [a.details.join('; ')] : [])].join(' ')
-
-/** One attribute line's height, and the widest a class grows to fit its lines (longer ones truncate). */
-const ATTRIBUTE_LINE_HEIGHT = 16
-const EXPANDED_MAX_WIDTH = 320
-/** The width of one character of an attribute line (`text-[11px] font-mono`), and the box's padding. */
-const ATTRIBUTE_CHAR_WIDTH = 6.6
-const EXPANDED_PADDING = 16
-
-/** A class's node size: `NODE_SIZE`, grown to list its changed attributes. */
-function classNodeSize(attributes: AttributeChange[] = []): Size {
-  if (attributes.length === 0) return NODE_SIZE
-  const longest = Math.max(...attributes.map((a) => attributeLine(a).length))
-  return {
-    width: Math.min(EXPANDED_MAX_WIDTH, Math.max(NODE_SIZE.width, longest * ATTRIBUTE_CHAR_WIDTH + EXPANDED_PADDING)),
-    height: NODE_SIZE.height + attributes.length * ATTRIBUTE_LINE_HEIGHT + EXPANDED_PADDING / 2,
-  }
-}
-
 type OntologyMapProps = { query?: string } & (
   | { ontology: Ontology; comparison?: never }
   | { comparison: OntologyComparison; ontology?: never }
@@ -277,15 +261,7 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
     return () => document.removeEventListener('keydown', clear)
   }, [selection, setSelection])
   // A comparison's changed classes grow to list their changed attributes.
-  const sizes = useMemo(
-    () =>
-      Object.fromEntries(
-        Object.entries(comparison?.changes.attributes ?? {})
-          .filter(([, attributes]) => attributes.length > 0)
-          .map(([label, attributes]) => [label, classNodeSize(attributes)]),
-      ),
-    [comparison],
-  )
+  const sizes = useMemo(() => classSizes(comparison?.changes.attributes), [comparison])
   // The whole Map is laid out, and filters only hide, so nothing moves when one changes.
   const layout = useQuery({
     queryKey: ['ontology-map-layout', map, sizes],
@@ -613,7 +589,11 @@ function ClassNodeView({ data }: NodeProps<ClassNode>) {
 /** A comparison's changed attributes of one class, one line each, diff-style, in their severity. */
 function ChangedAttributes({ attributes }: { attributes: AttributeChange[] }) {
   return (
-    <ul aria-label="Changed attributes" className="w-full pb-1 font-mono text-[11px] font-normal">
+    <ul
+      aria-label="Changed attributes"
+      className="w-full pb-1 font-mono font-normal"
+      style={{ fontSize: MONOSPACE_FONT_SIZE }}
+    >
       {attributes.map((a) => (
         <li
           key={a.name}
@@ -673,7 +653,7 @@ function PatternEdgeView({ id, source, target, data, markerEnd }: EdgeProps<Patt
               style.outlined && severity && SEVERITY.border[severity],
               (emphasized || style.outlined) && 'font-semibold text-foreground',
             )}
-            style={{ left: label.x, top: label.y, width: label.width, height: label.height, fontSize: LABEL_FONT_SIZE }}
+            style={{ left: label.x, top: label.y, width: label.width, height: label.height, fontSize: MONOSPACE_FONT_SIZE }}
           >
             <span
               className={cn(
