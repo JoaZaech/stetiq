@@ -55,7 +55,7 @@ The section lists every Ontology Version, newest first, with its origin, when it
 - **Columns** adds a column per Evaluator metric.
 - **Table** / **Chart** switches to one chart per Evaluator metric across versions, with a search box to find a metric.
 
-**Comparing two versions.** Tick two rows and click **Compare** to see the Ontology Diff from the older to the newer version. The Diff gives an overall classification, a count per classification, and every change labelled *breaking*, *deprecating* or *additive*, most severe first.
+**Comparing two versions.** Tick two rows and click **Compare** to see the Ontology Diff from the older to the newer version. The Diff gives an overall classification, a count per classification, and every change labelled *breaking*, *deprecating* or *additive*, most severe first. Any two versions can be compared, not only neighbours. As on the **Changes** tab below, the **Table / Map** toggle switches to a **Map** of both versions laid over each other.
 
 **An Ontology Version's page.** Click a version number to open it. It shows the version's Aliases and three tabs:
 

@@ -368,10 +368,36 @@ patterns:
 """
 
 
+# MAP_ONTOLOGY_V2's next version: Team and MEMBER_OF added (additive), and Queue
+# deprecated (deprecating). Against v1, Queue is an addition instead.
+MAP_ONTOLOGY_V3 = """
+node_types:
+  - {label: Agent, parent: Party}
+  - {label: Customer, parent: Party}
+  - {label: LegacyTicket, parent: Ticket, deprecated: true}
+  - Party
+  - {label: Queue, deprecated: true}
+  - Team
+  - label: Ticket
+    properties: [{name: priority, type: STRING, required: true}]
+relationship_types:
+  [DUPLICATES, {label: FILED, deprecated: true}, FOLLOWS, IN_QUEUE, MEMBER_OF, OPENED]
+patterns:
+  - [Customer, OPENED, Ticket]
+  - [Customer, FOLLOWS, Ticket]
+  - [Ticket, DUPLICATES, Ticket]
+  - [Customer, FILED, LegacyTicket]
+  - [Ticket, IN_QUEUE, Queue]
+  - [Agent, MEMBER_OF, Team]
+"""
+
+
 def ontology_map(client: stetiq.Client) -> dict[str, Any]:
-    """Knowledge Graph `support` with v1 = `MAP_ONTOLOGY` and v2 = `MAP_ONTOLOGY_V2`."""
+    """Knowledge Graph `support` with v1 = `MAP_ONTOLOGY`, v2 = `MAP_ONTOLOGY_V2` and
+    v3 = `MAP_ONTOLOGY_V3`."""
     client.create_knowledge_graph("support", ontology=MAP_ONTOLOGY)
     client.register_ontology("support", MAP_ONTOLOGY_V2)
+    client.register_ontology("support", MAP_ONTOLOGY_V3)
     return {}
 
 
