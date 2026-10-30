@@ -29,11 +29,24 @@ export class ApiError extends Error {
 }
 
 /**
- * True for an id the user cannot see: unknown (404), or a Knowledge Graph outside the
- * token's grants (403). Pages show both as "not found", so ids reveal nothing.
+ * For a failed **read** only: true for something the user cannot see, unknown (404) or
+ * in a Knowledge Graph outside the token's grants (403). Pages show both as "not found".
+ *
+ * Never use it on a write: there a 403 means the user may read but not edit, which
+ * `isAccessDenied` and `errorTitle` report as an access error.
  */
 export function isNotFound(error: unknown): boolean {
   return error instanceof ApiError && (error.status === 404 || error.status === 403)
+}
+
+/** True when the server refused the request for lack of permission (403). */
+export function isAccessDenied(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 403
+}
+
+/** The heading for a failed request: "Access denied" for a 403, else `fallback`. */
+export function errorTitle(error: unknown, fallback: string): string {
+  return isAccessDenied(error) ? 'Access denied' : fallback
 }
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
