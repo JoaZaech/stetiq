@@ -20,6 +20,7 @@ from stetiq.evaluation.framework import (
     ConstructionRunEvaluator,
     Evaluator,
     OntologyVersionEvaluator,
+    SubjectKind,
     check_evaluation,
     check_evaluator,
 )
@@ -215,6 +216,14 @@ class Client:
         return self._service.get_evaluation_results(
             knowledge_graph, "ontology_version", str(version)
         )
+
+    def list_evaluation_results(
+        self, knowledge_graph: str, subject_kind: SubjectKind = "ontology_version"
+    ) -> list[EvaluationResult]:
+        """The latest result of every Evaluator for every Ontology Version (or every
+        Construction Run, with `subject_kind="construction_run"`) of the Knowledge Graph
+        at once; `subject_id` says which subject each result belongs to."""
+        return self._service.list_evaluation_results(knowledge_graph, subject_kind)
 
     def evaluate(
         self,

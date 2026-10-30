@@ -266,6 +266,12 @@ class RemoteTrackingService:
         path = self._subject_path(knowledge_graph, subject_kind, subject_id) + "/evaluations"
         return [wire.evaluation_result_from_json(r) for r in self._call("GET", path)]
 
+    def list_evaluation_results(
+        self, knowledge_graph: str, subject_kind: SubjectKind
+    ) -> list[EvaluationResult]:
+        path = f"{self._kg_path(knowledge_graph)}/evaluations?subject_kind={quote(subject_kind)}"
+        return [wire.evaluation_result_from_json(r) for r in self._call("GET", path)]
+
     # --- Use Cases ------------------------------------------------------------------
 
     def register_use_case(self, knowledge_graph: str, use_case: UseCase) -> UseCaseVersion:

@@ -805,17 +805,15 @@ class SqlStore:
             )
 
     def list_evaluation_results(
-        self, knowledge_graph: str, subject_kind: str, subject_id: str
+        self, knowledge_graph: str, subject_kind: str, subject_id: str | None = None
     ) -> list[EvaluationResult]:
-        query = (
-            select(evaluation_results)
-            .where(
-                evaluation_results.c.knowledge_graph == knowledge_graph,
-                evaluation_results.c.subject_kind == subject_kind,
-                evaluation_results.c.subject_id == subject_id,
-            )
-            .order_by(evaluation_results.c.id)
-        )
+        where = [
+            evaluation_results.c.knowledge_graph == knowledge_graph,
+            evaluation_results.c.subject_kind == subject_kind,
+        ]
+        if subject_id is not None:
+            where.append(evaluation_results.c.subject_id == subject_id)
+        query = select(evaluation_results).where(*where).order_by(evaluation_results.c.id)
         with self._connection() as conn:
             rows = conn.execute(query).mappings().all()
         return [_evaluation_from_row(r) for r in rows]

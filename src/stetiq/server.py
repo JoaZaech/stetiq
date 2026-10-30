@@ -413,6 +413,12 @@ def create_app(
     def record_run_evaluation(name: str, run_id: str, body: RecordedEvaluation) -> dict[str, Any]:
         return record(name, "construction_run", run_id, body)
 
+    @api.get("/knowledge-graphs/{name}/evaluations")
+    def list_evaluations(name: str, subject_kind: str) -> list[dict[str, Any]]:
+        # The service rejects an unknown subject kind with its own error.
+        results = tracking.list_evaluation_results(name, cast(SubjectKind, subject_kind))
+        return [wire.evaluation_result_to_json(r) for r in results]
+
     @api.post(version_path + "/evaluate")
     def evaluate_version(
         name: str, number: int, use_case_version: int | None = Body(None, embed=True)

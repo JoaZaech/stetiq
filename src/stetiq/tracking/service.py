@@ -17,7 +17,7 @@ import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
-from typing import Protocol
+from typing import Protocol, get_args
 
 from stetiq import use_case as use_case_format
 from stetiq.conformance import assess_conformance, candidate_ontology
@@ -201,6 +201,14 @@ class TrackingService(Protocol):
     ) -> list[EvaluationResult]:
         """The latest result per (Evaluator, parameters) for the subject, ordered by
         Evaluator name then parameters."""
+        ...
+
+    def list_evaluation_results(
+        self, knowledge_graph: str, subject_kind: SubjectKind
+    ) -> list[EvaluationResult]:
+        """The latest result per (subject, Evaluator, parameters) across every subject
+        of `subject_kind` in the Knowledge Graph: `get_evaluation_results` for each of
+        them at once. Subjects come in the order of their first stored result."""
         ...
 
     def evaluate_construction_run(self, run_id: str) -> list[EvaluationResult]:
@@ -486,11 +494,20 @@ class LocalTrackingService:
         self, knowledge_graph: str, subject_kind: SubjectKind, subject_id: str
     ) -> list[EvaluationResult]:
         self._check_subject(knowledge_graph, subject_kind, subject_id)
-        latest = {
-            (r.evaluator, json.dumps(r.parameters, sort_keys=True)): r
-            for r in self._store.list_evaluation_results(knowledge_graph, subject_kind, subject_id)
-        }
-        return [latest[key] for key in sorted(latest)]
+        return _latest_per_evaluator(
+            self._store.list_evaluation_results(knowledge_graph, subject_kind, subject_id)
+        )
+
+    def list_evaluation_results(
+        self, knowledge_graph: str, subject_kind: SubjectKind
+    ) -> list[EvaluationResult]:
+        self.get_knowledge_graph(knowledge_graph)
+        if subject_kind not in get_args(SubjectKind):
+            raise EvaluatorError(f"Unsupported evaluation subject kind {subject_kind!r}")
+        by_subject: dict[str, list[EvaluationResult]] = {}
+        for result in self._store.list_evaluation_results(knowledge_graph, subject_kind):
+            by_subject.setdefault(result.subject_id, []).append(result)
+        return [r for results in by_subject.values() for r in _latest_per_evaluator(results)]
 
     def list_ontology_versions(self, knowledge_graph: str) -> list[OntologyVersion]:
         self.get_knowledge_graph(knowledge_graph)
@@ -865,6 +882,13 @@ class LocalTrackingService:
             if result.ontology_version == version:
                 return "passed" if result.passed else "failed"
         return None
+
+
+def _latest_per_evaluator(results: Sequence[EvaluationResult]) -> list[EvaluationResult]:
+    """One subject's results, oldest first -> the latest per (Evaluator, parameters),
+    ordered by Evaluator name then parameters."""
+    latest = {(r.evaluator, json.dumps(r.parameters, sort_keys=True)): r for r in results}
+    return [latest[key] for key in sorted(latest)]
 
 
 def _now() -> datetime:

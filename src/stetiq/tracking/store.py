@@ -138,9 +138,10 @@ class Store(Protocol):
         ...
 
     def list_evaluation_results(
-        self, knowledge_graph: str, subject_kind: str, subject_id: str
+        self, knowledge_graph: str, subject_kind: str, subject_id: str | None = None
     ) -> list[EvaluationResult]:
-        """Every stored result for the subject, oldest first."""
+        """Every stored result for the subject (every subject of the kind when
+        `subject_id` is None), oldest first."""
         ...
 
     def add_use_case_version(self, version: UseCaseVersion) -> None:
