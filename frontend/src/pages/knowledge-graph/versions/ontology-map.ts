@@ -1,7 +1,8 @@
 /**
  * The Ontology Map: an Ontology as a node-link dataset (docs/ontology-view-abstraction.md).
  * Classes are nodes, keyed by label. Each Pattern is a link, keyed by
- * (source, relation, target); relations are not nodes. No React and no I/O here.
+ * (source, relation, target); relations are not nodes. Each superclass is a subclass
+ * link, a separate link type keyed by (child, parent). No React and no I/O here.
  */
 import ELK from 'elkjs/lib/elk.bundled.js'
 import type { Ontology } from '@/api/ontology-versions'
@@ -30,9 +31,18 @@ export interface PatternLink {
  */
 export type LinkRoute = { kind: 'line'; bend: number } | { kind: 'loop'; size: number }
 
+/** A class's superclass, drawn from the subclass (child) to the superclass (parent). */
+export interface SubclassLink {
+  /** `Child -> Parent` */
+  id: string
+  child: string
+  parent: string
+}
+
 export interface OntologyMap {
   nodes: MapNode[]
   links: PatternLink[]
+  subclassLinks: SubclassLink[]
 }
 
 /** An Ontology's classes as nodes and its Patterns as links. */
@@ -64,7 +74,13 @@ export function ontologyMap(ontology: Ontology): OntologyMap {
     const bend = p.source < p.target ? slot : -slot
     return { ...p, route: { kind: 'line', bend: bend === 0 ? 0 : bend } } // never -0
   })
-  return { nodes, links }
+
+  // A superclass the Ontology doesn't declare has no node to link to.
+  const labels = new Set(nodes.map((n) => n.label))
+  const subclassLinks = ontology.node_types
+    .filter((n) => n.parent !== undefined && labels.has(n.parent))
+    .map((n) => ({ id: `${n.label} -> ${n.parent}`, child: n.label, parent: n.parent! }))
+  return { nodes, links, subclassLinks }
 }
 
 export interface Point {
@@ -80,13 +96,17 @@ const elk = new ELK()
 /**
  * Where each class goes: the top-left corner of its node, by class label. A stress
  * layout from a seeded force layout, so the same Map always lays out the same way. Each
- * pair of linked classes pulls together once, however many links run between them.
+ * pair of linked classes pulls together once, however many links run between them, and
+ * a subclass link pulls like a Pattern link, so subclasses sit near their superclass.
  */
 export async function layoutOntologyMap(map: OntologyMap): Promise<Record<string, Point>> {
   const pairs = new Set(
-    map.links
-      .filter((l) => l.source !== l.target)
-      .map((l) => JSON.stringify([l.source, l.target].sort())),
+    [
+      ...map.links.map((l) => [l.source, l.target]),
+      ...map.subclassLinks.map((l) => [l.child, l.parent]),
+    ]
+      .filter(([a, b]) => a !== b)
+      .map((pair) => JSON.stringify(pair.sort())),
   )
   const graph = await elk.layout({
     id: 'root',

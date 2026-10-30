@@ -56,6 +56,48 @@ describe('ontologyMap', () => {
   })
 })
 
+// A hierarchy under Ticket, with a deprecated class and a deprecated relation.
+const HIERARCHY: Ontology = {
+  node_types: [
+    { label: 'Bug', parent: 'Ticket' },
+    { label: 'Customer' },
+    { label: 'Incident', parent: 'Ticket' },
+    { label: 'LegacyTicket', parent: 'Ticket', deprecated: true },
+    { label: 'Ticket' },
+  ],
+  relationship_types: [{ label: 'FILED', deprecated: true }, { label: 'OPENED' }, { label: 'REPORTED' }],
+  patterns: [
+    ['Customer', 'FILED', 'Ticket'],
+    ['Customer', 'OPENED', 'Ticket'],
+    ['Customer', 'REPORTED', 'Incident'],
+    ['Customer', 'REPORTED', 'LegacyTicket'],
+  ],
+}
+
+describe('ontologyMap: the subclass hierarchy', () => {
+  it('draws each superclass as a subclass link, child to parent, apart from the Pattern links', () => {
+    const map = ontologyMap(HIERARCHY)
+
+    expect(map.subclassLinks.map((l) => [l.child, l.parent])).toEqual([
+      ['Bug', 'Ticket'],
+      ['Incident', 'Ticket'],
+      ['LegacyTicket', 'Ticket'],
+    ])
+    expect(map.links.map((l) => l.id)).toEqual([
+      '(Customer)-[FILED]->(Ticket)',
+      '(Customer)-[OPENED]->(Ticket)',
+      '(Customer)-[REPORTED]->(Incident)',
+      '(Customer)-[REPORTED]->(LegacyTicket)',
+    ])
+  })
+
+  it('draws no subclass link to a superclass the Ontology does not declare', () => {
+    const map = ontologyMap({ ...HIERARCHY, node_types: [{ label: 'Bug', parent: 'Ticket' }] })
+
+    expect(map.subclassLinks).toEqual([])
+  })
+})
+
 describe('layoutOntologyMap', () => {
   it('places every class apart from the others', async () => {
     const positions = await layoutOntologyMap(ontologyMap(ONTOLOGY))
@@ -70,6 +112,24 @@ describe('layoutOntologyMap', () => {
   it('lays out the same Ontology the same way every time', async () => {
     const first = await layoutOntologyMap(ontologyMap(ONTOLOGY))
     const second = await layoutOntologyMap(ontologyMap(structuredClone(ONTOLOGY)))
+
+    expect(second).toEqual(first)
+  })
+
+  it('places a subclass nearer its superclass than any other class', async () => {
+    // Bug's only tie is to its superclass Ticket.
+    const positions = await layoutOntologyMap(ontologyMap(HIERARCHY))
+    const distance = (p: Point, q: Point) => Math.hypot(p.x - q.x, p.y - q.y)
+    const fromBug = Object.entries(positions)
+      .filter(([label]) => label !== 'Bug')
+      .sort(([, p], [, q]) => distance(positions.Bug, p) - distance(positions.Bug, q))
+
+    expect(fromBug[0][0]).toBe('Ticket')
+  })
+
+  it('lays out the same hierarchy the same way every time', async () => {
+    const first = await layoutOntologyMap(ontologyMap(HIERARCHY))
+    const second = await layoutOntologyMap(ontologyMap(structuredClone(HIERARCHY)))
 
     expect(second).toEqual(first)
   })
