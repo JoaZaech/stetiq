@@ -20,6 +20,12 @@ export function useTableLinks(): TableLinks {
   return links
 }
 
+/** A row's props for its highlight, when the selection covers it. */
+export const selectedRowProps = (selected: boolean) => ({
+  'aria-current': selected || undefined,
+  'data-state': selected ? 'selected' : undefined,
+})
+
 /** The DOM id of a class's or relation's row in the Table. */
 export const conceptRowId = ({ kind, label }: ClassOrRelation) => `ontology-${kind}-${label}`
 

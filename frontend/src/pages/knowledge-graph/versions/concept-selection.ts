@@ -11,7 +11,7 @@
 import { useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router'
 import type { Ontology } from '@/api/ontology-versions'
-import { patternId } from './concepts'
+import { type ClassOrRelation, patternId } from './concepts'
 import type { MapSelection } from './ontology-map-focus'
 
 /** What is selected: anything the Map selects, or a relation as a whole (from the Table). */
@@ -52,14 +52,17 @@ export function formatSelection(selection: ConceptSelection): string {
   }
 }
 
+/** The classes and relations whose Table rows are highlighted, by label. */
+export interface SelectedRows {
+  classes: ReadonlySet<string>
+  relations: ReadonlySet<string>
+}
+
 /**
  * The Table rows a selection highlights: the class or relation selected, a link's
  * relation, or both classes of a path.
  */
-export function selectedRows(
-  ontology: Ontology,
-  selection: ConceptSelection | null,
-): { classes: ReadonlySet<string>; relations: ReadonlySet<string> } {
+export function selectedRows(ontology: Ontology, selection: ConceptSelection | null): SelectedRows {
   const classes = new Set<string>()
   const relations = new Set<string>()
   if (selection?.kind === 'class') classes.add(selection.label)
@@ -71,6 +74,10 @@ export function selectedRows(
   }
   return { classes, relations }
 }
+
+/** Whether `concept`'s rows are among the highlighted `rows`. */
+export const isSelectedRow = (rows: SelectedRows, { kind, label }: ClassOrRelation) =>
+  (kind === 'class' ? rows.classes : rows.relations).has(label)
 
 const write = (p: URLSearchParams, selection: ConceptSelection | null) => {
   if (selection) p.set(SELECT_PARAM, formatSelection(selection))

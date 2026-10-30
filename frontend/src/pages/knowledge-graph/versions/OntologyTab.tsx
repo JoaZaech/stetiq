@@ -14,11 +14,18 @@ import { formatCount } from '@/lib/format'
 import { useViewParam } from '@/lib/view-param'
 import { attributeRows } from './attribute-rows'
 import { AttributesGrid, type GroupRequest } from './AttributesGrid'
-import { type ConceptSelection, selectedRows, useConceptSelection, useShowOnMap } from './concept-selection'
+import {
+  type ConceptSelection,
+  isSelectedRow,
+  type SelectedRows,
+  selectedRows,
+  useConceptSelection,
+  useShowOnMap,
+} from './concept-selection'
 import { type ClassOrRelation, type ClassRow, type RelationRow, conceptTables } from './concepts'
 import { MAP_VIEW_OPTIONS, MAP_VIEWS } from './map-view'
 import { OntologyMap } from './OntologyMap'
-import { conceptRowId, type TableLinks, TableLinksContext } from './table-links'
+import { conceptRowId, selectedRowProps, type TableLinks, TableLinksContext } from './table-links'
 import { AttributeCountLink, ConceptLink, ShowOnMap } from './TableLinks'
 import { useOntologyVersionTab } from './version-context'
 
@@ -167,8 +174,8 @@ function OntologyTables({ ontology }: { ontology: Ontology }) {
     attributes: attributes.length,
   }
   const body: Record<SectionId, ReactNode> = {
-    classes: <ClassesGrid classes={all.classes} selected={highlighted.classes} />,
-    relations: <RelationsGrid relations={all.relations} selected={highlighted.relations} />,
+    classes: <ClassesGrid classes={all.classes} selected={highlighted} />,
+    relations: <RelationsGrid relations={all.relations} selected={highlighted} />,
     attributes: <AttributesGrid attributes={attributes} reveal={group} />,
   }
 
@@ -259,14 +266,10 @@ function Section({
 }
 
 /** A row's props: its id to scroll to, and its highlight when selected. */
-const rowProps = (concept: ClassOrRelation, selected: ReadonlySet<string>) => {
-  const current = selected.has(concept.label)
-  return {
-    id: conceptRowId(concept),
-    'aria-current': current || undefined,
-    'data-state': current ? 'selected' : undefined,
-  }
-}
+const rowProps = (concept: ClassOrRelation, selected: SelectedRows) => ({
+  id: conceptRowId(concept),
+  ...selectedRowProps(isSelectedRow(selected, concept)),
+})
 
 /** The column every row ends in: its "Show on Map". */
 const showOnMapColumn = (kind: ClassOrRelation['kind']) => ({
@@ -412,7 +415,7 @@ const CLASSES_GRID: DataTableParamsOptions = {
   search: 'q',
 }
 
-function ClassesGrid({ classes, selected }: { classes: ClassRow[]; selected: ReadonlySet<string> }) {
+function ClassesGrid({ classes, selected }: { classes: ClassRow[]; selected: SelectedRows }) {
   const grid = useDataTableParams(CLASSES_GRID)
   const table = useDataTable({
     data: classes,
@@ -536,7 +539,7 @@ const RELATIONS_GRID: DataTableParamsOptions = {
   search: 'q',
 }
 
-function RelationsGrid({ relations, selected }: { relations: RelationRow[]; selected: ReadonlySet<string> }) {
+function RelationsGrid({ relations, selected }: { relations: RelationRow[]; selected: SelectedRows }) {
   const grid = useDataTableParams(RELATIONS_GRID)
   const table = useDataTable({
     data: relations,

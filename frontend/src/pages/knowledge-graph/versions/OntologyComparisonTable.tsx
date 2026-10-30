@@ -11,12 +11,11 @@ import { createDataTableColumnHelper, filterColumn, useDataTable } from '@/lib/d
 import { type DataTableParamsOptions, useDataTableParams } from '@/lib/data-table-params'
 import { formatCount } from '@/lib/format'
 import { type ComparisonRow, comparisonRows } from './comparison-rows'
-import { useConceptSelection, useShowOnMap } from './concept-selection'
+import { isSelectedRow, selectedRows, useConceptSelection, useShowOnMap } from './concept-selection'
 import { ChangeLevelBadge } from './MapChangeSummary'
 import type { OntologyComparison } from './ontology-map-comparison'
 import { compareLevels, summarizeChanges } from './ontology-map-summary'
-import type { TableLinks } from './table-links'
-import { TableLinksContext } from './table-links'
+import { selectedRowProps, type TableLinks, TableLinksContext } from './table-links'
 import { ShowOnMap } from './TableLinks'
 import { useOntologyComparison } from './use-ontology-comparison'
 
@@ -100,6 +99,7 @@ function ComparisonGrid({ comparison, base, target }: { comparison: OntologyComp
     ...grid.tableOptions,
   })
   const [selection, setSelection] = useConceptSelection()
+  const highlighted = useMemo(() => selectedRows(comparison.ontology, selection), [comparison, selection])
   const showOnMap = useShowOnMap()
   const links = useMemo(
     (): TableLinks => ({
@@ -170,15 +170,9 @@ function ComparisonGrid({ comparison, base, target }: { comparison: OntologyComp
             table={table}
             label="Changes"
             empty="No changes match."
-            rowProps={(row) => {
-              const { owner } = row.original
-              const current =
-                owner !== null &&
-                (selection?.kind === 'class' || selection?.kind === 'relation') &&
-                selection.kind === owner.kind &&
-                selection.label === owner.label
-              return { 'aria-current': current || undefined, 'data-state': current ? 'selected' : undefined }
-            }}
+            rowProps={({ original: { owner } }) =>
+              selectedRowProps(owner !== null && isSelectedRow(highlighted, owner))
+            }
           />
         </TableLinksContext>
       )}
