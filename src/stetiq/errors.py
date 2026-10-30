@@ -60,3 +60,7 @@ class AuthenticationError(StetiqError):
 
 class PermissionDeniedError(StetiqError):
     """Server mode: the API token lacks the permission this Knowledge Graph operation needs."""
+
+
+class GateConfigError(StetiqError, ValueError):
+    """The Gates in the repo config file are malformed; the message names the Gate."""

@@ -10,6 +10,7 @@ from typing import Literal
 from stetiq.conformance import Conformance
 from stetiq.drift import DriftFinding, DriftThresholds
 from stetiq.errors import InvalidAliasNameError
+from stetiq.gates import Gate, GateOutcome
 from stetiq.evaluation.framework import Detail, MetricValue, ParameterValue, SubjectKind
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import Ontology, to_yaml
@@ -207,3 +208,38 @@ class ObservationOutcome:
     @property
     def drifted(self) -> bool:
         return self.drift is not None
+
+
+# --- Gates (ticket #14) --------------------------------------------------------------
+
+# What a Gate evaluation was run for: an Ontology Version (e.g. a Candidate) or a run.
+GateSubjectKind = Literal["ontology_version", "construction_run"]
+
+
+@dataclass(frozen=True)
+class GateResult:
+    """One recorded Gate evaluation: each Gate's outcome together with the Gate
+    definition used (`outcome.gate`).
+
+    `ontology_version` is the version the subject stands for: the version itself, or
+    for a run its Candidate if it gave rise to one, else the version it consumed.
+    Promotion audit entries take the target version's latest `GateResult`."""
+
+    knowledge_graph: str
+    subject_kind: GateSubjectKind
+    subject_id: str
+    ontology_version: int
+    outcomes: tuple[GateOutcome, ...]
+    evaluated_at: datetime
+
+    @property
+    def passed(self) -> bool:
+        return all(o.passed for o in self.outcomes)
+
+    @property
+    def failed(self) -> tuple[GateOutcome, ...]:
+        return tuple(o for o in self.outcomes if not o.passed)
+
+    @property
+    def gates(self) -> tuple[Gate, ...]:
+        return tuple(o.gate for o in self.outcomes)

@@ -18,6 +18,7 @@ from stetiq.tracking.entities import (
     ConstructionRun,
     EvaluationResult,
     EvolutionMode,
+    GateResult,
     KnowledgeGraph,
     Observation,
     OntologyVersion,
@@ -127,6 +128,12 @@ class Store(Protocol):
 
     def list_use_case_versions(self, knowledge_graph: str) -> list[UseCaseVersion]:
         """Ordered by version number ascending."""
+
+    def add_gate_result(self, result: GateResult) -> None:
+        """Append a Gate evaluation (insert-only)."""
+
+    def list_gate_results(self, knowledge_graph: str) -> list[GateResult]:
+        """Ordered oldest first."""
 
     def transaction(self):
         """Context manager making the enclosed store calls atomic."""

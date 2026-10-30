@@ -16,6 +16,7 @@ from stetiq.evaluation.framework import (
     SubjectKind,
 )
 from stetiq.evaluation.alignment import GoldOntologyAlignment
+from stetiq.evaluation.llm_mapping import LlmMappingError, LlmQuestionMapper
 from stetiq.evaluation.run import (
     CQ_EXECUTION_EVALUATOR,
     OBSERVED_SCHEMA_EVALUATOR,
@@ -37,6 +38,8 @@ __all__ = [
     "Evaluation",
     "Evaluator",
     "GoldOntologyAlignment",
+    "LlmMappingError",
+    "LlmQuestionMapper",
     "OntologyVersionEvaluator",
     "ReadOnlyGraphSource",
     "SubjectKind",
