@@ -27,6 +27,7 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
+import { MapChangeSummary } from './MapChangeSummary'
 import { MapDetailsPanel } from './MapDetailsPanel'
 import { MapPathPanel } from './MapPathPanel'
 import { MapSearchResults } from './MapSearchResults'
@@ -213,16 +214,23 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
   const [filters, setFilters] = useState<MapFilters>({ hideDeprecated: false, hideSubclassLinks: false })
   const shown = useMemo(() => filterOntologyMap(map, filters), [map, filters])
   const [selection, setSelection] = useState<MapSelection | null>(null)
+  // What the change summary points at: its focus shows, without selecting it.
+  const [preview, setPreview] = useState<MapSelection | null>(null)
   // Focus is over what is shown, so a selection a filter hides is no selection. Hiding
   // subclass links only declutters: a path through an inherited Pattern still counts.
   const reachable = useMemo(
     () => (filters.hideSubclassLinks ? filterOntologyMap(map, { ...filters, hideSubclassLinks: false }) : shown),
     [map, filters, shown],
   )
-  const focus = useMemo(() => focusOf(reachable, selection), [reachable, selection])
+  const selectedFocus = useMemo(() => focusOf(reachable, selection), [reachable, selection])
+  const focus = useMemo(
+    () => (preview ? focusOf(reachable, preview) : selectedFocus),
+    [preview, reachable, selectedFocus],
+  )
   const paths = useMemo(
-    () => (focus && selection?.kind === 'path' ? shortestPaths(reachable, selection.from, selection.to) : null),
-    [focus, reachable, selection],
+    () =>
+      selectedFocus && selection?.kind === 'path' ? shortestPaths(reachable, selection.from, selection.to) : null,
+    [selectedFocus, reachable, selection],
   )
   const matches = useMemo(() => searchMap(ontology, query), [ontology, query])
   const results = useMemo(() => searchOntology(ontology, query), [ontology, query])
@@ -235,7 +243,10 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
     const link = shown.links.find((l) => l.relation === result.label)
     return link ? { kind: 'link', id: link.id } : null
   }
-  const details = useMemo(() => (focus ? detailsOf(ontology, selection) : null), [focus, ontology, selection])
+  const details = useMemo(
+    () => (selectedFocus ? detailsOf(ontology, selection) : null),
+    [selectedFocus, ontology, selection],
+  )
 
   useEffect(() => {
     if (!selection) return
@@ -347,6 +358,14 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
   if (!elements) return <Skeleton className="h-[32rem] w-full" />
   return (
     <div className="flex h-[32rem] overflow-hidden rounded-md border">
+      {comparison && (
+        <MapChangeSummary
+          comparison={comparison}
+          selection={selection}
+          onPreview={setPreview}
+          onSelect={setSelection}
+        />
+      )}
       {query.trim() !== '' && (
         <MapSearchResults
           query={query}

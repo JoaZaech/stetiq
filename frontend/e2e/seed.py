@@ -507,6 +507,45 @@ def ontology_map_path(client: stetiq.Client) -> dict[str, Any]:
     return {}
 
 
+# Like examples/transit-network-kg: v2 (a Candidate's) takes the feed's camelCase columns,
+# v3 renames them to snake_case (two breaking removals, two additions) and documents HAS_TRIP.
+MAP_TRANSIT_V2 = """
+node_types:
+  - {label: Agency}
+  - {label: Route}
+  - label: Stop
+    properties: [{name: wheelchairBoarding, type: INTEGER}]
+  - label: Trip
+    properties: [{name: bikesAllowed, type: INTEGER}]
+relationship_types: [HAS_TRIP, OPERATES, SERVES]
+patterns:
+  - [Agency, OPERATES, Route]
+  - [Route, HAS_TRIP, Trip]
+  - [Trip, SERVES, Stop]
+"""
+
+MAP_TRANSIT_V3 = (
+    MAP_TRANSIT_V2.replace("wheelchairBoarding", "wheelchair_boarding")
+    .replace("bikesAllowed", "bikes_allowed")
+    .replace(
+        "relationship_types: [HAS_TRIP,",
+        "relationship_types: [{label: HAS_TRIP, description: The scheduled trips of a route},",
+    )
+)
+
+
+def ontology_map_transit(client: stetiq.Client) -> dict[str, Any]:
+    """Knowledge Graph `city-transit` with v1 = `MAP_TRANSIT_V2` without its attributes,
+    v2 = `MAP_TRANSIT_V2` and v3 = `MAP_TRANSIT_V3`."""
+    v1 = MAP_TRANSIT_V2.replace(
+        "    properties: [{name: wheelchairBoarding, type: INTEGER}]\n", ""
+    ).replace("    properties: [{name: bikesAllowed, type: INTEGER}]\n", "")
+    client.create_knowledge_graph("city-transit", ontology=v1)
+    client.register_ontology("city-transit", MAP_TRANSIT_V2)
+    client.register_ontology("city-transit", MAP_TRANSIT_V3)
+    return {}
+
+
 # For searching the Ontology Map, from the retail-orders example: Bin mentions warehouses in
 # its description and an attribute without being one, and so does SHIPPED_FROM's description.
 MAP_SEARCH_ONTOLOGY = """
@@ -554,6 +593,7 @@ SCENARIOS: dict[str, Scenario] = {
     "ontology_map_patterns": ontology_map_patterns,
     "ontology_map_attributes": ontology_map_attributes,
     "ontology_map_path": ontology_map_path,
+    "ontology_map_transit": ontology_map_transit,
     "ontology_map_search": ontology_map_search,
 }
 
