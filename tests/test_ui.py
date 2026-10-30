@@ -5,6 +5,7 @@ and `stetiq ui` (local mode, no tokens).
 The React app itself is tested in the browser by Playwright (`frontend/e2e`).
 """
 
+import click
 import pytest
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
@@ -564,7 +565,8 @@ def test_stetiq_ui_refuses_a_non_loopback_host_without_no_auth(served, tmp_path)
     )
 
     assert refused.exit_code == 2
-    assert "--no-auth" in refused.output
+    # CI terminals get Rich colour codes, which split the option name.
+    assert "--no-auth" in click.unstyle(refused.output)
     assert allowed.exit_code == 0, allowed.output
     assert [c["host"] for c in served] == ["0.0.0.0"]
 
