@@ -149,6 +149,22 @@ export function changesOfConcept(
   )
 }
 
+/** The Pattern an endpoint change names, as its link id (`Pattern.__str__`); null for any other change. */
+const endpointPattern = (change: OntologyChange) =>
+  /^endpoint pattern (.*) (?:added|removed)$/.exec(change.detail)?.[1] ?? null
+
+/**
+ * The Diff's changes to one Pattern link. The Diff records them against its relation:
+ * an endpoint change belongs to the one link it names, any other change to every link
+ * of the relation.
+ */
+function changesOfLink(diff: OntologyDiff, link: PatternLink): OntologyChange[] {
+  return changesOfConcept(diff, 'relationship_type', link.relation).filter((c) => {
+    const pattern = endpointPattern(c)
+    return pattern === null || pattern === link.id
+  })
+}
+
 /** Added or removed by which side has the item; otherwise modified when the Diff gives it a severity. */
 const changeKind = (inBase: boolean, inTarget: boolean, severity: Classification | null): MapChangeKind =>
   !inBase ? 'added' : !inTarget ? 'removed' : severity ? 'modified' : 'unchanged'
@@ -186,10 +202,10 @@ export function compareOntologies(base: Ontology, target: Ontology, diff: Ontolo
       return [n.label, { kind: changeKind(baseClasses.has(n.label), targetClasses.has(n.label), s), severity: s }]
     }),
   )
-  // The Diff records Pattern changes against their relation, so a link takes its relation's severity.
+  // A link takes the severity of its own endpoint change and of its relation's other changes.
   const links = Object.fromEntries(
     map.links.map((l): [string, MapChange] => {
-      const s = severity('relationship_type', l.relation)
+      const s = mostSevere(changesOfLink(diff, l).map((c) => c.classification))
       return [l.id, { kind: changeKind(baseLinks.has(l.id), targetLinks.has(l.id), s), severity: s }]
     }),
   )
@@ -228,7 +244,7 @@ export function changesOf(
   if (selection?.kind === 'class') return changesOfConcept(diff, 'node_type', selection.label)
   if (selection?.kind === 'link') {
     const link = map.links.find((l) => l.id === selection.id)
-    return link ? changesOfConcept(diff, 'relationship_type', link.relation) : []
+    return link ? changesOfLink(diff, link) : []
   }
   return []
 }

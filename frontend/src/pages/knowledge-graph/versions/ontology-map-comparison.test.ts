@@ -86,11 +86,25 @@ describe('compareOntologies', () => {
       // A new Pattern of a relation both versions have: the Diff records it against OPENED.
       '(Agent)-[OPENED]->(Ticket)': { kind: 'added', severity: 'additive' },
       '(Customer)-[FILED]->(LegacyTicket)': { kind: 'removed', severity: 'breaking' },
-      // The Pattern itself is in both versions, but its relation changed.
-      '(Customer)-[OPENED]->(Ticket)': { kind: 'modified', severity: 'additive' },
+      // OPENED's only change is another Pattern's: this one is unchanged.
+      '(Customer)-[OPENED]->(Ticket)': { kind: 'unchanged', severity: null },
       '(Ticket)-[ABOUT]->(Product)': { kind: 'unchanged', severity: null },
       '(Ticket)-[ASSIGNED]->(Agent)': { kind: 'added', severity: 'additive' },
     })
+  })
+
+  it("marks every Pattern of a relation modified, in that change's severity, when one of its attributes changes", () => {
+    const { changes } = compareOntologies(BASE, TARGET, {
+      classification: 'breaking',
+      changes: [
+        ...DIFF.changes,
+        { concept: 'OPENED.channel', concept_kind: 'property', kind: 'added', classification: 'breaking', detail: 'required property OPENED.channel added' },
+      ],
+    })
+
+    expect(changes.links['(Customer)-[OPENED]->(Ticket)']).toEqual({ kind: 'modified', severity: 'breaking' })
+    // The added Pattern is added, in the most severe of its own change and its relation's.
+    expect(changes.links['(Agent)-[OPENED]->(Ticket)']).toEqual({ kind: 'added', severity: 'breaking' })
   })
 
   it("draws the subclass links of both versions, a moved class's old one removed, in that class's severity", () => {
@@ -145,12 +159,13 @@ describe('changesOf', () => {
     expect(changesOf(comparison, { kind: 'class', label: 'Product' })).toEqual([])
   })
 
-  it("lists the Diff's changes to a selected link's relation", () => {
+  it("lists the Diff's changes to a selected link: its own Pattern's, and its relation's", () => {
     const comparison = compareOntologies(BASE, TARGET, DIFF)
 
-    expect(changesOf(comparison, { kind: 'link', id: '(Customer)-[OPENED]->(Ticket)' }).map((c) => c.detail)).toEqual([
+    expect(changesOf(comparison, { kind: 'link', id: '(Agent)-[OPENED]->(Ticket)' }).map((c) => c.detail)).toEqual([
       'endpoint pattern (Agent)-[OPENED]->(Ticket) added',
     ])
+    expect(changesOf(comparison, { kind: 'link', id: '(Customer)-[OPENED]->(Ticket)' })).toEqual([])
     expect(changesOf(comparison, null)).toEqual([])
   })
 })
