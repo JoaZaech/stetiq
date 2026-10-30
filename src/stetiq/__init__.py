@@ -2,12 +2,14 @@
 
 from stetiq.client import ActiveRun, Client
 from stetiq.conformance import Conformance, Mismatch, MismatchKind
+from stetiq.drift import DriftFinding, DriftKind, DriftThresholds
 from stetiq.errors import (
     EvaluatorError,
     GraphSourceNotBoundError,
     GraphSourceUnavailableError,
     GraphSourceWriteRejectedError,
     InvalidAliasNameError,
+    InvalidDriftConfigError,
     InvalidEvolutionModeError,
     KnowledgeGraphAlreadyExistsError,
     MissingDeclaredOntologyError,
@@ -27,6 +29,8 @@ from stetiq.graph_source import GraphSource, GraphSourceScope, InMemoryGraphSour
 from stetiq.ontology.diff import Change, ChangeKind, Classification, OntologyDiff
 from stetiq.tracking import (
     Alias,
+    DriftEvent,
+    ObservationOutcome,
     ConstructionRun,
     EvaluationResult,
     KnowledgeGraph,
@@ -38,6 +42,12 @@ from stetiq.tracking import (
 
 __all__ = [
     "Alias",
+    "DriftEvent",
+    "DriftFinding",
+    "DriftKind",
+    "DriftThresholds",
+    "InvalidDriftConfigError",
+    "ObservationOutcome",
     "InvalidAliasNameError",
     "Promotion",
     "ActiveRun",

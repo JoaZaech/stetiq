@@ -58,6 +58,8 @@ from stetiq.tracking.entities import (
     Promotion,
     RunStatus,
 )
+from stetiq.drift import DriftFinding, DriftThresholds
+from stetiq.tracking.entities import DriftEvent
 
 metadata = MetaData()
 
@@ -205,6 +207,22 @@ run_candidates = Table(
         ["knowledge_graph", "ontology_version"],
         ["ontology_versions.knowledge_graph", "ontology_versions.number"],
     ),
+)
+
+
+# --- Drift (ticket #16): a new table only. Drift events are alerts, never versions.
+drift_events = Table(
+    "drift_events",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("knowledge_graph", Text, ForeignKey("knowledge_graphs.name"), nullable=False),
+    Column("observation_id", Text, ForeignKey("observations.id"), nullable=False),
+    Column("previous_observation_id", Text, ForeignKey("observations.id"), nullable=True),
+    Column("contract_alias", Text, nullable=False),
+    Column("ontology_version", Integer, nullable=False),
+    Column("detected_at", Text, nullable=False),
+    Column("thresholds_json", Text, nullable=False),
+    Column("findings_json", Text, nullable=False),
 )
 
 
@@ -551,6 +569,47 @@ class SqlStore:
 
     def list_observations(self, knowledge_graph: str) -> list[Observation]:
         return self._observations(observations.c.knowledge_graph == knowledge_graph)
+
+    # --- Drift ----------------------------------------------------------------------
+
+    def add_drift_event(self, event: DriftEvent) -> None:
+        with self._connection() as conn:
+            conn.execute(
+                insert(drift_events).values(
+                    id=event.id,
+                    knowledge_graph=event.knowledge_graph,
+                    observation_id=event.observation_id,
+                    previous_observation_id=event.previous_observation_id,
+                    contract_alias=event.contract_alias,
+                    ontology_version=event.ontology_version,
+                    detected_at=event.detected_at.isoformat(),
+                    thresholds_json=json.dumps(event.thresholds.to_dict(), sort_keys=True),
+                    findings_json=json.dumps([f.to_dict() for f in event.findings]),
+                )
+            )
+
+    def list_drift_events(self, knowledge_graph: str) -> list[DriftEvent]:
+        query = (
+            select(drift_events)
+            .where(drift_events.c.knowledge_graph == knowledge_graph)
+            .order_by(drift_events.c.detected_at, drift_events.c.id)
+        )
+        with self._connection() as conn:
+            rows = conn.execute(query).mappings().all()
+        return [
+            DriftEvent(
+                id=r["id"],
+                knowledge_graph=r["knowledge_graph"],
+                observation_id=r["observation_id"],
+                previous_observation_id=r["previous_observation_id"],
+                contract_alias=r["contract_alias"],
+                ontology_version=r["ontology_version"],
+                detected_at=datetime.fromisoformat(r["detected_at"]),
+                findings=tuple(DriftFinding.from_dict(f) for f in json.loads(r["findings_json"])),
+                thresholds=DriftThresholds.from_dict(json.loads(r["thresholds_json"])),
+            )
+            for r in rows
+        ]
 
     # --- Aliases and Promotion ------------------------------------------------------
 

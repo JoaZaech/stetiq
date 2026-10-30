@@ -13,6 +13,7 @@ from stetiq.conformance import Conformance
 from stetiq.graph_source import GraphSourceScope
 from stetiq.tracking.entities import (
     Alias,
+    DriftEvent,
     Promotion,
     ConstructionRun,
     EvaluationResult,
@@ -80,6 +81,12 @@ class Store(Protocol):
 
     def list_observations(self, knowledge_graph: str) -> list[Observation]:
         """Ordered by observation time ascending."""
+
+    def add_drift_event(self, event: DriftEvent) -> None:
+        """Insert-only."""
+
+    def list_drift_events(self, knowledge_graph: str) -> list[DriftEvent]:
+        """Ordered oldest first."""
 
     def set_alias(self, alias: Alias) -> None:
         """Create the Alias or move it (upsert on knowledge graph + name)."""

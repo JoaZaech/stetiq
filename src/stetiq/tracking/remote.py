@@ -25,6 +25,8 @@ from stetiq.tracking.entities import (
     OntologyVersion,
     Origin,
 )
+from stetiq.drift import DriftThresholds
+from stetiq.tracking.entities import DriftEvent, ObservationOutcome
 from stetiq.tracking.service import ObservationInput
 
 
@@ -142,6 +144,25 @@ class RemoteTrackingService:
     def list_observations(self, knowledge_graph: str) -> list[Observation]:
         data = self._call("GET", self._kg_path(knowledge_graph) + "/observations")
         return [wire.observation_from_json(o) for o in data]
+
+    def record_observation(
+        self,
+        knowledge_graph: str,
+        observation: ObservationInput,
+        thresholds: DriftThresholds | None = None,
+    ) -> ObservationOutcome:
+        scope, schema = observation
+        body = {
+            "scope": wire.graph_source_scope_to_json(scope),
+            "observed_schema": wire.observed_schema_to_json(schema),
+            "drift_thresholds": wire.drift_thresholds_to_json(thresholds or DriftThresholds()),
+        }
+        data = self._call("POST", self._kg_path(knowledge_graph) + "/observations", body)
+        return wire.observation_outcome_from_json(data)
+
+    def list_drift_events(self, knowledge_graph: str) -> list[DriftEvent]:
+        data = self._call("GET", self._kg_path(knowledge_graph) + "/drift-events")
+        return [wire.drift_event_from_json(e) for e in data]
 
     # --- Aliases and Promotion ----------------------------------------------------------
 

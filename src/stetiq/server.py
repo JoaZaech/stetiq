@@ -136,6 +136,26 @@ def create_app(
     def list_observations(name: str) -> list[dict[str, Any]]:
         return [wire.observation_to_json(o) for o in tracking.list_observations(name)]
 
+    @api.post("/knowledge-graphs/{name}/observations", status_code=201)
+    def record_observation(
+        name: str,
+        scope: dict[str, Any] = Body(),
+        observed_schema: dict[str, Any] = Body(),
+        drift_thresholds: dict[str, Any] | None = Body(None),
+    ) -> dict[str, Any]:
+        observation = (
+            wire.graph_source_scope_from_json(scope),
+            wire.observed_schema_from_json(observed_schema),
+        )
+        thresholds = wire.drift_thresholds_from_json(drift_thresholds)
+        return wire.observation_outcome_to_json(
+            tracking.record_observation(name, observation, thresholds)
+        )
+
+    @api.get("/knowledge-graphs/{name}/drift-events")
+    def list_drift_events(name: str) -> list[dict[str, Any]]:
+        return [wire.drift_event_to_json(e) for e in tracking.list_drift_events(name)]
+
     @api.get("/observations/{observation_id}")
     def get_observation(observation_id: str) -> dict[str, Any]:
         return wire.observation_to_json(tracking.get_observation(observation_id))

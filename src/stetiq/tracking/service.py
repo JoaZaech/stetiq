@@ -19,6 +19,7 @@ from datetime import UTC, datetime
 from typing import Protocol
 
 from stetiq.conformance import assess_conformance, candidate_ontology
+from stetiq.drift import DriftThresholds, assess_drift
 from stetiq.errors import (
     EvaluatorError,
     GraphSourceNotBoundError,
@@ -42,10 +43,12 @@ from stetiq.tracking.entities import (
     DEFAULT_EVOLUTION_MODE,
     Alias,
     ConstructionRun,
+    DriftEvent,
     EvaluationResult,
     EvolutionMode,
     KnowledgeGraph,
     Observation,
+    ObservationOutcome,
     OntologyVersion,
     Origin,
     Promotion,
@@ -103,6 +106,18 @@ class TrackingService(Protocol):
     def get_observation(self, observation_id: str) -> Observation: ...
 
     def list_observations(self, knowledge_graph: str) -> list[Observation]: ...
+
+    def record_observation(
+        self,
+        knowledge_graph: str,
+        observation: ObservationInput,
+        thresholds: DriftThresholds | None = None,
+    ) -> ObservationOutcome:
+        """Store an on-demand Observation (no run) and check it for Drift against the
+        Contract Alias's version and the previous Observation. Never creates a version."""
+        ...
+
+    def list_drift_events(self, knowledge_graph: str) -> list[DriftEvent]: ...
 
     def set_alias(
         self, knowledge_graph: str, name: str, version: int, actor: str
@@ -413,6 +428,56 @@ class LocalTrackingService:
     def list_observations(self, knowledge_graph: str) -> list[Observation]:
         self.get_knowledge_graph(knowledge_graph)
         return self._store.list_observations(knowledge_graph)
+
+    # --- On-demand Observation and Drift --------------------------------------------
+
+    def record_observation(
+        self,
+        knowledge_graph: str,
+        observation: ObservationInput,
+        thresholds: DriftThresholds | None = None,
+    ) -> ObservationOutcome:
+        scope, schema = observation
+        thresholds = thresholds or DriftThresholds()
+        with self._store.transaction():
+            self.get_knowledge_graph(knowledge_graph)
+            history = self._store.list_observations(knowledge_graph)
+            previous = history[-1] if history else None
+            obs = Observation(
+                id=uuid.uuid4().hex,
+                knowledge_graph=knowledge_graph,
+                scope=scope,
+                observed_at=_now(),
+                schema=schema,
+                run_id=None,
+            )
+            self._store.add_observation(obs)
+            contract_alias = self.get_contract_alias(knowledge_graph)
+            contract = self.get_ontology_version(
+                knowledge_graph, self.get_alias(knowledge_graph, contract_alias).version
+            )
+            findings = assess_drift(
+                contract.ontology, schema, None if previous is None else previous.schema, thresholds
+            )
+            if not findings:
+                return ObservationOutcome(observation=obs)
+            event = DriftEvent(
+                id=uuid.uuid4().hex,
+                knowledge_graph=knowledge_graph,
+                observation_id=obs.id,
+                previous_observation_id=None if previous is None else previous.id,
+                contract_alias=contract_alias,
+                ontology_version=contract.number,
+                detected_at=obs.observed_at,
+                findings=findings,
+                thresholds=thresholds,
+            )
+            self._store.add_drift_event(event)
+            return ObservationOutcome(observation=obs, drift=event)
+
+    def list_drift_events(self, knowledge_graph: str) -> list[DriftEvent]:
+        self.get_knowledge_graph(knowledge_graph)
+        return self._store.list_drift_events(knowledge_graph)
 
     # --- Aliases and Promotion ------------------------------------------------------
 

@@ -44,3 +44,7 @@ class InvalidAliasNameError(StetiqError):
 
 class GraphSourceWriteRejectedError(StetiqError):
     """A query sent to a Graph Source was not read-only; adapters never issue writes."""
+
+
+class InvalidDriftConfigError(StetiqError, ValueError):
+    """The `drift:` section of the repo config (Drift thresholds) is malformed."""

@@ -53,18 +53,17 @@ def client_factory(tracking_mode, tmp_path, graph_source):
     """
     if tracking_mode == "local":
         uri = f"sqlite:///{tmp_path / 'stetiq.db'}"
-        yield lambda **kw: stetiq.Client(uri, graph_source=graph_source, **kw)
+        yield lambda **kw: stetiq.Client(uri, **{"graph_source": graph_source, **kw})
     elif tracking_mode == "postgres":
         uri = _postgres_url()
-        yield lambda **kw: stetiq.Client(uri, graph_source=graph_source, **kw)
+        yield lambda **kw: stetiq.Client(uri, **{"graph_source": graph_source, **kw})
     else:
         app = create_app(database_url=f"sqlite:///{tmp_path / 'server.db'}")
         with TestClient(app) as http:
             yield lambda **kw: stetiq.Client(
                 str(http.base_url),
                 service=RemoteTrackingService(str(http.base_url), http=http),
-                graph_source=graph_source,
-                **kw,
+                **{"graph_source": graph_source, **kw},
             )
 
 
