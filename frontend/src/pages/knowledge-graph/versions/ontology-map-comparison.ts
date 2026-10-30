@@ -49,13 +49,16 @@ const mostSevere = (classifications: Classification[]): Classification | null =>
 /** A comparison's two Ontologies and the Diff between them. */
 type ComparedOntologies = Pick<OntologyComparison, 'base' | 'target' | 'diff'>
 
+/** A class's or a relation's Concept kind: the Concepts that own attributes. */
+type OwnerKind = Exclude<OntologyChange['concept_kind'], 'property'>
+
 /**
  * The Diff's changes to one class or relation: those to the Concept itself and to its
  * attributes (`<owner>.<attribute>`), which the Diff records apart from their owner.
  */
 export function changesOfConcept(
   { base, target, diff }: ComparedOntologies,
-  kind: 'node_type' | 'relationship_type',
+  kind: OwnerKind,
   label: string,
 ): OntologyChange[] {
   return diff.changes.filter((c) =>
@@ -75,7 +78,7 @@ export function changesOfConcept(
 function attributeChanged(
   base: Ontology,
   target: Ontology,
-  kind: 'node_type' | 'relationship_type',
+  kind: OwnerKind,
   label: string,
   name: string,
 ): boolean {
@@ -139,7 +142,7 @@ export function compareOntologies(base: Ontology, target: Ontology, diff: Ontolo
 
   const [baseClasses, targetClasses] = [baseMap, targetMap].map((m) => new Set(m.nodes.map((n) => n.label)))
   const [baseLinks, targetLinks] = [baseMap, targetMap].map((m) => new Set(m.links.map((l) => l.id)))
-  const severity = (kind: 'node_type' | 'relationship_type', label: string) =>
+  const severity = (kind: OwnerKind, label: string) =>
     mostSevere(changesOfConcept({ base, target, diff }, kind, label).map((c) => c.classification))
 
   const classes = Object.fromEntries(
