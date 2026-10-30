@@ -80,14 +80,12 @@ test('a heading anchor deep link scrolls to its section, and headings link to th
 
 test('a guide link with an anchor opens that section of the other page', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 600 })
-  await page.goto('/ui/help/concepts')
+  await page.goto('/ui/help/using-the-web-ui')
 
   await page.getByRole('article').getByRole('link', { name: 'Getting started' }).click()
 
-  await expect(page).toHaveURL('/ui/help/getting-started#track-your-first-construction-run')
-  await expect(
-    page.getByRole('heading', { name: 'Track your first Construction Run' }),
-  ).toBeInViewport()
+  await expect(page).toHaveURL('/ui/help/getting-started#open-the-web-ui')
+  await expect(page.getByRole('heading', { name: 'Open the web UI' })).toBeInViewport()
 })
 
 test('a guide page renders tables and syntax-highlighted code', async ({ page }) => {
@@ -163,8 +161,8 @@ test('a Help page without diagrams does not load Mermaid', async ({ page }) => {
   })
   const mermaidScripts = () => scripts.filter((url) => /mermaid/i.test(url))
 
-  await page.goto('/ui/help/concepts')
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Concepts')
+  await page.goto('/ui/help/server-and-api-tokens')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Server & API Tokens')
   await page.waitForLoadState('networkidle')
   expect(mermaidScripts()).toEqual([])
 
