@@ -211,7 +211,10 @@ class TrackingService(Protocol):
 
     def register_use_case(self, knowledge_graph: str, use_case: UseCase) -> UseCaseVersion:
         """Store a new Use Case version (identical content returns the existing one).
-        Never creates an Ontology Version."""
+        Never creates an Ontology Version.
+
+        A new version is at once used to judge the latest Ontology Version's structural
+        answerability, and that result is stored; a dedupe hit judges nothing again."""
         ...
 
     def list_use_case_versions(self, knowledge_graph: str) -> list[UseCaseVersion]: ...
@@ -643,6 +646,10 @@ class LocalTrackingService:
                 use_case=use_case,
             )
             self._store.add_use_case_version(version)
+            # The latest Ontology Version is judged against the new questions at once.
+            ontology_versions = self._store.list_ontology_versions(knowledge_graph)
+            if ontology_versions:
+                self._run_answerability(ontology_versions[-1], version.number)
             return version
 
     def list_use_case_versions(self, knowledge_graph: str) -> list[UseCaseVersion]:

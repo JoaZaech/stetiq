@@ -55,6 +55,7 @@ These run **in the SDK process**:
 
 These run **in the tracking service**, which is server-side in remote mode:
 - The version built-ins (`BUILT_IN_EVALUATORS`) and `structural_answerability` run in `_register` for every *new* version, Candidates included. A dedupe hit does not re-run them.
+- `structural_answerability` also runs in `register_use_case` for every *new* Use Case Version, against the **latest** Ontology Version only, in the same transaction. The other built-ins are not re-run, and a dedupe hit judges nothing. This is why the web UI never calls `POST …/evaluate` after saving a Use Case: it only reads the stored result.
 - Conformance, the Evolution Mode decision, Candidate registration (`origin="run"`) and the run built-ins `conformance` and `observed_schema` all run in `end_run`, in one transaction.
 - Drift (`record_observation`). It never registers a version or moves an Alias.
 - **Gates.** The client sends Gate *definitions* only (`POST …/gate-results`). The server gathers the inputs, computes the outcomes and records them, and the Promotion audit's `gate_result` column reads that record.

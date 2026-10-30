@@ -110,6 +110,39 @@ patterns:
 """
 
 
+def test_registering_a_use_case_version_judges_the_latest_ontology_version_against_it(client, kg):
+    client.register_ontology(kg.name, WITHOUT_OPENED)
+
+    client.register_use_case(kg.name, USE_CASE)
+
+    latest = answerability(client.get_evaluation_results(kg.name, 2))
+    assert latest.use_case_version == 1
+    assert latest.metrics["unanswerable_questions"] == 1
+    # Only the latest Ontology Version is judged.
+    assert "structural_answerability" not in {
+        r.evaluator for r in client.get_evaluation_results(kg.name, 1)
+    }
+
+
+def test_registering_an_unchanged_use_case_judges_nothing_again(client, kg):
+    client.register_use_case(kg.name, USE_CASE)
+    judged = answerability(client.get_evaluation_results(kg.name, 1))
+
+    client.register_use_case(kg.name, USE_CASE)
+
+    assert answerability(client.get_evaluation_results(kg.name, 1)) == judged
+
+
+def test_a_new_use_case_version_does_not_re_run_the_other_built_ins(client, kg):
+    before = {r.evaluator: r for r in client.get_evaluation_results(kg.name, 1)}
+
+    client.register_use_case(kg.name, USE_CASE)
+
+    after = {r.evaluator: r for r in client.get_evaluation_results(kg.name, 1)}
+    assert set(after) == set(before) | {"structural_answerability"}
+    assert all(after[name] == result for name, result in before.items())
+
+
 def test_a_new_ontology_version_reports_unanswerable_questions_with_the_missing_concepts(
     client, kg
 ):
@@ -360,7 +393,8 @@ def test_questions_without_a_query_or_mapping_are_mapped_through_the_model_inter
         ],
     )
 
-    questions = per_question(answerability(client.evaluate("kg", 1)))
+    # Registering the Use Case judged v1 against it.
+    questions = per_question(answerability(client.get_evaluation_results("kg", 1)))
 
     assert mapper.asked == ["happy", "names"]
     assert questions["happy"] == {
