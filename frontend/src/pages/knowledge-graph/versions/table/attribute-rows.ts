@@ -1,6 +1,6 @@
 import type { Ontology } from '@/api/ontology-versions'
-import { type ClassOrRelation, conceptTables, constraintsOn, superclassChain } from './concepts'
-import { type DetailProperty, detailsOf } from './map/ontology-map-focus'
+import { type ClassOrRelation, conceptTables, constraintsOn, superclassChain } from '../concepts'
+import { type DetailProperty, detailsOf } from '../map/ontology-map-focus'
 
 /** An attribute as the Attributes grid lists it: one row per attribute a class or relation has. */
 export interface AttributeGridRow {

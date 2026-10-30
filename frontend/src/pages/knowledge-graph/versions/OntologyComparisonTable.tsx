@@ -15,8 +15,8 @@ import { isSelectedRow, selectedRows, useConceptSelection, useShowOnMap } from '
 import { ChangeLevelBadge, LevelCounts } from './MapChangeSummary'
 import type { OntologyComparison } from './ontology-map-comparison'
 import { compareLevels, summarizeChanges } from './ontology-map-summary'
-import { selectedRowProps, type TableLinks, TableLinksContext } from './table-links'
-import { ShowOnMap } from './TableLinks'
+import { selectedRowProps, type TableLinks, TableLinksContext } from './table/table-links'
+import { ShowOnMap } from './table/TableLinks'
 import { useOntologyComparison } from './use-ontology-comparison'
 
 /** Shows the documentation-only changes, which the grid leaves out by default. */

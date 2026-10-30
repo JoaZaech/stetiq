@@ -14,8 +14,8 @@ import { type DataTableParamsOptions, useDataTableParams } from '@/lib/data-tabl
 import { formatCount } from '@/lib/format'
 import { setOrDeleteParam } from '@/lib/search-params'
 import { useViewParam } from '@/lib/view-param'
-import { attributeRows } from './attribute-rows'
-import { AttributesGrid, type GroupRequest } from './AttributesGrid'
+import { attributeRows } from './table/attribute-rows'
+import { AttributesGrid, type GroupRequest } from './table/AttributesGrid'
 import {
   type ConceptSelection,
   isSelectedRow,
@@ -35,8 +35,8 @@ import {
 } from './concepts'
 import { MAP_VIEW_OPTIONS, MAP_VIEWS } from './map-view'
 import { OntologyMap } from './map/OntologyMap'
-import { conceptRowId, selectedRowProps, type TableLinks, TableLinksContext } from './table-links'
-import { AttributeCountLink, ConceptLink, ShowOnMap } from './TableLinks'
+import { conceptRowId, selectedRowProps, type TableLinks, TableLinksContext } from './table/table-links'
+import { AttributeCountLink, ConceptLink, ShowOnMap } from './table/TableLinks'
 import { useOntologyVersionTab } from './version-context'
 
 /**
