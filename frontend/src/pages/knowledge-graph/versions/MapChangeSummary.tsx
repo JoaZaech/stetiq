@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { ClassificationBadge } from '@/components/OntologyDiff'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import type { OntologyComparison } from './ontology-map-comparison'
 import type { MapSelection } from './ontology-map-focus'
@@ -12,11 +14,25 @@ import {
   type ConceptChanges,
 } from './ontology-map-summary'
 
-/** Each level's count in the headline, in its own colour: the Diff colours for severity. */
+/**
+ * Each level's count in the headline, in its own colour: the Diff colours for severity,
+ * and none for documentation-only, which the Diff colours are not for.
+ */
 const LEVEL_TEXT: Record<ChangeLevel, string> = {
+  'documentation-only': 'text-muted-foreground',
   additive: 'text-diff-additive',
   deprecating: 'text-diff-deprecating',
   breaking: 'text-diff-breaking',
+}
+
+/** A change's level as a badge: a severity's in its Diff colour, documentation-only's neutral. */
+export function ChangeLevelBadge({ level }: { level: ChangeLevel }) {
+  if (level !== 'documentation-only') return <ClassificationBadge classification={level} />
+  return (
+    <Badge variant="outline" className="text-muted-foreground">
+      {level}
+    </Badge>
+  )
 }
 
 /**
@@ -55,20 +71,79 @@ export function MapChangeSummary({
               </span>
             ))}
           </p>
-          <ul aria-label="Changed Concepts" className="space-y-1">
-            {summary.concepts.map((c) => (
-              <SummaryEntry
-                key={`${c.kind}:${c.label}`}
-                concept={c}
-                current={c === current}
-                onPreview={onPreview}
-                onSelect={onSelect}
-              />
-            ))}
-          </ul>
+          {summary.concepts.length > 0 && (
+            <ul aria-label="Changed Concepts" className="space-y-1">
+              {summary.concepts.map((c) => (
+                <SummaryEntry
+                  key={`${c.kind}:${c.label}`}
+                  concept={c}
+                  current={c === current}
+                  onPreview={onPreview}
+                  onSelect={onSelect}
+                />
+              ))}
+            </ul>
+          )}
+          {summary.documentationOnly.length > 0 && (
+            <DocumentationOnly
+              concepts={summary.documentationOnly}
+              count={summary.counts.find((c) => c.level === 'documentation-only')?.count ?? 0}
+              current={current}
+              onPreview={onPreview}
+              onSelect={onSelect}
+            />
+          )}
         </>
       )}
     </aside>
+  )
+}
+
+/**
+ * The documentation-only changes, collapsed to one line that expands to their entries.
+ * It opens by itself when the Map selects one of them.
+ */
+function DocumentationOnly({
+  concepts,
+  count,
+  current,
+  onPreview,
+  onSelect,
+}: {
+  concepts: ConceptChanges[]
+  count: number
+  current: ConceptChanges | null
+  onPreview: (selection: MapSelection | null) => void
+  onSelect: (selection: MapSelection) => void
+}) {
+  const id = useId()
+  const [expanded, setExpanded] = useState(false)
+  const open = expanded || (current !== null && concepts.includes(current))
+  const Chevron = open ? ChevronDown : ChevronRight
+  return (
+    <div className="space-y-1">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setExpanded(!open)}
+        className="flex w-full items-center gap-1 rounded-md p-2 text-left text-muted-foreground hover:bg-muted"
+      >
+        <Chevron aria-hidden className="size-4 shrink-0" />
+        {count} documentation-only {count === 1 ? 'change' : 'changes'}
+      </button>
+      <ul id={id} hidden={!open} aria-label="Documentation-only changes" className="space-y-1">
+        {concepts.map((c) => (
+          <SummaryEntry
+            key={`${c.kind}:${c.label}`}
+            concept={c}
+            current={c === current}
+            onPreview={onPreview}
+            onSelect={onSelect}
+          />
+        ))}
+      </ul>
+    </div>
   )
 }
 
@@ -107,7 +182,7 @@ function SummaryEntry({
         <span className="flex items-center gap-2">
           <span className="font-semibold break-all">{concept.label}</span>
           <span className="text-xs text-muted-foreground">{CONCEPT_NOUN[concept.kind]}</span>
-          <ClassificationBadge classification={concept.level} />
+          <ChangeLevelBadge level={concept.level} />
         </span>
         {concept.statements.map((s) => (
           <Statement key={`${s.change.concept}:${s.change.detail}`} statement={s} />

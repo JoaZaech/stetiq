@@ -27,7 +27,7 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
-import { MapChangeSummary } from './MapChangeSummary'
+import { ChangeLevelBadge, MapChangeSummary } from './MapChangeSummary'
 import { MapDetailsPanel } from './MapDetailsPanel'
 import { MapPathPanel } from './MapPathPanel'
 import { MapSearchResults } from './MapSearchResults'
@@ -43,6 +43,7 @@ import { detailsOf, focusOf, searchMap, type MapSelection } from './ontology-map
 import { layoutOntologyMap, NODE_SIZE, type Point, type Size } from './ontology-map-layout'
 import { shortestPaths } from './ontology-map-paths'
 import { searchOntology, type SearchResult } from './ontology-map-search'
+import { levelOf } from './ontology-map-summary'
 
 /**
  * How an item is drawn against the selection and the search: `selected` is the selection
@@ -500,7 +501,7 @@ function ChangeDetails({
           {changes.map((c) => (
             <li key={`${c.concept}:${c.detail}`} className="space-y-1">
               <div className="flex items-center gap-2">
-                <ClassificationBadge classification={c.classification} />
+                <ChangeLevelBadge level={levelOf(comparison, c)} />
                 <span className="text-xs text-muted-foreground">{c.kind}</span>
               </div>
               <div className="text-xs">{c.detail}</div>
