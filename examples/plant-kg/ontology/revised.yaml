@@ -1,0 +1,79 @@
+# Plant maintenance Knowledge Graph, revised after the first Construction Run.
+#
+# Compared with initial.yaml:
+# - adopts WorkOrder.downtime_minutes, which the Candidate from the first run proposed
+# - adds Fault and CAUSED_BY (the root-causes Competency Question was unanswerable)
+# - adds Supplier and the pattern SUPPLIED_BY was missing (it was an orphan)
+# - makes Technician.badge optional (the reports rarely state it)
+# - drops the uniqueness constraint on the optional WorkOrder.title
+# - documents every Concept
+node_types:
+  - label: Machine
+    description: A production machine from the asset register
+    properties:
+      - {name: name, type: STRING, required: true, description: "The asset id, e.g. CNC-04"}
+      - {name: model, type: STRING, description: Manufacturer and model}
+  - label: Line
+    description: A production line the machines sit on
+    properties:
+      - {name: name, type: STRING, required: true}
+  - label: Component
+    description: A part of a machine that a work order touched
+    properties:
+      - {name: name, type: STRING, required: true}
+  - label: Technician
+    description: A maintenance technician
+    properties:
+      - {name: name, type: STRING, required: true}
+      - {name: badge, type: STRING, description: "HR badge number, when known"}
+  - label: WorkOrder
+    description: One maintenance job from the CMMS, breakdown or preventive
+    properties:
+      - {name: id, type: STRING, required: true}
+      - {name: title, type: STRING}
+      - {name: kind, type: STRING, description: breakdown or preventive}
+      - {name: opened_at, type: DATE}
+      - {name: downtime_minutes, type: INTEGER, description: Production time lost}
+  - label: FollowUp
+    description: A follow-up task a technician recorded in the report
+    properties:
+      - {name: description, type: STRING, required: true}
+      - {name: status, type: STRING, required: true, description: open or done}
+  - label: Fault
+    description: The root cause a technician identified for a work order
+    properties:
+      - {name: description, type: STRING, required: true}
+  - label: Supplier
+    description: A vendor replacement parts are ordered from
+    properties:
+      - {name: name, type: STRING, required: true}
+relationship_types:
+  - label: PERFORMED_ON
+    description: The machine a work order was carried out on
+  - label: PART_OF
+    description: The line a machine sits on
+  - label: INVOLVED
+    description: The components a work order touched
+  - label: ASSIGNED_TO
+    description: The technician responsible
+  - label: FEEDS
+    description: Material flows from the source machine to the target machine
+  - label: HAS_FOLLOW_UP
+    description: The follow-up tasks recorded for a work order
+  - label: SUPPLIED_BY
+    description: The supplier a replacement component was ordered from
+  - label: CAUSED_BY
+    description: The root cause of a work order
+patterns:
+  - [WorkOrder, PERFORMED_ON, Machine]
+  - [Machine, PART_OF, Line]
+  - [WorkOrder, INVOLVED, Component]
+  - [WorkOrder, ASSIGNED_TO, Technician]
+  - [Machine, FEEDS, Machine]
+  - [WorkOrder, HAS_FOLLOW_UP, FollowUp]
+  - [FollowUp, ASSIGNED_TO, Technician]
+  - [Component, SUPPLIED_BY, Supplier]
+  - [WorkOrder, CAUSED_BY, Fault]
+constraints:
+  - {type: UNIQUENESS, node_type: WorkOrder, property_name: id}
+  - {type: UNIQUENESS, node_type: Machine, property_name: name}

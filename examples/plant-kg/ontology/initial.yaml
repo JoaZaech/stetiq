@@ -1,0 +1,51 @@
+# Plant maintenance Knowledge Graph, first Declared Ontology.
+# Written by the maintenance lead from the CMMS export and the asset register.
+node_types:
+  - label: Machine
+    description: A production machine from the asset register
+    properties:
+      - {name: name, type: STRING, required: true}
+      - {name: model, type: STRING}
+  - label: Line
+    properties:
+      - {name: name, type: STRING, required: true}
+  - label: Component
+    properties:
+      - {name: name, type: STRING, required: true}
+  - label: Technician
+    description: A maintenance technician
+    properties:
+      - {name: name, type: STRING, required: true}
+      - {name: badge, type: STRING, required: true}
+  - label: WorkOrder
+    description: One maintenance job from the CMMS, breakdown or preventive
+    properties:
+      - {name: id, type: STRING, required: true}
+      - {name: title, type: STRING}
+      - {name: kind, type: STRING}
+      - {name: opened_at, type: DATE}
+  - label: FollowUp
+    properties:
+      - {name: description, type: STRING, required: true}
+      - {name: status, type: STRING, required: true}
+relationship_types:
+  - label: PERFORMED_ON
+  - label: PART_OF
+  - label: INVOLVED
+  - label: ASSIGNED_TO
+  - label: FEEDS
+    description: Material flows from the source machine to the target machine
+  - label: HAS_FOLLOW_UP
+  - label: SUPPLIED_BY   # declared for the parts suppliers, but nobody wrote the pattern yet
+patterns:
+  - [WorkOrder, PERFORMED_ON, Machine]
+  - [Machine, PART_OF, Line]
+  - [WorkOrder, INVOLVED, Component]
+  - [WorkOrder, ASSIGNED_TO, Technician]
+  - [Machine, FEEDS, Machine]
+  - [WorkOrder, HAS_FOLLOW_UP, FollowUp]
+  - [FollowUp, ASSIGNED_TO, Technician]
+constraints:
+  - {type: UNIQUENESS, node_type: WorkOrder, property_name: id}
+  - {type: UNIQUENESS, node_type: WorkOrder, property_name: title}
+  - {type: UNIQUENESS, node_type: Machine, property_name: name}

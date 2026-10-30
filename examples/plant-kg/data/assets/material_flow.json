@@ -1,0 +1,10 @@
+{
+  "_comment": "Material flow between machines as drawn in the line layout. Last updated 2025-11-03; the January re-route on Line 1 is not in here yet.",
+  "edges": [
+    {"from": "Press-02", "to": "Weld-03"},
+    {"from": "Paint-01", "to": "Packer-05"},
+    {"from": "Conveyor-07", "to": "Packer-05"},
+    {"from": "Lathe-02", "to": "CNC-04"},
+    {"from": "CNC-04", "to": "Weld-03"}
+  ]
+}

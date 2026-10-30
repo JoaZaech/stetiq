@@ -1,0 +1,53 @@
+# Repo config for the plant maintenance Knowledge Graph (see docs/guide/06-stetiq-yaml.md).
+knowledge_graph: plant-maintenance
+
+# The Construction Entry Point `stetiq run` (and the demo's nightly rebuild) starts.
+# pipeline.py reads PLANT_GRAPH_FILE, PLANT_EXTRACTOR and PLANT_EXTRACTION_MODEL
+# from the environment, the way a real pipeline reads its database credentials.
+entry_point:
+  command: python pipeline.py --ontology {ontology} --scope {graph_source}
+
+drift:
+  max_count_drop: 0.25
+  max_count_increase: 1.0
+
+gates:
+  - name: no-breaking-changes
+    check: ontology_diff
+    max_classification: additive
+  - name: graph-conforms
+    check: conformance
+    min_score: 0.95
+  - name: questions-answerable
+    check: metric
+    evaluator: structural_answerability
+    metric: answerable_ratio
+    min: 0.8
+  - name: questions-run
+    check: metric
+    evaluator: competency_question_execution
+    metric: pass_ratio
+    min: 1.0
+  - name: no-orphans
+    check: metric
+    evaluator: orphan_concepts
+    metric: orphan_concepts
+    max: 0
+  - name: consistent-constraints
+    check: metric
+    evaluator: constraint_consistency
+    metric: inconsistencies
+    max: 0
+  - name: documented            # evaluators.Documented, a custom Ontology Version Evaluator
+    check: metric
+    evaluator: documented
+    metric: undocumented
+    max: 0
+  - name: reports-cover-orders  # evaluators.ReportCoverage, a custom Construction Run Evaluator
+    check: metric
+    evaluator: report_coverage
+    metric: coverage
+    min: 1.0
+  - name: no-type-collapses
+    check: count_drop
+    max_drop: 0.25

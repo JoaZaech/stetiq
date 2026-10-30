@@ -2,6 +2,10 @@
 
 stetiq versions, evaluates and governs the Ontology of a Knowledge Graph. **To use it, read the [user guide](docs/guide/)**, starting with [Getting started](docs/guide/01-getting-started.md). The web UI shows the same guide under **Help**.
 
+## Example
+
+[`examples/plant-kg/`](examples/plant-kg/) is a complete, local-only walkthrough: a factory's maintenance Knowledge Graph built from structured exports and technicians' free-text reports (read by Claude through the Claude Code CLI, or by a regex script offline), then versioned, evaluated against Competency Questions, gated, promoted and watched for Drift with stetiq. `uv run python examples/plant-kg/demo.py`, then `stetiq ui` from that folder.
+
 ## How we work with agents
 
 This repo uses [Matt Pocock's skills](https://github.com/mattpocock/skills) for Claude Code. Their settings live in `docs/agents/`. Issues go in GitHub Issues, and the triage labels are `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human` and `wontfix`.

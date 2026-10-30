@@ -1,0 +1,8 @@
+WO-2033 / Weld-03 / 9 Feb 2026 / Tomasz Nowak
+
+Scheduled torch service on Weld-03, 25 minutes planned and 25 minutes taken. The work involved the weld torch tip and the wire feeder. Both at the end of their interval, nothing unexpected. Root cause was routine wear of the contact tip.
+
+Note for the layout drawing: since the re-route in January, Weld-03 supplies welded frames straight to Paint-01, the old buffer rack is gone. Somebody please update the flow diagram.
+
+Follow-ups:
+- [x] Reorder contact tips (owner: Tomasz Nowak)

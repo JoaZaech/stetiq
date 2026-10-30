@@ -1,0 +1,8 @@
+machine_id,description,model,line,commissioned
+Press-02,400 t hydraulic press,Schuler PH-400,Line 1,2015-06-01
+Weld-03,Robotic welding cell,KUKA KR 16,Line 1,2018-03-12
+Paint-01,Powder coating booth,Nordson Encore,Line 1,2016-09-20
+Packer-05,Case packer,Bosch Paloma,Line 1,2019-11-05
+Conveyor-07,Pallet conveyor,Interroll MCP,Line 1,2019-11-05
+Lathe-02,CNC lathe,DMG Mori NLX 2500,Line 2,2017-02-14
+CNC-04,Vertical machining centre,Haas VF-2,Line 2,2020-07-30

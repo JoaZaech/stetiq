@@ -9,3 +9,6 @@ dist/
 
 # Built web UI (frontend/ -> npm run build); shipped in the wheel, not committed.
 src/stetiq/_frontend/
+
+# Local graph store and LLM cache of the plant maintenance example
+examples/plant-kg/.graphdb/

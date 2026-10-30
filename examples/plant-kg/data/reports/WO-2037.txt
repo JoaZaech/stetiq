@@ -1,0 +1,9 @@
+WO-2037 / Packer-05 / 25 Mar 2026 / Priya Natarajan
+
+Packer-05 jammed with film wrapped around the sealing jaw at 19:15. Two hours lost, worst stop this quarter. The work involved the sealing jaw and the heater band. The heater band had failed open, so the film never sealed and wound itself around the jaw on every cycle.
+
+Root cause was a failed heater band that let film stick to the sealing jaw. A replacement heater band was ordered from Watlow; Marcus fitted the spare from the store so we could restart.
+
+Follow-ups:
+- [ ] Stock a spare heater band for Packer-05 (owner: Priya Natarajan)
+- [x] Replace the heater band (owner: Marcus Webb)

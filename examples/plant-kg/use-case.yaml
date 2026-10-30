@@ -1,0 +1,47 @@
+# What the maintenance lead needs the Knowledge Graph to answer.
+#
+# A question with a `query` is executed against the graph at the end of every
+# Construction Run (competency_question_execution). Every question is also judged
+# structurally against each Ontology Version (structural_answerability): does the
+# Ontology even have the Concepts the question needs? The Cypher below is what we
+# would run on Neo4j; the example's local graph store answers these same queries.
+description: "Plant maintenance: which machines hurt us most, who fixed what, and what is still open."
+competency_questions:
+  - id: orders-per-machine
+    question: Which machines generate the most work orders?
+    query: >-
+      MATCH (w:WorkOrder)-[:PERFORMED_ON]->(m:Machine)
+      RETURN m.name AS machine, count(w) AS work_orders ORDER BY work_orders DESC
+  - id: breakdown-technicians
+    question: Who handled each breakdown?
+    query: >-
+      MATCH (w:WorkOrder {kind: 'breakdown'})-[:ASSIGNED_TO]->(t:Technician)
+      RETURN w.id AS work_order, t.name AS technician
+  - id: open-follow-ups
+    question: Which follow-ups are still open, and who owns them?
+    query: >-
+      MATCH (w:WorkOrder)-[:HAS_FOLLOW_UP]->(f:FollowUp {status: 'open'})-[:ASSIGNED_TO]->(t:Technician)
+      RETURN w.id AS work_order, f.description AS follow_up, t.name AS owner
+  - id: downstream-of-press
+    question: If Press-02 stops, which machines downstream starve within three steps?
+    query: >-
+      MATCH (:Machine {name: 'Press-02'})-[:FEEDS*1..3]->(m:Machine)
+      RETURN DISTINCT m.name AS machine
+    expected_answer: [Weld-03, Paint-01, Packer-05]
+  - id: root-causes
+    question: What was the root cause of each work order?
+    query: >-
+      MATCH (w:WorkOrder)-[:CAUSED_BY]->(f:Fault)
+      RETURN w.id AS work_order, f.description AS fault
+  - id: line-for-order
+    question: Which line does the machine of a work order sit on?
+    concepts: [WorkOrder, "(WorkOrder)-[PERFORMED_ON]->(Machine)", "(Machine)-[PART_OF]->(Line)", Line.name]
+  - id: repeat-faults
+    question: Which faults keep coming back on the same machine?
+    # No query and no Concept mapping yet: stetiq reports it as unmapped until a
+    # question mapper (STETIQ_QUESTION_MAPPER) or a human maps it.
+  - id: downtime-by-kind
+    question: How much downtime did breakdowns cost compared with preventive work?
+    query: >-
+      MATCH (w:WorkOrder)
+      RETURN w.kind AS kind, sum(w.downtime_minutes) AS downtime_minutes
