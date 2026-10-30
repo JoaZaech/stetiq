@@ -41,6 +41,7 @@ import {
   type MapChangeKind,
   type OntologyComparison,
 } from './ontology-map-comparison'
+import { centreOf, locatedSelection } from './ontology-map-centre'
 import { detailsOf, focusOf, searchMap, type MapSelection } from './ontology-map-focus'
 import { layoutOntologyMap, type Point } from './ontology-map-layout'
 import { labelShown, linkShape, READABLE_ZOOM, straightPath, type Box } from './ontology-map-links'
@@ -342,19 +343,10 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
     return { nodes, edges: [...subclassEdges, ...patternEdges] }
   }, [layout.data, sizes, shown, focus, matches, selection, comparison])
 
-  const centre = useMemo(() => {
-    if (!layout.data || !selection || !selected || located !== formatSelection(selected)) return null
-    const centreOf = (label: string): Point => {
-      const { width, height } = sizes[label] ?? NODE_SIZE
-      return { x: layout.data[label].x + width / 2, y: layout.data[label].y + height / 2 }
-    }
-    if (selection.kind === 'class') return centreOf(selection.label)
-    if (selection.kind !== 'link') return null
-    const link = map.links.find((l) => l.id === selection.id)
-    if (!link) return null
-    const [a, b] = [centreOf(link.source), centreOf(link.target)]
-    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
-  }, [layout.data, sizes, located, selected, selection, map])
+  const centre = useMemo(
+    () => (layout.data ? centreOf(map, layout.data, sizes, locatedSelection(located, selected, selection)) : null),
+    [layout.data, sizes, located, selected, selection, map],
+  )
 
   if (layout.error) return <ErrorAlert error={layout.error} title="The Map could not be laid out" />
   if (!elements) return <Skeleton className="h-[32rem] w-full" />
