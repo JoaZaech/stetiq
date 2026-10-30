@@ -17,6 +17,7 @@ from stetiq.tracking.entities import (
     ConstructionRun,
     EvaluationResult,
     EvolutionMode,
+    GateResult,
     KnowledgeGraph,
     Observation,
     OntologyVersion,
@@ -107,6 +108,12 @@ class Store(Protocol):
         self, knowledge_graph: str, subject_kind: str, subject_id: str
     ) -> list[EvaluationResult]:
         """Every stored result for the subject, oldest first."""
+
+    def add_gate_result(self, result: GateResult) -> None:
+        """Append a Gate evaluation (insert-only)."""
+
+    def list_gate_results(self, knowledge_graph: str) -> list[GateResult]:
+        """Ordered oldest first."""
 
     def transaction(self):
         """Context manager making the enclosed store calls atomic."""

@@ -7,9 +7,12 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+import yaml
 
 from stetiq.client import Client
-from stetiq.errors import EvaluatorError, StetiqError
+from stetiq.config import DEFAULT_CONFIG_PATH, load_config
+from stetiq.errors import EvaluatorError, GateConfigError, StetiqError
+from stetiq.gates import parse_gates
 
 app = typer.Typer(no_args_is_help=True, help="Version, evaluate and govern knowledge-graph ontologies.")
 kg_app = typer.Typer(no_args_is_help=True, help="Knowledge Graphs.")
@@ -254,3 +257,50 @@ def alias_contract(
         typer.echo(client.get_contract_alias(knowledge_graph))
     except StetiqError as e:
         raise _fail(e) from None
+
+
+@app.command("gate")
+def gate(
+    knowledge_graph: Annotated[
+        str | None, typer.Argument(help="Default: knowledge_graph from the config file")
+    ] = None,
+    version: Annotated[
+        int | None, typer.Option("--version", help="Ontology Version to gate (default: the latest)")
+    ] = None,
+    run: Annotated[str | None, typer.Option("--run", help="Construction Run id to gate")] = None,
+    config: Annotated[
+        Path, typer.Option("--config", help="Repo config file holding the Gates")
+    ] = Path(DEFAULT_CONFIG_PATH),
+    tracking_uri: TrackingUri = None,
+) -> None:
+    """Evaluate the config file's Gates for an Ontology Version or a run; record the result
+    on the server and exit 1 if any Gate fails."""
+    try:
+        if version is not None and run is not None:
+            raise GateConfigError("give --version or --run, not both")
+        try:
+            settings = load_config(config)
+        except (OSError, ValueError, yaml.YAMLError) as e:
+            raise GateConfigError(f"Cannot read config file {config}: {e}") from None
+        knowledge_graph = knowledge_graph or settings.get("knowledge_graph")
+        if not knowledge_graph:
+            raise GateConfigError(f"No Knowledge Graph given and none set in {config}")
+        gates = parse_gates(settings.get("gates"))
+        if not gates:
+            raise GateConfigError(f"{config} defines no Gates")
+        result = _client(tracking_uri).evaluate_gates(knowledge_graph, gates, version=version, run=run)
+    except StetiqError as e:
+        raise _fail(e) from None
+    for outcome in result.outcomes:
+        typer.echo(f"{'PASS' if outcome.passed else 'FAIL'}  {outcome.gate.name}")
+        if not outcome.passed:
+            for reason in outcome.reasons:
+                typer.echo(f"      - {reason}")
+    subject = f"run {run}" if run is not None else f"Ontology Version {result.ontology_version}"
+    if result.passed:
+        typer.echo(f"All {len(result.outcomes)} Gates passed for {knowledge_graph} {subject}")
+        return
+    typer.echo(
+        f"{len(result.failed)} of {len(result.outcomes)} Gates failed for {knowledge_graph} {subject}"
+    )
+    raise typer.Exit(code=1)

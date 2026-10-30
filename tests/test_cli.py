@@ -146,3 +146,56 @@ def test_cli_reports_an_unknown_alias(tmp_path, monkeypatch, support_ontology):
 
     assert result.exit_code == 1
     assert "nope" in result.output
+
+
+GATES_CONFIG = """
+knowledge_graph: kg
+gates:
+  - name: no-breaking-changes
+    check: ontology_diff
+    max_classification: deprecating
+"""
+
+
+def test_cli_gate_exits_non_zero_naming_the_failed_gates_and_why(tmp_path, monkeypatch, support_ontology):
+    monkeypatch.setenv("STETIQ_TRACKING_URI", f"sqlite:///{tmp_path / 'stetiq.db'}")
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "stetiq.yaml").write_text(GATES_CONFIG)
+    ontology = tmp_path / "ontology.yaml"
+    ontology.write_text(support_ontology)
+    evolved = tmp_path / "evolved.yaml"
+    evolved.write_text(support_ontology.replace("  - label: OPENED", "  - label: CLOSED").replace("OPENED", "CLOSED"))
+    runner = CliRunner()
+    runner.invoke(app, ["kg", "create", "kg", "--ontology", str(ontology)])
+
+    passing = runner.invoke(app, ["gate", "--version", "1"])  # KG from the config file
+    runner.invoke(app, ["ontology", "register", "kg", str(evolved)])
+    failing = runner.invoke(app, ["gate", "kg"])  # latest version, ./stetiq.yaml
+    promoted = runner.invoke(app, ["alias", "set", "kg", "production", "2", "--actor", "ada"])
+    log = runner.invoke(app, ["alias", "log", "kg"])
+
+    assert passing.exit_code == 0, passing.output
+    assert "PASS  no-breaking-changes" in passing.output
+    assert failing.exit_code == 1, failing.output
+    assert "FAIL  no-breaking-changes" in failing.output
+    assert "breaking change (v1 -> v2): removed OPENED" in failing.output
+    assert "1 of 1 Gates failed" in failing.output
+    assert promoted.exit_code == 0
+    assert log.output.strip().splitlines()[-1].split()[:5] == ["production", "1", "2", "ada", "failed"]
+
+
+def test_cli_gate_reports_a_malformed_config_file(tmp_path, monkeypatch, support_ontology):
+    monkeypatch.setenv("STETIQ_TRACKING_URI", f"sqlite:///{tmp_path / 'stetiq.db'}")
+    ontology = tmp_path / "ontology.yaml"
+    ontology.write_text(support_ontology)
+    config = tmp_path / "gates.yaml"
+    config.write_text("gates: [{check: nope}]")
+    CliRunner().invoke(app, ["kg", "create", "kg", "--ontology", str(ontology)])
+
+    result = CliRunner().invoke(app, ["gate", "kg", "--config", str(config)])
+    missing = CliRunner().invoke(app, ["gate", "kg", "--config", str(tmp_path / "absent.yaml")])
+
+    assert result.exit_code == 1
+    assert "nope" in result.output
+    assert missing.exit_code == 1
+    assert "absent.yaml" in missing.output

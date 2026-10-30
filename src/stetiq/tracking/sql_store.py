@@ -45,6 +45,7 @@ from sqlalchemy.pool import StaticPool
 from stetiq.conformance import Conformance
 from stetiq.errors import KnowledgeGraphAlreadyExistsError
 from stetiq.evaluation.framework import Detail
+from stetiq.gates import outcome_from_dict, outcome_to_dict
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import canonical_json, from_canonical_json
 from stetiq.tracking.entities import (
@@ -52,6 +53,7 @@ from stetiq.tracking.entities import (
     ConstructionRun,
     EvaluationResult,
     EvolutionMode,
+    GateResult,
     KnowledgeGraph,
     Observation,
     OntologyVersion,
@@ -228,6 +230,25 @@ Index(
     evaluation_results.c.knowledge_graph,
     evaluation_results.c.subject_kind,
     evaluation_results.c.subject_id,
+)
+
+
+# --- Gates (ticket #14): insert-only; each row holds the Gate definitions it used.
+gate_results = Table(
+    "gate_results",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("knowledge_graph", Text, ForeignKey("knowledge_graphs.name"), nullable=False),
+    Column("subject_kind", Text, nullable=False),  # "ontology_version" | "construction_run"
+    Column("subject_id", Text, nullable=False),
+    Column("ontology_version", Integer, nullable=False),
+    Column("passed", Integer, nullable=False),  # 0/1, denormalised for audit queries
+    Column("outcomes_json", Text, nullable=False),  # [{gate: definition, passed, reasons}]
+    Column("evaluated_at", Text, nullable=False),
+    ForeignKeyConstraint(
+        ["knowledge_graph", "ontology_version"],
+        ["ontology_versions.knowledge_graph", "ontology_versions.number"],
+    ),
 )
 
 
@@ -676,6 +697,42 @@ class SqlStore:
         with self._connection() as conn:
             rows = conn.execute(query).mappings().all()
         return [_evaluation_from_row(r) for r in rows]
+
+    # --- Gates ----------------------------------------------------------------------
+
+    def add_gate_result(self, result: GateResult) -> None:
+        with self._connection() as conn:
+            conn.execute(
+                insert(gate_results).values(
+                    knowledge_graph=result.knowledge_graph,
+                    subject_kind=result.subject_kind,
+                    subject_id=result.subject_id,
+                    ontology_version=result.ontology_version,
+                    passed=int(result.passed),
+                    outcomes_json=json.dumps([outcome_to_dict(o) for o in result.outcomes]),
+                    evaluated_at=result.evaluated_at.isoformat(),
+                )
+            )
+
+    def list_gate_results(self, knowledge_graph: str) -> list[GateResult]:
+        query = (
+            select(gate_results)
+            .where(gate_results.c.knowledge_graph == knowledge_graph)
+            .order_by(gate_results.c.id)
+        )
+        with self._connection() as conn:
+            rows = conn.execute(query).mappings().all()
+        return [
+            GateResult(
+                knowledge_graph=r["knowledge_graph"],
+                subject_kind=r["subject_kind"],
+                subject_id=r["subject_id"],
+                ontology_version=r["ontology_version"],
+                outcomes=tuple(outcome_from_dict(o) for o in json.loads(r["outcomes_json"])),
+                evaluated_at=datetime.fromisoformat(r["evaluated_at"]),
+            )
+            for r in rows
+        ]
 
 
 def _evaluation_from_row(row) -> EvaluationResult:

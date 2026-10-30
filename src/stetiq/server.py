@@ -13,6 +13,7 @@ from fastapi import APIRouter, Body, FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from stetiq.errors import StetiqError
+from stetiq.gates import outcome_from_dict
 from stetiq.ontology import parse_dict
 from stetiq.tracking import LocalTrackingService, SqlStore, TrackingService, wire
 
@@ -196,6 +197,24 @@ def create_app(
     def evaluate_version(name: str, number: int) -> list[dict[str, Any]]:
         results = tracking.evaluate_ontology_version(name, number)
         return [wire.evaluation_result_to_json(r) for r in results]
+
+    # --- Gates (ticket #14) ----------------------------------------------------------
+
+    @api.post("/knowledge-graphs/{name}/gate-results", status_code=201)
+    def record_gate_result(
+        name: str,
+        subject_kind: Literal["ontology_version", "construction_run"] = Body(),
+        subject_id: str = Body(),
+        outcomes: list[dict[str, Any]] = Body(),
+    ) -> dict[str, Any]:
+        parsed = tuple(outcome_from_dict(o) for o in outcomes)
+        return wire.gate_result_to_json(
+            tracking.record_gate_result(name, subject_kind, subject_id, parsed)
+        )
+
+    @api.get("/knowledge-graphs/{name}/gate-results")
+    def list_gate_results(name: str) -> list[dict[str, Any]]:
+        return [wire.gate_result_to_json(r) for r in tracking.list_gate_results(name)]
 
     app.include_router(api)
     return app

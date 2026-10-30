@@ -44,3 +44,7 @@ class InvalidAliasNameError(StetiqError):
 
 class GraphSourceWriteRejectedError(StetiqError):
     """A query sent to a Graph Source was not read-only; adapters never issue writes."""
+
+
+class GateConfigError(StetiqError, ValueError):
+    """The Gates in the repo config file are malformed; the message names the Gate."""

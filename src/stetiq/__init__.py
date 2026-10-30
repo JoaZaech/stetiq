@@ -4,6 +4,7 @@ from stetiq.client import ActiveRun, Client
 from stetiq.conformance import Conformance, Mismatch, MismatchKind
 from stetiq.errors import (
     EvaluatorError,
+    GateConfigError,
     GraphSourceNotBoundError,
     GraphSourceUnavailableError,
     GraphSourceWriteRejectedError,
@@ -23,12 +24,14 @@ from stetiq.evaluation import (
     GoldOntologyAlignment,
     OntologyVersionEvaluator,
 )
+from stetiq.gates import Gate, GateOutcome, load_gates
 from stetiq.graph_source import GraphSource, GraphSourceScope, InMemoryGraphSource
 from stetiq.ontology.diff import Change, ChangeKind, Classification, OntologyDiff
 from stetiq.tracking import (
     Alias,
     ConstructionRun,
     EvaluationResult,
+    GateResult,
     KnowledgeGraph,
     Observation,
     OntologyVersion,
@@ -51,6 +54,11 @@ __all__ = [
     "Evaluation",
     "EvaluationResult",
     "EvaluatorError",
+    "GateConfigError",
+    "Gate",
+    "GateOutcome",
+    "GateResult",
+    "load_gates",
     "Conformance",
     "Mismatch",
     "MismatchKind",
