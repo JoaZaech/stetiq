@@ -13,7 +13,7 @@ import { useSearchParams } from 'react-router'
 import type { Ontology } from '@/api/ontology-versions'
 import { setOrDeleteParam } from '@/lib/search-params'
 import { type ClassOrRelation, patternId } from './concepts'
-import type { MapSelection } from './ontology-map-focus'
+import type { MapSelection } from './map/ontology-map-focus'
 
 /** What is selected: anything the Map selects, or a relation as a whole (from the Table). */
 export type ConceptSelection = MapSelection | { kind: 'relation'; label: string }

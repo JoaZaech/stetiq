@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { AttributeChange } from './ontology-map-comparison'
+import type { AttributeChange } from '../comparison/ontology-map-comparison'
 import { attributeLine, classNodeSize, classSizes, labelSize, NODE_SIZE } from './ontology-map-sizes'
 
 const removed: AttributeChange = { name: 'wheelchairBoarding', kind: 'removed', severity: 'breaking', details: [] }

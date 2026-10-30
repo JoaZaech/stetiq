@@ -1,9 +1,9 @@
 import { ViewToggle } from '@/components/ViewToggle'
 import { useComparisonView } from './comparison-view'
-import { MAP_VIEW_OPTIONS } from './map-view'
+import { MAP_VIEW_OPTIONS } from '../map-view'
 import { OntologyComparisonMap } from './OntologyComparisonMap'
 import { OntologyComparisonTable } from './OntologyComparisonTable'
-import { useOntologyVersionTab } from './version-context'
+import { useOntologyVersionTab } from '../version-context'
 
 /**
  * The version page's Changes tab, against the previous version: both versions superimposed

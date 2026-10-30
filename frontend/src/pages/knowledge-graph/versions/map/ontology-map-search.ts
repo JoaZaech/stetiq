@@ -3,7 +3,7 @@
  * Concepts a search mentions, each with its reason.
  */
 import type { Ontology, OntologyConcept } from '@/api/ontology-versions'
-import type { ClassOrRelation } from './concepts'
+import type { ClassOrRelation } from '../concepts'
 
 /** A Concept found by something other than its name, e.g. "description mentions 'warehouse'". */
 export interface OtherSearchResult extends ClassOrRelation {

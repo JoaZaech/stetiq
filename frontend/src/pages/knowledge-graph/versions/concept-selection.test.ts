@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { formatSelection, parseSelection, selectedRows } from './concept-selection'
-import { ONTOLOGY } from './ontology-map.fixtures'
+import { ONTOLOGY } from './map/ontology-map.fixtures'
 
 describe('parseSelection', () => {
   it('reads a class, a relation, a link and a path', () => {
