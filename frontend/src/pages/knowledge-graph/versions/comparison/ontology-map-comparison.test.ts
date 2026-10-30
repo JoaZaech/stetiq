@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { OntologyChange, OntologyDiff } from '@/api/ontology-diff'
 import type { Ontology } from '@/api/ontology-versions'
 import { changesOf, compareOntologies, isDocumentationOnly } from './ontology-map-comparison'
-import { layoutOntologyMap } from './map/ontology-map-layout'
+import { layoutOntologyMap } from '../map/ontology-map-layout'
 
 // Canonical form, as the server sends it: Concepts sorted by label.
 const BASE: Ontology = {

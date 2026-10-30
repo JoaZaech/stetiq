@@ -3,7 +3,7 @@
  * weighs at in the comparison (documentation-only its own) and where it is on the Map.
  */
 import type { OntologyChange } from '@/api/ontology-diff'
-import { attributeReference, type ClassOrRelation, CONCEPT_NOUN, type ConceptNoun } from './concepts'
+import { attributeReference, type ClassOrRelation, CONCEPT_NOUN, type ConceptNoun } from '../concepts'
 import { changesOfConcept, type OntologyComparison } from './ontology-map-comparison'
 import { type ChangeLevel, compareLevels, levelOf } from './ontology-map-summary'
 
