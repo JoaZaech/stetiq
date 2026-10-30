@@ -203,6 +203,8 @@ class RemoteTrackingService:
     def _subject_path(self, knowledge_graph: str, subject_kind: SubjectKind, subject_id: str) -> str:
         if subject_kind == "ontology_version":
             return f"{self._kg_path(knowledge_graph)}/ontology-versions/{quote(subject_id, safe='')}"
+        if subject_kind == "construction_run":
+            return f"{self._kg_path(knowledge_graph)}/runs/{quote(subject_id, safe='')}"
         raise EvaluatorError(f"Unsupported evaluation subject kind {subject_kind!r}")
 
     def evaluate_ontology_version(
@@ -215,6 +217,12 @@ class RemoteTrackingService:
             for r in self._call("POST", path + "/evaluate", body)
         ]
 
+    def evaluate_construction_run(self, run_id: str) -> list[EvaluationResult]:
+        return [
+            wire.evaluation_result_from_json(r)
+            for r in self._call("POST", self._run_path(run_id) + "/evaluate")
+        ]
+
     def record_evaluation(
         self,
         knowledge_graph: str,
@@ -223,6 +231,8 @@ class RemoteTrackingService:
         evaluator: str,
         evaluation: Evaluation,
         parameters: Mapping[str, ParameterValue] | None = None,
+        *,
+        use_case_version: int | None = None,
     ) -> EvaluationResult:
         path = self._subject_path(knowledge_graph, subject_kind, subject_id) + "/evaluations"
         body = {
@@ -230,6 +240,8 @@ class RemoteTrackingService:
             **wire.evaluation_to_json(evaluation),
             "parameters": dict(parameters or {}),
         }
+        if use_case_version is not None:
+            body["use_case_version"] = use_case_version
         return wire.evaluation_result_from_json(self._call("POST", path, body))
 
     def get_evaluation_results(

@@ -252,10 +252,17 @@ def create_app(
         metrics: dict[str, Any] = Body(),
         details: list[dict[str, Any]] = Body([]),
         parameters: dict[str, Any] = Body({}),
+        use_case_version: int | None = Body(None),
     ) -> dict[str, Any]:
         evaluation = wire.evaluation_from_json({"metrics": metrics, "details": details})
         result = tracking.record_evaluation(
-            name, "ontology_version", str(number), evaluator, evaluation, parameters
+            name,
+            "ontology_version",
+            str(number),
+            evaluator,
+            evaluation,
+            parameters,
+            use_case_version=use_case_version,
         )
         return wire.evaluation_result_to_json(result)
 
@@ -264,6 +271,42 @@ def create_app(
         name: str, number: int, use_case_version: int | None = Body(None, embed=True)
     ) -> list[dict[str, Any]]:
         results = tracking.evaluate_ontology_version(name, number, use_case_version)
+        return [wire.evaluation_result_to_json(r) for r in results]
+
+    # Run-level evaluation (ticket #13). Results live under the run's Knowledge Graph,
+    # whose subject check also confirms the run belongs to it.
+    run_path = "/knowledge-graphs/{name}/runs/{run_id}"
+
+    @api.get(run_path + "/evaluations")
+    def get_run_evaluations(name: str, run_id: str) -> list[dict[str, Any]]:
+        results = tracking.get_evaluation_results(name, "construction_run", run_id)
+        return [wire.evaluation_result_to_json(r) for r in results]
+
+    @api.post(run_path + "/evaluations", status_code=201)
+    def record_run_evaluation(
+        name: str,
+        run_id: str,
+        evaluator: str = Body(),
+        metrics: dict[str, Any] = Body(),
+        details: list[dict[str, Any]] = Body([]),
+        parameters: dict[str, Any] = Body({}),
+        use_case_version: int | None = Body(None),
+    ) -> dict[str, Any]:
+        evaluation = wire.evaluation_from_json({"metrics": metrics, "details": details})
+        result = tracking.record_evaluation(
+            name,
+            "construction_run",
+            run_id,
+            evaluator,
+            evaluation,
+            parameters,
+            use_case_version=use_case_version,
+        )
+        return wire.evaluation_result_to_json(result)
+
+    @api.post("/runs/{run_id}/evaluate")
+    def evaluate_run(run_id: str) -> list[dict[str, Any]]:
+        results = tracking.evaluate_construction_run(run_id)
         return [wire.evaluation_result_to_json(r) for r in results]
 
     # --- Use Cases ------------------------------------------------------------------

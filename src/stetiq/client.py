@@ -6,19 +6,20 @@ import getpass
 import os
 import subprocess
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from stetiq.entry_point import EntryPoint, EntryPointError, placeholder_values
 from stetiq.errors import EvaluatorError, GraphSourceUnavailableError, UseCaseValidationError
 from stetiq.evaluation.framework import (
+    ConstructionRunEvaluator,
     Evaluator,
     OntologyVersionEvaluator,
     check_evaluation,
     check_evaluator,
 )
-from stetiq.evaluation.answerability import ANSWERABILITY_EVALUATOR
-from stetiq.evaluation.structural import BUILT_IN_EVALUATORS
+from stetiq.evaluation.run import CompetencyQuestionExecution, RunSubject, ScopedGraphSource
+from stetiq.tracking.service import RESERVED_EVALUATOR_NAMES
 from stetiq.graph_source import GraphSource, GraphSourceScope, graph_source_from_env
 from stetiq.ontology import Ontology, parse_yaml
 from stetiq.ontology.yaml_format import to_yaml
@@ -207,7 +208,7 @@ class Client:
         Results are stored as the newest per Evaluator (and parameters); returns
         the latest of all.
         """
-        reserved = {e.name for e in BUILT_IN_EVALUATORS} | {ANSWERABILITY_EVALUATOR}
+        reserved = RESERVED_EVALUATOR_NAMES
         for evaluator in evaluators:
             check_evaluator(evaluator)
             if not isinstance(evaluator, OntologyVersionEvaluator):
@@ -227,10 +228,11 @@ class Client:
 
         An `OntologyVersionEvaluator` then runs on every Ontology Version this
         client creates and on `evaluate()`; its results are stored alongside the
-        built-ins. `ConstructionRunEvaluator`s are accepted for run-level evaluation.
+        built-ins. A `ConstructionRunEvaluator` runs at the end of every Construction
+        Run this client starts and on `evaluate_run()`, in this process.
         """
         check_evaluator(evaluator)
-        taken = {e.name for e in BUILT_IN_EVALUATORS} | {ANSWERABILITY_EVALUATOR} | set(self._evaluators)
+        taken = RESERVED_EVALUATOR_NAMES | set(self._evaluators)
         if evaluator.name in taken:
             raise EvaluatorError(f"An Evaluator named {evaluator.name!r} is already registered")
         self._evaluators[evaluator.name] = evaluator
@@ -409,7 +411,13 @@ class Client:
             ontology_version = self.get_alias(knowledge_graph, alias).version
         run = self._service.start_run(knowledge_graph, ontology_version)
         declared = self._service.get_ontology_version(knowledge_graph, ontology_version)
-        return ActiveRun(self._service, graph_source, run, declared.ontology)
+        return ActiveRun(
+            self._service,
+            graph_source,
+            run,
+            declared.ontology,
+            on_end=lambda ended: self._evaluate_run_sdk_side(ended, graph_source),
+        )
 
     def _require_graph_source(self) -> GraphSource:
         if self._graph_source is None:
@@ -469,6 +477,96 @@ class Client:
         """All Construction Runs of the Knowledge Graph, oldest first."""
         return self._service.list_runs(knowledge_graph)
 
+    def get_run_evaluation_results(self, run_id: str) -> list[EvaluationResult]:
+        """The latest result of every run-level Evaluator for a Construction Run
+        (`conformance`, `observed_schema`, `competency_question_execution`, custom)."""
+        run = self.get_run(run_id)
+        return self._service.get_evaluation_results(run.knowledge_graph, "construction_run", run.id)
+
+    def evaluate_run(
+        self,
+        run_id: str,
+        *,
+        evaluators: Sequence[ConstructionRunEvaluator] = (),
+        use_case_version: int | None = None,
+    ) -> list[EvaluationResult]:
+        """Re-run run-level evaluation on a run that has an Observation (it ran to its
+        end, even if strict Evolution Mode then failed it), as happens automatically
+        when a run ends: `conformance` and `observed_schema` (tracking service), then
+        `competency_question_execution` and this client's custom run Evaluators (here).
+
+        Competency Questions are executed against the Graph Source as it is now, in
+        the run's Observation scope, judged against `use_case_version` (default: the
+        latest; skipped when the Knowledge Graph has no Use Case). `evaluators` are
+        extra, one-off run Evaluators. Returns the latest result of every Evaluator."""
+        for evaluator in evaluators:
+            check_evaluator(evaluator)
+            if not isinstance(evaluator, ConstructionRunEvaluator):
+                raise EvaluatorError(f"{evaluator.name!r} is not a ConstructionRunEvaluator")
+            if evaluator.name in RESERVED_EVALUATOR_NAMES:
+                raise EvaluatorError(f"An Evaluator named {evaluator.name!r} is already registered")
+        self._service.evaluate_construction_run(run_id)
+        self._evaluate_run_sdk_side(
+            self.get_run(run_id),
+            self._require_graph_source(),
+            use_case_version=use_case_version,
+            extra=evaluators,
+        )
+        return self.get_run_evaluation_results(run_id)
+
+    def _evaluate_run_sdk_side(
+        self,
+        run: ConstructionRun,
+        graph_source: GraphSource,
+        *,
+        use_case_version: int | None = None,
+        extra: Sequence[ConstructionRunEvaluator] = (),
+    ) -> None:
+        """Run-level Evaluators that need the Graph Source: executed Competency
+        Questions, then custom run Evaluators. Only their results leave this process."""
+        if run.observation_id is None:
+            return  # failed before observing: nothing to evaluate
+        observation = self._service.get_observation(run.observation_id)
+        subject = RunSubject(
+            run=run,
+            declared_ontology=self._service.get_ontology_version(
+                run.knowledge_graph, run.ontology_version
+            ),
+            observation=observation,
+            graph_source=ScopedGraphSource(graph_source, observation.scope),
+        )
+        if use_case_version is None:
+            versions = self._service.list_use_case_versions(run.knowledge_graph)
+            use_case = versions[-1] if versions else None
+        else:
+            use_case = self._service.get_use_case_version(run.knowledge_graph, use_case_version)
+        if use_case is not None:
+            execution = CompetencyQuestionExecution(use_case.use_case)
+            self._service.record_evaluation(
+                run.knowledge_graph,
+                "construction_run",
+                run.id,
+                execution.name,
+                check_evaluation(execution.name, execution.evaluate(subject)),
+                use_case_version=use_case.number,
+            )
+        custom = [e for e in self._evaluators.values() if isinstance(e, ConstructionRunEvaluator)]
+        for evaluator in [*custom, *extra]:
+            try:
+                outcome = evaluator.evaluate(subject)
+            except Exception as exc:
+                raise EvaluatorError(
+                    f"Evaluator {evaluator.name!r} failed on Construction Run {run.id}: {exc}"
+                ) from exc
+            self._service.record_evaluation(
+                run.knowledge_graph,
+                "construction_run",
+                run.id,
+                evaluator.name,
+                check_evaluation(evaluator.name, outcome),
+                evaluator.parameters,
+            )
+
     def compare_runs(self, run_ids: list[str]) -> RunComparison:
         """Runs side by side: their params, metrics and consumed Ontology Versions."""
         runs = tuple(self.get_run(i) for i in run_ids)
@@ -518,9 +616,12 @@ class ActiveRun:
         graph_source: GraphSource,
         run: ConstructionRun,
         declared_ontology: Ontology,
+        *,
+        on_end: Callable[[ConstructionRun], None] | None = None,
     ) -> None:
         self._service = service
         self._graph_source = graph_source
+        self._on_end = on_end
         self.id = run.id
         self.knowledge_graph = run.knowledge_graph
         self.ontology_version = run.ontology_version
@@ -542,14 +643,22 @@ class ActiveRun:
 
     def end(self) -> ConstructionRun:
         """End the run: observe the whole bound Graph Source scope and store the
-        Observed Schema. If the Observation fails, the run is marked failed."""
+        Observed Schema. If the Observation fails, the run is marked failed.
+
+        Run-level evaluation then runs automatically: Conformance and Observed Schema
+        statistics in the tracking service, executed Competency Questions and custom
+        run Evaluators in this process (EvaluatorError if one raises; the ended run
+        and the other results stay)."""
         try:
             scope = self._service.get_graph_source(self.knowledge_graph)
             schema = self._graph_source.observe(scope)
         except BaseException:
             self._service.fail_run(self.id)
             raise
-        return self._service.end_run(self.id, (scope, schema))
+        run = self._service.end_run(self.id, (scope, schema))
+        if self._on_end is not None:
+            self._on_end(run)
+        return run
 
     def fail(self) -> ConstructionRun:
         """Abort the run; it is recorded as failed and nothing is observed."""

@@ -41,6 +41,12 @@ from stetiq.evaluation.framework import (
     check_parameters,
 )
 from stetiq.evaluation.structural import BUILT_IN_EVALUATORS
+from stetiq.evaluation.run import (
+    CQ_EXECUTION_EVALUATOR,
+    SERVER_RUN_EVALUATORS,
+    NoGraphSource,
+    RunSubject,
+)
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import Ontology, content_hash, from_dict, to_dict
 from stetiq.tracking.entities import (
@@ -69,6 +75,13 @@ from stetiq.use_case import UseCase
 # The Observation itself happens SDK-side (the Graph Source adapter and its credentials
 # live with the user's process, never on the stetiq server).
 ObservationInput = tuple[GraphSourceScope, ObservedSchema]
+
+# Evaluator names stetiq computes itself; custom Evaluators cannot take them.
+RESERVED_EVALUATOR_NAMES = frozenset(
+    {e.name for e in BUILT_IN_EVALUATORS}
+    | {ANSWERABILITY_EVALUATOR, CQ_EXECUTION_EVALUATOR}
+    | {e.name for e in SERVER_RUN_EVALUATORS}
+)
 
 # The audit-log actor for Alias moves stetiq makes itself (the Contract Alias on creation).
 SYSTEM_ACTOR = "stetiq"
@@ -158,11 +171,15 @@ class TrackingService(Protocol):
         evaluator: str,
         evaluation: Evaluation,
         parameters: Mapping[str, ParameterValue] | None = None,
+        *,
+        use_case_version: int | None = None,
     ) -> EvaluationResult:
-        """Store a result computed elsewhere (a custom Evaluator run by the SDK).
+        """Store a result computed elsewhere (a custom Evaluator run by the SDK, or
+        `competency_question_execution`, which needs the SDK's Graph Source).
 
         `parameters` is the Evaluator's configuration; results are kept per
-        (evaluator, parameters)."""
+        (evaluator, parameters). `use_case_version` is the Use Case version the
+        result was judged against (must exist), or None."""
         ...
 
     def get_evaluation_results(
@@ -170,6 +187,12 @@ class TrackingService(Protocol):
     ) -> list[EvaluationResult]:
         """The latest result per (Evaluator, parameters) for the subject, ordered by
         Evaluator name then parameters."""
+        ...
+
+    def evaluate_construction_run(self, run_id: str) -> list[EvaluationResult]:
+        """(Re-)run the built-in run Evaluators that need no Graph Source access
+        (`conformance`, `observed_schema`) on a run with an Observation, and store the
+        results. Raises EvaluatorError for a run that has no Observation."""
         ...
 
     def register_use_case(self, knowledge_graph: str, use_case: UseCase) -> UseCaseVersion:
@@ -309,9 +332,44 @@ class LocalTrackingService:
                     f"Knowledge Graph {knowledge_graph!r} has no Ontology Version {subject_id!r}"
                 )
             self.get_ontology_version(knowledge_graph, int(subject_id))
+        elif subject_kind == "construction_run":
+            run = self._store.get_run(subject_id)
+            if run is None or run.knowledge_graph != knowledge_graph:
+                raise NotFoundError(
+                    f"Knowledge Graph {knowledge_graph!r} has no Construction Run {subject_id!r}"
+                )
         else:
-            # Construction Run subjects arrive with run-level evaluation (ticket #13).
             raise EvaluatorError(f"Unsupported evaluation subject kind {subject_kind!r}")
+
+    def _run_subject(self, run: ConstructionRun) -> RunSubject:
+        if run.observation_id is None:
+            raise EvaluatorError(
+                f"Construction Run {run.id!r} has no Observation to evaluate "
+                f"(it is {run.status} without having ended)"
+            )
+        return RunSubject(
+            run=run,
+            declared_ontology=self.get_ontology_version(run.knowledge_graph, run.ontology_version),
+            observation=self.get_observation(run.observation_id),
+            graph_source=NoGraphSource(),
+        )
+
+    def _run_run_built_ins(self, run: ConstructionRun) -> list[EvaluationResult]:
+        subject = self._run_subject(run)
+        return [
+            self._store_result(
+                run.knowledge_graph,
+                "construction_run",
+                run.id,
+                evaluator.name,
+                check_evaluation(evaluator.name, evaluator.evaluate(subject)),
+            )
+            for evaluator in SERVER_RUN_EVALUATORS
+        ]
+
+    def evaluate_construction_run(self, run_id: str) -> list[EvaluationResult]:
+        with self._store.transaction():
+            return self._run_run_built_ins(self.get_run(run_id))
 
     def evaluate_ontology_version(
         self, knowledge_graph: str, number: int, use_case_version: int | None = None
@@ -330,15 +388,28 @@ class LocalTrackingService:
         evaluator: str,
         evaluation: Evaluation,
         parameters: Mapping[str, ParameterValue] | None = None,
+        *,
+        use_case_version: int | None = None,
     ) -> EvaluationResult:
-        if evaluator in {e.name for e in BUILT_IN_EVALUATORS} | {ANSWERABILITY_EVALUATOR}:
+        # Executed Competency Questions are a built-in computed SDK-side (the Graph
+        # Source lives there), so only that name is accepted, and only on a run.
+        sdk_side = subject_kind == "construction_run" and evaluator == CQ_EXECUTION_EVALUATOR
+        if evaluator in RESERVED_EVALUATOR_NAMES and not sdk_side:
             raise EvaluatorError(f"{evaluator!r} is a built-in Evaluator; its results are computed by stetiq")
         evaluation = check_evaluation(evaluator, evaluation)
         parameters = check_parameters(evaluator, parameters or {})
         with self._store.transaction():
             self._check_subject(knowledge_graph, subject_kind, subject_id)
+            if use_case_version is not None:
+                self.get_use_case_version(knowledge_graph, use_case_version)
             return self._store_result(
-                knowledge_graph, subject_kind, subject_id, evaluator, evaluation, parameters
+                knowledge_graph,
+                subject_kind,
+                subject_id,
+                evaluator,
+                evaluation,
+                parameters,
+                use_case_version=use_case_version,
             )
 
     def get_evaluation_results(
@@ -466,7 +537,9 @@ class LocalTrackingService:
                     version = self._register(run.knowledge_graph, candidate, "run")
                     self._store.set_run_candidate(run_id, run.knowledge_graph, version.number)
             self._store.end_run(run_id, status, ended, obs.id)
-            return self.get_run(run_id)
+            run = self.get_run(run_id)
+            self._run_run_built_ins(run)
+            return run
 
     def fail_run(self, run_id: str) -> ConstructionRun:
         with self._store.transaction():

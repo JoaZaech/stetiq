@@ -16,8 +16,18 @@ from stetiq.evaluation.framework import (
     SubjectKind,
 )
 from stetiq.evaluation.alignment import GoldOntologyAlignment
+from stetiq.evaluation.run import (
+    CQ_EXECUTION_EVALUATOR,
+    OBSERVED_SCHEMA_EVALUATOR,
+    RUN_CONFORMANCE_EVALUATOR,
+    matches_expected_answer,
+)
 
 __all__ = [
+    "CQ_EXECUTION_EVALUATOR",
+    "OBSERVED_SCHEMA_EVALUATOR",
+    "RUN_CONFORMANCE_EVALUATOR",
+    "matches_expected_answer",
     "ANSWERABILITY_EVALUATOR",
     "CompetencyQuestionMapper",
     "StructuralAnswerability",
