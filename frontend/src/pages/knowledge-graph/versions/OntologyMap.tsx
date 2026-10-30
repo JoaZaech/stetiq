@@ -27,7 +27,7 @@ import { cn } from '@/lib/utils'
 import { MapDetailsPanel } from './MapDetailsPanel'
 import { MapPathPanel } from './MapPathPanel'
 import { filterOntologyMap, ontologyMap, type LinkRoute, type MapFilters } from './ontology-map'
-import { changesOf, type MapChange, type OntologyComparison } from './ontology-map-comparison'
+import { changesOf, type MapChange, type MapChangeKind, type OntologyComparison } from './ontology-map-comparison'
 import { detailsOf, focusOf, searchMap, type MapSelection } from './ontology-map-focus'
 import { layoutOntologyMap, NODE_SIZE, type Point } from './ontology-map-layout'
 import { shortestPaths } from './ontology-map-paths'
@@ -62,26 +62,86 @@ const BEND_SPACING = 48
 const LOOP_REACH = 48
 const LOOP_STEP = 24
 
-/** Severity's channel: the Diff colours, as Tailwind classes and as a stroke. */
-const SEVERITY_BORDER: Record<Classification, string> = {
-  additive: 'border-diff-additive',
-  deprecating: 'border-diff-deprecating',
-  breaking: 'border-diff-breaking',
-}
-const SEVERITY_FILL: Record<Classification, string> = {
-  additive: 'bg-diff-additive/15',
-  deprecating: 'bg-diff-deprecating/15',
-  breaking: 'bg-diff-breaking/15',
-}
-const SEVERITY_RING: Record<Classification, string> = {
-  additive: 'ring-diff-additive',
-  deprecating: 'ring-diff-deprecating',
-  breaking: 'ring-diff-breaking',
+/** Severity's channel: the Diff colours, as Tailwind classes for each part of a mark, and as a stroke. */
+const SEVERITY: Record<'border' | 'fill' | 'ring', Record<Classification, string>> = {
+  border: {
+    additive: 'border-diff-additive',
+    deprecating: 'border-diff-deprecating',
+    breaking: 'border-diff-breaking',
+  },
+  fill: {
+    additive: 'bg-diff-additive/15',
+    deprecating: 'bg-diff-deprecating/15',
+    breaking: 'bg-diff-breaking/15',
+  },
+  ring: {
+    additive: 'ring-diff-additive',
+    deprecating: 'ring-diff-deprecating',
+    breaking: 'ring-diff-breaking',
+  },
 }
 const severityStroke = (severity: Classification | null) => severity && `var(--diff-${severity})`
 
 /** The dash of a removed link: a ghost of where it used to be. */
 const REMOVED_DASH = '6 4'
+
+/** How one change kind is drawn on every mark. */
+interface ChangeStyle {
+  /** A class's box, and the parts of it its severity colours. */
+  node: string
+  nodeSeverity: (keyof typeof SEVERITY)[]
+  /** A link: dashed as a ghost, emphasized (thicker, its label bold), or muted. */
+  dashed: boolean
+  emphasized: boolean
+  muted: boolean
+  /** Its label outlined in its severity's colour, as a modified class is ringed. */
+  outlined: boolean
+  /** The legend's swatch. */
+  swatch: string
+}
+
+/** Change kind's channel, mark style: added solid, removed a dashed ghost, modified ringed, unchanged muted. */
+const CHANGE_STYLE: Record<MapChangeKind, ChangeStyle> = {
+  added: {
+    node: 'border-2 font-semibold',
+    nodeSeverity: ['border', 'fill'],
+    dashed: false,
+    emphasized: true,
+    muted: false,
+    outlined: false,
+    swatch: 'border-2 border-foreground bg-foreground/15',
+  },
+  removed: {
+    node: 'border-2 border-dashed bg-transparent text-muted-foreground shadow-none',
+    nodeSeverity: ['border'],
+    dashed: true,
+    emphasized: false,
+    muted: false,
+    outlined: false,
+    swatch: 'border-2 border-dashed border-foreground',
+  },
+  modified: {
+    node: 'ring-2 ring-offset-2 ring-offset-background',
+    nodeSeverity: ['ring'],
+    dashed: false,
+    emphasized: false,
+    muted: false,
+    outlined: true,
+    swatch: 'border ring-2 ring-foreground ring-offset-1 ring-offset-card',
+  },
+  unchanged: {
+    node: 'bg-muted text-muted-foreground shadow-none',
+    nodeSeverity: [],
+    dashed: false,
+    emphasized: false,
+    muted: true,
+    outlined: false,
+    swatch: 'border bg-muted',
+  },
+}
+
+/** How `change` is drawn, or nothing outside a comparison. */
+const changeStyle = (change?: MapChange): Partial<ChangeStyle> => (change ? CHANGE_STYLE[change.kind] : {})
 
 type OntologyMapProps = { query?: string } & (
   | { ontology: Ontology; comparison?: never }
@@ -133,20 +193,26 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
   const elements = useMemo(() => {
     if (!layout.data) return null
     const positions = layout.data
-    const emphasis = (kind: 'class' | 'link', key: string): Emphasis => {
-      const focused = kind === 'class' ? focus?.classes : focus?.links
-      const matched = kind === 'class' ? matches?.classes : matches?.links
-      return {
-        selected:
-          (kind === 'class' && selection?.kind === 'class' && selection.label === key) ||
-          (kind === 'link' && selection?.kind === 'link' && selection.id === key) ||
-          // A path's two classes, and the links along it.
-          (kind === 'class' && selection?.kind === 'path' && (selection.from === key || selection.to === key)) ||
-          (kind === 'link' && selection?.kind === 'path' && (focus?.links.has(key) ?? false)),
-        match: matched?.has(key) ?? false,
-        faded: focused ? !focused.has(key) : matched ? !matched.has(key) : false,
-      }
-    }
+    const faded = (key: string, focused?: Set<string>, matched?: Set<string>) =>
+      focused ? !focused.has(key) : matched ? !matched.has(key) : false
+    const classEmphasis = (label: string): Emphasis => ({
+      // The selected class, or either end of a path.
+      selected:
+        selection?.kind === 'class'
+          ? selection.label === label
+          : selection?.kind === 'path' && (selection.from === label || selection.to === label),
+      match: matches?.classes.has(label) ?? false,
+      faded: faded(label, focus?.classes, matches?.classes),
+    })
+    const linkEmphasis = (id: string): Emphasis => ({
+      // The selected link, or any link along a path.
+      selected:
+        selection?.kind === 'link'
+          ? selection.id === id
+          : selection?.kind === 'path' && (focus?.links.has(id) ?? false),
+      match: matches?.links.has(id) ?? false,
+      faded: faded(id, focus?.links, matches?.links),
+    })
     const nodes: ClassNode[] = shown.nodes.map((n) => ({
       id: n.label,
       type: 'class',
@@ -155,7 +221,7 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
         label: n.label,
         deprecated: n.deprecated,
         change: comparison?.changes.classes[n.label],
-        ...emphasis('class', n.label),
+        ...classEmphasis(n.label),
       },
       ariaLabel: n.label,
       ...NODE_SIZE,
@@ -170,7 +236,7 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
         route: l.route,
         deprecated: l.deprecated,
         change: comparison?.changes.links[l.id],
-        ...emphasis('link', l.id),
+        ...linkEmphasis(l.id),
       },
       ariaLabel: l.id,
       className: cn(l.deprecated && 'opacity-50'),
@@ -188,7 +254,7 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
       ariaLabel: l.id,
       // A subclass link fades with either of its classes.
       className: cn(
-        (emphasis('class', l.child).faded || emphasis('class', l.parent).faded) && 'opacity-20',
+        (classEmphasis(l.child).faded || classEmphasis(l.parent).faded) && 'opacity-20',
       ),
       markerEnd: SUBCLASS_ARROWHEAD,
     }))
@@ -289,21 +355,15 @@ function ChangeDetails({
 
 /** A comparison's key to change kind (mark style) and severity (the Diff colours). */
 function ComparisonLegend() {
-  const kinds: [string, string][] = [
-    ['added', 'border-2 border-foreground bg-foreground/15'],
-    ['removed', 'border-2 border-dashed border-foreground'],
-    ['modified', 'border ring-2 ring-foreground ring-offset-1 ring-offset-card'],
-    ['unchanged', 'border bg-muted'],
-  ]
   return (
     <Panel
       position="top-left"
       aria-label="Legend"
       className="flex max-w-[45%] flex-wrap items-center gap-x-3 gap-y-1 rounded-md border bg-card px-3 py-2 text-xs shadow-xs"
     >
-      {kinds.map(([kind, style]) => (
+      {Object.entries(CHANGE_STYLE).map(([kind, { swatch }]) => (
         <span key={kind} className="flex items-center gap-1">
-          <span aria-hidden className={cn('inline-block h-3 w-5 rounded-sm', style)} />
+          <span aria-hidden className={cn('inline-block h-3 w-5 rounded-sm', swatch)} />
           {kind}
         </span>
       ))}
@@ -355,6 +415,7 @@ function SubclassArrowhead() {
 
 function ClassNodeView({ data }: NodeProps<ClassNode>) {
   const severity = data.change?.severity
+  const style = changeStyle(data.change)
   return (
     <div
       data-class
@@ -368,16 +429,8 @@ function ClassNodeView({ data }: NodeProps<ClassNode>) {
         // Deprecated: faded, with a struck-through label.
         data.deprecated && 'opacity-50',
         // Change kind as mark style, severity in the Diff colours.
-        data.change?.kind === 'added' && ['border-2 font-semibold', severity && [SEVERITY_BORDER[severity], SEVERITY_FILL[severity]]],
-        data.change?.kind === 'removed' && [
-          'border-2 border-dashed bg-transparent text-muted-foreground shadow-none',
-          severity && SEVERITY_BORDER[severity],
-        ],
-        data.change?.kind === 'modified' && [
-          'ring-2 ring-offset-2 ring-offset-background',
-          severity && SEVERITY_RING[severity],
-        ],
-        data.change?.kind === 'unchanged' && 'bg-muted text-muted-foreground shadow-none',
+        style.node,
+        severity && style.nodeSeverity?.map((part) => SEVERITY[part][severity]),
         // Search matches get a ring in the primary colour: diff-* hues are reserved for severity.
         data.match && 'ring-2 ring-primary ring-offset-2 ring-offset-background',
         data.selected && 'border-2 border-foreground',
@@ -403,14 +456,10 @@ function PatternEdgeView({ id, source, target, data, markerEnd }: EdgeProps<Patt
   // A link's label is centred on it; a loop's sits just outside the arc.
   const anchor = labelAlign === 'start' ? 'translate(0, -50%)' : 'translate(-50%, -50%)'
 
-  const change = data.change?.kind
-  const stroke = data.selected
-    ? 'var(--foreground)'
-    : data.match
-      ? 'var(--primary)'
-      : (severityStroke(data.change?.severity ?? null) ?? undefined)
-  // Added links are emphasized, removed ones dashed ghosts, unchanged ones muted.
-  const emphasized = data.selected || data.match || change === 'added'
+  const severity = data.change?.severity ?? null
+  const style = changeStyle(data.change)
+  const stroke = data.selected ? 'var(--foreground)' : data.match ? 'var(--primary)' : (severityStroke(severity) ?? undefined)
+  const emphasized = data.selected || data.match || style.emphasized
 
   return (
     <>
@@ -419,13 +468,13 @@ function PatternEdgeView({ id, source, target, data, markerEnd }: EdgeProps<Patt
         path={path}
         markerEnd={markerEnd}
         interactionWidth={16}
-        data-change={change}
-        data-severity={data.change?.severity ?? undefined}
+        data-change={data.change?.kind}
+        data-severity={severity ?? undefined}
         style={{
           stroke,
           strokeWidth: emphasized ? 2 : undefined,
-          strokeDasharray: change === 'removed' ? REMOVED_DASH : undefined,
-          opacity: data.faded ? 0.2 : change === 'unchanged' ? 0.4 : undefined,
+          strokeDasharray: style.dashed ? REMOVED_DASH : undefined,
+          opacity: data.faded ? 0.2 : style.muted ? 0.4 : undefined,
           cursor: 'pointer',
         }}
       />
@@ -435,10 +484,9 @@ function PatternEdgeView({ id, source, target, data, markerEnd }: EdgeProps<Patt
           className={cn(
             'nodrag nopan pointer-events-none absolute rounded-sm bg-background/90 px-1 font-mono text-[10px] text-muted-foreground',
             data.deprecated && 'line-through opacity-50',
-            change === 'unchanged' && 'opacity-60',
-            // A modified link's label is outlined in its severity's colour, as a modified class is ringed.
-            change === 'modified' && ['border', data.change?.severity && SEVERITY_BORDER[data.change.severity]],
-            (emphasized || change === 'modified') && 'font-semibold text-foreground',
+            style.muted && 'opacity-60',
+            style.outlined && ['border', severity && SEVERITY.border[severity]],
+            (emphasized || style.outlined) && 'font-semibold text-foreground',
             data.faded && 'opacity-30',
           )}
           style={{ transform: `translate(${label.x}px, ${label.y}px) ${anchor}` }}
@@ -456,7 +504,7 @@ function SubclassEdgeView({ id, source, target, markerEnd, data }: EdgeProps<Sub
   const to = useInternalNode(target)
   if (!from || !to) return null
   const { path } = linePath(center(from.internals.positionAbsolute), center(to.internals.positionAbsolute), 0)
-  const change = data?.change
+  const style = changeStyle(data?.change)
   return (
     <BaseEdge
       id={id}
@@ -464,10 +512,10 @@ function SubclassEdgeView({ id, source, target, markerEnd, data }: EdgeProps<Sub
       markerEnd={markerEnd}
       style={{
         // Thin whatever its change, so it never reads as a relation.
-        stroke: severityStroke(change?.severity ?? null) ?? 'var(--muted-foreground)',
-        strokeOpacity: change?.kind === 'unchanged' ? 0.3 : 0.6,
+        stroke: severityStroke(data?.change?.severity ?? null) ?? 'var(--muted-foreground)',
+        strokeOpacity: style.muted ? 0.3 : 0.6,
         strokeWidth: 1,
-        strokeDasharray: change?.kind === 'removed' ? REMOVED_DASH : undefined,
+        strokeDasharray: style.dashed ? REMOVED_DASH : undefined,
       }}
     />
   )
