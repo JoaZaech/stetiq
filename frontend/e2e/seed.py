@@ -58,6 +58,15 @@ def knowledge_graphs(client: stetiq.Client) -> dict[str, Any]:
     return {}
 
 
+def many_knowledge_graphs(client: stetiq.Client) -> dict[str, Any]:
+    """Seven Knowledge Graphs, `alpha` to `golf`, created in that order; then `beta` gets
+    a v2, so by last modified they run beta, golf, foxtrot, echo, delta, charlie, alpha."""
+    for kg in ("alpha", "beta", "charlie", "delta", "echo", "foxtrot", "golf"):
+        client.create_knowledge_graph(kg, ontology=ONTOLOGY)
+    client.register_ontology("beta", ONTOLOGY.replace("Ticket]", "Ticket, Agent]", 1))
+    return {}
+
+
 def signed_in_users(client: stetiq.Client) -> dict[str, Any]:
     """`support` and `billing`, and a token for ada: edit on `support`, read on `billing`."""
     for kg in ("support", "billing"):
@@ -323,6 +332,7 @@ SCENARIOS: dict[str, Scenario] = {
     "construction_runs_reader": construction_runs_reader,
     "empty": empty,
     "knowledge_graphs": knowledge_graphs,
+    "many_knowledge_graphs": many_knowledge_graphs,
     "signed_in_users": signed_in_users,
     "support_lineage": support_lineage,
     "support_lineage_reader": support_lineage_reader,

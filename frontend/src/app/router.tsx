@@ -9,6 +9,7 @@ import type { RouteHandle } from './breadcrumbs'
 import {
   DEFAULT_SECTION,
   KNOWLEDGE_GRAPH_SECTIONS,
+  kgListUrl,
   type KnowledgeGraphSectionPath,
 } from './knowledge-graph-sections'
 
@@ -28,6 +29,7 @@ const RunComparePage = lazyPage(() => import('@/pages/knowledge-graph/runs/RunCo
 const RunConformanceTab = lazyPage(() => import('@/pages/knowledge-graph/runs/RunConformanceTab'), (m) => m.RunConformanceTab)
 const RunEvaluationsTab = lazyPage(() => import('@/pages/knowledge-graph/runs/RunEvaluationsTab'), (m) => m.RunEvaluationsTab)
 const RunOverviewTab = lazyPage(() => import('@/pages/knowledge-graph/runs/RunOverviewTab'), (m) => m.RunOverviewTab)
+const HomePage = lazyPage(() => import('@/pages/home/HomePage'), (m) => m.HomePage)
 const KnowledgeGraphsPage = lazyPage(() => import('@/pages/knowledge-graphs/KnowledgeGraphsPage'), (m) => m.KnowledgeGraphsPage)
 const ChangesTab = lazyPage(() => import('@/pages/knowledge-graph/versions/ChangesTab'), (m) => m.ChangesTab)
 const OntologyDiffPage = lazyPage(() => import('@/pages/knowledge-graph/versions/OntologyDiffPage'), (m) => m.OntologyDiffPage)
@@ -124,7 +126,7 @@ const helpRoute: RouteObject = {
 }
 
 const knowledgeGraphRoute: RouteObject = {
-  path: 'kg/:name',
+  path: ':name',
   element: <KnowledgeGraphLayout />,
   handle: crumb(({ name }) => name ?? ''),
   children: [
@@ -162,8 +164,11 @@ export const routes: RouteObject[] = [
         // Pathless: the signed-in pages. They read `/api/v1`, and a 401 there sends a
         // signed-out reader to sign-in (api/client.ts).
         children: [
+          { index: true, element: <HomePage />, handle: crumb(() => 'Home') },
           {
-            // Pathless: puts "Knowledge Graphs" first in the breadcrumbs of every page below.
+            // The list, and every Knowledge Graph below it: "Knowledge Graphs" comes first
+            // in their breadcrumbs and links to the list.
+            path: kgListUrl.slice(1), // relative to the app root
             handle: crumb(() => 'Knowledge Graphs'),
             children: [{ index: true, element: <KnowledgeGraphsPage /> }, knowledgeGraphRoute],
           },

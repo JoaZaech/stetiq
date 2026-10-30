@@ -18,21 +18,118 @@ test('a Knowledge Graph shows its sections in the sidebar and its header', async
     /Knowledge Graphs.*support.*Ontology Versions/,
   )
 
-  const sections = page.getByRole('navigation', { name: 'Knowledge Graph' })
-  for (const name of SECTIONS) await expect(sections.getByRole('link', { name })).toBeVisible()
-  await expect(sections.getByRole('link', { name: 'Ontology Versions' })).toHaveAttribute(
+  const sidebar = page.getByRole('navigation', { name: 'Main' })
+  await expect(sidebar.getByRole('button', { name: 'Knowledge Graph: support' })).toHaveText('support')
+  for (const name of SECTIONS) {
+    await expect(sidebar.getByRole('link', { name })).toHaveAttribute('href', new RegExp(`^/ui/kg/support/`))
+  }
+  await expect(sidebar.getByRole('link', { name: 'Ontology Versions' })).toHaveAttribute(
     'aria-current',
     'page',
   )
 
-  await sections.getByRole('link', { name: 'Promotions' }).click()
+  await sidebar.getByRole('link', { name: 'Promotions' }).click()
   await expect(page).toHaveURL('/ui/kg/support/promotions')
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('support')
   await expect(page.getByRole('heading', { level: 2 })).toHaveText('Promotions')
+  await expect(sidebar.getByRole('link', { name: 'Back to Knowledge Graphs' })).toHaveCount(0)
+})
 
-  await page.getByRole('link', { name: 'Back to Knowledge Graphs' }).click()
-  await expect(page).toHaveURL(/\/ui\/?$/)
-  await expect(page.getByRole('navigation', { name: 'Knowledge Graph' })).toHaveCount(0)
+test.describe('the Knowledge Graph switcher', () => {
+  test.use({ seed: 'knowledge_graphs' })
+
+  test('lists every Knowledge Graph with a check on the current one, and switching keeps the section', async ({
+    page,
+  }) => {
+    await page.goto('/ui/kg/support/runs')
+    const sidebar = page.getByRole('navigation', { name: 'Main' })
+
+    await sidebar.getByRole('button', { name: 'Knowledge Graph: support' }).click()
+
+    const list = page.getByRole('listbox', { name: 'Knowledge Graphs' })
+    await expect(list.getByRole('option')).toHaveText(['billing', 'support', 'All Knowledge Graphs'])
+    await expect(list.getByRole('option', { name: 'support' })).toHaveAttribute('aria-checked', 'true')
+    await expect(list.getByRole('option', { name: 'billing' })).toHaveAttribute('aria-checked', 'false')
+
+    await list.getByRole('option', { name: 'billing' }).click()
+
+    await expect(page).toHaveURL('/ui/kg/billing/runs')
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('billing')
+    await expect(sidebar.getByRole('button', { name: 'Knowledge Graph: billing' })).toBeVisible()
+    await expect(list).toHaveCount(0)
+  })
+
+  test('searches by name and switches with the keyboard', async ({ page }) => {
+    await page.goto('/ui/kg/support/use-case')
+    const switcher = page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Knowledge Graph: support' })
+
+    await switcher.focus()
+    await page.keyboard.press('Enter')
+    await page.getByRole('combobox', { name: 'Search Knowledge Graphs' }).fill('bill')
+
+    const list = page.getByRole('listbox', { name: 'Knowledge Graphs' })
+    await expect(list.getByRole('option')).toHaveText(['billing', 'All Knowledge Graphs'])
+
+    await page.keyboard.press('Enter')
+
+    await expect(page).toHaveURL('/ui/kg/billing/use-case')
+  })
+
+  test('from a detail or compare page, switching opens that section of the other Knowledge Graph', async ({
+    page,
+  }) => {
+    const sidebar = page.getByRole('navigation', { name: 'Main' })
+
+    await page.goto('/ui/kg/support/versions/2')
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('v2')
+    await sidebar.getByRole('button', { name: 'Knowledge Graph: support' }).click()
+    await page.getByRole('option', { name: 'billing' }).click()
+    await expect(page).toHaveURL('/ui/kg/billing/versions')
+
+    await page.goto('/ui/kg/support/versions/compare?id=1&id=2')
+    await sidebar.getByRole('button', { name: 'Knowledge Graph: support' }).click()
+    await page.getByRole('option', { name: 'billing' }).click()
+    await expect(page).toHaveURL('/ui/kg/billing/versions')
+  })
+
+  test('the switcher stays highlighted while its list is open, expanded or collapsed to an icon', async ({
+    page,
+  }) => {
+    await page.goto('/ui/kg/support/versions')
+    const sidebar = page.getByRole('navigation', { name: 'Main' })
+    const switcher = sidebar.getByRole('button', { name: 'Knowledge Graph: support' })
+    const background = () => switcher.evaluate((el) => getComputedStyle(el).backgroundColor)
+
+    for (const collapsed of [false, true]) {
+      if (collapsed) {
+        await page.getByRole('button', { name: 'Toggle Sidebar' }).first().click()
+        await expect.poll(async () => (await sidebar.boundingBox())!.width).toBeLessThan(64)
+      }
+      await page.mouse.move(0, 0)
+      const closed = await background()
+
+      // By keyboard, so no hover style is in play; focus also opens the collapsed tooltip.
+      await switcher.focus()
+      await page.keyboard.press('Enter')
+      await expect(page.getByRole('listbox', { name: 'Knowledge Graphs' })).toBeVisible()
+      await expect.poll(background).not.toBe(closed)
+
+      await page.keyboard.press('Escape')
+      await expect(page.getByRole('listbox', { name: 'Knowledge Graphs' })).toHaveCount(0)
+      await switcher.blur()
+      await expect.poll(background).toBe(closed)
+    }
+  })
+
+  test('"All Knowledge Graphs" opens the list page', async ({ page }) => {
+    await page.goto('/ui/settings')
+
+    await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Select a Knowledge Graph' }).click()
+    await page.getByRole('option', { name: 'All Knowledge Graphs' }).click()
+
+    await expect(page).toHaveURL('/ui/kg')
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Knowledge Graphs')
+  })
 })
 
 test('the Ontology Version table lists versions newest first with Alias chips and a Candidate badge', async ({

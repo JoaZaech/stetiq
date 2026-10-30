@@ -1,14 +1,34 @@
 import { expect, test } from './fixtures'
 
-test('the sidebar leads to Knowledge Graphs and Settings, with breadcrumbs and a page title', async ({
+const SECTIONS = ['Ontology Versions', 'Construction Runs', 'Use Case', 'Observations', 'Promotions']
+
+test('the sidebar lists Home, the Knowledge Graph switcher, the five sections, Help and Settings', async ({
+  page,
+}) => {
+  await page.goto('/ui/settings')
+  const sidebar = page.getByRole('navigation', { name: 'Main' })
+
+  await expect(sidebar.getByRole('listitem')).toHaveText([
+    'Home',
+    'Select a Knowledge Graph',
+    ...SECTIONS,
+    'Help',
+    'Settings',
+  ])
+  await expect(sidebar.getByRole('button', { name: 'Select a Knowledge Graph' })).toBeVisible()
+  await expect(sidebar.getByRole('link', { name: 'Knowledge Graphs' })).toHaveCount(0)
+})
+
+test('the app opens on Home; the sidebar leads to Settings and back Home, with breadcrumbs and a page title', async ({
   page,
 }) => {
   await page.goto('/ui/')
   const sidebar = page.getByRole('navigation', { name: 'Main' })
   const breadcrumbs = page.getByRole('navigation', { name: 'breadcrumb' })
 
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Knowledge Graphs')
-  await expect(breadcrumbs).toHaveText('Knowledge Graphs')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Welcome to stetiq')
+  await expect(breadcrumbs).toHaveText('Home')
+  await expect(sidebar.getByRole('link', { name: 'Home' })).toHaveAttribute('data-active', 'true')
 
   await sidebar.getByRole('link', { name: 'Settings' }).click()
 
@@ -17,10 +37,125 @@ test('the sidebar leads to Knowledge Graphs and Settings, with breadcrumbs and a
   await expect(breadcrumbs).toHaveText('Settings')
   await expect(page).toHaveTitle('Settings · stetiq')
 
-  await sidebar.getByRole('link', { name: 'Knowledge Graphs' }).click()
+  await sidebar.getByRole('link', { name: 'Home' }).click()
 
   await expect(page).toHaveURL(/\/ui\/?$/)
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Knowledge Graphs')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Welcome to stetiq')
+
+  await page.getByRole('link', { name: 'stetiq' }).first().click()
+
+  await expect(page).toHaveURL(/\/ui\/?$/)
+})
+
+test.describe('with Knowledge Graphs', () => {
+  test.use({ seed: 'knowledge_graphs' })
+
+  test('on a fresh browser the section items are disabled, saying to select a Knowledge Graph first', async ({
+    page,
+  }) => {
+    await page.goto('/ui/settings')
+    const sidebar = page.getByRole('navigation', { name: 'Main' })
+
+    for (const name of SECTIONS) {
+      await expect(sidebar.getByRole('link', { name })).toBeDisabled()
+      await expect(sidebar.getByRole('link', { name })).not.toHaveAttribute('href')
+    }
+    await sidebar.getByRole('link', { name: 'Construction Runs' }).hover()
+    await expect(page.getByRole('tooltip')).toHaveText('Select a Knowledge Graph first')
+  })
+
+  test('outside a Knowledge Graph, the section items lead into the last one opened', async ({ page }) => {
+    await page.goto('/ui/kg/billing/observations')
+    const sidebar = page.getByRole('navigation', { name: 'Main' })
+    await expect(sidebar.getByRole('link', { name: 'Observations' })).toHaveAttribute('aria-current', 'page')
+
+    await sidebar.getByRole('link', { name: 'Settings' }).click()
+    await expect(page).toHaveURL('/ui/settings')
+
+    await expect(sidebar.getByRole('button', { name: 'Select a Knowledge Graph' })).toBeVisible()
+    await expect(sidebar.getByRole('link', { name: 'Ontology Versions' })).toHaveAttribute(
+      'href',
+      '/ui/kg/billing/versions',
+    )
+
+    await page.goto('/ui/')
+    await sidebar.getByRole('link', { name: 'Construction Runs' }).click()
+
+    await expect(page).toHaveURL('/ui/kg/billing/runs')
+    await expect(sidebar.getByRole('button', { name: 'Knowledge Graph: billing' })).toBeVisible()
+  })
+
+  test('while the Knowledge Graph list loads, the section items already lead into the last one opened', async ({
+    page,
+  }) => {
+    await page.goto('/ui/kg/billing/runs')
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('billing')
+
+    let release = () => {}
+    const held = new Promise<void>((resolve) => (release = resolve))
+    await page.route('**/api/v1/knowledge-graphs', async (route) => {
+      await held
+      await route.continue()
+    })
+    await page.goto('/ui/settings')
+
+    const sidebar = page.getByRole('navigation', { name: 'Main' })
+    await expect(sidebar.getByRole('link', { name: 'Construction Runs' })).toHaveAttribute(
+      'href',
+      '/ui/kg/billing/runs',
+    )
+    release()
+  })
+
+  test('on Help, the section items lead into the last one opened without loading the list, until the switcher opens', async ({
+    page,
+  }) => {
+    await page.goto('/ui/kg/billing/runs')
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('billing')
+
+    const listRequests: string[] = []
+    page.on('request', (request) => {
+      if (new URL(request.url()).pathname === '/api/v1/knowledge-graphs') listRequests.push(request.url())
+    })
+    await page.goto('/ui/help')
+
+    const sidebar = page.getByRole('navigation', { name: 'Main' })
+    await expect(sidebar.getByRole('link', { name: 'Construction Runs' })).toHaveAttribute(
+      'href',
+      '/ui/kg/billing/runs',
+    )
+    expect(listRequests).toEqual([])
+
+    await sidebar.getByRole('button', { name: 'Select a Knowledge Graph' }).click()
+
+    await expect(page.getByRole('option', { name: 'billing' })).toBeVisible()
+    expect(listRequests).toHaveLength(1)
+  })
+
+  test('a last-opened Knowledge Graph that does not exist leaves the section items disabled', async ({
+    page,
+  }) => {
+    await page.goto('/ui/kg/no-such-graph/runs')
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Knowledge Graph not found')
+
+    await page.goto('/ui/settings')
+
+    const sidebar = page.getByRole('navigation', { name: 'Main' })
+    await expect(sidebar.getByRole('link', { name: 'Construction Runs' })).toBeDisabled()
+  })
+
+  test('with the sidebar collapsed, the switcher is an icon whose tooltip names the Knowledge Graph', async ({
+    page,
+  }) => {
+    await page.goto('/ui/kg/support/versions')
+    const sidebar = page.getByRole('navigation', { name: 'Main' })
+
+    await page.getByRole('button', { name: 'Toggle Sidebar' }).first().click()
+    await expect.poll(async () => (await sidebar.boundingBox())!.width).toBeLessThan(64)
+
+    await sidebar.getByRole('button', { name: 'Knowledge Graph: support' }).hover()
+    await expect(page.getByRole('tooltip')).toHaveText('support')
+  })
 })
 
 test('the sidebar shows the stetiq logo and package version, and links to Help', async ({

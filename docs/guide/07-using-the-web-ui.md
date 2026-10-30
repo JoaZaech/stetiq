@@ -6,9 +6,13 @@ Open it with `stetiq ui` (local mode, see [Getting started](./01-getting-started
 
 ## Finding your way around
 
-The sidebar always has three entries:
+The web UI opens on **Home**: a *Getting Started* block whose cards open the guide pages for each step of the workflow (collapse it once you know your way, and it stays collapsed in that browser), and your five most recently modified Knowledge Graphs, with **View all** leading to the full list. The stetiq logo at the top of the sidebar always leads back to Home.
 
-- **Knowledge Graphs**: the list of Knowledge Graphs. Inside a Knowledge Graph it becomes a back link, and the sidebar lists that Knowledge Graph's sections below it.
+The sidebar looks the same on every page:
+
+- **Home**.
+- **The Knowledge Graph switcher**: shows the Knowledge Graph you are in, or *Select a Knowledge Graph*. Click it to see every Knowledge Graph you can read, with a check on the current one; type to search by name, and pick one with the mouse or the arrow keys and Enter. Switching keeps you in the same section: from *support*'s Construction Runs you land on *billing*'s Construction Runs. From a detail or compare page you land on that section's list, since the ids belong to the other Knowledge Graph. **All Knowledge Graphs** at the bottom opens the full list at `/ui/kg`. With the sidebar collapsed to icons, hover the switcher to see the Knowledge Graph's name.
+- **The sections**: Ontology Versions, Construction Runs, Use Case, Observations and Promotions. Inside a Knowledge Graph they lead to its sections. Elsewhere (Home, Settings, Help, the list) they lead into the Knowledge Graph you last opened in this browser. Until you have opened one, or if it no longer exists, they are greyed out with a *Select a Knowledge Graph first* tooltip.
 - **Help**: this guide.
 - **Settings**: the theme (light, dark or system) and your access. In local mode, Access says every Knowledge Graph is editable and names the user your changes are recorded as. On a server, it shows who you are signed in as, your grants (*read* or *edit* per Knowledge Graph, `*` meaning all of them) and a **Sign out** button.
 
@@ -29,7 +33,7 @@ Without *edit*, these controls stay visible but disabled, with a *Needs edit acc
 
 ## The Knowledge Graphs list
 
-The landing page lists every Knowledge Graph you can read, with:
+The Knowledge Graphs page (`/ui/kg`) lists every Knowledge Graph you can read, with:
 
 - **Contract Alias version**: the Ontology Version its Contract Alias points to.
 - **Latest version**: its newest Ontology Version.

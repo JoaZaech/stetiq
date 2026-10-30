@@ -5,7 +5,7 @@ describe('breadcrumbs', () => {
   it('lists every matched route that names a crumb, outermost first', () => {
     const matches = [
       { pathname: '/', params: {}, handle: undefined },
-      { pathname: '/', params: {}, handle: { crumb: () => 'Knowledge Graphs' } },
+      { pathname: '/kg', params: {}, handle: { crumb: () => 'Knowledge Graphs' } },
       {
         pathname: '/kg/support',
         params: { name: 'support' },
@@ -15,7 +15,7 @@ describe('breadcrumbs', () => {
     ]
 
     expect(breadcrumbs(matches)).toEqual([
-      { label: 'Knowledge Graphs', to: '/' },
+      { label: 'Knowledge Graphs', to: '/kg' },
       { label: 'support', to: '/kg/support' },
     ])
   })
