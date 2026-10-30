@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from stetiq.evaluation.answerability import CompetencyQuestionMapper
 from stetiq.auth import Permission, TokenRegistry
 from stetiq.errors import PermissionDeniedError, StetiqError
+from stetiq.gates import outcome_from_dict
 from stetiq.ontology import parse_dict
 from stetiq.use_case import parse_use_case_dict
 from stetiq.tracking import LocalTrackingService, SqlStore, TrackingService, wire
@@ -280,6 +281,24 @@ def create_app(
     @api.get("/knowledge-graphs/{name}/use-case-versions/{number}")
     def get_use_case_version(name: str, number: int) -> dict[str, Any]:
         return wire.use_case_version_to_json(tracking.get_use_case_version(name, number))
+
+    # --- Gates (ticket #14) ----------------------------------------------------------
+
+    @api.post("/knowledge-graphs/{name}/gate-results", status_code=201)
+    def record_gate_result(
+        name: str,
+        subject_kind: Literal["ontology_version", "construction_run"] = Body(),
+        subject_id: str = Body(),
+        outcomes: list[dict[str, Any]] = Body(),
+    ) -> dict[str, Any]:
+        parsed = tuple(outcome_from_dict(o) for o in outcomes)
+        return wire.gate_result_to_json(
+            tracking.record_gate_result(name, subject_kind, subject_id, parsed)
+        )
+
+    @api.get("/knowledge-graphs/{name}/gate-results")
+    def list_gate_results(name: str) -> list[dict[str, Any]]:
+        return [wire.gate_result_to_json(r) for r in tracking.list_gate_results(name)]
 
     app.include_router(api)
     return app

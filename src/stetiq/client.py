@@ -10,7 +10,12 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from stetiq.entry_point import EntryPoint, EntryPointError, placeholder_values
-from stetiq.errors import EvaluatorError, GraphSourceUnavailableError, UseCaseValidationError
+from stetiq.errors import (
+    EvaluatorError,
+    GraphSourceUnavailableError,
+    NotFoundError,
+    UseCaseValidationError,
+)
 from stetiq.evaluation.framework import (
     Evaluator,
     OntologyVersionEvaluator,
@@ -20,6 +25,7 @@ from stetiq.evaluation.framework import (
 from stetiq.evaluation.answerability import ANSWERABILITY_EVALUATOR
 from stetiq.evaluation.llm_mapping import question_mapper_from_env
 from stetiq.evaluation.structural import BUILT_IN_EVALUATORS
+from stetiq.gates import GateInputs, GatesInput, evaluate_gates, load_gates
 from stetiq.graph_source import GraphSource, GraphSourceScope, graph_source_from_env
 from stetiq.ontology import Ontology, parse_yaml
 from stetiq.ontology.yaml_format import to_yaml
@@ -29,6 +35,7 @@ from stetiq.tracking import (
     Promotion,
     ConstructionRun,
     EvaluationResult,
+    GateResult,
     KnowledgeGraph,
     LocalTrackingService,
     Observation,
@@ -333,6 +340,83 @@ class Client:
 
     def get_use_case_version(self, knowledge_graph: str, number: int) -> UseCaseVersion:
         return self._service.get_use_case_version(knowledge_graph, number)
+
+    # --- Gates ----------------------------------------------------------------------
+
+    def evaluate_gates(
+        self,
+        knowledge_graph: str,
+        gates: GatesInput,
+        *,
+        version: int | None = None,
+        run: str | None = None,
+    ) -> GateResult:
+        """Evaluate Gates (a config file path, config YAML text, or Gate objects) for an
+        Ontology Version (default: the latest, e.g. a fresh Candidate) or a Construction
+        Run, against the results stored on the server. The result, with the Gate
+        definitions used, is recorded there and returned.
+
+        What the Gates see, for the version the subject stands for (a run stands for its
+        Candidate, else the version it consumed):
+        - the Ontology Diff from the Contract Alias's version to it;
+        - its latest Evaluator results;
+        - Conformance and Observed Schema of the run (for a version: the latest
+          finished-or-strict-failed run standing for it), and the Observation before
+          that run's as statistics baseline.
+        """
+        if version is not None and run is not None:
+            raise ValueError("evaluate_gates takes version or run, not both")
+        definitions = load_gates(gates)
+        if run is not None:
+            subject = self.get_run(run)
+            if subject.knowledge_graph != knowledge_graph:
+                raise NotFoundError(
+                    f"Knowledge Graph {knowledge_graph!r} has no Construction Run {run!r}"
+                )
+            number = subject.candidate_version or subject.ontology_version
+        else:
+            number = version or self.list_ontology_versions(knowledge_graph)[-1].number
+            subject = self._latest_run_standing_for(knowledge_graph, number)
+        outcomes = evaluate_gates(definitions, self._gate_inputs(knowledge_graph, number, subject))
+        if run is not None:
+            return self._service.record_gate_result(knowledge_graph, "construction_run", run, outcomes)
+        return self._service.record_gate_result(
+            knowledge_graph, "ontology_version", str(number), outcomes
+        )
+
+    def _latest_run_standing_for(self, knowledge_graph: str, version: int) -> ConstructionRun | None:
+        runs = [
+            r
+            for r in self.list_runs(knowledge_graph)
+            if r.conformance is not None and (r.candidate_version or r.ontology_version) == version
+        ]
+        return runs[-1] if runs else None
+
+    def _gate_inputs(
+        self, knowledge_graph: str, number: int, run: ConstructionRun | None
+    ) -> GateInputs:
+        contract = self.get_contract_version(knowledge_graph)
+        target = self.get_ontology_version(knowledge_graph, number)
+        observed = baseline = None
+        if run is not None and run.observation_id is not None:
+            observations = self.list_observations(knowledge_graph)
+            index = next(i for i, o in enumerate(observations) if o.id == run.observation_id)
+            observed = observations[index].schema
+            baseline = observations[index - 1].schema if index > 0 else None
+        return GateInputs(
+            ontology_version=number,
+            contract_version=contract.number,
+            diff=diff_ontologies(contract.ontology, target.ontology),
+            conformance=None if run is None else run.conformance,
+            evaluations=tuple(self.get_evaluation_results(knowledge_graph, number)),
+            observed=observed,
+            baseline=baseline,
+        )
+
+    def list_gate_results(self, knowledge_graph: str) -> list[GateResult]:
+        """Every recorded Gate evaluation of the Knowledge Graph, oldest first, each with
+        the Gate definitions it used."""
+        return self._service.list_gate_results(knowledge_graph)
 
     # --- Aliases and Promotion ------------------------------------------------------
 

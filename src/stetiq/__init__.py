@@ -8,6 +8,7 @@ from stetiq.errors import (
     AuthenticationError,
     PermissionDeniedError,
     EvaluatorError,
+    GateConfigError,
     GraphSourceNotBoundError,
     GraphSourceUnavailableError,
     GraphSourceWriteRejectedError,
@@ -30,6 +31,7 @@ from stetiq.evaluation import (
     LlmQuestionMapper,
     OntologyVersionEvaluator,
 )
+from stetiq.gates import Gate, GateOutcome, load_gates
 from stetiq.graph_source import GraphSource, GraphSourceScope, InMemoryGraphSource
 from stetiq.ontology.diff import Change, ChangeKind, Classification, OntologyDiff
 from stetiq.tracking import (
@@ -38,6 +40,7 @@ from stetiq.tracking import (
     ObservationOutcome,
     ConstructionRun,
     EvaluationResult,
+    GateResult,
     KnowledgeGraph,
     Observation,
     OntologyVersion,
@@ -70,6 +73,11 @@ __all__ = [
     "Evaluation",
     "EvaluationResult",
     "EvaluatorError",
+    "GateConfigError",
+    "Gate",
+    "GateOutcome",
+    "GateResult",
+    "load_gates",
     "Conformance",
     "Mismatch",
     "MismatchKind",
