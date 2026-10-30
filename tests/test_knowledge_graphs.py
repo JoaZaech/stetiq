@@ -1,6 +1,7 @@
 import pytest
 
 import stetiq
+from stetiq.graph_source import GraphSourceScope
 
 
 def test_creating_a_knowledge_graph_registers_its_declared_ontology_as_first_version(
@@ -52,3 +53,52 @@ def test_knowledge_graphs_persist_across_clients(client_factory, support_ontolog
     versions = client_factory().list_ontology_versions("customer-support-kg")
 
     assert [v.number for v in versions] == [1]
+
+
+EVOLVED_ONTOLOGY = """
+node_types: [Customer, Ticket, Agent]
+relationship_types: [OPENED]
+patterns: [[Customer, OPENED, Ticket]]
+"""
+
+
+def test_listed_knowledge_graphs_carry_a_summary_of_their_state(client, support_ontology):
+    client.create_knowledge_graph("support", ontology=support_ontology)
+    client.register_ontology("support", EVOLVED_ONTOLOGY)
+    client.bind_graph_source("support", GraphSourceScope(database="neo4j", label="KG_support"))
+    run = client.start_run("support", ontology_version=1)
+    run.fail()
+
+    [kg] = client.list_knowledge_graphs()
+
+    assert kg.contract_version == 1
+    assert kg.latest_version == 2
+    assert kg.last_run_status == "failed"
+    assert kg.last_modified_at == client.get_run(run.id).ended_at
+
+
+def test_a_new_knowledge_graph_summary_has_no_run_and_was_last_modified_at_creation(
+    client, support_ontology
+):
+    created = client.create_knowledge_graph("support", ontology=support_ontology)
+
+    [kg] = client.list_knowledge_graphs()
+
+    assert kg.contract_version == 1
+    assert kg.latest_version == 1
+    assert kg.last_run_status is None
+    # Creation ends by pointing the Contract Alias at v1.
+    [initial_promotion] = client.list_promotions("support")
+    assert kg.last_modified_at == initial_promotion.promoted_at
+    assert kg.last_modified_at >= created.created_at
+
+
+def test_the_summary_follows_the_contract_alias_when_it_is_promoted(client, support_ontology):
+    client.create_knowledge_graph("support", ontology=support_ontology)
+    client.register_ontology("support", EVOLVED_ONTOLOGY)
+
+    promoted = client.set_alias("support", "production", 2)
+
+    [kg] = client.list_knowledge_graphs()
+    assert kg.contract_version == 2
+    assert kg.last_modified_at == promoted.updated_at

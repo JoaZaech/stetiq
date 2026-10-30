@@ -22,8 +22,20 @@ Origin = Literal["registered", "run"]
 
 @dataclass(frozen=True)
 class KnowledgeGraph:
+    """A Knowledge Graph. The summary fields are filled in only when Knowledge Graphs
+    are listed, so a list can show each one's state at a glance; elsewhere they are None.
+
+    `contract_version` is the version the Contract Alias points to, `latest_version` the
+    newest Ontology Version, `last_run_status` the status of the most recently started
+    Construction Run (None without runs) and `last_modified_at` the time of its latest
+    recorded change (version, run, Promotion, Use Case Version or Observation)."""
+
     name: str
     created_at: datetime
+    contract_version: int | None = None
+    latest_version: int | None = None
+    last_run_status: RunStatus | None = None
+    last_modified_at: datetime | None = None
 
 
 @dataclass(frozen=True)

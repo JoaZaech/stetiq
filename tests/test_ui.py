@@ -1,5 +1,5 @@
 """The web UI's server side, tested over raw HTTP: the built app served at `/ui`, the
-who-am-I route, and `stetiq ui` (local mode, no tokens).
+who-am-I route, the Knowledge Graph list summaries, and `stetiq ui` (local mode, no tokens).
 
 The React app itself is tested in the browser by Playwright (`frontend/e2e`).
 """
@@ -12,6 +12,7 @@ import stetiq
 from stetiq.auth import TokenRegistry
 from stetiq.cli import app
 from stetiq.server import create_app
+from stetiq.tracking import wire
 
 SHELL = "<!doctype html><title>stetiq</title><div id=root></div>"
 
@@ -107,6 +108,39 @@ def test_who_am_i_reports_local_mode_where_every_knowledge_graph_is_editable(
         r = http.get("/api/v1/whoami")
 
     assert r.json() == {"mode": "local", "user": "grace", "grants": {"*": "edit"}}
+
+
+# --- Knowledge Graph list summaries -------------------------------------------------------
+
+
+def test_the_knowledge_graph_list_shows_only_readable_ones_with_their_summary(
+    http, database_url, support_ontology
+):
+    sdk = stetiq.Client(database_url)
+    sdk.create_knowledge_graph("support", ontology=support_ontology)
+    sdk.create_knowledge_graph("billing", ontology=support_ontology)
+    sdk.register_ontology("support", "node_types:\n  - label: Customer\n")
+
+    r = http.get("/api/v1/knowledge-graphs", headers=bearer(database_url, {"support": "read"}))
+
+    assert r.status_code == 200
+    [support] = r.json()
+    assert support["name"] == "support"
+    assert (support["contract_version"], support["latest_version"]) == (1, 2)
+    assert support["last_run_status"] is None
+    assert (
+        support["last_modified_at"] == sdk.list_knowledge_graphs()[1].last_modified_at.isoformat()
+    )
+
+
+def test_a_knowledge_graph_payload_without_summary_fields_still_parses():
+    kg = wire.knowledge_graph_from_json({"name": "support", "created_at": "2026-01-02T03:04:05"})
+
+    assert kg.name == "support"
+    assert kg.contract_version is None
+    assert kg.latest_version is None
+    assert kg.last_run_status is None
+    assert kg.last_modified_at is None
 
 
 # --- stetiq ui ----------------------------------------------------------------------------
