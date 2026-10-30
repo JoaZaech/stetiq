@@ -40,15 +40,18 @@ export function shortestPaths(map: OntologyMap, from: string, to: string): MapPa
   }
   const chains = new Map([...labels].map((c) => [c, chain(c)]))
   const stepBetween = (a: string, b: string): PathStep => {
-    const [up, down] = [chains.get(a)!, chains.get(b)!]
+    const [chainOfA, chainOfB] = [chains.get(a)!, chains.get(b)!]
     const links: string[] = []
     const ancestors = new Set<string>()
     for (const l of map.links) {
-      for (const [x, y] of [[up, down], [down, up]]) {
-        const [i, j] = [x.indexOf(l.source), y.indexOf(l.target)]
-        if (i === -1 || j === -1) continue
+      // Either way round: one class's chain holds the link's source, the other's its target.
+      for (const [sourceChain, targetChain] of [[chainOfA, chainOfB], [chainOfB, chainOfA]]) {
+        // How many superclasses up each chain the link's end sits; -1 when it is not there.
+        const [sourceHeight, targetHeight] = [sourceChain.indexOf(l.source), targetChain.indexOf(l.target)]
+        if (sourceHeight === -1 || targetHeight === -1) continue
         if (!links.includes(l.id)) links.push(l.id)
-        for (const c of [...x.slice(1, i + 1), ...y.slice(1, j + 1)]) ancestors.add(c)
+        const climbed = [...sourceChain.slice(1, sourceHeight + 1), ...targetChain.slice(1, targetHeight + 1)]
+        for (const c of climbed) ancestors.add(c)
       }
     }
     return { links: links.sort(), ancestors: [...ancestors].sort() }

@@ -43,12 +43,12 @@ type Emphasis = {
   faded: boolean
 }
 
-/** How an item changed, on a comparison's Map only. */
-type Changed = { change?: MapChange }
+/** An item's data for how it changed, set on a comparison's Map only. */
+type MapChangeData = { change?: MapChange }
 
-type ClassNode = Node<{ label: string; deprecated: boolean } & Emphasis & Changed, 'class'>
-type PatternEdge = Edge<{ relation: string; route: LinkRoute; deprecated: boolean } & Emphasis & Changed, 'pattern'>
-type SubclassEdge = Edge<Changed, 'subclass'>
+type ClassNode = Node<{ label: string; deprecated: boolean } & Emphasis & MapChangeData, 'class'>
+type PatternEdge = Edge<{ relation: string; route: LinkRoute; deprecated: boolean } & Emphasis & MapChangeData, 'pattern'>
+type SubclassEdge = Edge<MapChangeData, 'subclass'>
 
 const NODE_TYPES = { class: ClassNodeView }
 const EDGE_TYPES = { pattern: PatternEdgeView, subclass: SubclassEdgeView }
