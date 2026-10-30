@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Ontology } from '@/api/ontology-versions'
 import {
   detailsOf,
+  filterOntologyMap,
   focusOf,
   layoutOntologyMap,
   neighboursOf,
@@ -114,7 +115,7 @@ describe('focusOf', () => {
 })
 
 // A class hierarchy, Party > Customer > VipCustomer, with properties at each level.
-const HIERARCHY: Ontology = {
+const PARTIES: Ontology = {
   node_types: [
     {
       label: 'Customer',
@@ -142,7 +143,7 @@ const HIERARCHY: Ontology = {
 
 describe('detailsOf', () => {
   it('details a class: its own properties, then those it inherits, marked with the ancestor that declares them', () => {
-    expect(detailsOf(HIERARCHY, { kind: 'class', label: 'VipCustomer' })).toEqual({
+    expect(detailsOf(PARTIES, { kind: 'class', label: 'VipCustomer' })).toEqual({
       kind: 'class',
       label: 'VipCustomer',
       description: undefined,
@@ -159,8 +160,8 @@ describe('detailsOf', () => {
 
   it('takes a property a class redeclares from the class, not from its ancestor', () => {
     const ontology: Ontology = {
-      ...HIERARCHY,
-      node_types: HIERARCHY.node_types.map((n) =>
+      ...PARTIES,
+      node_types: PARTIES.node_types.map((n) =>
         n.label === 'Customer' ? { ...n, properties: [{ name: 'name', type: 'STRING' }] } : n,
       ),
     }
@@ -172,7 +173,7 @@ describe('detailsOf', () => {
 
   it('stops at a superclass the Ontology does not declare, and at a cycle', () => {
     const ontology: Ontology = {
-      ...HIERARCHY,
+      ...PARTIES,
       node_types: [
         { label: 'A', parent: 'B', properties: [{ name: 'a', type: 'STRING' }] },
         { label: 'B', parent: 'A', properties: [{ name: 'b', type: 'STRING' }] },
@@ -185,7 +186,7 @@ describe('detailsOf', () => {
   })
 
   it("details a link: its Pattern, and its relation's description and properties", () => {
-    expect(detailsOf(HIERARCHY, { kind: 'link', id: '(Customer)-[OPENED]->(Ticket)' })).toEqual({
+    expect(detailsOf(PARTIES, { kind: 'link', id: '(Customer)-[OPENED]->(Ticket)' })).toEqual({
       kind: 'link',
       id: '(Customer)-[OPENED]->(Ticket)',
       source: 'Customer',
@@ -198,25 +199,104 @@ describe('detailsOf', () => {
   })
 
   it('has nothing to detail for no selection, or one the Ontology does not have', () => {
-    expect(detailsOf(HIERARCHY, null)).toBeNull()
-    expect(detailsOf(HIERARCHY, { kind: 'class', label: 'Agent' })).toBeNull()
-    expect(detailsOf(HIERARCHY, { kind: 'link', id: '(Ticket)-[OPENED]->(Customer)' })).toBeNull()
+    expect(detailsOf(PARTIES, null)).toBeNull()
+    expect(detailsOf(PARTIES, { kind: 'class', label: 'Agent' })).toBeNull()
+    expect(detailsOf(PARTIES, { kind: 'link', id: '(Ticket)-[OPENED]->(Customer)' })).toBeNull()
   })
 })
 
 describe('searchMap', () => {
   it('matches the classes and links whose Concept the tables would find', () => {
     // "open" is in Customer's description and is the OPENED relation; "tier" is a VipCustomer attribute.
-    expect(searchMap(HIERARCHY, ' OPEN ')).toEqual({
+    expect(searchMap(PARTIES, ' OPEN ')).toEqual({
       classes: new Set(['Customer']),
       links: new Set(['(Customer)-[OPENED]->(Ticket)']),
     })
-    expect(searchMap(HIERARCHY, 'tier')).toEqual({ classes: new Set(['VipCustomer']), links: new Set() })
-    expect(searchMap(HIERARCHY, 'nothing like it')).toEqual({ classes: new Set(), links: new Set() })
+    expect(searchMap(PARTIES, 'tier')).toEqual({ classes: new Set(['VipCustomer']), links: new Set() })
+    expect(searchMap(PARTIES, 'nothing like it')).toEqual({ classes: new Set(), links: new Set() })
   })
 
   it('matches nothing in particular for an empty search', () => {
-    expect(searchMap(HIERARCHY, '  ')).toBeNull()
+    expect(searchMap(PARTIES, '  ')).toBeNull()
+  })
+})
+
+// A hierarchy under Ticket, with a deprecated class and a deprecated relation.
+const HIERARCHY: Ontology = {
+  node_types: [
+    { label: 'Bug', parent: 'Ticket' },
+    { label: 'Customer' },
+    { label: 'Incident', parent: 'Ticket' },
+    { label: 'LegacyTicket', parent: 'Ticket', deprecated: true },
+    { label: 'Ticket' },
+  ],
+  relationship_types: [{ label: 'FILED', deprecated: true }, { label: 'OPENED' }, { label: 'REPORTED' }],
+  patterns: [
+    ['Customer', 'FILED', 'Ticket'],
+    ['Customer', 'OPENED', 'Ticket'],
+    ['Customer', 'REPORTED', 'Incident'],
+    ['Customer', 'REPORTED', 'LegacyTicket'],
+  ],
+}
+
+describe('ontologyMap: the subclass hierarchy', () => {
+  it('draws each superclass as a subclass link, child to parent, apart from the Pattern links', () => {
+    const map = ontologyMap(HIERARCHY)
+
+    expect(map.subclassLinks.map((l) => [l.child, l.parent])).toEqual([
+      ['Bug', 'Ticket'],
+      ['Incident', 'Ticket'],
+      ['LegacyTicket', 'Ticket'],
+    ])
+    expect(map.links.map((l) => l.id)).toEqual([
+      '(Customer)-[FILED]->(Ticket)',
+      '(Customer)-[OPENED]->(Ticket)',
+      '(Customer)-[REPORTED]->(Incident)',
+      '(Customer)-[REPORTED]->(LegacyTicket)',
+    ])
+  })
+
+  it('draws no subclass link to a superclass the Ontology does not declare', () => {
+    const map = ontologyMap({ ...HIERARCHY, node_types: [{ label: 'Bug', parent: 'Ticket' }] })
+
+    expect(map.subclassLinks).toEqual([])
+  })
+})
+
+describe('ontologyMap: deprecation', () => {
+  it('marks deprecated classes, and the links of a deprecated relation', () => {
+    const map = ontologyMap(HIERARCHY)
+
+    expect(map.nodes.filter((n) => n.deprecated).map((n) => n.label)).toEqual(['LegacyTicket'])
+    expect(map.links.filter((l) => l.deprecated).map((l) => l.id)).toEqual(['(Customer)-[FILED]->(Ticket)'])
+  })
+})
+
+describe('filterOntologyMap', () => {
+  it('hides deprecated classes and relations, and every link to a hidden class', () => {
+    const map = filterOntologyMap(ontologyMap(HIERARCHY), { hideDeprecated: true, hideSubclassLinks: false })
+
+    expect(map.nodes.map((n) => n.label)).toEqual(['Bug', 'Customer', 'Incident', 'Ticket'])
+    expect(map.links.map((l) => l.id)).toEqual([
+      '(Customer)-[OPENED]->(Ticket)',
+      '(Customer)-[REPORTED]->(Incident)',
+    ])
+    expect(map.subclassLinks.map((l) => l.id)).toEqual(['Bug -> Ticket', 'Incident -> Ticket'])
+  })
+
+  it('hides subclass links and keeps every class and Pattern link', () => {
+    const all = ontologyMap(HIERARCHY)
+    const map = filterOntologyMap(all, { hideDeprecated: false, hideSubclassLinks: true })
+
+    expect(map.subclassLinks).toEqual([])
+    expect(map.nodes).toEqual(all.nodes)
+    expect(map.links).toEqual(all.links)
+  })
+
+  it('hides nothing with neither filter on', () => {
+    const all = ontologyMap(HIERARCHY)
+
+    expect(filterOntologyMap(all, { hideDeprecated: false, hideSubclassLinks: false })).toEqual(all)
   })
 })
 
@@ -234,6 +314,24 @@ describe('layoutOntologyMap', () => {
   it('lays out the same Ontology the same way every time', async () => {
     const first = await layoutOntologyMap(ontologyMap(ONTOLOGY))
     const second = await layoutOntologyMap(ontologyMap(structuredClone(ONTOLOGY)))
+
+    expect(second).toEqual(first)
+  })
+
+  it('places a subclass nearer its superclass than any other class', async () => {
+    // Bug's only tie is to its superclass Ticket.
+    const positions = await layoutOntologyMap(ontologyMap(HIERARCHY))
+    const distance = (p: Point, q: Point) => Math.hypot(p.x - q.x, p.y - q.y)
+    const fromBug = Object.entries(positions)
+      .filter(([label]) => label !== 'Bug')
+      .sort(([, p], [, q]) => distance(positions.Bug, p) - distance(positions.Bug, q))
+
+    expect(fromBug[0][0]).toBe('Ticket')
+  })
+
+  it('lays out the same hierarchy the same way every time', async () => {
+    const first = await layoutOntologyMap(ontologyMap(HIERARCHY))
+    const second = await layoutOntologyMap(ontologyMap(structuredClone(HIERARCHY)))
 
     expect(second).toEqual(first)
   })

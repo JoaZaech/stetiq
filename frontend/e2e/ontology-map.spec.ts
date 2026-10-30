@@ -105,3 +105,68 @@ test('the Map is drawn in the colours of the current theme', async ({ page }) =>
   await expect.poll(() => lightness(customer, 'backgroundColor')).toBeLessThan(0.4)
   await expect.poll(() => lightness(customer, 'color')).toBeGreaterThan(0.6)
 })
+
+test('subclass links are drawn apart from Pattern links, and deprecated items faded and struck through', async ({
+  page,
+}) => {
+  await page.goto('/ui/kg/support/versions/1/ontology')
+  const map = ontologyMap(page)
+  const group = (name: string) => map.getByRole('group', { name, exact: true })
+
+  // A subclass link is thinner than a Pattern link, with a hollow arrowhead.
+  await expect(group('Agent -> Party')).toBeVisible()
+  const subclass = linkPath(map, 'Customer -> Party')
+  const pattern = linkPath(map, '(Customer)-[OPENED]->(Ticket)')
+  const strokeWidth = (path: Locator) => path.evaluate((el) => parseFloat(getComputedStyle(el).strokeWidth))
+  expect(await strokeWidth(subclass)).toBeLessThan(await strokeWidth(pattern))
+  const arrowheadFill = (path: Locator) =>
+    path.evaluate((el) => {
+      // `url('#id')`, where React Flow's own marker ids contain parentheses.
+      const id = /^url\(['"]?#(.*?)['"]?\)$/.exec(el.getAttribute('marker-end') ?? '')![1]
+      return getComputedStyle(document.getElementById(id)!.firstElementChild!).fill
+    })
+  expect(await arrowheadFill(subclass)).not.toEqual(await arrowheadFill(pattern))
+
+  // Deprecated: the LegacyTicket class and the FILED relation; Ticket and OPENED are not.
+  const opacity = (locator: Locator) => locator.evaluate((el) => Number(getComputedStyle(el).opacity))
+  const struck = (locator: Locator) =>
+    locator.evaluate((el) => getComputedStyle(el).textDecorationLine.includes('line-through'))
+  // A node's own box is transparent; its drawn shape is its first child.
+  const shape = (name: string) => group(name).locator(':scope > *').first()
+  expect(await opacity(shape('LegacyTicket'))).toBeLessThan(1)
+  expect(await struck(map.getByText('LegacyTicket', { exact: true }))).toBe(true)
+  expect(await opacity(group('(Customer)-[FILED]->(LegacyTicket)'))).toBeLessThan(1)
+  expect(await struck(map.getByText('FILED', { exact: true }))).toBe(true)
+  expect(await opacity(shape('Ticket'))).toBe(1)
+  expect(await struck(map.getByText('Ticket', { exact: true }))).toBe(false)
+  expect(await opacity(group('(Customer)-[OPENED]->(Ticket)'))).toBe(1)
+  expect(await struck(map.getByText('OPENED', { exact: true }))).toBe(false)
+})
+
+test('the Map hides deprecated items and subclass links on request', async ({ page }) => {
+  await page.goto('/ui/kg/support/versions/1/ontology')
+  const map = ontologyMap(page)
+  const group = (name: string) => map.getByRole('group', { name, exact: true })
+  await expect(group('LegacyTicket')).toBeVisible()
+
+  await page.getByRole('switch', { name: 'Hide deprecated' }).click()
+
+  // A hidden class takes its links with it.
+  await expect(group('LegacyTicket')).toHaveCount(0)
+  await expect(group('LegacyTicket -> Ticket')).toHaveCount(0)
+  await expect(group('(Customer)-[FILED]->(LegacyTicket)')).toHaveCount(0)
+  await expect(group('Customer -> Party')).toBeVisible()
+  await expect(group('(Customer)-[OPENED]->(Ticket)')).toBeVisible()
+
+  await page.getByRole('switch', { name: 'Hide subclass links' }).click()
+
+  await expect(group('Customer -> Party')).toHaveCount(0)
+  await expect(group('Agent -> Party')).toHaveCount(0)
+  await expect(group('Agent')).toBeVisible()
+  await expect(group('(Customer)-[OPENED]->(Ticket)')).toBeVisible()
+
+  await page.getByRole('switch', { name: 'Hide deprecated' }).click()
+
+  await expect(group('LegacyTicket')).toBeVisible()
+  await expect(group('LegacyTicket -> Ticket')).toHaveCount(0)
+})

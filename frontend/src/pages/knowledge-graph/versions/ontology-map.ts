@@ -1,7 +1,8 @@
 /**
  * The Ontology Map: an Ontology as a node-link dataset (docs/ontology-view-abstraction.md).
  * Classes are nodes, keyed by label. Each Pattern is a link, keyed by
- * (source, relation, target); relations are not nodes. No React and no I/O here.
+ * (source, relation, target); relations are not nodes. Each superclass is a subclass
+ * link, a separate link type keyed by (child, parent). No React and no I/O here.
  */
 import ELK from 'elkjs/lib/elk.bundled.js'
 import type { Ontology, OntologyConcept, OntologyProperty } from '@/api/ontology-versions'
@@ -10,6 +11,7 @@ import { conceptTables, searchConcepts } from './concepts'
 export interface MapNode {
   /** The class label, also the node's key. */
   label: string
+  deprecated: boolean
 }
 
 export interface PatternLink {
@@ -18,6 +20,8 @@ export interface PatternLink {
   source: string
   relation: string
   target: string
+  /** Whether its relation is deprecated. */
+  deprecated: boolean
   route: LinkRoute
 }
 
@@ -31,19 +35,32 @@ export interface PatternLink {
  */
 export type LinkRoute = { kind: 'line'; bend: number } | { kind: 'loop'; size: number }
 
+/** A class's superclass, drawn from the subclass (child) to the superclass (parent). */
+export interface SubclassLink {
+  /** `Child -> Parent` */
+  id: string
+  child: string
+  parent: string
+}
+
 export interface OntologyMap {
   nodes: MapNode[]
   links: PatternLink[]
+  subclassLinks: SubclassLink[]
 }
 
 /** An Ontology's classes as nodes and its Patterns as links. */
 export function ontologyMap(ontology: Ontology): OntologyMap {
-  const nodes = ontology.node_types.map((n) => ({ label: n.label }))
+  const nodes = ontology.node_types.map((n) => ({ label: n.label, deprecated: n.deprecated ?? false }))
+  const deprecatedRelations = new Set(
+    ontology.relationship_types.filter((r) => r.deprecated).map((r) => r.label),
+  )
   const patterns = ontology.patterns.map(([source, relation, target]) => ({
     id: `(${source})-[${relation}]->(${target})`,
     source,
     relation,
     target,
+    deprecated: deprecatedRelations.has(relation),
   }))
 
   // Links between the same two classes, in either direction, keyed by the pair.
@@ -65,7 +82,38 @@ export function ontologyMap(ontology: Ontology): OntologyMap {
     const bend = p.source < p.target ? slot : -slot
     return { ...p, route: { kind: 'line', bend: bend === 0 ? 0 : bend } } // never -0
   })
-  return { nodes, links }
+
+  // A superclass the Ontology doesn't declare has no node to link to.
+  const labels = new Set(nodes.map((n) => n.label))
+  const subclassLinks = ontology.node_types
+    .filter((n) => n.parent !== undefined && labels.has(n.parent))
+    .map((n) => ({ id: `${n.label} -> ${n.parent}`, child: n.label, parent: n.parent! }))
+  return { nodes, links, subclassLinks }
+}
+
+/** What the Map leaves out. */
+export interface MapFilters {
+  /** Hide deprecated classes and relations, and every link to a hidden class. */
+  hideDeprecated: boolean
+  hideSubclassLinks: boolean
+}
+
+/**
+ * The Map without what `filters` hide. Links keep their routes, and the layout stays
+ * that of the whole Map, so nothing moves when a filter changes.
+ */
+export function filterOntologyMap(map: OntologyMap, filters: MapFilters): OntologyMap {
+  const hidden = new Set(
+    filters.hideDeprecated ? map.nodes.filter((n) => n.deprecated).map((n) => n.label) : [],
+  )
+  const nodes = map.nodes.filter((n) => !hidden.has(n.label))
+  const links = map.links.filter(
+    (l) => !(filters.hideDeprecated && l.deprecated) && !hidden.has(l.source) && !hidden.has(l.target),
+  )
+  const subclassLinks = filters.hideSubclassLinks
+    ? []
+    : map.subclassLinks.filter((l) => !hidden.has(l.child) && !hidden.has(l.parent))
+  return { nodes, links, subclassLinks }
 }
 
 /** The classes and links next to one class, each sorted. */
@@ -243,13 +291,17 @@ const elk = new ELK()
 /**
  * Where each class goes: the top-left corner of its node, by class label. A stress
  * layout from a seeded force layout, so the same Map always lays out the same way. Each
- * pair of linked classes pulls together once, however many links run between them.
+ * pair of linked classes pulls together once, however many links run between them, and
+ * a subclass link pulls like a Pattern link, so subclasses sit near their superclass.
  */
 export async function layoutOntologyMap(map: OntologyMap): Promise<Record<string, Point>> {
   const pairs = new Set(
-    map.links
-      .filter((l) => l.source !== l.target)
-      .map((l) => JSON.stringify([l.source, l.target].sort())),
+    [
+      ...map.links.map((l) => [l.source, l.target]),
+      ...map.subclassLinks.map((l) => [l.child, l.parent]),
+    ]
+      .filter(([a, b]) => a !== b)
+      .map((pair) => JSON.stringify(pair.sort())),
   )
   const graph = await elk.layout({
     id: 'root',

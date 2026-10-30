@@ -7,6 +7,7 @@ import {
   EdgeLabelRenderer,
   Handle,
   MarkerType,
+  Panel,
   Position,
   ReactFlow,
   useInternalNode,
@@ -17,17 +18,21 @@ import {
 } from '@xyflow/react'
 import type { Ontology } from '@/api/ontology-versions'
 import { ErrorAlert } from '@/components/ErrorAlert'
+import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { MapDetailsPanel } from './MapDetailsPanel'
 import {
   detailsOf,
+  filterOntologyMap,
   focusOf,
   layoutOntologyMap,
   NODE_SIZE,
   ontologyMap,
   searchMap,
   type LinkRoute,
+  type MapFilters,
   type MapSelection,
   type Point,
 } from './ontology-map'
@@ -43,11 +48,15 @@ type Emphasis = {
   faded: boolean
 }
 
-type ClassNode = Node<{ label: string } & Emphasis, 'class'>
-type PatternEdge = Edge<{ relation: string; route: LinkRoute } & Emphasis, 'pattern'>
+type ClassNode = Node<{ label: string; deprecated: boolean } & Emphasis, 'class'>
+type PatternEdge = Edge<{ relation: string; route: LinkRoute; deprecated: boolean } & Emphasis, 'pattern'>
+type SubclassEdge = Edge<Record<string, never>, 'subclass'>
 
 const NODE_TYPES = { class: ClassNodeView }
-const EDGE_TYPES = { pattern: PatternEdgeView }
+const EDGE_TYPES = { pattern: PatternEdgeView, subclass: SubclassEdgeView }
+
+/** The hollow triangle at the superclass end of a subclass link (see `SubclassArrowhead`). */
+const SUBCLASS_ARROWHEAD = 'ontology-map-subclass-arrowhead'
 
 /** Pixels between parallel links, per unit of a `line` route's bend. */
 const BEND_SPACING = 48
@@ -62,10 +71,13 @@ const LOOP_STEP = 24
  */
 export function OntologyMap({ ontology, query = '' }: { ontology: Ontology; query?: string }) {
   const map = useMemo(() => ontologyMap(ontology), [ontology])
+  const [filters, setFilters] = useState<MapFilters>({ hideDeprecated: false, hideSubclassLinks: false })
+  const shown = useMemo(() => filterOntologyMap(map, filters), [map, filters])
   const [selection, setSelection] = useState<MapSelection | null>(null)
-  const focus = useMemo(() => focusOf(map, selection), [map, selection])
+  // Focus is over what is shown, so a selection a filter hides is no selection.
+  const focus = useMemo(() => focusOf(shown, selection), [shown, selection])
   const matches = useMemo(() => searchMap(ontology, query), [ontology, query])
-  const details = useMemo(() => detailsOf(ontology, selection), [ontology, selection])
+  const details = useMemo(() => (focus ? detailsOf(ontology, selection) : null), [focus, ontology, selection])
 
   useEffect(() => {
     if (!selection) return
@@ -73,6 +85,7 @@ export function OntologyMap({ ontology, query = '' }: { ontology: Ontology; quer
     document.addEventListener('keydown', clear)
     return () => document.removeEventListener('keydown', clear)
   }, [selection])
+  // The whole Map is laid out, and filters only hide, so nothing moves when one changes.
   const layout = useQuery({
     queryKey: ['ontology-map-layout', map],
     queryFn: () => layoutOntologyMap(map),
@@ -93,25 +106,38 @@ export function OntologyMap({ ontology, query = '' }: { ontology: Ontology; quer
         faded: focused ? !focused.has(key) : matched ? !matched.has(key) : false,
       }
     }
-    const nodes: ClassNode[] = map.nodes.map((n) => ({
+    const nodes: ClassNode[] = shown.nodes.map((n) => ({
       id: n.label,
       type: 'class',
       position: positions[n.label],
-      data: { label: n.label, ...emphasis('class', n.label) },
+      data: { label: n.label, deprecated: n.deprecated, ...emphasis('class', n.label) },
       ariaLabel: n.label,
       ...NODE_SIZE,
     }))
-    const edges: PatternEdge[] = map.links.map((l) => ({
+    const patternEdges: PatternEdge[] = shown.links.map((l) => ({
       id: l.id,
       type: 'pattern',
       source: l.source,
       target: l.target,
-      data: { relation: l.relation, route: l.route, ...emphasis('link', l.id) },
+      data: { relation: l.relation, route: l.route, deprecated: l.deprecated, ...emphasis('link', l.id) },
       ariaLabel: l.id,
+      className: cn(l.deprecated && 'opacity-50'),
       markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--muted-foreground)' },
     }))
-    return { nodes, edges }
-  }, [layout.data, map, focus, matches, selection])
+    const subclassEdges: SubclassEdge[] = shown.subclassLinks.map((l) => ({
+      id: l.id,
+      type: 'subclass',
+      source: l.child,
+      target: l.parent,
+      ariaLabel: l.id,
+      // A subclass link fades with either of its classes.
+      className: cn(
+        (emphasis('class', l.child).faded || emphasis('class', l.parent).faded) && 'opacity-20',
+      ),
+      markerEnd: SUBCLASS_ARROWHEAD,
+    }))
+    return { nodes, edges: [...subclassEdges, ...patternEdges] }
+  }, [layout.data, shown, focus, matches, selection])
 
   if (layout.error) return <ErrorAlert error={layout.error} title="The Map could not be laid out" />
   if (!elements) return <Skeleton className="h-[32rem] w-full" />
@@ -129,15 +155,69 @@ export function OntologyMap({ ontology, query = '' }: { ontology: Ontology; quer
         // The Map keeps its own selection (focus and details), not React Flow's.
         elementsSelectable={false}
         onNodeClick={(_, node) => setSelection({ kind: 'class', label: node.id })}
-        onEdgeClick={(_, edge) => setSelection({ kind: 'link', id: edge.id })}
+        onEdgeClick={(_, edge) => edge.type === 'pattern' && setSelection({ kind: 'link', id: edge.id })}
         onPaneClick={() => setSelection(null)}
         minZoom={0.2}
         fitView
       >
         <Controls showInteractive={false} />
+        <Panel position="top-right" className="flex gap-4 rounded-md border bg-card px-3 py-2 text-sm shadow-xs">
+          <FilterSwitch
+            id="map-hide-deprecated"
+            label="Hide deprecated"
+            checked={filters.hideDeprecated}
+            onCheckedChange={(hideDeprecated) => setFilters({ ...filters, hideDeprecated })}
+          />
+          <FilterSwitch
+            id="map-hide-subclass-links"
+            label="Hide subclass links"
+            checked={filters.hideSubclassLinks}
+            onCheckedChange={(hideSubclassLinks) => setFilters({ ...filters, hideSubclassLinks })}
+          />
+        </Panel>
       </ReactFlow>
       {details && <MapDetailsPanel details={details} onClose={() => setSelection(null)} />}
+      <SubclassArrowhead />
     </div>
+  )
+}
+
+function FilterSwitch({
+  id,
+  label,
+  checked,
+  onCheckedChange,
+}: {
+  id: string
+  label: string
+  checked: boolean
+  onCheckedChange: (checked: boolean) => void
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <Switch id={id} size="sm" checked={checked} onCheckedChange={onCheckedChange} />
+      <Label htmlFor={id}>{label}</Label>
+    </div>
+  )
+}
+
+/** The marker subclass links end in: a hollow triangle, so they never read as a relation. */
+function SubclassArrowhead() {
+  return (
+    <svg className="absolute size-0" aria-hidden>
+      <defs>
+        <marker
+          id={SUBCLASS_ARROWHEAD}
+          viewBox="-10 -10 20 20"
+          markerUnits="userSpaceOnUse"
+          markerWidth="16"
+          markerHeight="16"
+          orient="auto-start-reverse"
+        >
+          <polygon points="-8,-5 0,0 -8,5" fill="var(--background)" stroke="var(--muted-foreground)" />
+        </marker>
+      </defs>
+    </svg>
   )
 }
 
@@ -150,13 +230,15 @@ function ClassNodeView({ data }: NodeProps<ClassNode>) {
       data-faded={data.faded || undefined}
       className={cn(
         'flex size-full cursor-pointer items-center justify-center rounded-md border bg-card px-2 text-sm font-medium text-card-foreground shadow-xs transition-opacity',
+        // Deprecated: faded, with a struck-through label.
+        data.deprecated && 'opacity-50',
         // Search matches get a ring in the primary colour: diff-* hues are reserved for severity.
         data.match && 'ring-2 ring-primary ring-offset-2 ring-offset-background',
         data.selected && 'border-2 border-foreground',
         data.faded && 'opacity-30',
       )}
     >
-      <span className="truncate">{data.label}</span>
+      <span className={cn('truncate', data.deprecated && 'line-through')}>{data.label}</span>
       {/* React Flow attaches links to handles; links are drawn centre to centre, so these stay hidden. */}
       <Handle type="target" position={Position.Top} isConnectable={false} className="invisible" />
       <Handle type="source" position={Position.Bottom} isConnectable={false} className="invisible" />
@@ -196,6 +278,7 @@ function PatternEdgeView({ id, source, target, data, markerEnd }: EdgeProps<Patt
         <div
           className={cn(
             'nodrag nopan pointer-events-none absolute rounded-sm bg-background/90 px-1 font-mono text-[10px] text-muted-foreground',
+            data.deprecated && 'line-through opacity-50',
             (data.selected || data.match) && 'font-semibold text-foreground',
             data.faded && 'opacity-30',
           )}
@@ -205,6 +288,22 @@ function PatternEdgeView({ id, source, target, data, markerEnd }: EdgeProps<Patt
         </div>
       </EdgeLabelRenderer>
     </>
+  )
+}
+
+/** A subclass link: thin, grey and straight, from the subclass to its superclass. */
+function SubclassEdgeView({ id, source, target, markerEnd }: EdgeProps<SubclassEdge>) {
+  const from = useInternalNode(source)
+  const to = useInternalNode(target)
+  if (!from || !to) return null
+  const { path } = linePath(center(from.internals.positionAbsolute), center(to.internals.positionAbsolute), 0)
+  return (
+    <BaseEdge
+      id={id}
+      path={path}
+      markerEnd={markerEnd}
+      style={{ stroke: 'var(--muted-foreground)', strokeOpacity: 0.6, strokeWidth: 1 }}
+    />
   )
 }
 
