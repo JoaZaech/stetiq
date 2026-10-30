@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Link } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import {
   type Alias,
   type Promotion,
@@ -11,6 +11,8 @@ import { useOntologyVersions, type OntologyVersion } from '@/api/ontology-versio
 import { knowledgeGraphSection, kgUrl } from '@/app/knowledge-graph-sections'
 import { DataTable } from '@/components/DataTable'
 import { ErrorAlert } from '@/components/ErrorAlert'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
 import { createDataTableColumnHelper, useDataTable } from '@/lib/data-table'
 import { formatDateTime } from '@/lib/format'
@@ -35,6 +37,19 @@ interface VersionRow {
 const column = createDataTableColumnHelper<VersionRow>()
 
 const columns = column.columns([
+  // Select two rows, then Compare: the Ontology Diff between them.
+  column.display({
+    id: 'select',
+    header: () => <span className="sr-only">Select</span>,
+    enableSorting: false,
+    cell: ({ row }) => (
+      <Checkbox
+        aria-label={`Select v${row.original.number}`}
+        checked={row.getIsSelected()}
+        onCheckedChange={(checked) => row.toggleSelected(checked === true)}
+      />
+    ),
+  }),
   column.accessor('number', {
     header: 'Version',
     cell: ({ row }) => (
@@ -132,7 +147,28 @@ function VersionTable({
   const table = useDataTable({
     data,
     columns,
+    getRowId: (row) => String(row.number),
     initialState: { sorting: [{ id: 'number', desc: true }] },
   })
-  return <DataTable table={table} label="Ontology Versions" empty="No Ontology Versions yet." />
+  const navigate = useNavigate()
+  const selected = table.getSelectedRowModel().rows.map((row) => row.original.number)
+  const compare = () => {
+    const [base, target] = [...selected].sort((a, b) => a - b)
+    navigate(`${kgUrl(name, 'versions', 'compare')}?base=${base}&target=${target}`)
+  }
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-3">
+        <Button size="sm" variant="outline" disabled={selected.length !== 2} onClick={compare}>
+          Compare
+        </Button>
+        <span className="text-xs text-muted-foreground">
+          {selected.length === 2
+            ? 'Ontology Diff from the older to the newer version'
+            : 'Select two versions to compare'}
+        </span>
+      </div>
+      <DataTable table={table} label="Ontology Versions" empty="No Ontology Versions yet." />
+    </div>
+  )
 }

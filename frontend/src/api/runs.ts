@@ -60,22 +60,3 @@ export const runEvaluationsQuery = (kg: string, runId: string) => ({
 })
 export const useRunEvaluations = (kg: string, runId: string) =>
   useQuery(runEvaluationsQuery(kg, runId))
-
-/** wire.observation_to_json; the run page reads only the Observed Schema's sizes. */
-export interface RunObservation {
-  id: string
-  knowledge_graph: string
-  run_id: string | null
-  observed_at: string
-  /** GraphSourceScope.to_dict */
-  scope: { database: string; label: string | null; namespace: string | null }
-  schema: { node_types: unknown[]; relationship_types: unknown[]; patterns: unknown[] }
-}
-
-/** The Observation a run ended with (`run.observation_id`); idle while there is none. */
-export const useRunObservation = (observationId: string | null) =>
-  useQuery({
-    queryKey: ['observation', observationId],
-    queryFn: () => api<RunObservation>(`/observations/${encodeURIComponent(observationId ?? '')}`),
-    enabled: observationId !== null,
-  })

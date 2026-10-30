@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { type ConstructionRun, type RunObservation, useRunObservation } from '@/api/runs'
+import { formatScope, useObservation } from '@/api/observations'
+import type { ConstructionRun } from '@/api/runs'
 import { kgUrl } from '@/app/knowledge-graph-sections'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -113,7 +114,7 @@ function KeyValues<T>({
 
 /** The Observation of the Graph Source the run ended with: when, where, and its size. */
 function EndingObservation({ run }: { run: ConstructionRun }) {
-  const observation = useRunObservation(run.observation_id)
+  const observation = useObservation(run.observation_id)
   if (run.observation_id === null) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -129,7 +130,7 @@ function EndingObservation({ run }: { run: ConstructionRun }) {
   return (
     <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2 text-sm">
       <Fact label="Observed">{formatDateTime(observed_at)}</Fact>
-      <Fact label="Graph Source">{scopeLabel(observation.data.scope)}</Fact>
+      <Fact label="Graph Source">{formatScope(observation.data.scope)}</Fact>
       <Fact label="Classes">{schema.node_types.length}</Fact>
       <Fact label="Relations">{schema.relationship_types.length}</Fact>
       <Fact label="Patterns">{schema.patterns.length}</Fact>
@@ -137,9 +138,3 @@ function EndingObservation({ run }: { run: ConstructionRun }) {
   )
 }
 
-/** e.g. `neo4j`, `neo4j · label Tenant · namespace acme` */
-function scopeLabel({ database, label, namespace }: RunObservation['scope']) {
-  return [database, label && `label ${label}`, namespace && `namespace ${namespace}`]
-    .filter(Boolean)
-    .join(' · ')
-}

@@ -309,6 +309,122 @@ def test_a_knowledge_graph_payload_without_summary_fields_still_parses():
     assert kg.latest_version is None
     assert kg.last_run_status is None
     assert kg.last_modified_at is None
+    assert kg.description is None
+
+
+# --- Knowledge Graph description ------------------------------------------------------------
+
+
+def describe_support(http, headers=None):
+    return http.put(
+        "/api/v1/knowledge-graphs/support/description",
+        json={"description": "Answers support questions."},
+        headers=headers,
+    )
+
+
+def test_a_read_only_token_cannot_set_the_description(http, database_url, two_graphs):
+    r = describe_support(http, bearer(database_url, {"support": "read"}))
+
+    assert r.status_code == 403
+    assert r.json()["error"]["type"] == "PermissionDeniedError"
+    readable = http.get(
+        "/api/v1/knowledge-graphs/support", headers=bearer(database_url, {"*": "read"})
+    )
+    assert readable.json()["description"] is None
+
+
+def test_an_editor_sets_the_description_through_the_sign_in_cookie(http, database_url, two_graphs):
+    sign_in(http, database_url, {"support": "edit"})
+
+    refused = describe_support(http)
+    r = describe_support(http, {"X-CSRF-Token": http.cookies["stetiq_csrf"]})
+
+    assert refused.status_code == 403
+    assert r.status_code == 200
+    assert http.get("/api/v1/knowledge-graphs/support").json()["description"] == (
+        "Answers support questions."
+    )
+
+
+# --- Ontology Diff ------------------------------------------------------------------------
+
+
+@pytest.fixture
+def two_versions(database_url):
+    """`support` v1 (Customer, Ticket) and v2 (Customer, Agent): Ticket removed, Agent added."""
+    sdk = stetiq.Client(database_url)
+    sdk.create_knowledge_graph(
+        "support", ontology="node_types:\n  - label: Customer\n  - label: Ticket\n"
+    )
+    sdk.register_ontology("support", "node_types:\n  - label: Customer\n  - label: Agent\n")
+    return "support"
+
+
+def test_the_diff_route_returns_the_classified_changes_between_two_versions(
+    http, database_url, two_versions
+):
+    r = http.get(
+        "/api/v1/knowledge-graphs/support/ontology-diff",
+        params={"base": 1, "target": 2},
+        headers=bearer(database_url, {"support": "read"}),
+    )
+
+    assert r.status_code == 200, r.text
+    assert r.json() == {
+        "classification": "breaking",
+        "changes": [
+            {
+                "concept": "Agent",
+                "concept_kind": "node_type",
+                "kind": "added",
+                "classification": "additive",
+                "detail": "node type Agent added",
+            },
+            {
+                "concept": "Ticket",
+                "concept_kind": "node_type",
+                "kind": "removed",
+                "classification": "breaking",
+                "detail": "node type Ticket removed",
+            },
+        ],
+    }
+
+
+def diff(http, kg, base, target, headers):
+    return http.get(
+        f"/api/v1/knowledge-graphs/{kg}/ontology-diff",
+        params={"base": base, "target": target},
+        headers=headers,
+    )
+
+
+def test_diffing_a_version_against_itself_shows_no_changes(http, database_url, two_versions):
+    r = diff(http, "support", 2, 2, bearer(database_url, {"support": "read"}))
+
+    assert r.status_code == 200
+    assert r.json() == {"classification": None, "changes": []}
+
+
+def test_an_unknown_version_or_one_outside_the_tokens_grants_is_a_uniform_404(
+    http, database_url, two_versions
+):
+    reader = bearer(database_url, {"billing": "read"})
+    sdk = stetiq.Client(database_url)
+    sdk.create_knowledge_graph("billing", ontology="node_types:\n  - label: Invoice\n")
+
+    unknown = diff(http, "billing", 1, 9, reader)
+    hidden = diff(http, "support", 1, 2, reader)
+    hidden_unknown = diff(http, "nope", 1, 2, reader)
+
+    assert unknown.status_code == hidden.status_code == hidden_unknown.status_code == 404
+    assert {r.json()["error"]["type"] for r in (unknown, hidden, hidden_unknown)} == {
+        "NotFoundError"
+    }
+    # An existing Knowledge Graph outside the grants reads exactly like a missing one.
+    assert hidden.json()["error"]["message"] == "Knowledge Graph 'support' does not exist"
+    assert hidden_unknown.json()["error"]["message"] == "Knowledge Graph 'nope' does not exist"
 
 
 # --- stetiq ui ----------------------------------------------------------------------------

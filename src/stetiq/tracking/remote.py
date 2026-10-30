@@ -81,6 +81,11 @@ class RemoteTrackingService:
     def get_knowledge_graph(self, name: str) -> KnowledgeGraph:
         return wire.knowledge_graph_from_json(self._call("GET", self._kg_path(name)))
 
+    def set_knowledge_graph_description(self, name: str, description: str | None) -> KnowledgeGraph:
+        body = {"description": description}
+        data = self._call("PUT", self._kg_path(name) + "/description", body)
+        return wire.knowledge_graph_from_json(data)
+
     def list_knowledge_graphs(self) -> list[KnowledgeGraph]:
         return [wire.knowledge_graph_from_json(k) for k in self._call("GET", "/knowledge-graphs")]
 

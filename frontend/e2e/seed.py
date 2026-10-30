@@ -20,6 +20,7 @@ from typing import Any
 
 import stetiq
 from stetiq.auth import TokenRegistry
+from stetiq.drift import DriftThresholds
 from stetiq.graph_source import GraphSourceScope
 
 Scenario = Callable[[stetiq.Client], dict[str, Any]]
@@ -191,6 +192,95 @@ def construction_runs_reader(client: stetiq.Client) -> dict[str, Any]:
     return {**seeded, "grace": issue_token(client, "grace", {"support": "read"})}
 
 
+# v4 (from v2): deprecates Agent, drops Ticket.opened_at and adds an ASSIGNED relation,
+# so its Ontology Diff has a deprecating, a breaking and an additive change.
+SUPPORT_V4 = (
+    SUPPORT_V2.replace(
+        "{label: Agent, parent: Party}", "{label: Agent, parent: Party, deprecated: true}"
+    )
+    .replace("    properties: [{name: opened_at, type: DATE}]\n", "")
+    .replace("relationship_types: [OPENED]", "relationship_types: [OPENED, ASSIGNED]")
+    .replace(
+        "patterns: [[Customer, OPENED, Ticket]]",
+        "patterns: [[Customer, OPENED, Ticket], [Ticket, ASSIGNED, Agent]]",
+    )
+)
+
+
+def support_breaking_change(client: stetiq.Client) -> dict[str, Any]:
+    """`support_lineage`, plus v4: a deprecating, a breaking and an additive change from v2."""
+    seeded = support_lineage(client)
+    client.register_ontology("support", SUPPORT_V4)
+    return seeded
+
+
+def described_support(client: stetiq.Client) -> dict[str, Any]:
+    """`support_lineage` with a markdown description, a token for ada that can edit
+    `support` and one for grace that can only read it."""
+    seeded = support_lineage(client)
+    client.set_knowledge_graph_description(
+        "support", "Answers **support** questions.\n\n- triage\n- escalation"
+    )
+    return {
+        **seeded,
+        "ada": issue_token(client, "ada", {"support": "edit"}),
+        "grace": issue_token(client, "grace", {"support": "read"}),
+    }
+
+
+SUPPORT_USE_CASE_V2 = (
+    SUPPORT_USE_CASE
+    + """  - id: agent-names
+    question: What are our agents called?
+    concepts: [Agent.name]
+"""
+)
+
+SUPPORT_USE_CASE_V3 = """
+description: Support agents triage and answer tickets
+competency_questions:
+  - id: customer-names
+    question: What is each customer called?
+    concepts: [Customer.name]
+  - id: ticket-dates
+    question: When was each ticket opened?
+    query: MATCH (t:Ticket) RETURN t.opened_at
+    expected_answer: [{opened_at: "2026-01-01"}]
+    concepts: [Ticket.opened_at]
+"""
+
+
+def support_use_case_versions(client: stetiq.Client) -> dict[str, Any]:
+    """`support_lineage`, with three Use Case Versions: v1 asks `customer-names`, v2 adds
+    `agent-names`, v3 rewords `customer-names`, drops `agent-names`, adds `ticket-dates`
+    and changes the description."""
+    seeded = support_lineage(client)
+    client.register_use_case("support", SUPPORT_USE_CASE_V2)
+    client.register_use_case("support", SUPPORT_USE_CASE_V3)
+    return seeded
+
+
+def observed_support(_client: stetiq.Client) -> dict[str, Any]:
+    """`support` observed twice: once at the end of a Construction Run (no Drift), then
+    on demand after a `Refund` node type and more Tickets appeared, which raises a Drift
+    event against the Contract Alias (`production` -> v1)."""
+    graph = stetiq.InMemoryGraphSource()
+    client = stetiq.Client(_client.tracking_uri, graph_source=graph)
+    client.create_knowledge_graph("support", ontology=SUPPORT_V1)
+    client.bind_graph_source("support", GraphSourceScope(database="neo4j", label="Support"))
+    ada = graph.add_node(["Support", "Party", "Customer"], {"name": "Ada"})
+    ticket = graph.add_node(["Support", "Ticket"], {"opened_at": date(2026, 1, 1)})
+    graph.add_relationship(ada, "OPENED", ticket)
+    with client.start_run("support", ontology_version=1) as run:
+        pass
+    for day in (2, 3, 4):
+        graph.add_node(["Support", "Ticket"], {"opened_at": date(2026, 1, day)})
+    graph.add_node(["Support", "Refund"], {})
+    outcome = client.observe("support", thresholds=DriftThresholds(max_count_increase=0.5))
+    assert outcome.drift is not None
+    return {"run_id": run.id, "observation_id": outcome.observation.id}
+
+
 SCENARIOS: dict[str, Scenario] = {
     "construction_runs": construction_runs,
     "construction_runs_reader": construction_runs_reader,
@@ -199,6 +289,10 @@ SCENARIOS: dict[str, Scenario] = {
     "signed_in_users": signed_in_users,
     "support_lineage": support_lineage,
     "support_lineage_reader": support_lineage_reader,
+    "support_breaking_change": support_breaking_change,
+    "described_support": described_support,
+    "support_use_case_versions": support_use_case_versions,
+    "observed_support": observed_support,
 }
 
 

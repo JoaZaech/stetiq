@@ -9,6 +9,9 @@ import { RunEvaluationsTab } from '@/pages/knowledge-graph/runs/RunEvaluationsTa
 import { RunOverviewTab } from '@/pages/knowledge-graph/runs/RunOverviewTab'
 import { shortRunId } from '@/pages/knowledge-graph/runs/runs'
 import { KnowledgeGraphsPage } from '@/pages/knowledge-graphs/KnowledgeGraphsPage'
+import { ChangesTab } from '@/pages/knowledge-graph/versions/ChangesTab'
+import { OntologyDiffPage } from '@/pages/knowledge-graph/versions/OntologyDiffPage'
+import { ObservationsPage } from '@/pages/knowledge-graph/observations/ObservationsPage'
 import { OntologyTab } from '@/pages/knowledge-graph/versions/OntologyTab'
 import { OntologyVersionPage } from '@/pages/knowledge-graph/versions/OntologyVersionPage'
 import { OntologyVersionsPage } from '@/pages/knowledge-graph/versions/OntologyVersionsPage'
@@ -16,6 +19,8 @@ import { OverviewTab } from '@/pages/knowledge-graph/versions/OverviewTab'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { SettingsPage } from '@/pages/settings/SettingsPage'
 import { SignInPage } from '@/pages/sign-in/SignInPage'
+import { UseCaseComparePage } from '@/pages/knowledge-graph/use-case/UseCaseComparePage'
+import { UseCasePage } from '@/pages/knowledge-graph/use-case/UseCasePage'
 import { AppLayout } from './AppLayout'
 import type { RouteHandle } from './breadcrumbs'
 import {
@@ -40,6 +45,8 @@ const knowledgeGraphSectionRoutes: Record<
   versions: {
     page: <OntologyVersionsPage />,
     children: [
+      // ?base=&target=: two rows selected in the version table.
+      { path: 'compare', element: <OntologyDiffPage />, handle: crumb(() => 'Compare') },
       {
         path: ':number',
         element: <OntologyVersionPage />,
@@ -48,6 +55,7 @@ const knowledgeGraphSectionRoutes: Record<
         children: [
           { index: true, element: <OverviewTab /> },
           { path: 'ontology', element: <OntologyTab /> },
+          { path: 'changes', element: <ChangesTab /> },
         ],
       },
     ],
@@ -68,8 +76,11 @@ const knowledgeGraphSectionRoutes: Record<
       },
     ],
   },
-  'use-case': {},
-  observations: {},
+  'use-case': {
+    page: <UseCasePage />,
+    children: [{ path: 'compare', element: <UseCaseComparePage />, handle: crumb(() => 'Compare') }],
+  },
+  observations: { page: <ObservationsPage /> },
   promotions: {},
 }
 

@@ -19,6 +19,7 @@ import { aliasesByVersion } from './lineage'
 const TABS: readonly RouteTab[] = [
   { label: 'Overview', to: '' },
   { label: 'Ontology', to: 'ontology' },
+  { label: 'Changes', to: 'changes' },
 ]
 
 /** `/kg/:name/versions/:number`: "v{n}" with its Alias chips, then the tabs. */
