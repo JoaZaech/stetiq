@@ -17,16 +17,18 @@ interface DataTableProps<TData extends RowData> {
   table: ReactTable<DataTableFeatures, TData>
   /** Shown in a single row when no row is left (e.g. after filtering). */
   empty: ReactNode
+  /** The table's accessible name, e.g. "Ontology Versions". */
+  label?: string
 }
 
 /**
  * Renders any `useDataTable` table as a dense shadcn table: visible columns only,
  * sortable headers become buttons, and a message row when there is nothing to show.
  */
-export function DataTable<TData extends RowData>({ table, empty }: DataTableProps<TData>) {
+export function DataTable<TData extends RowData>({ table, empty, label }: DataTableProps<TData>) {
   const rows = table.getRowModel().rows
   return (
-    <Table>
+    <Table aria-label={label}>
       <TableHeader>
         {table.getHeaderGroups().map((group) => (
           <TableRow key={group.id}>

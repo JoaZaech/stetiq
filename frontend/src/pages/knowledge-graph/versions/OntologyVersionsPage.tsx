@@ -1,17 +1,18 @@
+import { useMemo } from 'react'
 import { Link } from 'react-router'
-import { useAliases, useContractAlias, usePromotions } from '@/api/aliases'
-import { useOntologyVersions } from '@/api/ontology-versions'
+import {
+  type Alias,
+  type Promotion,
+  useAliases,
+  useContractAlias,
+  usePromotions,
+} from '@/api/aliases'
+import { useOntologyVersions, type OntologyVersion } from '@/api/ontology-versions'
 import { knowledgeGraphSection, kgUrl } from '@/app/knowledge-graph-sections'
+import { DataTable } from '@/components/DataTable'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { createDataTableColumnHelper, useDataTable } from '@/lib/data-table'
 import { formatDateTime } from '@/lib/format'
 import { KnowledgeGraphSectionPage } from '../KnowledgeGraphSectionPage'
 import { useKnowledgeGraphName } from '../params'
@@ -20,16 +21,59 @@ import { aliasesByVersion, candidateVersions } from './lineage'
 
 const SECTION = knowledgeGraphSection('versions')
 
+/** One row of the version table. */
+interface VersionRow {
+  knowledgeGraph: string
+  number: number
+  origin: OntologyVersion['origin']
+  createdAt: string
+  aliases: string[]
+  contractAlias: string | undefined
+  candidate: boolean
+}
+
+const column = createDataTableColumnHelper<VersionRow>()
+
+const columns = column.columns([
+  column.accessor('number', {
+    header: 'Version',
+    cell: ({ row }) => (
+      <Link
+        to={kgUrl(row.original.knowledgeGraph, 'versions', row.original.number)}
+        className="font-medium text-primary underline-offset-4 hover:underline"
+      >
+        v{row.original.number}
+      </Link>
+    ),
+  }),
+  column.accessor('origin', { header: 'Origin' }),
+  column.accessor('createdAt', {
+    header: 'Created',
+    sortFn: 'datetime',
+    cell: ({ getValue }) => <time dateTime={getValue()}>{formatDateTime(getValue())}</time>,
+  }),
+  column.display({
+    id: 'aliases',
+    header: 'Aliases',
+    cell: ({ row }) => (
+      <span className="inline-flex flex-wrap items-center gap-1">
+        <AliasChips aliases={row.original.aliases} contractAlias={row.original.contractAlias} />
+        {row.original.candidate && <CandidateBadge />}
+      </span>
+    ),
+  }),
+])
+
 /** `/kg/:name/versions`: the Knowledge Graph's Ontology Versions, newest first. */
 export function OntologyVersionsPage() {
   return (
     <KnowledgeGraphSectionPage section={SECTION}>
-      <VersionTable />
+      <VersionList />
     </KnowledgeGraphSectionPage>
   )
 }
 
-function VersionTable() {
+function VersionList() {
   const name = useKnowledgeGraphName()
   const versions = useOntologyVersions(name)
   const aliases = useAliases(name)
@@ -45,42 +89,50 @@ function VersionTable() {
   if (versions.data.length === 0) {
     return <p className="text-sm text-muted-foreground">No Ontology Versions yet.</p>
   }
-
-  const aliased = aliasesByVersion(aliases.data)
-  const candidates = candidateVersions(versions.data, promotions.data)
-  const newestFirst = [...versions.data].sort((a, b) => b.number - a.number)
   return (
-    <Table aria-label="Ontology Versions">
-      <TableHeader>
-        <TableRow>
-          <TableHead>Version</TableHead>
-          <TableHead>Origin</TableHead>
-          <TableHead>Created</TableHead>
-          <TableHead>Aliases</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {newestFirst.map((v) => (
-          <TableRow key={v.number}>
-            <TableCell className="font-medium">
-              <Link
-                to={kgUrl(name, 'versions', v.number)}
-                className="text-primary underline-offset-4 hover:underline"
-              >
-                v{v.number}
-              </Link>
-            </TableCell>
-            <TableCell>{v.origin}</TableCell>
-            <TableCell>{formatDateTime(v.created_at)}</TableCell>
-            <TableCell>
-              <span className="inline-flex flex-wrap items-center gap-1">
-                <AliasChips aliases={aliased.get(v.number) ?? []} contractAlias={contractAlias.data} />
-                {candidates.has(v.number) && <CandidateBadge />}
-              </span>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <VersionTable
+      name={name}
+      versions={versions.data}
+      aliases={aliases.data}
+      promotions={promotions.data}
+      contractAlias={contractAlias.data}
+    />
   )
+}
+
+function VersionTable({
+  name,
+  versions,
+  aliases,
+  promotions,
+  contractAlias,
+}: {
+  name: string
+  versions: OntologyVersion[]
+  aliases: Alias[]
+  promotions: Promotion[]
+  contractAlias: string | undefined
+}) {
+  // Rows stay referentially stable between renders, as `useDataTable` needs.
+  const data = useMemo(() => {
+    const aliased = aliasesByVersion(aliases)
+    const candidates = candidateVersions(versions, promotions)
+    return versions.map(
+      (v): VersionRow => ({
+        knowledgeGraph: name,
+        number: v.number,
+        origin: v.origin,
+        createdAt: v.created_at,
+        aliases: aliased.get(v.number) ?? [],
+        contractAlias,
+        candidate: candidates.has(v.number),
+      }),
+    )
+  }, [name, versions, aliases, promotions, contractAlias])
+  const table = useDataTable({
+    data,
+    columns,
+    initialState: { sorting: [{ id: 'number', desc: true }] },
+  })
+  return <DataTable table={table} label="Ontology Versions" empty="No Ontology Versions yet." />
 }

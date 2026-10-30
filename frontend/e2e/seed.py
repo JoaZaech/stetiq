@@ -123,11 +123,20 @@ def support_lineage(_client: stetiq.Client) -> dict[str, Any]:
     return {"run_id": ended.id, "candidate_version": ended.candidate_version}
 
 
+def support_lineage_reader(client: stetiq.Client) -> dict[str, Any]:
+    """`support_lineage`, plus a `secret` Knowledge Graph and a token for grace that can
+    read `support` only."""
+    seeded = support_lineage(client)
+    client.create_knowledge_graph("secret", ontology="node_types:\n  - label: Customer\n")
+    return {**seeded, "grace": issue_token(client, "grace", {"support": "read"})}
+
+
 SCENARIOS: dict[str, Scenario] = {
     "empty": empty,
     "knowledge_graphs": knowledge_graphs,
     "signed_in_users": signed_in_users,
     "support_lineage": support_lineage,
+    "support_lineage_reader": support_lineage_reader,
 }
 
 

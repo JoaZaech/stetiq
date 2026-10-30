@@ -1,4 +1,4 @@
-import { expect, test } from './fixtures'
+import { expect, signIn, test } from './fixtures'
 
 test.use({ seed: 'support_lineage' })
 
@@ -147,4 +147,24 @@ test('an unknown Knowledge Graph or version shows a not-found page', async ({ pa
 
   await page.goto('/ui/kg/support/no-such-section')
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Page not found')
+})
+
+test.describe('with a token that can read only `support`', () => {
+  test.use({ mode: 'server', seed: 'support_lineage_reader' })
+
+  test('a Knowledge Graph outside the grants shows the same not-found page as an unknown one', async ({
+    page,
+    stetiq,
+  }) => {
+    await signIn(page, (stetiq.seeded.grace as { value: string }).value)
+
+    await page.goto('/ui/kg/support/versions/2')
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('v2')
+
+    await page.goto('/ui/kg/secret/versions')
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Knowledge Graph not found')
+    await expect(page.getByText(/permission/i)).toHaveCount(0)
+    await page.goto('/ui/kg/secret/versions/1')
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Knowledge Graph not found')
+  })
 })
