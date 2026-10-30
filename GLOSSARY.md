@@ -54,11 +54,11 @@ _Avoid_: Test query, requirement
 
 **Use Case**:
 The problem a Knowledge Graph exists to solve, expressed as a set of Competency Questions and tasks, versioned independently of the Ontology.
+_Avoid_: Scenario, goal
 
 **Use Case Version**:
 An immutable snapshot of a Knowledge Graph's Use Case; adding, changing or removing a Competency Question yields a new one, and results stay tied to the version they were judged against.
 _Avoid_: Revision, question set
-_Avoid_: Scenario, goal
 
 **Construction Run**:
 One execution of the user's extraction workflow against a Declared Ontology; recorded as provenance, not the primary subject of evaluation. When it introduces new concepts, it is linked to the new Ontology Version it gave rise to.
