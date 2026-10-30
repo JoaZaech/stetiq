@@ -17,6 +17,19 @@ export interface MapChange {
   severity: Classification | null
 }
 
+/**
+ * How one attribute of a class changed, as the class lists it on a comparison's Map:
+ * removed, added, or modified with the Diff's details of each change to it.
+ */
+export interface AttributeChange {
+  name: string
+  kind: Exclude<MapChangeKind, 'unchanged'>
+  /** The most severe of the Diff's changes to it. */
+  severity: Classification
+  /** A modified attribute's changes, as the Diff words them; empty when added or removed. */
+  details: string[]
+}
+
 /** Two Ontology Versions superimposed: the union network of both, and how each item changed. */
 export interface OntologyComparison {
   /** Every class and link of either side, laid out as one Map. */
@@ -31,11 +44,15 @@ export interface OntologyComparison {
   target: Ontology
   /** The core's Ontology Diff from the base to the target, behind every severity. */
   diff: OntologyDiff
-  /** Each item's change, by class label, Pattern link id and subclass link id. */
+  /**
+   * Each item's change, by class label, Pattern link id and subclass link id, and each
+   * class's changed attributes by class label (empty when none changed).
+   */
   changes: {
     classes: Record<string, MapChange>
     links: Record<string, MapChange>
     subclassLinks: Record<string, MapChange>
+    attributes: Record<string, AttributeChange[]>
   }
 }
 
@@ -50,7 +67,7 @@ const mostSevere = (classifications: Classification[]): Classification | null =>
 type ComparedOntologies = Pick<OntologyComparison, 'base' | 'target' | 'diff'>
 
 /** A class's or a relation's Concept kind: the Concepts that own attributes. */
-type OwnerKind = Exclude<OntologyChange['concept_kind'], 'property'>
+export type OwnerKind = Exclude<OntologyChange['concept_kind'], 'property'>
 
 /**
  * The Diff's changes to one class or relation: those to the Concept itself and to its
@@ -173,14 +190,41 @@ export function compareOntologies(base: Ontology, target: Ontology, diff: Ontolo
       return [l.id, { kind, severity: kind === 'unchanged' ? null : severity('node_type', l.child) }]
     }),
   )
+  const attributes = Object.fromEntries(
+    map.nodes.map((n) => [n.label, attributeChanges(changesOfConcept({ base, target, diff }, 'node_type', n.label))]),
+  )
   return {
     map: { ...map, subclassLinks },
     ontology,
     base,
     target,
     diff,
-    changes: { classes, links, subclassLinks: subclassLinkChanges },
+    changes: { classes, links, subclassLinks: subclassLinkChanges, attributes },
   }
+}
+
+/**
+ * The changed attributes among one class's Diff changes, one entry per attribute, by
+ * name in code-point order, as the Diff sorts them.
+ */
+function attributeChanges(changes: OntologyChange[]): AttributeChange[] {
+  const byName = new Map<string, OntologyChange[]>()
+  for (const c of changes.filter((c) => c.concept_kind === 'property')) {
+    const name = c.concept.slice(c.concept.indexOf('.') + 1)
+    byName.set(name, [...(byName.get(name) ?? []), c])
+  }
+  return [...byName]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([name, cs]) => {
+      // Added or removed is one change; any other is a modification, one change per detail.
+      const kind = cs.length === 1 && (cs[0].kind === 'added' || cs[0].kind === 'removed') ? cs[0].kind : 'modified'
+      return {
+        name,
+        kind,
+        severity: mostSevere(cs.map((c) => c.classification))!,
+        details: kind === 'modified' ? cs.map((c) => c.detail) : [],
+      }
+    })
 }
 
 /**

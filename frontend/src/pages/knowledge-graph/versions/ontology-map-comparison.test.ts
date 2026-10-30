@@ -148,6 +148,84 @@ describe('compareOntologies', () => {
   })
 })
 
+describe('compareOntologies: changed attributes', () => {
+  // A transit Stop whose wheelchair attribute was renamed, its name made required and a
+  // code made unique; its description and the Route class are untouched.
+  const base: Ontology = {
+    node_types: [
+      { label: 'Route', properties: [{ name: 'short_name', type: 'STRING' }] },
+      {
+        label: 'Stop',
+        properties: [
+          { name: 'code', type: 'STRING' },
+          { name: 'description', type: 'STRING' },
+          { name: 'name', type: 'STRING' },
+          { name: 'wheelchairBoarding', type: 'INTEGER' },
+        ],
+      },
+    ],
+    relationship_types: [{ label: 'SERVES' }],
+    patterns: [['Route', 'SERVES', 'Stop']],
+  }
+  const target: Ontology = {
+    ...base,
+    node_types: [
+      base.node_types[0],
+      {
+        label: 'Stop',
+        properties: [
+          { name: 'code', type: 'STRING' },
+          { name: 'description', type: 'STRING' },
+          { name: 'name', type: 'STRING', required: true },
+          { name: 'wheelchair_boarding', type: 'INTEGER' },
+        ],
+      },
+    ],
+    constraints: [{ type: 'UNIQUENESS', node_type: 'Stop', property_name: 'code' }],
+  }
+  // What the core's Ontology Diff reports from base to target.
+  const diff: OntologyDiff = {
+    classification: 'breaking',
+    changes: [
+      { concept: 'Stop.name', concept_kind: 'property', kind: 'changed', classification: 'breaking', detail: 'now required' },
+      { concept: 'Stop.wheelchairBoarding', concept_kind: 'property', kind: 'removed', classification: 'breaking', detail: 'property Stop.wheelchairBoarding removed' },
+      { concept: 'Stop.wheelchair_boarding', concept_kind: 'property', kind: 'added', classification: 'additive', detail: 'optional property Stop.wheelchair_boarding added' },
+      { concept: 'Stop.code', concept_kind: 'property', kind: 'changed', classification: 'breaking', detail: 'UNIQUENESS constraint added' },
+    ],
+  }
+
+  it('lists exactly the attributes that changed on a class, each removed, added or modified, by name', () => {
+    const { changes } = compareOntologies(base, target, diff)
+
+    expect(changes.attributes.Stop).toEqual([
+      { name: 'code', kind: 'modified', severity: 'breaking', details: ['UNIQUENESS constraint added'] },
+      { name: 'name', kind: 'modified', severity: 'breaking', details: ['now required'] },
+      { name: 'wheelchairBoarding', kind: 'removed', severity: 'breaking', details: [] },
+      { name: 'wheelchair_boarding', kind: 'added', severity: 'additive', details: [] },
+    ])
+  })
+
+  it('lists no attributes for a class none of whose attributes changed', () => {
+    const { changes } = compareOntologies(base, target, diff)
+
+    expect(changes.attributes.Route).toEqual([])
+  })
+
+  it("gives a modified attribute every one of its changes, in the most severe one's severity", () => {
+    const { changes } = compareOntologies(base, target, {
+      classification: 'breaking',
+      changes: [
+        { concept: 'Stop.name', concept_kind: 'property', kind: 'changed', classification: 'additive', detail: 'description changed' },
+        { concept: 'Stop.name', concept_kind: 'property', kind: 'changed', classification: 'breaking', detail: 'now required' },
+      ],
+    })
+
+    expect(changes.attributes.Stop).toEqual([
+      { name: 'name', kind: 'modified', severity: 'breaking', details: ['description changed', 'now required'] },
+    ])
+  })
+})
+
 describe('layoutOntologyMap: a comparison', () => {
   it('gives each class of either version one position, the same every time', async () => {
     const first = await layoutOntologyMap(compareOntologies(BASE, TARGET, DIFF).map)

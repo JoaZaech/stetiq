@@ -422,6 +422,33 @@ def ontology_map_patterns(client: stetiq.Client) -> dict[str, Any]:
     return {}
 
 
+# Changed attributes on the Ontology Map: v2 renames Stop.wheelchairBoarding to
+# wheelchair_boarding and makes Stop.name required; Stop.code and Route are untouched.
+MAP_ATTRIBUTES_V1 = """
+node_types:
+  - label: Route
+    properties: [{name: short_name, type: STRING}]
+  - label: Stop
+    properties:
+      - {name: code, type: STRING}
+      - {name: name, type: STRING}
+      - {name: wheelchairBoarding, type: INTEGER}
+relationship_types: [SERVES]
+patterns: [[Route, SERVES, Stop]]
+"""
+
+MAP_ATTRIBUTES_V2 = MAP_ATTRIBUTES_V1.replace(
+    "{name: name, type: STRING}", "{name: name, type: STRING, required: true}"
+).replace("wheelchairBoarding", "wheelchair_boarding")
+
+
+def ontology_map_attributes(client: stetiq.Client) -> dict[str, Any]:
+    """Knowledge Graph `transit` with v1 = `MAP_ATTRIBUTES_V1` and v2 = `MAP_ATTRIBUTES_V2`."""
+    client.create_knowledge_graph("transit", ontology=MAP_ATTRIBUTES_V1)
+    client.register_ontology("transit", MAP_ATTRIBUTES_V2)
+    return {}
+
+
 # For selecting on the Ontology Map: a superclass, properties, a constraint, a described relation.
 MAP_DETAILS_ONTOLOGY = """
 node_types:
@@ -494,6 +521,72 @@ def ontology_map_large(client: stetiq.Client) -> dict[str, Any]:
     return {}
 
 
+# Like examples/transit-network-kg: v2 (a Candidate's) takes the feed's camelCase columns,
+# v3 renames them to snake_case (two breaking removals, two additions) and documents HAS_TRIP.
+MAP_TRANSIT_V2 = """
+node_types:
+  - {label: Agency}
+  - {label: Route}
+  - label: Stop
+    properties: [{name: wheelchairBoarding, type: INTEGER}]
+  - label: Trip
+    properties: [{name: bikesAllowed, type: INTEGER}]
+relationship_types: [HAS_TRIP, OPERATES, SERVES]
+patterns:
+  - [Agency, OPERATES, Route]
+  - [Route, HAS_TRIP, Trip]
+  - [Trip, SERVES, Stop]
+"""
+
+MAP_TRANSIT_V3 = (
+    MAP_TRANSIT_V2.replace("wheelchairBoarding", "wheelchair_boarding")
+    .replace("bikesAllowed", "bikes_allowed")
+    .replace(
+        "relationship_types: [HAS_TRIP,",
+        "relationship_types: [{label: HAS_TRIP, description: The scheduled trips of a route},",
+    )
+)
+
+
+def ontology_map_transit(client: stetiq.Client) -> dict[str, Any]:
+    """Knowledge Graph `city-transit` with v1 = `MAP_TRANSIT_V2` without its attributes,
+    v2 = `MAP_TRANSIT_V2` and v3 = `MAP_TRANSIT_V3`."""
+    v1 = MAP_TRANSIT_V2.replace(
+        "    properties: [{name: wheelchairBoarding, type: INTEGER}]\n", ""
+    ).replace("    properties: [{name: bikesAllowed, type: INTEGER}]\n", "")
+    client.create_knowledge_graph("city-transit", ontology=v1)
+    client.register_ontology("city-transit", MAP_TRANSIT_V2)
+    client.register_ontology("city-transit", MAP_TRANSIT_V3)
+    return {}
+
+
+# For searching the Ontology Map, from the retail-orders example: Bin mentions warehouses in
+# its description and an attribute without being one, and so does SHIPPED_FROM's description.
+MAP_SEARCH_ONTOLOGY = """
+node_types:
+  - label: Bin
+    description: A storage location inside a warehouse
+    properties: [{name: code, type: STRING}, {name: warehouse, type: STRING}]
+  - {label: Order}
+  - {label: Shipment}
+  - {label: Warehouse, description: A fulfilment site shipments leave from}
+relationship_types:
+  - {label: FULFILLS}
+  - {label: SHIPPED_FROM, description: The warehouse a shipment left}
+  - {label: STORED_IN}
+patterns:
+  - [Shipment, FULFILLS, Order]
+  - [Shipment, SHIPPED_FROM, Warehouse]
+  - [Bin, STORED_IN, Warehouse]
+"""
+
+
+def ontology_map_search(client: stetiq.Client) -> dict[str, Any]:
+    """Knowledge Graph `retail` with v1 = `MAP_SEARCH_ONTOLOGY`."""
+    client.create_knowledge_graph("retail", ontology=MAP_SEARCH_ONTOLOGY)
+    return {}
+
+
 SCENARIOS: dict[str, Scenario] = {
     "construction_runs": construction_runs,
     "construction_runs_reader": construction_runs_reader,
@@ -512,8 +605,11 @@ SCENARIOS: dict[str, Scenario] = {
     "ontology_map": ontology_map,
     "ontology_map_details": ontology_map_details,
     "ontology_map_patterns": ontology_map_patterns,
+    "ontology_map_attributes": ontology_map_attributes,
     "ontology_map_path": ontology_map_path,
     "ontology_map_large": ontology_map_large,
+    "ontology_map_transit": ontology_map_transit,
+    "ontology_map_search": ontology_map_search,
 }
 
 

@@ -9,6 +9,14 @@ export interface ClassRow {
   depth: number
   /** e.g. `UNIQUENESS (name)` */
   constraints: string[]
+  /** How many attributes it declares itself. */
+  attributes: number
+  /** How many more it inherits along its superclass chain (a redeclared one counts as its own). */
+  inheritedAttributes: number
+  /** Its own Patterns out of it, as `HAS_TRIP → Trip` (relation, then target), sorted. */
+  outgoing: string[]
+  /** Its own Patterns into it, as `HAS_TRIP ← Route` (relation, then source), sorted. */
+  incoming: string[]
 }
 
 export interface RelationRow {
@@ -51,6 +59,22 @@ export function conceptTables(ontology: Ontology): ConceptTables {
     children.set(parent, [...(children.get(parent) ?? []), node])
   }
 
+  const byLabel = new Map(ontology.node_types.map((n) => [n.label, n]))
+  // The attribute names a class inherits: its ancestors', nearest first, stopping at an
+  // undeclared superclass and never revisiting a class.
+  const inheritedNames = (node: (typeof ontology.node_types)[number]) => {
+    const own = new Set((node.properties ?? []).map((p) => p.name))
+    const inherited = new Set<string>()
+    const seen = new Set([node.label])
+    let c = node.parent === undefined ? undefined : byLabel.get(node.parent)
+    while (c && !seen.has(c.label)) {
+      seen.add(c.label)
+      for (const p of c.properties ?? []) if (!own.has(p.name)) inherited.add(p.name)
+      c = c.parent === undefined ? undefined : byLabel.get(c.parent)
+    }
+    return inherited
+  }
+
   const classes: ClassRow[] = []
   const visit = (parent: string | undefined, depth: number) => {
     const level = [...(children.get(parent) ?? [])].sort((a, b) => a.label.localeCompare(b.label))
@@ -62,6 +86,16 @@ export function conceptTables(ontology: Ontology): ConceptTables {
         parent: node.parent,
         depth,
         constraints: constraintsOf(ontology, node.label),
+        attributes: (node.properties ?? []).length,
+        inheritedAttributes: inheritedNames(node).size,
+        outgoing: ontology.patterns
+          .filter(([source]) => source === node.label)
+          .map(([, relation, target]) => `${relation} → ${target}`)
+          .sort(),
+        incoming: ontology.patterns
+          .filter(([, , target]) => target === node.label)
+          .map(([source, relation]) => `${relation} ← ${source}`)
+          .sort(),
       })
       visit(node.label, depth + 1)
     }

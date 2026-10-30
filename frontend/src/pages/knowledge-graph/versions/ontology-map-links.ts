@@ -1,13 +1,10 @@
 /** How the Map draws a Pattern link and its relation label, and when the label shows. */
 import type { PatternLink } from './ontology-map'
 import type { MapChange } from './ontology-map-comparison'
-import { NODE_SIZE, type Point } from './ontology-map-layout'
+import type { Point, Size } from './ontology-map-layout'
 
-/** A rectangle by its top-left corner. */
-export interface Box extends Point {
-  width: number
-  height: number
-}
+/** A rectangle by its top-left corner: a class's node on the Map, or a label's pill. */
+export type Box = Point & Size
 
 /**
  * The least zoom at which a link's label can be read. Fit-to-view never zooms out past
@@ -35,7 +32,7 @@ const LABEL_PADDING = 8
 const LABEL_HEIGHT = 18
 
 /** The pill a relation's label is drawn on. */
-export const labelSize = (relation: string) => ({
+export const labelSize = (relation: string): Size => ({
   width: Math.ceil(relation.length * LABEL_FONT_SIZE * CHAR_WIDTH) + 2 * LABEL_PADDING,
   height: LABEL_HEIGHT,
 })
@@ -54,45 +51,39 @@ export interface LinkShape {
   label: Box
 }
 
-/** A Pattern link drawn between its classes' nodes, given each node's top-left corner. */
-export function linkShape(link: Pick<PatternLink, 'relation' | 'route'>, from: Point, to: Point): LinkShape {
+/** A Pattern link drawn between its classes' nodes, each by its box on the Map. */
+export function linkShape(link: Pick<PatternLink, 'relation' | 'route'>, from: Box, to: Box): LinkShape {
   const size = labelSize(link.relation)
   return link.route.kind === 'loop'
-    ? loopShape(center(from), link.route.size, size)
-    : lineShape(center(from), center(to), link.route.bend, size)
+    ? loopShape(from, link.route.size, size)
+    : lineShape(from, to, link.route.bend, size)
 }
 
-/** A straight line between two nodes, from boundary to boundary, given each node's top-left corner. */
-export const straightPath = (from: Point, to: Point): string =>
-  lineShape(center(from), center(to), 0, { width: 0, height: 0 }).path
+/** A straight line between two nodes' boxes, from boundary to boundary. */
+export const straightPath = (from: Box, to: Box): string => lineShape(from, to, 0, { width: 0, height: 0 }).path
 
-const center = (topLeft: Point): Point => ({
-  x: topLeft.x + NODE_SIZE.width / 2,
-  y: topLeft.y + NODE_SIZE.height / 2,
-})
+const center = ({ x, y, width, height }: Box): Point => ({ x: x + width / 2, y: y + height / 2 })
 
 /** Where the ray from a node's centre towards `toward` leaves the node's box. */
-function boundary(c: Point, toward: Point): Point {
+function boundary(node: Box, toward: Point): Point {
+  const c = center(node)
   const dx = toward.x - c.x
   const dy = toward.y - c.y
   if (dx === 0 && dy === 0) return c
-  const scale = 1 / Math.max(Math.abs(dx) / (NODE_SIZE.width / 2), Math.abs(dy) / (NODE_SIZE.height / 2))
+  const scale = 1 / Math.max(Math.abs(dx) / (node.width / 2), Math.abs(dy) / (node.height / 2))
   return { x: c.x + dx * scale, y: c.y + dy * scale }
 }
 
-const centredOn = (p: Point, size: { width: number; height: number }): Box => ({
-  x: p.x - size.width / 2,
-  y: p.y - size.height / 2,
-  ...size,
-})
+const centredOn = (p: Point, size: Size): Box => ({ x: p.x - size.width / 2, y: p.y - size.height / 2, ...size })
 
 /**
- * A quadratic curve between two classes, bent `bend` spacings to the left of a → b. Its
- * label sits on the curve, moved along it by the bend: parallel links bend apart and
- * their labels also step along the pair, so labels never sit side by side, whichever way
- * the pair runs.
+ * A quadratic curve between two classes' boxes, bent `bend` spacings to the left of
+ * from → to. Its label sits on the curve, moved along it by the bend: parallel links bend
+ * apart and their labels also step along the pair, so labels never sit side by side,
+ * whichever way the pair runs.
  */
-function lineShape(a: Point, b: Point, bend: number, size: { width: number; height: number }): LinkShape {
+function lineShape(from: Box, to: Box, bend: number, size: Size): LinkShape {
+  const [a, b] = [center(from), center(to)]
   const length = Math.hypot(b.x - a.x, b.y - a.y) || 1
   // Left of a → b in screen coordinates, where y grows downwards.
   const normal = { x: (b.y - a.y) / length, y: -(b.x - a.x) / length }
@@ -101,8 +92,8 @@ function lineShape(a: Point, b: Point, bend: number, size: { width: number; heig
     x: (a.x + b.x) / 2 + normal.x * bend * BEND_SPACING * 2,
     y: (a.y + b.y) / 2 + normal.y * bend * BEND_SPACING * 2,
   }
-  const start = boundary(a, control)
-  const end = boundary(b, control)
+  const start = boundary(from, control)
+  const end = boundary(to, control)
   // A link running the other way has the opposite bend and runs from the other end, so
   // its label steps the same way along the pair as its slot.
   const t = Math.min(0.9, Math.max(0.1, 0.5 + bend * LABEL_STAGGER))
@@ -118,8 +109,9 @@ function lineShape(a: Point, b: Point, bend: number, size: { width: number; heig
  * centre, through the wide node's top or bottom) rarely leave; larger loops nest outside
  * smaller ones. Its label starts just outside the arc.
  */
-function loopShape(c: Point, loop: number, size: { width: number; height: number }): LinkShape {
-  const right = c.x + NODE_SIZE.width / 2
+function loopShape(node: Box, loop: number, size: Size): LinkShape {
+  const c = center(node)
+  const right = node.x + node.width
   const reach = LOOP_REACH + LOOP_STEP * (loop - 1)
   const spread = 8 + 6 * (loop - 1)
   const [y0, y1] = [c.y - spread, c.y + spread]

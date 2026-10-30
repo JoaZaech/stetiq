@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ontologyMap } from './ontology-map'
-import type { Point } from './ontology-map-layout'
+import { NODE_SIZE, type Point } from './ontology-map-layout'
 import { labelShown, linkShape, READABLE_ZOOM, type Box } from './ontology-map-links'
 import { ONTOLOGY } from './ontology-map.fixtures'
 
@@ -39,7 +39,7 @@ describe('linkShape', () => {
     ['one above the other', { x: 0, y: 220 }],
     ['diagonally apart', { x: 260, y: 200 }],
   ])("staggers parallel links' labels so none overlaps another, %s", (_, ticket) => {
-    const at: Record<string, Point> = { Customer: { x: 0, y: 0 }, Ticket: ticket }
+    const at: Record<string, Box> = { Customer: { x: 0, y: 0, ...NODE_SIZE }, Ticket: { ...ticket, ...NODE_SIZE } }
     const labels = parallel.map((l) => linkShape(l, at[l.source], at[l.target]).label)
 
     expect(parallel).toHaveLength(3)

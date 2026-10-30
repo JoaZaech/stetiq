@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Ontology } from '@/api/ontology-versions'
 import { ontologyMap } from './ontology-map'
-import { layoutOntologyMap, NODE_SIZE, type Point } from './ontology-map-layout'
+import { layoutOntologyMap, NODE_SIZE, type Point, type Size } from './ontology-map-layout'
 import { linkShape, type Box } from './ontology-map-links'
 import { HIERARCHY, ONTOLOGY, PARTIES } from './ontology-map.fixtures'
 
@@ -49,15 +49,47 @@ describe('layoutOntologyMap', () => {
   ])('leaves room for every link label clear of every class, in %s', async (_, ontology) => {
     const map = ontologyMap(ontology)
     const positions = await layoutOntologyMap(map)
-    const nodes: Box[] = Object.values(positions).map((p) => ({ ...p, ...NODE_SIZE }))
+    const node = (label: string): Box => ({ ...positions[label], ...NODE_SIZE })
     const overlap = (a: Box, b: Box) =>
       a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
 
     const covered = map.links.filter((l) => {
-      const { label } = linkShape(l, positions[l.source], positions[l.target])
-      return nodes.some((n) => overlap(label, n))
+      const { label } = linkShape(l, node(l.source), node(l.target))
+      return Object.keys(positions).some((n) => overlap(label, node(n)))
     })
     expect(covered.map((l) => l.id)).toEqual([])
+  })
+
+  it('keeps a larger class apart from every other class', async () => {
+    const sizes: Record<string, Size> = { Ticket: { width: 280, height: 400 } }
+    const positions = await layoutOntologyMap(ontologyMap(HIERARCHY), sizes)
+    const box = (label: string) => ({ ...positions[label], ...(sizes[label] ?? NODE_SIZE) })
+    const overlap = (a: string, b: string) => {
+      const [p, q] = [box(a), box(b)]
+      return p.x < q.x + q.width && q.x < p.x + p.width && p.y < q.y + q.height && q.y < p.y + p.height
+    }
+    const labels = Object.keys(positions)
+
+    expect(labels.flatMap((a) => labels.filter((b) => a < b && overlap(a, b)))).toEqual([])
+  })
+
+  it('keeps every class in its place relative to the others when one is larger', async () => {
+    const map = ontologyMap(HIERARCHY)
+    const centres = (positions: Record<string, Point>, sizes: Record<string, Size> = {}) =>
+      Object.fromEntries(
+        Object.entries(positions).map(([label, p]) => {
+          const { width, height } = sizes[label] ?? NODE_SIZE
+          return [label, { x: p.x + width / 2, y: p.y + height / 2 }]
+        }),
+      )
+    const order = (cs: Record<string, Point>, axis: 'x' | 'y') =>
+      Object.keys(cs).sort((a, b) => cs[a][axis] - cs[b][axis])
+    const sizes: Record<string, Size> = { Ticket: { width: 280, height: 400 } }
+    const plain = centres(await layoutOntologyMap(map))
+    const larger = centres(await layoutOntologyMap(map, sizes), sizes)
+
+    expect(order(larger, 'x')).toEqual(order(plain, 'x'))
+    expect(order(larger, 'y')).toEqual(order(plain, 'y'))
   })
 
   it('lays out an Ontology of 100 classes in under a second', async () => {
