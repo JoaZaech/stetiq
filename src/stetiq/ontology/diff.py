@@ -9,7 +9,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from stetiq.ontology.model import ConceptKind, NodeType, Ontology, Pattern, Property, RelationshipType
+from stetiq.ontology.model import (
+    ConceptKind,
+    NodeType,
+    Ontology,
+    Pattern,
+    Property,
+    RelationshipType,
+)
 
 
 class ChangeKind(StrEnum):
@@ -29,8 +36,6 @@ class Classification(StrEnum):
     @property
     def severity(self) -> int:
         return list(Classification).index(self)
-
-
 
 
 @dataclass(frozen=True)
@@ -101,11 +106,23 @@ def _diff_constraints(base: Ontology, target: Ontology) -> list[Change]:
     """A new constraint may reject existing data (breaking); dropping one only relaxes (additive)."""
     old, new = set(base.constraints), set(target.constraints)
     changes = [
-        Change(f"{c.node_type}.{c.property_name}", "property", ChangeKind.CHANGED, Classification.BREAKING, f"{c.type} constraint added")
+        Change(
+            f"{c.node_type}.{c.property_name}",
+            "property",
+            ChangeKind.CHANGED,
+            Classification.BREAKING,
+            f"{c.type} constraint added",
+        )
         for c in sorted(new - old)
     ]
     changes += [
-        Change(f"{c.node_type}.{c.property_name}", "property", ChangeKind.CHANGED, Classification.ADDITIVE, f"{c.type} constraint removed")
+        Change(
+            f"{c.node_type}.{c.property_name}",
+            "property",
+            ChangeKind.CHANGED,
+            Classification.ADDITIVE,
+            f"{c.type} constraint removed",
+        )
         for c in sorted(old - new)
     ]
     return changes
@@ -134,13 +151,33 @@ def _diff_concepts(
     changes: list[Change] = []
     for label in sorted(old.keys() | new.keys()):
         if label not in old:
-            changes.append(Change(label, kind, ChangeKind.ADDED, Classification.ADDITIVE, f"{name} {label} added"))
+            changes.append(
+                Change(
+                    label, kind, ChangeKind.ADDED, Classification.ADDITIVE, f"{name} {label} added"
+                )
+            )
         elif label not in new:
-            changes.append(Change(label, kind, ChangeKind.REMOVED, Classification.BREAKING, f"{name} {label} removed"))
+            changes.append(
+                Change(
+                    label,
+                    kind,
+                    ChangeKind.REMOVED,
+                    Classification.BREAKING,
+                    f"{name} {label} removed",
+                )
+            )
         else:
             changes += _diff_deprecation(kind, old[label], new[label])
             if old[label].description != new[label].description:
-                changes.append(Change(label, kind, ChangeKind.CHANGED, Classification.ADDITIVE, "description changed"))
+                changes.append(
+                    Change(
+                        label,
+                        kind,
+                        ChangeKind.CHANGED,
+                        Classification.ADDITIVE,
+                        "description changed",
+                    )
+                )
             changes += _diff_properties(old[label], new[label])
             if kind == "node_type":
                 changes += _diff_parent(old[label], new[label])
@@ -154,14 +191,32 @@ def _is_deprecated(c: NodeType | RelationshipType) -> bool:
     return c.deprecated or c.replaced_by is not None
 
 
-def _diff_deprecation(kind: ConceptKind, old: NodeType | RelationshipType, new: NodeType | RelationshipType) -> list[Change]:
+def _diff_deprecation(
+    kind: ConceptKind, old: NodeType | RelationshipType, new: NodeType | RelationshipType
+) -> list[Change]:
     """Deprecating (incl. a rename declared via `replacedBy`) is deprecating; undeprecating is additive."""
     label = new.label
     replacement = f"; replaced by {new.replaced_by}" if new.replaced_by else ""
     if _is_deprecated(new) and not _is_deprecated(old):
-        return [Change(label, kind, ChangeKind.DEPRECATED, Classification.DEPRECATING, f"{_KIND_NAMES[kind]} {label} deprecated{replacement}")]
+        return [
+            Change(
+                label,
+                kind,
+                ChangeKind.DEPRECATED,
+                Classification.DEPRECATING,
+                f"{_KIND_NAMES[kind]} {label} deprecated{replacement}",
+            )
+        ]
     if _is_deprecated(old) and not _is_deprecated(new):
-        return [Change(label, kind, ChangeKind.CHANGED, Classification.ADDITIVE, f"{_KIND_NAMES[kind]} {label} no longer deprecated")]
+        return [
+            Change(
+                label,
+                kind,
+                ChangeKind.CHANGED,
+                Classification.ADDITIVE,
+                f"{_KIND_NAMES[kind]} {label} no longer deprecated",
+            )
+        ]
     if old.replaced_by != new.replaced_by:
         return [
             Change(
@@ -183,11 +238,23 @@ def _diff_patterns(label: str, base: Ontology, target: Ontology) -> list[Change]
     """Endpoint patterns: allowing more is additive, allowing less (narrowing) is breaking."""
     old, new = _patterns(base, label), _patterns(target, label)
     changes = [
-        Change(label, "relationship_type", ChangeKind.CHANGED, Classification.ADDITIVE, f"endpoint pattern {p} added")
+        Change(
+            label,
+            "relationship_type",
+            ChangeKind.CHANGED,
+            Classification.ADDITIVE,
+            f"endpoint pattern {p} added",
+        )
         for p in sorted(new - old)
     ]
     changes += [
-        Change(label, "relationship_type", ChangeKind.CHANGED, Classification.BREAKING, f"endpoint pattern {p} removed")
+        Change(
+            label,
+            "relationship_type",
+            ChangeKind.CHANGED,
+            Classification.BREAKING,
+            f"endpoint pattern {p} removed",
+        )
         for p in sorted(old - new)
     ]
     return changes
@@ -198,7 +265,9 @@ def _diff_patterns(label: str, base: Ontology, target: Ontology) -> list[Change]
 WIDENING_TYPE_CHANGES: frozenset[tuple[str, str]] = frozenset({("INTEGER", "FLOAT")})
 
 
-def _diff_properties(old_owner: NodeType | RelationshipType, new_owner: NodeType | RelationshipType) -> list[Change]:
+def _diff_properties(
+    old_owner: NodeType | RelationshipType, new_owner: NodeType | RelationshipType
+) -> list[Change]:
     old = {p.name: p for p in old_owner.properties}
     new = {p.name: p for p in new_owner.properties}
     changes: list[Change] = []
@@ -218,7 +287,13 @@ def _diff_properties(old_owner: NodeType | RelationshipType, new_owner: NodeType
             )
         elif name not in new:
             changes.append(
-                Change(concept, "property", ChangeKind.REMOVED, Classification.BREAKING, f"property {concept} removed")
+                Change(
+                    concept,
+                    "property",
+                    ChangeKind.REMOVED,
+                    Classification.BREAKING,
+                    f"property {concept} removed",
+                )
             )
         else:
             changes += _diff_property(concept, old[name], new[name])
@@ -228,7 +303,15 @@ def _diff_properties(old_owner: NodeType | RelationshipType, new_owner: NodeType
 def _diff_property(concept: str, old: Property, new: Property) -> list[Change]:
     changes: list[Change] = []
     if old.description != new.description:
-        changes.append(Change(concept, "property", ChangeKind.CHANGED, Classification.ADDITIVE, "description changed"))
+        changes.append(
+            Change(
+                concept,
+                "property",
+                ChangeKind.CHANGED,
+                Classification.ADDITIVE,
+                "description changed",
+            )
+        )
     if old.type != new.type:
         widening = (old.type, new.type) in WIDENING_TYPE_CHANGES
         changes.append(

@@ -31,8 +31,16 @@ def _start_server(database_url: str):
     port = _free_port()
     proc = subprocess.Popen(
         [
-            sys.executable, "-c", "from stetiq.cli import app; app()",
-            "server", "--host", "127.0.0.1", "--port", str(port), "--database-url", database_url,
+            sys.executable,
+            "-c",
+            "from stetiq.cli import app; app()",
+            "server",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+            "--database-url",
+            database_url,
         ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
@@ -60,9 +68,7 @@ def _issue_token_with_cli(database_url: str, user: str, *grants: str) -> str:
     return result.output.strip().splitlines()[-1]
 
 
-@pytest.fixture(
-    params=["sqlite", pytest.param("postgres", marks=pytest.mark.postgres)]
-)
+@pytest.fixture(params=["sqlite", pytest.param("postgres", marks=pytest.mark.postgres)])
 def server(request, tmp_path):
     """A running server, as (url, database_url)."""
     if request.param == "sqlite":
@@ -127,8 +133,12 @@ def test_tokens_can_be_listed_and_revoked_with_the_cli(server, monkeypatch):
         stetiq.Client(url, token=token).get_knowledge_graph("kg")
 
 
-def test_sdk_selects_remote_mode_from_an_http_tracking_uri(server_url, support_ontology, monkeypatch):
-    stetiq.Client(server_url).create_knowledge_graph("customer-support-kg", ontology=support_ontology)
+def test_sdk_selects_remote_mode_from_an_http_tracking_uri(
+    server_url, support_ontology, monkeypatch
+):
+    stetiq.Client(server_url).create_knowledge_graph(
+        "customer-support-kg", ontology=support_ontology
+    )
     monkeypatch.setenv("STETIQ_TRACKING_URI", server_url)
 
     versions = stetiq.Client().list_ontology_versions("customer-support-kg")
@@ -138,18 +148,31 @@ def test_sdk_selects_remote_mode_from_an_http_tracking_uri(server_url, support_o
         stetiq.Client(server_url).get_knowledge_graph("no-such-kg")
 
 
-def test_cli_selects_remote_mode_from_an_http_tracking_uri(server_url, tmp_path, support_ontology, monkeypatch):
+def test_cli_selects_remote_mode_from_an_http_tracking_uri(
+    server_url, tmp_path, support_ontology, monkeypatch
+):
     ontology = tmp_path / "ontology.yaml"
     ontology.write_text(support_ontology)
     monkeypatch.chdir(tmp_path)
     runner = CliRunner()
 
     created = runner.invoke(
-        cli_app, ["kg", "create", "customer-support-kg", "--ontology", str(ontology), "--tracking-uri", server_url]
+        cli_app,
+        [
+            "kg",
+            "create",
+            "customer-support-kg",
+            "--ontology",
+            str(ontology),
+            "--tracking-uri",
+            server_url,
+        ],
     )
     monkeypatch.setenv("STETIQ_TRACKING_URI", server_url)
     fetched = runner.invoke(cli_app, ["ontology", "get", "customer-support-kg", "1"])
-    duplicate = runner.invoke(cli_app, ["kg", "create", "customer-support-kg", "--ontology", str(ontology)])
+    duplicate = runner.invoke(
+        cli_app, ["kg", "create", "customer-support-kg", "--ontology", str(ontology)]
+    )
 
     assert created.exit_code == 0, created.output
     assert yaml.safe_load(fetched.output)["patterns"] == [["Customer", "OPENED", "Ticket"]]
@@ -162,14 +185,15 @@ def test_cli_selects_remote_mode_from_an_http_tracking_uri(server_url, tmp_path,
 def test_server_revalidates_ontologies_it_receives(tmp_path):
     database_url = f"sqlite:///{tmp_path / 'server.db'}"
     _, token = TokenRegistry(database_url).issue("admin", {"*": "edit"})
-    with TestClient(
-        create_app(database_url), headers={"Authorization": f"Bearer {token}"}
-    ) as http:
+    with TestClient(create_app(database_url), headers={"Authorization": f"Bearer {token}"}) as http:
         response = http.post(
             "/api/v1/knowledge-graphs",
             json={
                 "name": "customer-support-kg",
-                "declared_ontology": {"node_types": [{"label": "Customer"}], "patterns": [["Customer", "OPENED", "Ticket"]]},
+                "declared_ontology": {
+                    "node_types": [{"label": "Customer"}],
+                    "patterns": [["Customer", "OPENED", "Ticket"]],
+                },
             },
         )
         missing = http.get("/api/v1/knowledge-graphs/customer-support-kg")

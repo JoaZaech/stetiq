@@ -48,7 +48,11 @@ def test_adding_a_concept_is_additive(diff):
 
 
 def test_removing_a_concept_is_breaking(diff):
-    d = diff(BASE.replace("[OPENED, HANDLES]", "[OPENED, ASSIGNED]").replace("HANDLES, Ticket]", "ASSIGNED, Ticket]"))
+    d = diff(
+        BASE.replace("[OPENED, HANDLES]", "[OPENED, ASSIGNED]").replace(
+            "HANDLES, Ticket]", "ASSIGNED, Ticket]"
+        )
+    )
 
     assert summary(d) == [("ASSIGNED", "added", "additive"), ("HANDLES", "removed", "breaking")]
     assert d.classification == "breaking"
@@ -57,8 +61,12 @@ def test_removing_a_concept_is_breaking(diff):
 
 
 def test_narrowing_a_relations_endpoint_patterns_is_breaking(diff):
-    d = diff(BASE.replace("  - [Agent, HANDLES, Ticket]", "  - [Agent, HANDLES, Ticket]\n  - [Agent, OPENED, Ticket]")
-             .replace("  - [Customer, OPENED, Ticket]\n", ""))
+    d = diff(
+        BASE.replace(
+            "  - [Agent, HANDLES, Ticket]",
+            "  - [Agent, HANDLES, Ticket]\n  - [Agent, OPENED, Ticket]",
+        ).replace("  - [Customer, OPENED, Ticket]\n", "")
+    )
 
     assert summary(d) == [("OPENED", "changed", "additive"), ("OPENED", "changed", "breaking")]
     widened, narrowed = d.changes
@@ -83,12 +91,14 @@ def test_widening_a_propertys_type_is_additive(client):
 
 
 def test_adding_an_optional_property_is_additive_but_a_required_one_is_breaking(diff):
-    d = diff(BASE.replace(
-        "      - {name: priority, type: FLOAT}",
-        "      - {name: priority, type: FLOAT}\n"
-        "      - {name: channel, type: STRING}\n"
-        "      - {name: status, type: STRING, required: true}",
-    ))
+    d = diff(
+        BASE.replace(
+            "      - {name: priority, type: FLOAT}",
+            "      - {name: priority, type: FLOAT}\n"
+            "      - {name: channel, type: STRING}\n"
+            "      - {name: status, type: STRING, required: true}",
+        )
+    )
 
     assert summary(d) == [
         ("Ticket.channel", "added", "additive"),
@@ -103,8 +113,11 @@ def test_removing_a_property_is_breaking(diff):
 
 
 def test_making_a_property_required_is_breaking_and_optional_is_additive(diff):
-    d = diff(BASE.replace("{name: name, type: STRING, required: true}", "{name: name, type: STRING}")
-             .replace("{name: opened_at, type: DATE}", "{name: opened_at, type: DATE, required: true}"))
+    d = diff(
+        BASE.replace(
+            "{name: name, type: STRING, required: true}", "{name: name, type: STRING}"
+        ).replace("{name: opened_at, type: DATE}", "{name: opened_at, type: DATE, required: true}")
+    )
 
     assert summary(d) == [
         ("Customer.name", "changed", "additive"),
@@ -121,10 +134,17 @@ def test_marking_a_concept_deprecated_is_deprecating(diff):
 
 
 def test_a_rename_declared_via_replaced_by_is_deprecating(diff):
-    d = diff(BASE.replace("[OPENED, HANDLES]", "[OPENED, {label: HANDLES, replacedBy: RESOLVES}, RESOLVES]")
-             + "  - [Agent, RESOLVES, Ticket]\n")
+    d = diff(
+        BASE.replace(
+            "[OPENED, HANDLES]", "[OPENED, {label: HANDLES, replacedBy: RESOLVES}, RESOLVES]"
+        )
+        + "  - [Agent, RESOLVES, Ticket]\n"
+    )
 
-    assert summary(d) == [("HANDLES", "deprecated", "deprecating"), ("RESOLVES", "added", "additive")]
+    assert summary(d) == [
+        ("HANDLES", "deprecated", "deprecating"),
+        ("RESOLVES", "added", "additive"),
+    ]
     assert "replaced by RESOLVES" in d.changes[0].detail
     assert d.classification == "deprecating"
 
@@ -156,10 +176,19 @@ def test_diffing_an_unknown_version_is_not_found(client):
 
 
 def test_changing_a_description_is_additive(diff):
-    d = diff(BASE.replace("  - label: Ticket\n", "  - label: Ticket\n    description: A support request\n")
-             .replace("{name: opened_at, type: DATE}", "{name: opened_at, type: DATE, description: When it was opened}"))
+    d = diff(
+        BASE.replace(
+            "  - label: Ticket\n", "  - label: Ticket\n    description: A support request\n"
+        ).replace(
+            "{name: opened_at, type: DATE}",
+            "{name: opened_at, type: DATE, description: When it was opened}",
+        )
+    )
 
-    assert summary(d) == [("Ticket", "changed", "additive"), ("Ticket.opened_at", "changed", "additive")]
+    assert summary(d) == [
+        ("Ticket", "changed", "additive"),
+        ("Ticket.opened_at", "changed", "additive"),
+    ]
 
 
 def test_giving_a_root_node_type_a_parent_is_additive_but_moving_it_is_breaking(client):
@@ -167,17 +196,29 @@ def test_giving_a_root_node_type_a_parent_is_additive_but_moving_it_is_breaking(
     under_party = "node_types: [Party, Organisation, {label: Customer, parent: Party}]\n"
     moved = "node_types: [Party, Organisation, {label: Customer, parent: Organisation}]\n"
 
-    assert summary(client.diff_ontologies(flat, under_party)) == [("Customer", "changed", "additive")]
-    assert summary(client.diff_ontologies(under_party, moved)) == [("Customer", "changed", "breaking")]
-    assert summary(client.diff_ontologies(under_party, flat)) == [("Customer", "changed", "breaking")]
+    assert summary(client.diff_ontologies(flat, under_party)) == [
+        ("Customer", "changed", "additive")
+    ]
+    assert summary(client.diff_ontologies(under_party, moved)) == [
+        ("Customer", "changed", "breaking")
+    ]
+    assert summary(client.diff_ontologies(under_party, flat)) == [
+        ("Customer", "changed", "breaking")
+    ]
 
 
 def test_adding_a_constraint_is_breaking_and_dropping_one_is_additive(client):
     plain = "node_types:\n  - {label: Customer, properties: [{name: email, type: STRING}]}\n"
-    unique = plain + "constraints:\n  - {type: UNIQUENESS, node_type: Customer, property_name: email}\n"
+    unique = (
+        plain + "constraints:\n  - {type: UNIQUENESS, node_type: Customer, property_name: email}\n"
+    )
 
-    assert summary(client.diff_ontologies(plain, unique)) == [("Customer.email", "changed", "breaking")]
-    assert summary(client.diff_ontologies(unique, plain)) == [("Customer.email", "changed", "additive")]
+    assert summary(client.diff_ontologies(plain, unique)) == [
+        ("Customer.email", "changed", "breaking")
+    ]
+    assert summary(client.diff_ontologies(unique, plain)) == [
+        ("Customer.email", "changed", "additive")
+    ]
 
 
 def _with_node_type(label: str) -> str:

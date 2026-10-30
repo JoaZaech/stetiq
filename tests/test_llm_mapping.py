@@ -13,7 +13,6 @@ import pytest
 import stetiq
 from stetiq import CompetencyQuestion, LlmQuestionMapper
 
-
 REFUSAL = SimpleNamespace(stop_reason="refusal", content=[])
 
 
@@ -51,7 +50,9 @@ def _client_with_mapper(mode, tmp_path, mapper):
 
     url = f"sqlite:///{tmp_path / 'stetiq.db'}"
     if mode == "local":
-        yield stetiq.Client(url, service=LocalTrackingService(SqlStore(url), question_mapper=mapper))
+        yield stetiq.Client(
+            url, service=LocalTrackingService(SqlStore(url), question_mapper=mapper)
+        )
         return
     from stetiq.auth import TokenRegistry
 
@@ -114,7 +115,9 @@ def test_the_llm_is_asked_with_the_question_and_the_ontology_on_the_configured_m
 ):
     client, fake = llm
     client.create_knowledge_graph("kg", ontology=support_ontology)
-    client.register_use_case("kg", [CompetencyQuestion(id="happy", question="Are our customers happy?")])
+    client.register_use_case(
+        "kg", [CompetencyQuestion(id="happy", question="Are our customers happy?")]
+    )
     fake.requests.clear()
 
     client.evaluate("kg", 1)
@@ -133,7 +136,11 @@ def test_questions_with_a_concept_mapping_or_query_never_reach_the_llm(llm, supp
         "kg",
         [
             CompetencyQuestion(id="a", question="Tickets?", concepts=("Ticket",)),
-            CompetencyQuestion(id="b", question="Openers?", query="MATCH (c:Customer)-[:OPENED]->(t:Ticket) RETURN c"),
+            CompetencyQuestion(
+                id="b",
+                question="Openers?",
+                query="MATCH (c:Customer)-[:OPENED]->(t:Ticket) RETURN c",
+            ),
         ],
     )
     fake.requests.clear()
@@ -164,7 +171,9 @@ def test_the_mapper_that_produced_a_mapping_is_stored_with_the_result(llm, suppo
 def test_unusable_references_in_the_llm_answer_are_dropped(llm, support_ontology):
     client, _ = llm
     client.create_knowledge_graph("kg", ontology=support_ontology)
-    client.register_use_case("kg", [CompetencyQuestion(id="raised", question="Who raised which ticket?")])
+    client.register_use_case(
+        "kg", [CompetencyQuestion(id="raised", question="Who raised which ticket?")]
+    )
 
     q = per_question(answerability(client.evaluate("kg", 1)))["raised"]
 
@@ -192,7 +201,7 @@ def test_an_llm_failure_leaves_the_question_unmapped_without_blocking_versioning
 
 # --- configuration -----------------------------------------------------------------------
 
-STUB_MAPPER_MODULE = '''
+STUB_MAPPER_MODULE = """
 class StubMapper:
     description = "stub"
 
@@ -201,7 +210,7 @@ class StubMapper:
 
 
 instance = StubMapper()
-'''
+"""
 
 
 @pytest.fixture
@@ -270,9 +279,16 @@ def test_the_server_maps_with_the_mapper_given_on_the_command_line(
     env.pop("STETIQ_QUESTION_MAPPER", None)
     proc = subprocess.Popen(
         [
-            sys.executable, "-c", "from stetiq.cli import app; app()",
-            "server", "--port", str(port), "--database-url", database_url,
-            "--question-mapper", "stub_mapper:StubMapper",
+            sys.executable,
+            "-c",
+            "from stetiq.cli import app; app()",
+            "server",
+            "--port",
+            str(port),
+            "--database-url",
+            database_url,
+            "--question-mapper",
+            "stub_mapper:StubMapper",
         ],
         env=env,
         stdout=subprocess.DEVNULL,

@@ -13,14 +13,14 @@ from fastapi import APIRouter, Body, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from stetiq.evaluation.answerability import CompetencyQuestionMapper
-from stetiq.evaluation.framework import SubjectKind
 from stetiq.auth import ApiToken, Permission, TokenRegistry, bearer_token
 from stetiq.errors import NotFoundError, PermissionDeniedError, StetiqError
+from stetiq.evaluation.answerability import CompetencyQuestionMapper
+from stetiq.evaluation.framework import SubjectKind
 from stetiq.gates import parse_gates
 from stetiq.ontology import parse_dict
-from stetiq.use_case import parse_use_case_dict
 from stetiq.tracking import LocalTrackingService, SqlStore, TrackingService, wire
+from stetiq.use_case import parse_use_case_dict
 from stetiq.web import ui_router
 
 DATABASE_URL_ENV = "STETIQ_DATABASE_URL"
@@ -90,9 +90,7 @@ def create_app(
         kg = _target_knowledge_graph(token, request.path_params)
         if kg is not None:
             token.require(kg, needed)
-        elif not (
-            request.method in ("POST", "GET") and request.url.path == CREATE_KG_PATH
-        ):
+        elif not (request.method in ("POST", "GET") and request.url.path == CREATE_KG_PATH):
             # Fail closed: a route whose Knowledge Graph we cannot tell is not reachable.
             raise PermissionDeniedError(f"Cannot authorize {request.method} {request.url.path}")
         # POST /knowledge-graphs names its Knowledge Graph in the body: checked in the route.
@@ -102,9 +100,7 @@ def create_app(
 
     @app.exception_handler(StetiqError)
     def _stetiq_error(_request: Request, exc: StetiqError) -> JSONResponse:
-        status = next(
-            (s for cls, s in wire.ERROR_STATUS.items() if isinstance(exc, cls)), 400
-        )
+        status = next((s for cls, s in wire.ERROR_STATUS.items() if isinstance(exc, cls)), 400)
         return JSONResponse(wire.error_to_json(exc), status_code=status)
 
     @app.get("/health")

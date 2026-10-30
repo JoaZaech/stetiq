@@ -112,7 +112,7 @@ MAX_LISTED_REASONS = 20  # per Gate; the rest are summarised in one line
 def _capped(reasons: list[str]) -> list[str]:
     if len(reasons) <= MAX_LISTED_REASONS:
         return reasons
-    return reasons[:MAX_LISTED_REASONS] + [f"... and {len(reasons) - MAX_LISTED_REASONS} more"]
+    return [*reasons[:MAX_LISTED_REASONS], f"... and {len(reasons) - MAX_LISTED_REASONS} more"]
 
 
 @dataclass(frozen=True)
@@ -189,7 +189,8 @@ class MetricGate(Gate):
             return self._outcome(
                 False,
                 f"No result of Evaluator {self.evaluator!r} for Ontology Version "
-                f"{inputs.ontology_version} or its run" + (f" with parameters {dict(self.parameters)}" if self.parameters else ""),
+                f"{inputs.ontology_version} or its run"
+                + (f" with parameters {dict(self.parameters)}" if self.parameters else ""),
             )
         if len(results) > 1:
             return self._outcome(
@@ -247,7 +248,11 @@ class CountDropGate(Gate):
         drops = []
         for kind, before, after in (
             ("node type", inputs.baseline.node_types, inputs.observed.node_types),
-            ("relationship type", inputs.baseline.relationship_types, inputs.observed.relationship_types),
+            (
+                "relationship type",
+                inputs.baseline.relationship_types,
+                inputs.observed.relationship_types,
+            ),
         ):
             now = {t.label: t.count for t in after}
             for t in before:
@@ -273,7 +278,11 @@ def evaluate_gates(gates: Sequence[Gate], inputs: GateInputs) -> tuple[GateOutco
 
 
 def outcome_to_dict(outcome: GateOutcome) -> dict[str, Any]:
-    return {"gate": outcome.gate.to_dict(), "passed": outcome.passed, "reasons": list(outcome.reasons)}
+    return {
+        "gate": outcome.gate.to_dict(),
+        "passed": outcome.passed,
+        "reasons": list(outcome.reasons),
+    }
 
 
 def outcome_from_dict(d: Mapping[str, Any]) -> GateOutcome:
@@ -418,4 +427,3 @@ _PARSERS = {
     "metric": _parse_metric,
     "count_drop": _parse_count_drop,
 }
-

@@ -13,8 +13,8 @@ Bearer` header is accepted too, for curl and tests.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from html import escape
-from typing import Iterable
 from urllib.parse import parse_qs, quote
 
 from fastapi import APIRouter, Request
@@ -115,7 +115,9 @@ def ui_router(tracking: TrackingService, registry: TokenRegistry) -> APIRouter:
             for a in aliases:
                 by_version.setdefault(a.version, []).append(a.name)
             rows = "".join(
-                _version_row(v.number, v.origin, v.created_at, by_version.get(v.number, []), contract)
+                _version_row(
+                    v.number, v.origin, v.created_at, by_version.get(v.number, []), contract
+                )
                 for v in reversed(versions)
             )
             body = (
@@ -144,7 +146,7 @@ def ui_router(tracking: TrackingService, registry: TokenRegistry) -> APIRouter:
             metric_heads = "".join(f'<th class="num" scope="col">{_e(m)}</th>' for m in metrics)
             rows = "".join(_run_row(r, metrics) for r in all_runs)
             body = f"""
-<form method="get" action="{_e(_kg_url(name, '/runs/compare'))}">
+<form method="get" action="{_e(_kg_url(name, "/runs/compare"))}">
 <p class="lede">Tick two or more runs to compare their params and metrics.</p>
 <div class="scroll"><table>
 <thead><tr><th scope="col">Compare</th><th scope="col">Run</th><th scope="col">Status</th>
@@ -172,13 +174,18 @@ def ui_router(tracking: TrackingService, registry: TokenRegistry) -> APIRouter:
                 ("Ontology Version", [f"v{r.ontology_version}" for r in cmp.runs]),
                 ("Conformance", [_score(r.conformance) for r in cmp.runs]),
             ]
-            sections = [("Run", fixed), ("Params", list(cmp.params.items())),
-                        ("Metrics", [(k, [_num(v) for v in vs]) for k, vs in cmp.metrics.items()])]
+            sections = [
+                ("Run", fixed),
+                ("Params", list(cmp.params.items())),
+                ("Metrics", [(k, [_num(v) for v in vs]) for k, vs in cmp.metrics.items()]),
+            ]
             body_rows = ""
             for title, rows in sections:
                 if not rows:
                     continue
-                body_rows += f'<tr><th colspan="{len(cmp.runs) + 1}" scope="rowgroup">{title}</th></tr>'
+                body_rows += (
+                    f'<tr><th colspan="{len(cmp.runs) + 1}" scope="rowgroup">{title}</th></tr>'
+                )
                 for key, values in rows:
                     cells = "".join(f"<td>{_e(_dash(v))}</td>" for v in values)
                     body_rows += f'<tr><th scope="row">{_e(key)}</th>{cells}</tr>'
@@ -202,9 +209,9 @@ def ui_router(tracking: TrackingService, registry: TokenRegistry) -> APIRouter:
             target = _version_param(request, "target") or numbers[-1]
             result = sdk.diff_ontology_versions(name, base, target)
             picker = f"""
-<form class="pick" method="get" action="{_e(_kg_url(name, '/diff'))}">
-  <label>Base {_version_select('base', numbers, base)}</label>
-  <label>Target {_version_select('target', numbers, target)}</label>
+<form class="pick" method="get" action="{_e(_kg_url(name, "/diff"))}">
+  <label>Base {_version_select("base", numbers, base)}</label>
+  <label>Target {_version_select("target", numbers, target)}</label>
   <button type="submit">Show diff</button>
 </form>"""
             if not result.changes:
@@ -336,8 +343,12 @@ def _kg_item(name: str, tracking: TrackingService) -> str:
 
 
 def _tabs(name: str, current: str) -> str:
-    tabs = [("versions", "Ontology Versions", ""), ("runs", "Construction Runs", "/runs"),
-            ("diff", "Diff", "/diff"), ("drift", "Drift", "/drift")]
+    tabs = [
+        ("versions", "Ontology Versions", ""),
+        ("runs", "Construction Runs", "/runs"),
+        ("diff", "Diff", "/diff"),
+        ("drift", "Drift", "/drift"),
+    ]
     links = "".join(
         f'<a href="{_e(_kg_url(name, sub))}"{" aria-current=page" if key == current else ""}>{label}</a>'
         for key, label, sub in tabs

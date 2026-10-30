@@ -10,8 +10,8 @@ from typing import Literal
 from stetiq.conformance import Conformance
 from stetiq.drift import DriftFinding, DriftThresholds
 from stetiq.errors import InvalidAliasNameError
-from stetiq.gates import Gate, GateOutcome
 from stetiq.evaluation.framework import Detail, MetricValue, ParameterValue, SubjectKind
+from stetiq.gates import Gate, GateOutcome
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import Ontology, to_yaml
 from stetiq.use_case import UseCase
@@ -218,6 +218,7 @@ class ObservationOutcome:
 
 
 # --- Gates ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class GateResult:

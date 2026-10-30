@@ -8,6 +8,8 @@ from urllib.parse import quote
 
 import httpx
 
+from stetiq import use_case as use_case_format
+from stetiq.drift import DriftThresholds
 from stetiq.errors import EvaluatorError, StetiqError
 from stetiq.evaluation.framework import Evaluation, ParameterValue, SubjectKind
 from stetiq.gates import Gate
@@ -16,22 +18,21 @@ from stetiq.ontology import Ontology, to_dict
 from stetiq.tracking import wire
 from stetiq.tracking.entities import (
     Alias,
-    Promotion,
-    validate_alias_name,
     ConstructionRun,
+    DriftEvent,
     EvaluationResult,
     EvolutionMode,
     GateResult,
     KnowledgeGraph,
     Observation,
+    ObservationOutcome,
     OntologyVersion,
+    Promotion,
     UseCaseVersion,
+    validate_alias_name,
 )
-from stetiq import use_case as use_case_format
-from stetiq.use_case import UseCase
-from stetiq.drift import DriftThresholds
-from stetiq.tracking.entities import DriftEvent, ObservationOutcome
 from stetiq.tracking.service import ObservationInput
+from stetiq.use_case import UseCase
 
 
 class RemoteTrackingService:
@@ -122,7 +123,9 @@ class RemoteTrackingService:
 
     def start_run(self, knowledge_graph: str, ontology_version: int) -> ConstructionRun:
         body = {"ontology_version": ontology_version}
-        return wire.run_from_json(self._call("POST", self._kg_path(knowledge_graph) + "/runs", body))
+        return wire.run_from_json(
+            self._call("POST", self._kg_path(knowledge_graph) + "/runs", body)
+        )
 
     def get_run(self, run_id: str) -> ConstructionRun:
         return wire.run_from_json(self._call("GET", self._run_path(run_id)))
@@ -183,7 +186,9 @@ class RemoteTrackingService:
     def set_alias(self, knowledge_graph: str, name: str, version: int, actor: str) -> Alias:
         validate_alias_name(name)  # a name like "a/b" would not even reach its route
         body = {"version": version, "actor": actor}
-        return wire.alias_from_json(self._call("PUT", self._alias_path(knowledge_graph, name), body))
+        return wire.alias_from_json(
+            self._call("PUT", self._alias_path(knowledge_graph, name), body)
+        )
 
     def get_alias(self, knowledge_graph: str, name: str) -> Alias:
         return wire.alias_from_json(self._call("GET", self._alias_path(knowledge_graph, name)))
@@ -202,9 +207,13 @@ class RemoteTrackingService:
     def get_contract_alias(self, knowledge_graph: str) -> str:
         return self._call("GET", self._kg_path(knowledge_graph) + "/contract-alias")["alias"]
 
-    def _subject_path(self, knowledge_graph: str, subject_kind: SubjectKind, subject_id: str) -> str:
+    def _subject_path(
+        self, knowledge_graph: str, subject_kind: SubjectKind, subject_id: str
+    ) -> str:
         if subject_kind == "ontology_version":
-            return f"{self._kg_path(knowledge_graph)}/ontology-versions/{quote(subject_id, safe='')}"
+            return (
+                f"{self._kg_path(knowledge_graph)}/ontology-versions/{quote(subject_id, safe='')}"
+            )
         if subject_kind == "construction_run":
             return f"{self._kg_path(knowledge_graph)}/runs/{quote(subject_id, safe='')}"
         raise EvaluatorError(f"Unsupported evaluation subject kind {subject_kind!r}")

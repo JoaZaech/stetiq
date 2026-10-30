@@ -127,9 +127,7 @@ class Neo4jGraphSource:
         )
 
     def _session(self, scope: GraphSourceScope) -> neo4j.Session:
-        return self._driver.session(
-            database=scope.database, default_access_mode=neo4j.READ_ACCESS
-        )
+        return self._driver.session(database=scope.database, default_access_mode=neo4j.READ_ACCESS)
 
 
 def graph_source_from_env(environ: Mapping[str, str] | None = None) -> Neo4jGraphSource | None:

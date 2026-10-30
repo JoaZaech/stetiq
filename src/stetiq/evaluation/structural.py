@@ -102,9 +102,7 @@ class OrphanConcepts(OntologyVersionEvaluator):
             n.label for n in o.node_types if n.parent is not None
         }
         used_relationships = {p.relationship for p in o.patterns}
-        nodes = sorted(
-            n.label for n in o.node_types if n.label not in in_pattern | in_hierarchy
-        )
+        nodes = sorted(n.label for n in o.node_types if n.label not in in_pattern | in_hierarchy)
         relationships = sorted(
             r.label for r in o.relationship_types if r.label not in used_relationships
         )
@@ -145,9 +143,7 @@ def _redundant_patterns(o: Ontology, lineage: dict[str, list[str]]) -> list[Deta
             None,
         )
         if general is not None:
-            details.append(
-                Detail(str(p), f"implied by {general}", "redundant_patterns")
-            )
+            details.append(Detail(str(p), f"implied by {general}", "redundant_patterns"))
     return details
 
 
@@ -193,7 +189,11 @@ def _duplicate_structure(
         )
         if twins:
             details.append(
-                Detail(c.label, f"same properties as {', '.join(twins)}", "duplicate_structure_concepts")
+                Detail(
+                    c.label,
+                    f"same properties as {', '.join(twins)}",
+                    "duplicate_structure_concepts",
+                )
             )
     return details
 
@@ -221,9 +221,7 @@ class Redundancy(OntologyVersionEvaluator):
             *_duplicate_structure(o.relationship_types, {}),
         ]
         counts = Counter(d.metric for d in details)
-        return Evaluation(
-            metrics={m: counts[m] for m in self._METRICS}, details=tuple(details)
-        )
+        return Evaluation(metrics={m: counts[m] for m in self._METRICS}, details=tuple(details))
 
 
 class ConstraintConsistency(OntologyVersionEvaluator):

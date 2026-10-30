@@ -42,7 +42,9 @@ def test_cli_binds_and_shows_the_graph_source(cli_env):
 
     output = _invoke("kg", "source", "support")
 
-    assert cli_env.get_graph_source("support") == GraphSourceScope(database="kgs", label="KG_support")
+    assert cli_env.get_graph_source("support") == GraphSourceScope(
+        database="kgs", label="KG_support"
+    )
     assert "kgs" in output and "KG_support" in output
 
 
@@ -100,7 +102,11 @@ def test_cli_lists_gate_results(cli_env, tmp_path):
     config = tmp_path / "stetiq.yaml"
     config.write_text(
         yaml.safe_dump(
-            {"gates": [{"name": "safe", "check": "ontology_diff", "max_classification": "additive"}]}
+            {
+                "gates": [
+                    {"name": "safe", "check": "ontology_diff", "max_classification": "additive"}
+                ]
+            }
         )
     )
     _invoke("gate", "support", "--config", str(config))

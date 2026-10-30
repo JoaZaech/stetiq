@@ -50,7 +50,12 @@ def test_precision_and_recall_over_concepts_against_a_gold_ontology(client, kg, 
     by_metric = {}
     for d in result.details:
         by_metric.setdefault(d.metric, []).append(d.item)
-    assert sorted(by_metric["matched_concepts"]) == ["Customer", "Customer.name", "OPENED", "Ticket"]
+    assert sorted(by_metric["matched_concepts"]) == [
+        "Customer",
+        "Customer.name",
+        "OPENED",
+        "Ticket",
+    ]
     assert by_metric["unmatched_evaluated_concepts"] == ["Ticket.opened_at"]
     assert sorted(by_metric["unmatched_reference_concepts"]) == [
         "ASSIGNED_TO",

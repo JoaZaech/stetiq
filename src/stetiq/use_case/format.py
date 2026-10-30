@@ -17,10 +17,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from stetiq import digest
-
 import yaml
 
+from stetiq import digest
 from stetiq.errors import UseCaseValidationError
 from stetiq.use_case.concepts import parse_concept_reference
 from stetiq.use_case.model import CompetencyQuestion, UseCase

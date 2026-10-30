@@ -71,7 +71,9 @@ def _fail(path: str, problem: str) -> OntologyValidationError:
 def _check_keys(path: str, d: dict[str, Any], allowed: set[str]) -> None:
     unknown = sorted(set(d) - allowed)
     if unknown:
-        raise _fail(path, f"unknown key(s) {', '.join(unknown)}; allowed: {', '.join(sorted(allowed))}")
+        raise _fail(
+            path, f"unknown key(s) {', '.join(unknown)}; allowed: {', '.join(sorted(allowed))}"
+        )
 
 
 def _optional_str(path: str, value: Any) -> str | None:
@@ -102,7 +104,9 @@ def _parse_property(path: str, raw: Any) -> Property:
     _check_keys(path, raw, _PROPERTY_KEYS)
     ptype = raw.get("type")
     if ptype not in PROPERTY_TYPES:
-        raise _fail(path, f"unknown property type {ptype!r}; allowed: {', '.join(sorted(PROPERTY_TYPES))}")
+        raise _fail(
+            path, f"unknown property type {ptype!r}; allowed: {', '.join(sorted(PROPERTY_TYPES))}"
+        )
     return Property(
         name=name,
         type=ptype,
@@ -148,12 +152,14 @@ def _check_hierarchy(nodes: list[dict[str, Any]]) -> None:
     parents = {n["label"]: n["parent"] for n in nodes}
     for label, parent in parents.items():
         if parent is not None and (parent not in parents or parent == label):
-            raise _fail(f"{label}.parent", f"{parent!r} is not another node type declared in node_types")
+            raise _fail(
+                f"{label}.parent", f"{parent!r} is not another node type declared in node_types"
+            )
     for start in parents:
         seen, current = [start], parents[start]
         while current is not None:
             if current in seen:
-                cycle = " -> ".join([*seen[seen.index(current):], current])
+                cycle = " -> ".join([*seen[seen.index(current) :], current])
                 raise _fail(f"{start}.parent", f"hierarchy cycle {cycle}")
             seen.append(current)
             current = parents[current]
@@ -179,7 +185,9 @@ def _parse_section(doc: dict[str, Any], section: str) -> list[dict[str, Any]]:
     return concepts
 
 
-def _parse_patterns(doc: dict[str, Any], node_labels: set[str], rel_labels: set[str]) -> list[Pattern]:
+def _parse_patterns(
+    doc: dict[str, Any], node_labels: set[str], rel_labels: set[str]
+) -> list[Pattern]:
     raw = doc.get("patterns") or []
     if not isinstance(raw, list):
         raise _fail("patterns", "must be a list")
@@ -195,7 +203,9 @@ def _parse_patterns(doc: dict[str, Any], node_labels: set[str], rel_labels: set[
             if node not in node_labels:
                 raise _fail(f"{path} {p}", f"node type {node!r} is not declared in node_types")
         if rel not in rel_labels:
-            raise _fail(f"{path} {p}", f"relationship type {rel!r} is not declared in relationship_types")
+            raise _fail(
+                f"{path} {p}", f"relationship type {rel!r} is not declared in relationship_types"
+            )
         patterns.append(Pattern(source, rel, target))
     return patterns
 
@@ -229,7 +239,10 @@ def _parse_constraints(doc: dict[str, Any], nodes: list[dict[str, Any]]) -> list
             raise _fail(path, f"node type {node_type!r} is not declared in node_types")
         prop = c.get("property_name")
         if prop not in properties_of(node_type):
-            raise _fail(f"{path} {node_type}.{prop}", "property is not declared on the node type or its ancestors")
+            raise _fail(
+                f"{path} {node_type}.{prop}",
+                "property is not declared on the node type or its ancestors",
+            )
         constraint = Constraint(c["type"], node_type, prop)
         if constraint in constraints:
             raise _fail(path, "constraint is declared more than once")

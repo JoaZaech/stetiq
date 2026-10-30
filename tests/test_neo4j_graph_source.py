@@ -18,8 +18,7 @@ SCOPE = GraphSourceScope(database="neo4j", label="KG")
 def reader_credentials(neo4j_container, neo4j_admin_driver):
     """A least-privilege user holding only the built-in `reader` role."""
     neo4j_admin_driver.execute_query(
-        "CREATE OR REPLACE USER stetiq_reader SET PASSWORD 'readerpassword' "
-        "CHANGE NOT REQUIRED",
+        "CREATE OR REPLACE USER stetiq_reader SET PASSWORD 'readerpassword' CHANGE NOT REQUIRED",
         database_="system",
     )
     neo4j_admin_driver.execute_query("GRANT ROLE reader TO stetiq_reader", database_="system")
@@ -84,13 +83,15 @@ def test_execute_read_rejects_writes_even_with_write_privileges(
 ):
     neo4j_admin_driver.execute_query("CREATE (:KG:Customer {name: 'Ada'})", database_="neo4j")
 
-    with Neo4jGraphSource.connect(
-        neo4j_container.get_connection_url(),
-        user=neo4j_container.username,
-        password=neo4j_container.password,
-    ) as source:
-        with pytest.raises(GraphSourceWriteRejectedError):
-            source.execute_read(SCOPE, query)
+    with (
+        Neo4jGraphSource.connect(
+            neo4j_container.get_connection_url(),
+            user=neo4j_container.username,
+            password=neo4j_container.password,
+        ) as source,
+        pytest.raises(GraphSourceWriteRejectedError),
+    ):
+        source.execute_read(SCOPE, query)
 
     records, _, _ = neo4j_admin_driver.execute_query(
         "MATCH (c:Customer) RETURN c.name AS name", database_="neo4j"

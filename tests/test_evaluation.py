@@ -116,7 +116,7 @@ def test_a_custom_evaluator_cannot_shadow_a_built_in_or_another_registration(cli
 def test_an_invalid_metric_is_rejected_naming_the_evaluator(client, kg):
     client.register_evaluator(Returns("bad_metric", {"score": "high"}))
 
-    with pytest.raises(stetiq.EvaluatorError, match="bad_metric.*score"):
+    with pytest.raises(stetiq.EvaluatorError, match=r"bad_metric.*score"):
         client.evaluate(kg.name, 1)
 
     assert "bad_metric" not in by_evaluator(client.get_evaluation_results(kg.name, 1))
@@ -125,7 +125,7 @@ def test_an_invalid_metric_is_rejected_naming_the_evaluator(client, kg):
 def test_a_failing_custom_evaluator_reports_its_name_and_the_version_still_exists(client, kg):
     client.register_evaluator(Crashes())
 
-    with pytest.raises(stetiq.EvaluatorError, match="crashes.*boom"):
+    with pytest.raises(stetiq.EvaluatorError, match=r"crashes.*boom"):
         client.register_ontology(kg.name, WITH_ISOLATED_AGENT)
 
     assert [v.number for v in client.list_ontology_versions(kg.name)] == [1, 2]
@@ -185,7 +185,9 @@ def test_node_types_connected_through_the_hierarchy_are_not_isolated(client):
 def test_orphan_concepts_are_those_nothing_else_refers_to(client, kg):
     version = client.register_ontology(kg.name, WITH_ISOLATED_AGENT)
 
-    orphans = by_evaluator(client.get_evaluation_results(kg.name, version.number))["orphan_concepts"]
+    orphans = by_evaluator(client.get_evaluation_results(kg.name, version.number))[
+        "orphan_concepts"
+    ]
 
     # ESCALATES is in no pattern; Agent is in no pattern and outside any hierarchy.
     assert orphans.metrics == {

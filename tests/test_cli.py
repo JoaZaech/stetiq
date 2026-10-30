@@ -18,7 +18,9 @@ def test_cli_registers_lists_and_fetches_ontology_versions(tmp_path, monkeypatch
     evolved.write_text(support_ontology.replace("type: DATE", "type: DATE\n        required: true"))
     runner = CliRunner()
 
-    created = runner.invoke(app, ["kg", "create", "customer-support-kg", "--ontology", str(ontology)])
+    created = runner.invoke(
+        app, ["kg", "create", "customer-support-kg", "--ontology", str(ontology)]
+    )
     registered = runner.invoke(app, ["ontology", "register", "customer-support-kg", str(evolved)])
     listed = runner.invoke(app, ["ontology", "list", "customer-support-kg"])
     fetched = runner.invoke(app, ["ontology", "get", "customer-support-kg", "1"])
@@ -37,13 +39,15 @@ def test_cli_reports_malformed_ontology_and_exits_non_zero(tmp_path, monkeypatch
     ontology = tmp_path / "ontology.yaml"
     ontology.write_text("node_types: [Customer, Customer]")
 
-    result = CliRunner().invoke(app, ["kg", "create", "customer-support-kg", "--ontology", str(ontology)])
+    result = CliRunner().invoke(
+        app, ["kg", "create", "customer-support-kg", "--ontology", str(ontology)]
+    )
 
     assert result.exit_code == 1
     assert "Customer" in result.output
 
 
-CUSTOM_EVALUATOR_MODULE = '''
+CUSTOM_EVALUATOR_MODULE = """
 from stetiq import Evaluation, OntologyVersionEvaluator
 
 class NodeTypeCount(OntologyVersionEvaluator):
@@ -51,7 +55,7 @@ class NodeTypeCount(OntologyVersionEvaluator):
 
     def evaluate(self, version):
         return Evaluation(metrics={"node_types": len(version.ontology.node_types)})
-'''
+"""
 
 
 def test_cli_shows_and_re_runs_evaluations_with_a_custom_evaluator(
@@ -68,8 +72,14 @@ def test_cli_shows_and_re_runs_evaluations_with_a_custom_evaluator(
     shown = runner.invoke(app, ["ontology", "evaluations", "customer-support-kg", "1"])
     rerun = runner.invoke(
         app,
-        ["ontology", "evaluate", "customer-support-kg", "1",
-         "--evaluator", "my_evaluators:NodeTypeCount"],
+        [
+            "ontology",
+            "evaluate",
+            "customer-support-kg",
+            "1",
+            "--evaluator",
+            "my_evaluators:NodeTypeCount",
+        ],
     )
 
     assert shown.exit_code == 0, shown.output
@@ -85,7 +95,11 @@ def test_cli_diffs_two_ontology_versions(tmp_path, monkeypatch, support_ontology
     ontology = tmp_path / "ontology.yaml"
     ontology.write_text(support_ontology)
     evolved = tmp_path / "evolved.yaml"
-    evolved.write_text(support_ontology.replace("  - label: OPENED", "  - label: CLOSED").replace("OPENED", "CLOSED"))
+    evolved.write_text(
+        support_ontology.replace("  - label: OPENED", "  - label: CLOSED").replace(
+            "OPENED", "CLOSED"
+        )
+    )
     runner = CliRunner()
     runner.invoke(app, ["kg", "create", "customer-support-kg", "--ontology", str(ontology)])
     runner.invoke(app, ["ontology", "register", "customer-support-kg", str(evolved)])
@@ -102,7 +116,9 @@ def test_cli_diffs_two_ontology_versions(tmp_path, monkeypatch, support_ontology
     assert "No changes" in unchanged.output
 
 
-def test_cli_registers_a_use_case_and_evaluates_answerability(tmp_path, monkeypatch, support_ontology):
+def test_cli_registers_a_use_case_and_evaluates_answerability(
+    tmp_path, monkeypatch, support_ontology
+):
     monkeypatch.setenv("STETIQ_TRACKING_URI", f"sqlite:///{tmp_path / 'stetiq.db'}")
     ontology = tmp_path / "ontology.yaml"
     ontology.write_text(support_ontology)
@@ -128,12 +144,18 @@ def test_cli_registers_a_use_case_and_evaluates_answerability(tmp_path, monkeypa
     assert "agents [unanswerable_questions]: missing Agent" in evaluated.output
 
 
-def test_cli_moves_lists_and_fetches_aliases_with_an_audit_log(tmp_path, monkeypatch, support_ontology):
+def test_cli_moves_lists_and_fetches_aliases_with_an_audit_log(
+    tmp_path, monkeypatch, support_ontology
+):
     monkeypatch.setenv("STETIQ_TRACKING_URI", f"sqlite:///{tmp_path / 'stetiq.db'}")
     ontology = tmp_path / "ontology.yaml"
     ontology.write_text(support_ontology)
     evolved = tmp_path / "evolved.yaml"
-    evolved.write_text(support_ontology.replace("  - label: OPENED", "  - label: CLOSED").replace("OPENED", "CLOSED"))
+    evolved.write_text(
+        support_ontology.replace("  - label: OPENED", "  - label: CLOSED").replace(
+            "OPENED", "CLOSED"
+        )
+    )
     runner = CliRunner()
     runner.invoke(app, ["kg", "create", "kg", "--ontology", str(ontology)])
     runner.invoke(app, ["ontology", "register", "kg", str(evolved)])
@@ -204,7 +226,9 @@ def _repo_with_entry_point(tmp_path, monkeypatch, support_ontology, exit_code):
         yaml.safe_dump(
             {
                 "knowledge_graph": "kg",
-                "entry_point": {"command": [sys.executable, "pipeline.py", "{ontology}", str(exit_code)]},
+                "entry_point": {
+                    "command": [sys.executable, "pipeline.py", "{ontology}", str(exit_code)]
+                },
             }
         )
     )
@@ -237,12 +261,16 @@ def test_cli_run_exits_non_zero_when_the_entry_point_fails(tmp_path, monkeypatch
     assert "exited with code 2" in result.output
 
 
-def test_cli_run_exits_non_zero_when_strict_mode_fails_the_run(tmp_path, monkeypatch, support_ontology):
+def test_cli_run_exits_non_zero_when_strict_mode_fails_the_run(
+    tmp_path, monkeypatch, support_ontology
+):
     sdk, graph, repo = _repo_with_entry_point(tmp_path, monkeypatch, support_ontology, exit_code=0)
     sdk.set_evolution_mode("kg", "strict")
     graph.add_node(["Agent"], {})
 
-    result = CliRunner().invoke(app, ["run", "--config", str(repo / "stetiq.yaml"), "--ontology-version", "1"])
+    result = CliRunner().invoke(
+        app, ["run", "--config", str(repo / "stetiq.yaml"), "--ontology-version", "1"]
+    )
 
     assert result.exit_code == 1
     assert [r.status for r in sdk.list_runs("kg")] == ["failed"]
@@ -268,14 +296,20 @@ gates:
 """
 
 
-def test_cli_gate_exits_non_zero_naming_the_failed_gates_and_why(tmp_path, monkeypatch, support_ontology):
+def test_cli_gate_exits_non_zero_naming_the_failed_gates_and_why(
+    tmp_path, monkeypatch, support_ontology
+):
     monkeypatch.setenv("STETIQ_TRACKING_URI", f"sqlite:///{tmp_path / 'stetiq.db'}")
     monkeypatch.chdir(tmp_path)
     (tmp_path / "stetiq.yaml").write_text(GATES_CONFIG)
     ontology = tmp_path / "ontology.yaml"
     ontology.write_text(support_ontology)
     evolved = tmp_path / "evolved.yaml"
-    evolved.write_text(support_ontology.replace("  - label: OPENED", "  - label: CLOSED").replace("OPENED", "CLOSED"))
+    evolved.write_text(
+        support_ontology.replace("  - label: OPENED", "  - label: CLOSED").replace(
+            "OPENED", "CLOSED"
+        )
+    )
     runner = CliRunner()
     runner.invoke(app, ["kg", "create", "kg", "--ontology", str(ontology)])
 
@@ -292,7 +326,13 @@ def test_cli_gate_exits_non_zero_naming_the_failed_gates_and_why(tmp_path, monke
     assert "breaking change (v1 -> v2): removed OPENED" in failing.output
     assert "1 of 1 Gates failed" in failing.output
     assert promoted.exit_code == 0
-    assert log.output.strip().splitlines()[-1].split()[:5] == ["production", "1", "2", "ada", "failed"]
+    assert log.output.strip().splitlines()[-1].split()[:5] == [
+        "production",
+        "1",
+        "2",
+        "ada",
+        "failed",
+    ]
 
 
 def test_cli_gate_reports_a_malformed_config_file(tmp_path, monkeypatch, support_ontology):

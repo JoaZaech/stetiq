@@ -12,24 +12,26 @@ from datetime import datetime
 from typing import Any
 
 from stetiq import errors
+from stetiq import use_case as use_case_format
 from stetiq.conformance import Conformance
+from stetiq.drift import DriftFinding, DriftThresholds
 from stetiq.evaluation.framework import Detail, Evaluation
+from stetiq.gates import outcome_from_dict, outcome_to_dict
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import from_dict, to_dict
 from stetiq.tracking.entities import (
+    Alias,
     ConstructionRun,
+    DriftEvent,
     EvaluationResult,
+    GateResult,
     KnowledgeGraph,
     Observation,
+    ObservationOutcome,
     OntologyVersion,
+    Promotion,
     UseCaseVersion,
 )
-from stetiq import use_case as use_case_format
-from stetiq.tracking.entities import Alias, Promotion
-from stetiq.drift import DriftFinding, DriftThresholds
-from stetiq.tracking.entities import DriftEvent, ObservationOutcome
-from stetiq.tracking.entities import GateResult
-from stetiq.gates import outcome_from_dict, outcome_to_dict
 
 API_PREFIX = "/api/v1"
 
@@ -186,7 +188,9 @@ def run_from_json(d: dict[str, Any]) -> ConstructionRun:
         params=dict(d["params"]),
         metrics={k: float(v) for k, v in d["metrics"].items()},
         observation_id=d["observation_id"],
-        conformance=None if d.get("conformance") is None else Conformance.from_dict(d["conformance"]),
+        conformance=None
+        if d.get("conformance") is None
+        else Conformance.from_dict(d["conformance"]),
         candidate_version=d.get("candidate_version"),
     )
 

@@ -31,7 +31,9 @@ build-backend = "uv_build"
 dev = [
     "httpx2>=2.16.0",
     "psycopg[binary]>=3.3",
+    "pyright>=1.1.414",
     "pytest>=9.2.0",
+    "ruff>=0.17.3",
     "testcontainers[neo4j]>=4.15",
 ]
 
@@ -41,3 +43,12 @@ markers = [
     "postgres: needs a Postgres database (set STETIQ_TEST_POSTGRES_URL)",
     "neo4j: needs Docker (throwaway Neo4j testcontainer); skipped when Docker is unavailable",
 ]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "BLE"]
+# Typer and FastAPI declare options/dependencies as call defaults by design.
+ignore = ["B008", "E501"]  # line length is left to `ruff format`

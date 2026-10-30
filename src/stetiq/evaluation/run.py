@@ -72,9 +72,7 @@ class RunConformance(ConstructionRunEvaluator):
     name = RUN_CONFORMANCE_EVALUATOR
 
     def evaluate(self, run: ConstructionRunSubject) -> Evaluation:
-        conformance = assess_conformance(
-            run.declared_ontology.ontology, run.observation.schema
-        )
+        conformance = assess_conformance(run.declared_ontology.ontology, run.observation.schema)
         groups = {
             "declared_absent": conformance.declared_absent,
             "undeclared": conformance.undeclared,

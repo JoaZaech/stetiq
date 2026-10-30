@@ -5,3 +5,4 @@ __pycache__/
 .stetiq/
 *.db
 dist/
+.claude/worktrees/

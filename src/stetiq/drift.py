@@ -29,6 +29,7 @@ from stetiq.graph_source import ObservedSchema
 from stetiq.ontology import Ontology
 from stetiq.ontology.model import ConceptKind
 
+
 class DriftKind(StrEnum):
     UNDECLARED = "undeclared"  # observed, not declared by the contract
     VANISHED = "vanished"  # declared by the contract, not observed
@@ -93,7 +94,10 @@ class DriftThresholds:
                 )
 
     def to_dict(self) -> dict[str, Any]:
-        return {"max_count_drop": self.max_count_drop, "max_count_increase": self.max_count_increase}
+        return {
+            "max_count_drop": self.max_count_drop,
+            "max_count_increase": self.max_count_increase,
+        }
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> DriftThresholds:
@@ -129,7 +133,10 @@ def thresholds_from_config(config: Mapping[str, Any]) -> DriftThresholds:
     return DriftThresholds.from_dict(section)
 
 
-_STRUCTURAL = {MismatchKind.UNDECLARED: DriftKind.UNDECLARED, MismatchKind.ABSENT: DriftKind.VANISHED}
+_STRUCTURAL = {
+    MismatchKind.UNDECLARED: DriftKind.UNDECLARED,
+    MismatchKind.ABSENT: DriftKind.VANISHED,
+}
 
 
 def assess_drift(
@@ -143,7 +150,10 @@ def assess_drift(
     conformance = assess_conformance(contract, observed)
     findings = [
         DriftFinding(
-            kind=_STRUCTURAL[m.kind], subject=m.subject, subject_kind=m.subject_kind, detail=m.detail
+            kind=_STRUCTURAL[m.kind],
+            subject=m.subject,
+            subject_kind=m.subject_kind,
+            detail=m.detail,
         )
         for m in conformance.mismatches
         if m.kind in _STRUCTURAL and m.subject_kind != "pattern"  # patterns are not Concepts
@@ -171,7 +181,9 @@ def _statistical(
             change = (new - old) / old
             if thresholds.max_count_drop is not None and -change > thresholds.max_count_drop:
                 kind, word = DriftKind.COUNT_DROP, "dropped"
-            elif thresholds.max_count_increase is not None and change > thresholds.max_count_increase:
+            elif (
+                thresholds.max_count_increase is not None and change > thresholds.max_count_increase
+            ):
                 kind, word = DriftKind.COUNT_INCREASE, "rose"
             else:
                 continue

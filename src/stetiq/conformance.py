@@ -8,9 +8,9 @@ as a Candidate).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from enum import StrEnum
-from collections.abc import Callable
 from typing import Any, Literal
 
 from stetiq.graph_source import (
@@ -78,9 +78,7 @@ class Conformance:
         )
 
     def _concepts(self, kind: MismatchKind) -> tuple[Mismatch, ...]:
-        return tuple(
-            m for m in self.mismatches if m.kind == kind and m.subject_kind != "pattern"
-        )
+        return tuple(m for m in self.mismatches if m.kind == kind and m.subject_kind != "pattern")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -148,9 +146,7 @@ class _Checks:
         self._mismatches: list[Mismatch] = []
 
     def record(self, subject: str, kind: MismatchSubjectKind, found: list[Mismatch]) -> None:
-        self._conforms[
-            (kind, subject)
-        ] = not found  # a node and a relationship may share a label
+        self._conforms[(kind, subject)] = not found  # a node and a relationship may share a label
         self._mismatches.extend(found)
 
     def presence(
@@ -158,9 +154,7 @@ class _Checks:
     ) -> bool:
         """Record an absent/undeclared item; True when it is on both sides."""
         if not is_declared:
-            self.record(
-                subject, kind, [Mismatch(subject, kind, MismatchKind.UNDECLARED)]
-            )
+            self.record(subject, kind, [Mismatch(subject, kind, MismatchKind.UNDECLARED)])
         elif not is_observed:
             self.record(subject, kind, [Mismatch(subject, kind, MismatchKind.ABSENT)])
         return is_declared and is_observed
@@ -191,9 +185,7 @@ def _check_concepts(
             subject = f"{label}.{name}"
             dp, op = declared_props.get(name), observed_props.get(name)
             if checks.presence(subject, "property", dp is not None, op is not None):
-                checks.record(
-                    subject, "property", _property_mismatches(subject, label, dp, op)
-                )
+                checks.record(subject, "property", _property_mismatches(subject, label, dp, op))
 
 
 # The properties declared for a Concept (own, and for node types inherited ones too).
@@ -251,16 +243,12 @@ def _property_mismatches(
     return found
 
 
-def _check_patterns(
-    checks: _Checks, declared: Ontology, observed: ObservedSchema
-) -> None:
+def _check_patterns(checks: _Checks, declared: Ontology, observed: ObservedSchema) -> None:
     declared_patterns = set(declared.patterns)
     observed_patterns = {p.pattern for p in observed.patterns}
     for key in sorted(declared_patterns | observed_patterns):
         subject = str(key)
-        if checks.presence(
-            subject, "pattern", key in declared_patterns, key in observed_patterns
-        ):
+        if checks.presence(subject, "pattern", key in declared_patterns, key in observed_patterns):
             checks.record(subject, "pattern", [])
 
 
@@ -311,23 +299,17 @@ def _extend(declared, observed, concept_type, properties_of: PropertiesOf):
     for c in declared:
         o = observed_by_label.get(c.label)
         known = {p.name for p in properties_of(c)}  # inherited ones are not new
-        extra = tuple(
-            _property(p) for p in (o.properties if o else ()) if p.name not in known
-        )
+        extra = tuple(_property(p) for p in (o.properties if o else ()) if p.name not in known)
         added_properties = added_properties or bool(extra)
         extended.append(
-            replace(
-                c, properties=tuple(sorted(c.properties + extra, key=lambda p: p.name))
-            )
+            replace(c, properties=tuple(sorted(c.properties + extra, key=lambda p: p.name)))
             if extra
             else c
         )
     new_labels = set(observed_by_label) - declared_labels
     for label in new_labels:
         props = observed_by_label[label].properties
-        extended.append(
-            concept_type(label=label, properties=tuple(_property(p) for p in props))
-        )
+        extended.append(concept_type(label=label, properties=tuple(_property(p) for p in props)))
     return tuple(sorted(extended, key=lambda c: c.label)), new_labels, added_properties
 
 

@@ -56,7 +56,9 @@ class EntryPoint:
 
     def __post_init__(self) -> None:
         if not self.command or not all(isinstance(a, str) for a in self.command):
-            raise InvalidEntryPointError("entry_point.command must be a non-empty string or list of strings")
+            raise InvalidEntryPointError(
+                "entry_point.command must be a non-empty string or list of strings"
+            )
 
     @classmethod
     def from_config(cls, config: dict[str, Any]) -> EntryPoint:
@@ -69,7 +71,9 @@ class EntryPoint:
             return cls(tuple(shlex.split(command)))
         if isinstance(command, list):
             return cls(tuple(command))
-        raise InvalidEntryPointError("entry_point.command must be a non-empty string or list of strings")
+        raise InvalidEntryPointError(
+            "entry_point.command must be a non-empty string or list of strings"
+        )
 
     def argv(self, values: dict[str, str]) -> list[str]:
         """The command with every placeholder replaced by `values[name]`."""

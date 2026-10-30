@@ -66,7 +66,11 @@ def _run_id(admin, kg):
 
 # --- Gate results are computed by the server -------------------------------------------
 
-NO_BREAKING = {"name": "no-breaking-changes", "check": "ontology_diff", "max_classification": "deprecating"}
+NO_BREAKING = {
+    "name": "no-breaking-changes",
+    "check": "ontology_diff",
+    "max_classification": "deprecating",
+}
 
 
 def test_a_gate_result_records_the_servers_outcome_not_the_clients(server, admin, support):
@@ -120,7 +124,9 @@ def test_a_gate_result_needs_gate_definitions(server, support):
 # --- Built-in Evaluator names are reserved ---------------------------------------------
 
 
-@pytest.mark.parametrize("evaluator", ["hierarchy", "structural_answerability", "conformance", "observed_schema"])
+@pytest.mark.parametrize(
+    "evaluator", ["hierarchy", "structural_answerability", "conformance", "observed_schema"]
+)
 def test_results_under_built_in_evaluator_names_are_rejected(server, admin, support, evaluator):
     _, http = server
     editor = _headers(server, "mallory", {"support": "edit"})
@@ -129,7 +135,9 @@ def test_results_under_built_in_evaluator_names_are_rejected(server, admin, supp
         f"{API}/knowledge-graphs/support/ontology-versions/1/evaluations",
         f"{API}/knowledge-graphs/support/runs/{_run_id(admin, support)}/evaluations",
     ):
-        response = http.post(path, headers=editor, json={"evaluator": evaluator, "metrics": {"x": 1}})
+        response = http.post(
+            path, headers=editor, json={"evaluator": evaluator, "metrics": {"x": 1}}
+        )
         assert response.status_code == 422, (path, response.text)
 
 
@@ -198,5 +206,7 @@ def test_ids_outside_the_tokens_grants_answer_like_unknown_ids(
     )
 
     assert existing.status_code == unknown.status_code == 404
-    existing_text = existing.text.replace(run.id, unknown_id).replace(run.observation_id, unknown_id)
+    existing_text = existing.text.replace(run.id, unknown_id).replace(
+        run.observation_id, unknown_id
+    )
     assert existing_text == unknown.text

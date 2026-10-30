@@ -18,6 +18,7 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Protocol
 
+from stetiq import use_case as use_case_format
 from stetiq.conformance import assess_conformance, candidate_ontology
 from stetiq.drift import DriftThresholds, assess_drift
 from stetiq.errors import (
@@ -41,18 +42,18 @@ from stetiq.evaluation.framework import (
     check_evaluation,
     check_parameters,
 )
-from stetiq.evaluation.structural import BUILT_IN_EVALUATORS
 from stetiq.evaluation.run import (
     CQ_EXECUTION_EVALUATOR,
     SERVER_RUN_EVALUATORS,
     NoGraphSource,
     RunSubject,
 )
+from stetiq.evaluation.structural import BUILT_IN_EVALUATORS
 from stetiq.gates import Gate, GateInputs
 from stetiq.gates import evaluate_gates as run_gates
-from stetiq.ontology.diff import diff_ontologies
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import Ontology, content_hash, from_dict, to_dict
+from stetiq.ontology.diff import diff_ontologies
 from stetiq.tracking.entities import (
     DEFAULT_CONTRACT_ALIAS,
     DEFAULT_EVOLUTION_MODE,
@@ -67,13 +68,12 @@ from stetiq.tracking.entities import (
     ObservationOutcome,
     OntologyVersion,
     Origin,
-    UseCaseVersion,
     Promotion,
     RunStatus,
+    UseCaseVersion,
     validate_alias_name,
 )
 from stetiq.tracking.store import Store
-from stetiq import use_case as use_case_format
 from stetiq.use_case import UseCase
 
 # What the SDK observed at the end of a run: the scope it read and the Observed Schema.
@@ -101,6 +101,7 @@ class TrackingService(Protocol):
 
     def list_knowledge_graphs(self) -> list[KnowledgeGraph]:
         """By name. In server mode, only those the API token can read."""
+        ...
 
     def register_ontology(self, knowledge_graph: str, ontology: Ontology) -> OntologyVersion:
         """Register a version by hand (origin "registered"; "run" versions only arise
@@ -149,9 +150,7 @@ class TrackingService(Protocol):
 
     def list_drift_events(self, knowledge_graph: str) -> list[DriftEvent]: ...
 
-    def set_alias(
-        self, knowledge_graph: str, name: str, version: int, actor: str
-    ) -> Alias: ...
+    def set_alias(self, knowledge_graph: str, name: str, version: int, actor: str) -> Alias: ...
 
     def get_alias(self, knowledge_graph: str, name: str) -> Alias: ...
 
@@ -270,7 +269,9 @@ class LocalTrackingService:
             self.get_knowledge_graph(knowledge_graph)
             return self._register(knowledge_graph, ontology, "registered")
 
-    def _register(self, knowledge_graph: str, ontology: Ontology, origin: Origin) -> OntologyVersion:
+    def _register(
+        self, knowledge_graph: str, ontology: Ontology, origin: Origin
+    ) -> OntologyVersion:
         # Hold the canonical form, so the returned version equals it fetched back.
         ontology = from_dict(to_dict(ontology))
         digest = content_hash(ontology)
@@ -404,9 +405,7 @@ class LocalTrackingService:
     ) -> list[EvaluationResult]:
         with self._store.transaction():
             version = self.get_ontology_version(knowledge_graph, number)
-            return self._run_built_ins(version) + self._run_answerability(
-                version, use_case_version
-            )
+            return self._run_built_ins(version) + self._run_answerability(version, use_case_version)
 
     def record_evaluation(
         self,
@@ -423,7 +422,9 @@ class LocalTrackingService:
         # Source lives there), so only that name is accepted, and only on a run.
         sdk_side = subject_kind == "construction_run" and evaluator == CQ_EXECUTION_EVALUATOR
         if evaluator in RESERVED_EVALUATOR_NAMES and not sdk_side:
-            raise EvaluatorError(f"{evaluator!r} is a built-in Evaluator; its results are computed by stetiq")
+            raise EvaluatorError(
+                f"{evaluator!r} is a built-in Evaluator; its results are computed by stetiq"
+            )
         evaluation = check_evaluation(evaluator, evaluation)
         parameters = check_parameters(evaluator, parameters or {})
         with self._store.transaction():
@@ -687,7 +688,9 @@ class LocalTrackingService:
             if current is not None and current.version == version:
                 return current
             moved = _now()
-            alias = Alias(knowledge_graph=knowledge_graph, name=name, version=version, updated_at=moved)
+            alias = Alias(
+                knowledge_graph=knowledge_graph, name=name, version=version, updated_at=moved
+            )
             self._store.set_alias(alias)
             self._store.add_promotion(
                 Promotion(
@@ -767,7 +770,9 @@ class LocalTrackingService:
             self._store.add_gate_result(result)
             return result
 
-    def _latest_run_standing_for(self, knowledge_graph: str, version: int) -> ConstructionRun | None:
+    def _latest_run_standing_for(
+        self, knowledge_graph: str, version: int
+    ) -> ConstructionRun | None:
         """The latest run with Conformance whose Candidate (else consumed version) is `version`."""
         runs = [
             r
@@ -810,7 +815,7 @@ class LocalTrackingService:
         return self._store.list_gate_results(knowledge_graph)
 
     def _latest_gate_verdict(self, knowledge_graph: str, version: int) -> str | None:
-        """"passed"/"failed" for the version's latest Gate result; None if never gated."""
+        """ "passed"/"failed" for the version's latest Gate result; None if never gated."""
         for result in reversed(self._store.list_gate_results(knowledge_graph)):
             if result.ontology_version == version:
                 return "passed" if result.passed else "failed"

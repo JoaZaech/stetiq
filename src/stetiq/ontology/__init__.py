@@ -14,23 +14,30 @@ from stetiq.ontology.diff import (
     OntologyDiff,
     diff_ontologies,
 )
-from stetiq.ontology.model import Constraint, NodeType, Ontology, Pattern, Property, RelationshipType
+from stetiq.ontology.model import (
+    Constraint,
+    NodeType,
+    Ontology,
+    Pattern,
+    Property,
+    RelationshipType,
+)
 from stetiq.ontology.yaml_format import parse_dict, parse_yaml, to_yaml
 
 __all__ = [
     "Change",
-    "Constraint",
     "ChangeKind",
     "Classification",
-    "OntologyDiff",
-    "diff_ontologies",
+    "Constraint",
     "NodeType",
     "Ontology",
+    "OntologyDiff",
     "Pattern",
     "Property",
     "RelationshipType",
     "canonical_json",
     "content_hash",
+    "diff_ontologies",
     "from_canonical_json",
     "from_dict",
     "parse_dict",

@@ -36,9 +36,7 @@ def result(results, evaluator):
     return found
 
 
-def test_conformance_appears_as_an_evaluation_result_on_the_run(
-    client, support_kg, graph_source
-):
+def test_conformance_appears_as_an_evaluation_result_on_the_run(client, support_kg, graph_source):
     seed_support_graph(graph_source)
 
     run = run_once(client)
@@ -114,9 +112,7 @@ def test_competency_questions_with_a_query_pass_when_their_result_is_non_empty(
 
     run = run_once(client)
 
-    execution = result(
-        client.get_run_evaluation_results(run.id), "competency_question_execution"
-    )
+    execution = result(client.get_run_evaluation_results(run.id), "competency_question_execution")
     assert execution.use_case_version == use_case.number
     assert execution.metrics == {
         "questions": 2,
@@ -143,8 +139,11 @@ def test_competency_questions_with_a_query_pass_when_their_result_is_non_empty(
         ([{"name": "Ada"}], ["Ada", "Bob"], "failed"),
         ([{"name": "Ada", "n": 1}], {"name": "Ada", "n": 1}, "passed"),  # a mapping: one row
         ([{"name": "Ada", "n": 2}], {"name": "Ada", "n": 1}, "failed"),
-        ([{"name": "Bob", "n": 1}, {"name": "Ada", "n": 2}],
-         [{"name": "Ada", "n": 2}, {"name": "Bob", "n": 1}], "passed"),  # rows, any order
+        (
+            [{"name": "Bob", "n": 1}, {"name": "Ada", "n": 2}],
+            [{"name": "Ada", "n": 2}, {"name": "Bob", "n": 1}],
+            "passed",
+        ),  # rows, any order
         ([], [], "passed"),  # an expected empty answer
     ],
 )
@@ -164,9 +163,7 @@ def test_a_competency_question_with_an_expected_answer_passes_only_when_the_resu
 
     run = run_once(client)
 
-    execution = result(
-        client.get_run_evaluation_results(run.id), "competency_question_execution"
-    )
+    execution = result(client.get_run_evaluation_results(run.id), "competency_question_execution")
     assert statuses(execution) == {"q": status}
     assert execution.details[0].data["check"] == "expected_answer"
 
@@ -234,18 +231,19 @@ def test_a_query_that_fails_fails_its_question_with_the_error_type_only(
 ):
     seed_support_graph(graph_source)
     client = client_factory(graph_source=ExplodingGraphSource(graph_source))
-    client.register_use_case(
-        support_kg, [stetiq.CompetencyQuestion("q", "Who?", query=WHO_OPENED)]
-    )
+    client.register_use_case(support_kg, [stetiq.CompetencyQuestion("q", "Who?", query=WHO_OPENED)])
 
     run = run_once(client)
 
-    execution = result(
-        client.get_run_evaluation_results(run.id), "competency_question_execution"
-    )
+    execution = result(client.get_run_evaluation_results(run.id), "competency_question_execution")
     [detail] = execution.details
     assert detail.metric == "failed_questions"
-    assert detail.data == {"status": "error", "rows": 0, "check": "non_empty", "error": "RuntimeError"}
+    assert detail.data == {
+        "status": "error",
+        "rows": 0,
+        "check": "non_empty",
+        "error": "RuntimeError",
+    }
     assert execution.metrics["failed_questions"] == 1
 
 
@@ -279,9 +277,12 @@ def test_re_running_judges_against_a_chosen_use_case_version(client, support_kg,
         support_kg, stetiq.CompetencyQuestion("b", "Who else?", query=WHO_OPENED)
     )
     run = run_once(client)
-    assert result(
-        client.get_run_evaluation_results(run.id), "competency_question_execution"
-    ).use_case_version == 2
+    assert (
+        result(
+            client.get_run_evaluation_results(run.id), "competency_question_execution"
+        ).use_case_version
+        == 2
+    )
 
     results = client.evaluate_run(run.id, use_case_version=first.number)
 
@@ -290,9 +291,7 @@ def test_re_running_judges_against_a_chosen_use_case_version(client, support_kg,
     assert statuses(execution) == {"a": "passed"}
 
 
-def test_without_a_use_case_no_competency_questions_are_executed(
-    client, support_kg, graph_source
-):
+def test_without_a_use_case_no_competency_questions_are_executed(client, support_kg, graph_source):
     seed_support_graph(graph_source)
 
     run = run_once(client)
@@ -344,9 +343,11 @@ def test_a_failing_custom_run_evaluator_raises_but_the_run_and_other_results_sta
     seed_support_graph(graph_source)
     client.register_evaluator(Broken())
 
-    with pytest.raises(stetiq.EvaluatorError, match="broken"):
-        with client.start_run(support_kg, ontology_version=1):
-            pass
+    with (
+        pytest.raises(stetiq.EvaluatorError, match="broken"),
+        client.start_run(support_kg, ontology_version=1),
+    ):
+        pass
 
     [run] = client.list_runs(support_kg)
     assert run.status == "finished"
@@ -379,9 +380,7 @@ def test_an_aborted_run_has_no_observation_to_evaluate(client, support_kg, graph
         client.evaluate_run(run.id)
 
 
-def test_a_run_failed_by_strict_evolution_mode_is_still_evaluated(
-    client, support_kg, graph_source
-):
+def test_a_run_failed_by_strict_evolution_mode_is_still_evaluated(client, support_kg, graph_source):
     client.set_evolution_mode(support_kg, "strict")
     seed_support_graph(graph_source)
     graph_source.add_node(["Agent"], {})

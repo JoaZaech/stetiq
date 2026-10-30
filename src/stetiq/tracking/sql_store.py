@@ -43,16 +43,18 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import StaticPool
 
+from stetiq import use_case as use_case_format
 from stetiq.conformance import Conformance
+from stetiq.drift import DriftFinding, DriftThresholds
 from stetiq.errors import KnowledgeGraphAlreadyExistsError
 from stetiq.evaluation.framework import Detail
 from stetiq.gates import outcome_from_dict, outcome_to_dict
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import canonical_json, from_canonical_json
-from stetiq import use_case as use_case_format
 from stetiq.tracking.entities import (
     Alias,
     ConstructionRun,
+    DriftEvent,
     EvaluationResult,
     EvolutionMode,
     GateResult,
@@ -63,8 +65,6 @@ from stetiq.tracking.entities import (
     RunStatus,
     UseCaseVersion,
 )
-from stetiq.drift import DriftFinding, DriftThresholds
-from stetiq.tracking.entities import DriftEvent
 
 metadata = MetaData()
 
@@ -328,9 +328,7 @@ def _engine(database_url: str):
         engine = create_engine(url, connect_args={"check_same_thread": False})
     else:
         # One shared connection, or every pooled connection would see its own empty DB.
-        engine = create_engine(
-            url, poolclass=StaticPool, connect_args={"check_same_thread": False}
-        )
+        engine = create_engine(url, poolclass=StaticPool, connect_args={"check_same_thread": False})
 
     # pysqlite's own transaction handling is off; we emit BEGIN IMMEDIATE so a
     # transaction takes the write lock up front (no lost-update on numbering).
@@ -402,7 +400,9 @@ class SqlStore:
             row = conn.execute(query).mappings().first()
         if row is None:
             return None
-        return KnowledgeGraph(name=row["name"], created_at=datetime.fromisoformat(row["created_at"]))
+        return KnowledgeGraph(
+            name=row["name"], created_at=datetime.fromisoformat(row["created_at"])
+        )
 
     def list_knowledge_graphs(self) -> list[KnowledgeGraph]:
         query = select(knowledge_graphs).order_by(knowledge_graphs.c.name)
@@ -564,9 +564,7 @@ class SqlStore:
             conn.execute(
                 update(construction_runs)
                 .where(construction_runs.c.id == run_id)
-                .values(
-                    status=status, ended_at=ended_at.isoformat(), observation_id=observation_id
-                )
+                .values(status=status, ended_at=ended_at.isoformat(), observation_id=observation_id)
             )
 
     def set_run_conformance(self, run_id: str, conformance: Conformance) -> None:
@@ -766,9 +764,13 @@ class SqlStore:
     def set_contract_alias(self, knowledge_graph: str, alias: str) -> None:
         with self._connection() as conn:
             conn.execute(
-                delete(contract_aliases).where(contract_aliases.c.knowledge_graph == knowledge_graph)
+                delete(contract_aliases).where(
+                    contract_aliases.c.knowledge_graph == knowledge_graph
+                )
             )
-            conn.execute(insert(contract_aliases).values(knowledge_graph=knowledge_graph, alias=alias))
+            conn.execute(
+                insert(contract_aliases).values(knowledge_graph=knowledge_graph, alias=alias)
+            )
 
     def get_contract_alias(self, knowledge_graph: str) -> str | None:
         query = select(contract_aliases.c.alias).where(

@@ -149,5 +149,9 @@ def neo4j_admin_driver(neo4j_container):
 def _no_graph_source_from_the_environment(monkeypatch):
     """Tests opt in to env-configured Graph Sources explicitly; the developer's own
     STETIQ_GRAPH_SOURCE_* settings never leak into the suite."""
-    for name in ("STETIQ_GRAPH_SOURCE_URI", "STETIQ_GRAPH_SOURCE_USER", "STETIQ_GRAPH_SOURCE_PASSWORD"):
+    for name in (
+        "STETIQ_GRAPH_SOURCE_URI",
+        "STETIQ_GRAPH_SOURCE_USER",
+        "STETIQ_GRAPH_SOURCE_PASSWORD",
+    ):
         monkeypatch.delenv(name, raising=False)

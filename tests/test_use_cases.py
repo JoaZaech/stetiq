@@ -110,14 +110,19 @@ patterns:
 """
 
 
-def test_a_new_ontology_version_reports_unanswerable_questions_with_the_missing_concepts(client, kg):
+def test_a_new_ontology_version_reports_unanswerable_questions_with_the_missing_concepts(
+    client, kg
+):
     client.register_use_case(kg.name, USE_CASE)
 
     version = client.register_ontology(kg.name, WITHOUT_OPENED)
 
     result = answerability(client.get_evaluation_results(kg.name, version.number))
     assert result.use_case_version == 1
-    assert (result.metrics["answerable_questions"], result.metrics["unanswerable_questions"]) == (1, 1)
+    assert (result.metrics["answerable_questions"], result.metrics["unanswerable_questions"]) == (
+        1,
+        1,
+    )
     assert result.metrics["answerable_ratio"] == 0.5
     questions = per_question(result)
     assert questions["customer-names"]["status"] == "answerable"

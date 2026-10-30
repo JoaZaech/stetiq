@@ -103,9 +103,7 @@ def test_only_an_existing_alias_can_be_contract_alias(client, support_kg):
     assert client.get_contract_alias(support_kg) == "production"
 
 
-def test_a_run_without_an_explicit_version_consumes_the_contract_alias_version(
-    client, support_kg
-):
+def test_a_run_without_an_explicit_version_consumes_the_contract_alias_version(client, support_kg):
     client.bind_graph_source(support_kg, stetiq.GraphSourceScope(database="neo4j"))
     client.set_alias(support_kg, "production", 2)
 

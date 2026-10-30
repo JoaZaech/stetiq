@@ -189,8 +189,10 @@ def check_parameters(evaluator_name: str, parameters: Any) -> dict[str, Paramete
     for key, value in parameters.items():
         if not isinstance(key, str) or not key:
             raise EvaluatorError(f"Evaluator {evaluator_name!r}: parameter names must be strings")
-        if isinstance(value, bool) or not isinstance(value, (str, int, float)) or (
-            isinstance(value, float) and not math.isfinite(value)
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (str, int, float))
+            or (isinstance(value, float) and not math.isfinite(value))
         ):
             raise EvaluatorError(
                 f"Evaluator {evaluator_name!r}: parameter {key!r} must be a string or "

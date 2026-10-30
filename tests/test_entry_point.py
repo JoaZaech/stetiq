@@ -39,7 +39,15 @@ def pipeline(tmp_path):
 
     def entry_point(exit_code=0, *extra):
         return stetiq.EntryPoint(
-            command=(sys.executable, str(script), "{ontology}", "{graph_source}", str(record), str(exit_code), *extra)
+            command=(
+                sys.executable,
+                str(script),
+                "{ontology}",
+                "{graph_source}",
+                str(record),
+                str(exit_code),
+                *extra,
+            )
         )
 
     entry_point.record = lambda: json.loads(record.read_text())
@@ -67,7 +75,11 @@ def test_run_entry_point_passes_the_contract_ontology_and_graph_source_then_obse
     assert yaml.safe_load(record["ontology"]) == yaml.safe_load(
         client.get_ontology_yaml(support_kg, 1)
     )
-    assert json.loads(record["graph_source"]) == {"database": "neo4j", "label": "KG_support", "namespace": None}
+    assert json.loads(record["graph_source"]) == {
+        "database": "neo4j",
+        "label": "KG_support",
+        "namespace": None,
+    }
 
 
 def seed_undeclared_concept(graph_source):
@@ -131,14 +143,29 @@ def test_the_declared_ontology_follows_the_contract_alias_unless_overridden(
     passed_by_version = pipeline.record()["ontology"]
     by_alias = client.run_entry_point(support_kg, pipeline(), alias="staging")
 
-    assert [by_contract.ontology_version, by_version.ontology_version, by_alias.ontology_version] == [1, 2, 2]
-    assert [n["label"] for n in yaml.safe_load(passed_by_version)["node_types"]] == ["Agent", "Customer", "Ticket"]
+    assert [
+        by_contract.ontology_version,
+        by_version.ontology_version,
+        by_alias.ontology_version,
+    ] == [1, 2, 2]
+    assert [n["label"] for n in yaml.safe_load(passed_by_version)["node_types"]] == [
+        "Agent",
+        "Customer",
+        "Ticket",
+    ]
 
 
 def test_every_placeholder_is_filled_inside_arguments(client, support_kg, pipeline):
     run = client.run_entry_point(
         support_kg,
-        pipeline(0, "kg={knowledge_graph}", "v{ontology_version}", "{run_id}", "{database}/{label}/{namespace}", "{other}"),
+        pipeline(
+            0,
+            "kg={knowledge_graph}",
+            "v{ontology_version}",
+            "{run_id}",
+            "{database}/{label}/{namespace}",
+            "{other}",
+        ),
     )
 
     assert pipeline.record()["args"] == ["kg=support", "v1", run.id, "neo4j/KG_support/", "{other}"]
@@ -155,8 +182,14 @@ def test_a_command_that_cannot_be_started_fails_the_run_and_raises(client, suppo
 
 def test_an_entry_point_is_read_from_the_repo_config_as_a_string_or_a_list():
     assert stetiq.EntryPoint.from_config(
-        {"entry_point": {"command": "python build.py --ontology '{ontology}' --scope {graph_source}"}}
-    ) == stetiq.EntryPoint(command=("python", "build.py", "--ontology", "{ontology}", "--scope", "{graph_source}"))
+        {
+            "entry_point": {
+                "command": "python build.py --ontology '{ontology}' --scope {graph_source}"
+            }
+        }
+    ) == stetiq.EntryPoint(
+        command=("python", "build.py", "--ontology", "{ontology}", "--scope", "{graph_source}")
+    )
     assert stetiq.EntryPoint.from_config(
         {"gates": {}, "entry_point": {"command": ["make", "graph"]}}
     ) == stetiq.EntryPoint(command=("make", "graph"))
@@ -164,7 +197,13 @@ def test_an_entry_point_is_read_from_the_repo_config_as_a_string_or_a_list():
 
 @pytest.mark.parametrize(
     "config",
-    [{}, {"entry_point": None}, {"entry_point": {}}, {"entry_point": {"command": ""}}, {"entry_point": {"command": [1]}}],
+    [
+        {},
+        {"entry_point": None},
+        {"entry_point": {}},
+        {"entry_point": {"command": ""}},
+        {"entry_point": {"command": [1]}},
+    ],
 )
 def test_a_missing_or_malformed_entry_point_is_rejected(config):
     with pytest.raises(stetiq.InvalidEntryPointError):

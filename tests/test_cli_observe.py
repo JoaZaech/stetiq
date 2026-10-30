@@ -25,7 +25,9 @@ def cli_env(tmp_path, monkeypatch, support_ontology):
     client.bind_graph_source("support", GraphSourceScope(database="neo4j"))
     ada = graph.add_node(["Customer"], {"name": "Ada"})
     for _ in range(10):
-        graph.add_relationship(ada, "OPENED", graph.add_node(["Ticket"], {"opened_at": date(2026, 1, 1)}))
+        graph.add_relationship(
+            ada, "OPENED", graph.add_node(["Ticket"], {"opened_at": date(2026, 1, 1)})
+        )
     return graph, client
 
 
@@ -59,7 +61,11 @@ def test_observe_reads_statistical_thresholds_and_the_kg_from_the_repo_config(cl
     first = runner.invoke(app, ["observe"])
     ada = graph.add_node(["Customer"], {"name": "Bob"}, database="later")
     for _ in range(12):
-        graph.add_relationship(ada, "OPENED", graph.add_node(["Ticket"], {"opened_at": date(2026, 1, 2)}, database="later"))
+        graph.add_relationship(
+            ada,
+            "OPENED",
+            graph.add_node(["Ticket"], {"opened_at": date(2026, 1, 2)}, database="later"),
+        )
     client.bind_graph_source("support", GraphSourceScope(database="later"))
 
     second = runner.invoke(app, ["observe"])

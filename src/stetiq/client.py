@@ -9,6 +9,7 @@ import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
+from stetiq.drift import DriftThresholds
 from stetiq.entry_point import EntryPoint, EntryPointError, placeholder_values
 from stetiq.errors import (
     EvaluatorError,
@@ -25,14 +26,12 @@ from stetiq.evaluation.framework import (
 from stetiq.evaluation.llm_mapping import question_mapper_from_env
 from stetiq.evaluation.run import CompetencyQuestionExecution, RunSubject, ScopedGraphSource
 from stetiq.gates import GatesInput, load_gates
-from stetiq.tracking.service import RESERVED_EVALUATOR_NAMES
 from stetiq.graph_source import GraphSource, GraphSourceScope, graph_source_from_env
 from stetiq.ontology import Ontology, parse_yaml
-from stetiq.ontology.yaml_format import to_yaml
 from stetiq.ontology.diff import OntologyDiff, diff_ontologies
+from stetiq.ontology.yaml_format import to_yaml
 from stetiq.tracking import (
     Alias,
-    Promotion,
     ConstructionRun,
     EvaluationResult,
     GateResult,
@@ -40,12 +39,15 @@ from stetiq.tracking import (
     LocalTrackingService,
     Observation,
     OntologyVersion,
+    Promotion,
     RemoteTrackingService,
     RunComparison,
     SqlStore,
     TrackingService,
     UseCaseVersion,
 )
+from stetiq.tracking.entities import DriftEvent, EvolutionMode, ObservationOutcome
+from stetiq.tracking.service import RESERVED_EVALUATOR_NAMES
 from stetiq.use_case import (
     CompetencyQuestion,
     UseCase,
@@ -53,8 +55,6 @@ from stetiq.use_case import (
     parse_use_case_dict,
     parse_use_case_yaml,
 )
-from stetiq.drift import DriftThresholds
-from stetiq.tracking.entities import DriftEvent, EvolutionMode, ObservationOutcome
 
 TRACKING_URI_ENV = "STETIQ_TRACKING_URI"
 DEFAULT_TRACKING_URI = "sqlite:///.stetiq/stetiq.db"
@@ -69,8 +69,9 @@ def resolve_actor(actor: str | None = None) -> str:
         return actor or os.environ[ACTOR_ENV]
     try:
         return getpass.getuser()
-    except Exception:
+    except (KeyError, OSError):  # no login name for this process
         return "unknown"
+
 
 # A Declared Ontology given to the SDK: stetiq YAML text, a path to a YAML file,
 # or an already-built Ontology model.
@@ -98,7 +99,9 @@ def service_for_uri(tracking_uri: str, *, token: str | None = None) -> TrackingS
     if scheme in ("http", "https"):
         return RemoteTrackingService(tracking_uri, token=resolve_token(token))
     if scheme == "sqlite" or scheme.startswith("postgresql"):
-        return LocalTrackingService(SqlStore(tracking_uri), question_mapper=question_mapper_from_env())
+        return LocalTrackingService(
+            SqlStore(tracking_uri), question_mapper=question_mapper_from_env()
+        )
     raise ValueError(
         f"Unsupported tracking URI {tracking_uri!r} "
         "(expected http(s)://<server>, sqlite:///<path> or postgresql://...)"
@@ -112,6 +115,7 @@ def _to_ontology(ontology: OntologyInput) -> Ontology:
         return parse_yaml(Path(ontology).read_text(encoding="utf-8"))
     return parse_yaml(ontology)
 
+
 def _evaluation_key(evaluator: str, parameters: Mapping[str, object]) -> str:
     if not parameters:
         return evaluator
@@ -120,7 +124,9 @@ def _evaluation_key(evaluator: str, parameters: Mapping[str, object]) -> str:
 
 # A Use Case given to the SDK: Use Case YAML text, a path to a YAML file, a `UseCase`,
 # or just its Competency Questions.
-UseCaseInput = str | os.PathLike[str] | UseCase | list[CompetencyQuestion] | tuple[CompetencyQuestion, ...]
+UseCaseInput = (
+    str | os.PathLike[str] | UseCase | list[CompetencyQuestion] | tuple[CompetencyQuestion, ...]
+)
 
 
 def _to_use_case(use_case: UseCaseInput) -> UseCase:
@@ -200,11 +206,11 @@ class Client:
     def get_ontology_yaml(self, knowledge_graph: str, number: int) -> str:
         return self.get_ontology_version(knowledge_graph, number).to_yaml()
 
-    def get_evaluation_results(
-        self, knowledge_graph: str, version: int
-    ) -> list[EvaluationResult]:
+    def get_evaluation_results(self, knowledge_graph: str, version: int) -> list[EvaluationResult]:
         """The latest result of every Evaluator (built-in and custom) for an Ontology Version."""
-        return self._service.get_evaluation_results(knowledge_graph, "ontology_version", str(version))
+        return self._service.get_evaluation_results(
+            knowledge_graph, "ontology_version", str(version)
+        )
 
     def evaluate(
         self,
@@ -322,7 +328,6 @@ class Client:
         candidates = [v for v in versions if v.number not in aliased]
         return (candidates or versions)[-1]
 
-
     def diff_ontologies(self, base: OntologyInput, target: OntologyInput) -> OntologyDiff:
         """The Ontology Diff between two Ontologies that need not be registered (e.g. files in a repo)."""
         return diff_ontologies(_to_ontology(base), _to_ontology(target))
@@ -415,7 +420,9 @@ class Client:
 
     def get_ontology_version_by_alias(self, knowledge_graph: str, alias: str) -> OntologyVersion:
         """The Ontology Version `alias` currently points to, e.g. for a downstream consumer."""
-        return self.get_ontology_version(knowledge_graph, self.get_alias(knowledge_graph, alias).version)
+        return self.get_ontology_version(
+            knowledge_graph, self.get_alias(knowledge_graph, alias).version
+        )
 
     def list_promotions(self, knowledge_graph: str) -> list[Promotion]:
         """The Alias audit log: every Alias move, oldest first."""
@@ -528,7 +535,9 @@ class Client:
                 try:
                     exit_code = subprocess.run(argv, cwd=cwd).returncode
                 except OSError as e:
-                    raise EntryPointError(f"could not start the Construction Entry Point {argv[0]!r}: {e}") from e
+                    raise EntryPointError(
+                        f"could not start the Construction Entry Point {argv[0]!r}: {e}"
+                    ) from e
             run.log_param("entry_point.exit_code", exit_code)
             if exit_code != 0:
                 run.fail()

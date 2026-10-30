@@ -16,7 +16,9 @@ from stetiq.errors import EvaluatorError, GateConfigError, StetiqError
 from stetiq.gates import parse_gates
 from stetiq.use_case import to_yaml as to_use_case_yaml
 
-app = typer.Typer(no_args_is_help=True, help="Version, evaluate and govern knowledge-graph ontologies.")
+app = typer.Typer(
+    no_args_is_help=True, help="Version, evaluate and govern knowledge-graph ontologies."
+)
 kg_app = typer.Typer(no_args_is_help=True, help="Knowledge Graphs.")
 ontology_app = typer.Typer(no_args_is_help=True, help="Ontology Versions.")
 app.add_typer(kg_app, name="kg")
@@ -28,7 +30,11 @@ app.add_typer(alias_app, name="alias")
 
 TrackingUri = Annotated[
     str | None,
-    typer.Option("--tracking-uri", envvar="STETIQ_TRACKING_URI", help="http(s)://<server> (remote) or sqlite:///<path> (local)"),
+    typer.Option(
+        "--tracking-uri",
+        envvar="STETIQ_TRACKING_URI",
+        help="http(s)://<server> (remote) or sqlite:///<path> (local)",
+    ),
 ]
 OntologyFile = Annotated[Path, typer.Argument(exists=True, dir_okay=False, help="stetiq YAML file")]
 
@@ -82,7 +88,9 @@ def kg_create(
     name: str,
     ontology: Annotated[
         Path | None,
-        typer.Option("--ontology", exists=True, dir_okay=False, help="Declared Ontology (stetiq YAML)"),
+        typer.Option(
+            "--ontology", exists=True, dir_okay=False, help="Declared Ontology (stetiq YAML)"
+        ),
     ] = None,
     tracking_uri: TrackingUri = None,
 ) -> None:
@@ -110,7 +118,9 @@ def kg_list(tracking_uri: TrackingUri = None) -> None:
 def kg_bind_source(
     knowledge_graph: str,
     database: Annotated[str, typer.Option("--database", help="Graph Source database")] = "neo4j",
-    label: Annotated[str | None, typer.Option("--label", help="Only nodes carrying this label")] = None,
+    label: Annotated[
+        str | None, typer.Option("--label", help="Only nodes carrying this label")
+    ] = None,
     namespace: Annotated[
         str | None, typer.Option("--namespace", help="Only nodes in this namespace")
     ] = None,
@@ -165,7 +175,9 @@ def kg_evolution_mode(
 
 
 @ontology_app.command("register")
-def ontology_register(knowledge_graph: str, ontology: OntologyFile, tracking_uri: TrackingUri = None) -> None:
+def ontology_register(
+    knowledge_graph: str, ontology: OntologyFile, tracking_uri: TrackingUri = None
+) -> None:
     """Register an Ontology by hand; identical content returns the existing version."""
     try:
         version = _client(tracking_uri).register_ontology(knowledge_graph, ontology)
@@ -183,7 +195,9 @@ def ontology_list(knowledge_graph: str, tracking_uri: TrackingUri = None) -> Non
         raise _fail(e) from None
     typer.echo(f"{'VERSION':<8} {'ORIGIN':<11} {'HASH':<13} CREATED")
     for v in versions:
-        typer.echo(f"{v.number:<8} {v.origin:<11} {v.content_hash[:12]:<13} {v.created_at.isoformat()}")
+        typer.echo(
+            f"{v.number:<8} {v.origin:<11} {v.content_hash[:12]:<13} {v.created_at.isoformat()}"
+        )
 
 
 @ontology_app.command("get")
@@ -215,11 +229,15 @@ def _echo_results(results) -> None:
         typer.echo(f"{r.evaluator}{against}: {metrics}")
         for d in r.details:
             metric = f" [{d.metric}]" if d.metric else ""
-            typer.echo(f"  - {d.item}{metric}: {d.message}" if d.message else f"  - {d.item}{metric}")
+            typer.echo(
+                f"  - {d.item}{metric}: {d.message}" if d.message else f"  - {d.item}{metric}"
+            )
 
 
 @ontology_app.command("evaluations")
-def ontology_evaluations(knowledge_graph: str, version: int, tracking_uri: TrackingUri = None) -> None:
+def ontology_evaluations(
+    knowledge_graph: str, version: int, tracking_uri: TrackingUri = None
+) -> None:
     """Show the latest result of every Evaluator for an Ontology Version."""
     try:
         results = _client(tracking_uri).get_evaluation_results(knowledge_graph, version)
@@ -238,7 +256,10 @@ def ontology_evaluate(
     ] = None,
     use_case_version: Annotated[
         int | None,
-        typer.Option("--use-case-version", help="Judge answerability against this Use Case version (default latest)"),
+        typer.Option(
+            "--use-case-version",
+            help="Judge answerability against this Use Case version (default latest)",
+        ),
     ] = None,
     tracking_uri: TrackingUri = None,
 ) -> None:
@@ -256,7 +277,9 @@ def ontology_evaluate(
 @ontology_app.command("diff")
 def ontology_diff(
     knowledge_graph: str,
-    base: Annotated[int | None, typer.Argument(help="Default: the Contract Alias's version")] = None,
+    base: Annotated[
+        int | None, typer.Argument(help="Default: the Contract Alias's version")
+    ] = None,
     target: Annotated[
         int | None, typer.Argument(help="Default: the latest Candidate, else the latest version")
     ] = None,
@@ -268,7 +291,9 @@ def ontology_diff(
     except StetiqError as e:
         raise _fail(e) from None
     if not d.changes:
-        typer.echo(f"No changes between Ontology Versions {base or 'contract'} and {target or 'latest Candidate'}")
+        typer.echo(
+            f"No changes between Ontology Versions {base or 'contract'} and {target or 'latest Candidate'}"
+        )
         return
     width = max(len(c.concept) for c in d.changes)
     for c in d.changes:
@@ -279,7 +304,9 @@ def ontology_diff(
 @use_case_app.command("register")
 def use_case_register(
     knowledge_graph: str,
-    use_case: Annotated[Path, typer.Argument(exists=True, dir_okay=False, help="Use Case YAML file")],
+    use_case: Annotated[
+        Path, typer.Argument(exists=True, dir_okay=False, help="Use Case YAML file")
+    ],
     tracking_uri: TrackingUri = None,
 ) -> None:
     """Register the Knowledge Graph's Use Case as a new Use Case version."""
@@ -342,13 +369,19 @@ def use_case_get(knowledge_graph: str, version: int, tracking_uri: TrackingUri =
 
 Actor = Annotated[
     str | None,
-    typer.Option("--actor", envvar="STETIQ_ACTOR", help="Who the audit log records (default: OS user)"),
+    typer.Option(
+        "--actor", envvar="STETIQ_ACTOR", help="Who the audit log records (default: OS user)"
+    ),
 ]
 
 
 @alias_app.command("set")
 def alias_set(
-    knowledge_graph: str, alias: str, version: int, actor: Actor = None, tracking_uri: TrackingUri = None
+    knowledge_graph: str,
+    alias: str,
+    version: int,
+    actor: Actor = None,
+    tracking_uri: TrackingUri = None,
 ) -> None:
     """Create ALIAS or move it to VERSION (Promotion, or rollback to an earlier version)."""
     try:
@@ -405,7 +438,9 @@ def alias_log(knowledge_graph: str, tracking_uri: TrackingUri = None) -> None:
 @alias_app.command("contract")
 def alias_contract(
     knowledge_graph: str,
-    alias: Annotated[str | None, typer.Argument(help="Designate this Alias; omit to show the current one")] = None,
+    alias: Annotated[
+        str | None, typer.Argument(help="Designate this Alias; omit to show the current one")
+    ] = None,
     tracking_uri: TrackingUri = None,
 ) -> None:
     """Show the Contract Alias, or designate ALIAS as the Contract Alias."""
@@ -420,7 +455,9 @@ def alias_contract(
 
 ConfigFile = Annotated[
     Path,
-    typer.Option("--config", dir_okay=False, help="Repo config file declaring the Construction Entry Point"),
+    typer.Option(
+        "--config", dir_okay=False, help="Repo config file declaring the Construction Entry Point"
+    ),
 ]
 
 
@@ -431,9 +468,14 @@ def run(
     ] = None,
     config: ConfigFile = Path(DEFAULT_CONFIG_PATH),
     ontology_version: Annotated[
-        int | None, typer.Option("--ontology-version", help="Declared Ontology (default: the Contract Alias's version)")
+        int | None,
+        typer.Option(
+            "--ontology-version", help="Declared Ontology (default: the Contract Alias's version)"
+        ),
     ] = None,
-    alias: Annotated[str | None, typer.Option("--alias", help="Use the version this Alias points to")] = None,
+    alias: Annotated[
+        str | None, typer.Option("--alias", help="Use the version this Alias points to")
+    ] = None,
     tracking_uri: TrackingUri = None,
 ) -> None:
     """Invoke the Construction Entry Point as a Construction Run, then observe the Graph Source.
@@ -448,7 +490,9 @@ def run(
         raise typer.Exit(code=1) from None
     knowledge_graph = knowledge_graph or settings.get("knowledge_graph")
     if not knowledge_graph:
-        typer.echo("error: name the Knowledge Graph, or set knowledge_graph in the repo config", err=True)
+        typer.echo(
+            "error: name the Knowledge Graph, or set knowledge_graph in the repo config", err=True
+        )
         raise typer.Exit(code=1)
     try:
         result = _client(tracking_uri).run_entry_point(
@@ -565,7 +609,9 @@ DEFAULT_CONFIG = Path(DEFAULT_CONFIG_PATH)
 
 ConfigPath = Annotated[
     Path | None,
-    typer.Option("--config", dir_okay=False, help="Repo config file (default ./stetiq.yaml, if present)"),
+    typer.Option(
+        "--config", dir_okay=False, help="Repo config file (default ./stetiq.yaml, if present)"
+    ),
 ]
 
 
@@ -606,7 +652,9 @@ def observe(
         thresholds = thresholds_from_config(settings)
         kg = knowledge_graph or settings.get("knowledge_graph")
         if not kg:
-            raise StetiqError("no Knowledge Graph given (argument or `knowledge_graph` in the repo config)")
+            raise StetiqError(
+                "no Knowledge Graph given (argument or `knowledge_graph` in the repo config)"
+            )
         outcome = _client(tracking_uri).observe(kg, thresholds=thresholds)
     except StetiqError as e:
         raise _fail(e) from None
@@ -673,7 +721,9 @@ def gate(
         gates = parse_gates(settings.get("gates"))
         if not gates:
             raise GateConfigError(f"{config} defines no Gates")
-        result = _client(tracking_uri).evaluate_gates(knowledge_graph, gates, version=version, run=run)
+        result = _client(tracking_uri).evaluate_gates(
+            knowledge_graph, gates, version=version, run=run
+        )
     except StetiqError as e:
         raise _fail(e) from None
     for outcome in result.outcomes:
@@ -780,7 +830,9 @@ def runs_evaluate(
     ] = None,
     use_case_version: Annotated[
         int | None,
-        typer.Option("--use-case-version", help="Execute this Use Case version's questions (default latest)"),
+        typer.Option(
+            "--use-case-version", help="Execute this Use Case version's questions (default latest)"
+        ),
     ] = None,
     tracking_uri: TrackingUri = None,
 ) -> None:

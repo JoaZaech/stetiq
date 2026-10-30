@@ -139,9 +139,7 @@ def _in_scope(node: _Node, scope: GraphSourceScope) -> bool:
         return False
     if scope.label is not None and scope.label not in node.labels:
         return False
-    if scope.namespace is not None and node.properties.get(NAMESPACE_PROPERTY) != scope.namespace:
-        return False
-    return True
+    return scope.namespace is None or node.properties.get(NAMESPACE_PROPERTY) == scope.namespace
 
 
 def _observed_properties(records: list[dict[str, Any]]) -> tuple[ObservedProperty, ...]:

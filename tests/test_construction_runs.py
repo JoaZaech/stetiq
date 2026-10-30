@@ -144,9 +144,7 @@ def test_an_observation_stores_no_individual_entities(client, support_kg, graph_
     assert "2026-01-01" not in repr(observation)
 
 
-def test_a_run_used_as_context_manager_ends_with_an_observation(
-    client, support_kg, graph_source
-):
+def test_a_run_used_as_context_manager_ends_with_an_observation(client, support_kg, graph_source):
     with client.start_run(support_kg, ontology_version=1) as run:
         _seed_support_graph(graph_source)
 
@@ -156,9 +154,8 @@ def test_a_run_used_as_context_manager_ends_with_an_observation(
 
 
 def test_a_crashed_run_is_recorded_as_failed_without_an_observation(client, support_kg):
-    with pytest.raises(RuntimeError):
-        with client.start_run(support_kg, ontology_version=1) as run:
-            raise RuntimeError("extractor crashed")
+    with pytest.raises(RuntimeError), client.start_run(support_kg, ontology_version=1) as run:
+        raise RuntimeError("extractor crashed")
 
     failed = client.get_run(run.id)
     assert failed.status == "failed"

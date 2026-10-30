@@ -49,9 +49,7 @@ class CompetencyQuestionMapper(Protocol):
     is stored with each question it mapped, as `data.mapper`.
     """
 
-    def map_question(
-        self, question: CompetencyQuestion, ontology: Ontology
-    ) -> Sequence[str]: ...
+    def map_question(self, question: CompetencyQuestion, ontology: Ontology) -> Sequence[str]: ...
 
 
 class _OntologyIndex:
@@ -185,8 +183,10 @@ class StructuralAnswerability(OntologyVersionEvaluator):
                 return "query", found, None
         if self.mapper is not None:
             try:
-                mapped = [parse_concept_reference(c) for c in self.mapper.map_question(question, ontology)]
-            except Exception as exc:  # a model failure must not block versioning
+                mapped = [
+                    parse_concept_reference(c) for c in self.mapper.map_question(question, ontology)
+                ]
+            except Exception as exc:  # noqa: BLE001 -- a model failure must not block versioning
                 return None, [], f"mapper failed: {exc}"
             if mapped:
                 return "model", mapped, None

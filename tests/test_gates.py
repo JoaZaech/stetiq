@@ -88,14 +88,16 @@ def test_every_gate_evaluation_is_recorded_on_the_server_with_the_gate_definitio
     )
     assert not recorded.passed
     assert [g.to_dict() for g in recorded.gates] == [
-        {"name": "no-breaking-changes", "check": "ontology_diff", "max_classification": "deprecating"}
+        {
+            "name": "no-breaking-changes",
+            "check": "ontology_diff",
+            "max_classification": "deprecating",
+        }
     ]
     assert any("OPENED" in r for r in recorded.failed[0].reasons)
 
 
-def test_the_promotion_audit_log_records_the_target_versions_latest_gate_result(
-    client, support_kg
-):
+def test_the_promotion_audit_log_records_the_target_versions_latest_gate_result(client, support_kg):
     client.evaluate_gates(support_kg, NO_BREAKING, version=3)  # fails
     client.evaluate_gates(support_kg, NO_BREAKING, version=2)  # passes
     client.set_alias(support_kg, "staging", 3)
@@ -149,7 +151,9 @@ class CompetencyQuestions(stetiq.OntologyVersionEvaluator):
         answerable = any(r.label == "OPENED" for r in version.ontology.relationship_types)
         return stetiq.Evaluation(
             metrics={"unanswerable": 0 if answerable else 1},
-            details=() if answerable else (stetiq.Detail("cq-1", "Which tickets did Ada open?", "unanswerable"),),
+            details=()
+            if answerable
+            else (stetiq.Detail("cq-1", "Which tickets did Ada open?", "unanswerable"),),
         )
 
 
@@ -274,9 +278,7 @@ def test_a_candidate_is_gated_with_the_conformance_of_the_run_that_gave_rise_to_
     assert by_version.failed[0].reasons[0] == by_run.failed[0].reasons[0]
 
 
-def test_a_version_no_run_has_produced_or_consumed_fails_a_conformance_gate(
-    client, bound_kg
-):
+def test_a_version_no_run_has_produced_or_consumed_fails_a_conformance_gate(client, bound_kg):
     result = client.evaluate_gates(bound_kg, CONFORMANCE, version=1)
 
     assert not result.passed
@@ -295,7 +297,9 @@ def seed_in_namespace(graph_source, namespace, customers, tickets_per_customer=1
     for i in range(customers):
         customer = graph_source.add_node(["Customer"], {"name": f"c{i}", "namespace": namespace})
         for _ in range(tickets_per_customer):
-            ticket = graph_source.add_node(["Ticket"], {"opened_at": date(2026, 1, 1), "namespace": namespace})
+            ticket = graph_source.add_node(
+                ["Ticket"], {"opened_at": date(2026, 1, 1), "namespace": namespace}
+            )
             graph_source.add_relationship(customer, "OPENED", ticket)
 
 
@@ -384,9 +388,15 @@ def test_without_a_version_the_latest_version_is_gated(client, support_kg):
         ("gates: [{check: conformance}]", "missing 'min_score'"),
         ("gates: [{check: conformance, min_score: 2}]", "between 0 and 1"),
         ("gates: [{check: conformance, min_score: 0.9, typo: 1}]", "unknown key(s) typo"),
-        ("gates: [{check: ontology_diff, max_classification: awful}]", "additive, deprecating or breaking"),
+        (
+            "gates: [{check: ontology_diff, max_classification: awful}]",
+            "additive, deprecating or breaking",
+        ),
         ("gates: [{check: metric, evaluator: x, metric: y}]", "'min' and/or 'max'"),
-        ("gates: [{check: count_drop, max_drop: 0.1}, {check: count_drop, max_drop: 0.2}]", "Duplicate Gate names"),
+        (
+            "gates: [{check: count_drop, max_drop: 0.1}, {check: count_drop, max_drop: 0.2}]",
+            "Duplicate Gate names",
+        ),
         ("gates: {check: conformance}", "must be a list"),
     ],
 )

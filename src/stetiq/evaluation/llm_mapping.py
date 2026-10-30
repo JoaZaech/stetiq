@@ -144,7 +144,7 @@ def _concepts(response: Any) -> list[str]:
             continue
         try:
             parse_concept_reference(ref)
-        except Exception:
+        except ValueError:
             continue
         if ref not in usable:
             usable.append(ref)

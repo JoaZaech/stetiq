@@ -10,6 +10,7 @@ and comments are ignored.
 
 from __future__ import annotations
 
+import itertools
 import re
 
 from stetiq.use_case.concepts import (
@@ -27,9 +28,7 @@ _NODE = re.compile(
     rf"\(\s*(?P<var>{_ID})?\s*(?P<labels>:\s*{_ID}(?:\s*[:&|]\s*{_ID})*)?\s*"
     rf"(?P<props>\{{[^{{}}]*\}})?\s*\)"
 )
-_CONNECTOR = re.compile(
-    r"\s*(?P<back><)?\s*-\s*(?:\[(?P<body>[^\]]*)\])?\s*-\s*(?P<fwd>>)?\s*$"
-)
+_CONNECTOR = re.compile(r"\s*(?P<back><)?\s*-\s*(?:\[(?P<body>[^\]]*)\])?\s*-\s*(?P<fwd>>)?\s*$")
 _REL_BODY = re.compile(
     rf"^\s*(?P<var>{_ID})?\s*(?::\s*(?P<types>{_ID}(?:\s*\|\s*:?\s*{_ID})*))?\s*"
     rf"(?P<length>\*[^{{]*)?\s*(?P<props>\{{.*\}})?\s*$",
@@ -60,7 +59,7 @@ def requirements_from_query(query: str) -> list[Requirement]:
     # links[i]: how nodes[i] connects to nodes[i-1], as (connector, relationship body),
     # or None when they are not one chain (e.g. separate clauses or a function call).
     links: list[tuple[re.Match, re.Match] | None] = [None]
-    for prev, node in zip(nodes, nodes[1:]):
+    for prev, node in itertools.pairwise(nodes):
         connector = _CONNECTOR.match(text, prev.end(), node.start())
         body = _REL_BODY.match(connector.group("body") or "") if connector else None
         links.append((connector, body) if connector and body else None)

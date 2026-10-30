@@ -11,7 +11,6 @@ import json
 from typing import Any
 
 from stetiq import digest
-
 from stetiq.ontology.model import (
     Constraint,
     NodeType,
@@ -36,9 +35,7 @@ def _concept_to_dict(c: NodeType | RelationshipType) -> dict[str, Any]:
     if c.description is not None:
         d["description"] = c.description
     if c.properties:
-        d["properties"] = [
-            _property_to_dict(p) for p in sorted(c.properties, key=lambda p: p.name)
-        ]
+        d["properties"] = [_property_to_dict(p) for p in sorted(c.properties, key=lambda p: p.name)]
     if c.deprecated:
         d["deprecated"] = True
     if c.replaced_by is not None:
@@ -55,8 +52,7 @@ def to_dict(ontology: Ontology) -> dict[str, Any]:
             _concept_to_dict(n) for n in sorted(ontology.node_types, key=lambda n: n.label)
         ],
         "relationship_types": [
-            _concept_to_dict(r)
-            for r in sorted(ontology.relationship_types, key=lambda r: r.label)
+            _concept_to_dict(r) for r in sorted(ontology.relationship_types, key=lambda r: r.label)
         ],
         "patterns": [[p.source, p.relationship, p.target] for p in sorted(ontology.patterns)],
     }

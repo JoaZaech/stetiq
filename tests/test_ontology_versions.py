@@ -106,7 +106,10 @@ def test_a_version_is_fetched_back_as_yaml(client, kg):
 
     assert fetched == {
         "node_types": [
-            {"label": "Customer", "properties": [{"name": "name", "type": "STRING", "required": True}]},
+            {
+                "label": "Customer",
+                "properties": [{"name": "name", "type": "STRING", "required": True}],
+            },
             {
                 "label": "Ticket",
                 "description": "A support request",
@@ -143,7 +146,9 @@ patterns:
     fetched = yaml.safe_load(client.get_ontology_yaml(kg.name, v2.number))
     ontology = client.get_ontology_version(kg.name, v2.number).ontology
 
-    assert {"label": "Customer", "deprecated": True, "replacedBy": "Client"} in fetched["node_types"]
+    assert {"label": "Customer", "deprecated": True, "replacedBy": "Client"} in fetched[
+        "node_types"
+    ]
     assert {"label": "OPENED", "deprecated": True} in fetched["relationship_types"]
     assert {"label": "RAISED", "replacedBy": "OPENED"} in fetched["relationship_types"]
     assert ontology.node_type("Customer").replaced_by == "Client"
@@ -158,7 +163,10 @@ def test_node_type_hierarchy_round_trips_through_fetch(client, kg):
     fetched = yaml.safe_load(client.get_ontology_yaml(kg.name, v2.number))
 
     assert {"label": "Customer", "parent": "Party"} in fetched["node_types"]
-    assert client.get_ontology_version(kg.name, v2.number).ontology.node_type("Customer").parent == "Party"
+    assert (
+        client.get_ontology_version(kg.name, v2.number).ontology.node_type("Customer").parent
+        == "Party"
+    )
     again = client.register_ontology(kg.name, client.get_ontology_yaml(kg.name, v2.number))
     assert (again.number, again.content_hash) == (v2.number, v2.content_hash)
 
@@ -179,7 +187,9 @@ def test_constraints_round_trip_through_fetch(client, kg, support_ontology):
 
 
 def test_deprecating_a_concept_creates_a_new_version(client, kg, support_ontology):
-    deprecated = support_ontology.replace("  - label: Ticket\n", "  - label: Ticket\n    deprecated: true\n")
+    deprecated = support_ontology.replace(
+        "  - label: Ticket\n", "  - label: Ticket\n    deprecated: true\n"
+    )
 
     v2 = client.register_ontology(kg.name, deprecated)
 

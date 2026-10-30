@@ -19,7 +19,10 @@ if TYPE_CHECKING:
 def _concepts(ontology: Ontology) -> dict[tuple[str, str], str]:
     """(kind, identity) -> the Concept's display name."""
     concepts: dict[tuple[str, str], str] = {}
-    for kind, types in (("node", ontology.node_types), ("relationship", ontology.relationship_types)):
+    for kind, types in (
+        ("node", ontology.node_types),
+        ("relationship", ontology.relationship_types),
+    ):
         for t in types:
             concepts[(kind, t.label)] = t.label
             for p in t.properties:
@@ -73,7 +76,11 @@ class GoldOntologyAlignment(OntologyVersionEvaluator):
                     for k in extra
                 ),
                 *(
-                    Detail(reference[k], "missing from the evaluated version", "unmatched_reference_concepts")
+                    Detail(
+                        reference[k],
+                        "missing from the evaluated version",
+                        "unmatched_reference_concepts",
+                    )
                     for k in missing
                 ),
             ),

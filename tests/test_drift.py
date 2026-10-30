@@ -28,7 +28,9 @@ def seed_conforming_graph(graph_source, tickets=1, database="neo4j"):
     """Exactly the support ontology: Customer(name)-[OPENED]->Ticket(opened_at)."""
     ada = graph_source.add_node(["Customer"], {"name": "Ada"}, database=database)
     for _ in range(tickets):
-        ticket = graph_source.add_node(["Ticket"], {"opened_at": date(2026, 1, 1)}, database=database)
+        ticket = graph_source.add_node(
+            ["Ticket"], {"opened_at": date(2026, 1, 1)}, database=database
+        )
         graph_source.add_relationship(ada, "OPENED", ticket)
     return ada
 
@@ -246,7 +248,12 @@ def test_thresholds_come_from_the_drift_section_of_the_repo_config():
 
 @pytest.mark.parametrize(
     "section",
-    [{"max_count_drop": -0.1}, {"max_count_drop": "10%"}, {"max_count_dorp": 0.1}, ["max_count_drop"]],
+    [
+        {"max_count_drop": -0.1},
+        {"max_count_drop": "10%"},
+        {"max_count_dorp": 0.1},
+        ["max_count_drop"],
+    ],
 )
 def test_a_malformed_drift_section_is_rejected(section):
     with pytest.raises(InvalidDriftConfigError):

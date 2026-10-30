@@ -60,9 +60,7 @@ def test_the_breakdown_lists_declared_but_absent_and_present_but_undeclared_conc
         "OPENED",
     ]
     assert subjects(run.conformance.undeclared) == ["Agent", "Agent.name"]
-    assert subjects(run.conformance.pattern_mismatches) == [
-        "(Customer)-[OPENED]->(Ticket)"
-    ]
+    assert subjects(run.conformance.pattern_mismatches) == ["(Customer)-[OPENED]->(Ticket)"]
     # Elements: 6 declared (Customer, Customer.name, Ticket, Ticket.opened_at, OPENED, the
     # pattern) + 2 undeclared (Agent, Agent.name); only Customer and Customer.name conform.
     assert run.conformance.score == 0.25
@@ -73,16 +71,12 @@ def test_the_breakdown_lists_property_type_and_required_mismatches(
 ):
     ada = graph_source.add_node(["Customer"], {"name": "Ada"})
     graph_source.add_node(["Customer"], {})  # `name` is required
-    ticket = graph_source.add_node(
-        ["Ticket"], {"opened_at": "yesterday"}
-    )  # declared DATE
+    ticket = graph_source.add_node(["Ticket"], {"opened_at": "yesterday"})  # declared DATE
     graph_source.add_relationship(ada, "OPENED", ticket)
 
     run = run_once(client, support_kg)
 
-    assert [
-        (m.subject, m.kind, m.detail) for m in run.conformance.property_mismatches
-    ] == [
+    assert [(m.subject, m.kind, m.detail) for m in run.conformance.property_mismatches] == [
         (
             "Customer.name",
             "required_missing",
@@ -122,9 +116,7 @@ def test_evolution_mode_defaults_to_evolving(client, support_kg):
     assert client.get_evolution_mode(support_kg) == "evolving"
 
 
-def test_evolution_mode_can_be_set_per_knowledge_graph(
-    client, support_kg, support_ontology
-):
+def test_evolution_mode_can_be_set_per_knowledge_graph(client, support_kg, support_ontology):
     client.create_knowledge_graph("other", ontology=support_ontology)
 
     client.set_evolution_mode(support_kg, "strict")
@@ -150,7 +142,7 @@ def test_evolution_mode_of_an_unknown_knowledge_graph_is_not_found(client):
 def seed_graph_with_new_concepts(graph_source):
     """The support graph plus an Agent node type, a HANDLES relationship type and a
     Ticket.priority property, none of them declared."""
-    ada, ticket = seed_conforming_graph(graph_source)
+    _, ticket = seed_conforming_graph(graph_source)
     graph_source.add_node(["Ticket"], {"opened_at": date(2026, 1, 2), "priority": 2})
     grace = graph_source.add_node(["Agent"], {"name": "Grace"})
     graph_source.add_relationship(grace, "HANDLES", ticket)
@@ -234,9 +226,7 @@ def test_evolving_mode_creates_a_candidate_of_the_declared_ontology_plus_new_con
     assert client.diff_ontologies(CANDIDATE_ONTOLOGY, candidate.ontology).changes == ()
 
 
-def test_a_candidate_only_adds_to_the_declared_ontology(
-    client, support_kg, graph_source
-):
+def test_a_candidate_only_adds_to_the_declared_ontology(client, support_kg, graph_source):
     seed_graph_with_new_concepts(graph_source)
 
     run = run_once(client, support_kg)
@@ -245,9 +235,7 @@ def test_a_candidate_only_adds_to_the_declared_ontology(
     assert diff.classification == "additive"
 
 
-def test_a_candidate_keeps_the_declared_constraints(
-    client, support_ontology, graph_source
-):
+def test_a_candidate_keeps_the_declared_constraints(client, support_ontology, graph_source):
     constrained = support_ontology + (
         "constraints:\n  - {type: UNIQUENESS, node_type: Customer, property_name: name}\n"
     )
@@ -258,9 +246,7 @@ def test_a_candidate_keeps_the_declared_constraints(
     run = run_once(client, "support")
 
     candidate = client.get_ontology_version("support", run.candidate_version).ontology
-    assert [(c.node_type, c.property_name) for c in candidate.constraints] == [
-        ("Customer", "name")
-    ]
+    assert [(c.node_type, c.property_name) for c in candidate.constraints] == [("Customer", "name")]
 
 
 HIERARCHY_ONTOLOGY = """
@@ -273,9 +259,7 @@ node_types:
 """
 
 
-def test_properties_inherited_from_a_parent_are_declared_on_the_subclass(
-    client, graph_source
-):
+def test_properties_inherited_from_a_parent_are_declared_on_the_subclass(client, graph_source):
     client.create_knowledge_graph("staff", ontology=HIERARCHY_ONTOLOGY)
     client.bind_graph_source("staff", GraphSourceScope(database="neo4j"))
     graph_source.add_node(["Person", "Agent"], {"name": "Grace"})
@@ -286,9 +270,7 @@ def test_properties_inherited_from_a_parent_are_declared_on_the_subclass(
     assert run.candidate_version is None
 
 
-def test_a_candidate_is_evaluated_by_the_built_in_evaluators(
-    client, support_kg, graph_source
-):
+def test_a_candidate_is_evaluated_by_the_built_in_evaluators(client, support_kg, graph_source):
     seed_graph_with_new_concepts(graph_source)
 
     run = run_once(client, support_kg)
@@ -321,17 +303,13 @@ def test_an_undeclared_pattern_between_declared_concepts_is_no_new_concept(
     client, support_kg, graph_source
 ):
     ada, ticket = seed_conforming_graph(graph_source)
-    graph_source.add_relationship(
-        ticket, "OPENED", ada
-    )  # (Ticket)-[OPENED]->(Customer)
+    graph_source.add_relationship(ticket, "OPENED", ada)  # (Ticket)-[OPENED]->(Customer)
 
     evolving = run_once(client, support_kg)
     client.set_evolution_mode(support_kg, "strict")
     strict = run_once(client, support_kg)
 
-    assert subjects(evolving.conformance.pattern_mismatches) == [
-        "(Ticket)-[OPENED]->(Customer)"
-    ]
+    assert subjects(evolving.conformance.pattern_mismatches) == ["(Ticket)-[OPENED]->(Customer)"]
     assert evolving.candidate_version is None
     assert strict.status == "finished"
 
@@ -339,18 +317,15 @@ def test_an_undeclared_pattern_between_declared_concepts_is_no_new_concept(
 def test_a_crashed_run_creates_no_candidate(client, support_kg, graph_source):
     seed_graph_with_new_concepts(graph_source)
 
-    with pytest.raises(RuntimeError):
-        with client.start_run(support_kg, ontology_version=1) as run:
-            raise RuntimeError("extraction crashed")
+    with pytest.raises(RuntimeError), client.start_run(support_kg, ontology_version=1) as run:
+        raise RuntimeError("extraction crashed")
 
     assert client.get_run(run.id).status == "failed"
     assert client.get_run(run.id).candidate_version is None
     assert [v.number for v in client.list_ontology_versions(support_kg)] == [1]
 
 
-def test_runs_producing_the_same_candidate_share_its_version(
-    client, support_kg, graph_source
-):
+def test_runs_producing_the_same_candidate_share_its_version(client, support_kg, graph_source):
     seed_graph_with_new_concepts(graph_source)
 
     first = run_once(client, support_kg)

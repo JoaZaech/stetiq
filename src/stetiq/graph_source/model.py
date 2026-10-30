@@ -105,9 +105,7 @@ class ObservedSchema:
 
     def pattern(self, source: str, relationship: str, target: str) -> ObservedPattern | None:
         key = (source, relationship, target)
-        return next(
-            (p for p in self.patterns if (p.source, p.relationship, p.target) == key), None
-        )
+        return next((p for p in self.patterns if (p.source, p.relationship, p.target) == key), None)
 
     def to_dict(self) -> dict[str, Any]:
         def props(ps: tuple[ObservedProperty, ...]) -> list[dict[str, Any]]:
