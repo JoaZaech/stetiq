@@ -134,3 +134,17 @@ test('the Ontology tab lists Concepts grouped, with hierarchy and constraints, a
   await expect(page.getByText('No relations match “ticket”.')).toBeVisible()
   await expect(attributes.getByRole('row')).toHaveCount(3)
 })
+
+test('an unknown Knowledge Graph or version shows a not-found page', async ({ page }) => {
+  await page.goto('/ui/kg/nope/versions')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Knowledge Graph not found')
+
+  await page.goto('/ui/kg/support/versions/9')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Ontology Version not found')
+
+  await page.goto('/ui/kg/support/versions/latest/ontology')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Ontology Version not found')
+
+  await page.goto('/ui/kg/support/no-such-section')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Page not found')
+})
