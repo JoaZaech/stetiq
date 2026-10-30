@@ -3,7 +3,10 @@ import { createBrowserRouter, Navigate, type RouteObject } from 'react-router'
 import { KnowledgeGraphLayout } from '@/pages/knowledge-graph/KnowledgeGraphLayout'
 import { KnowledgeGraphSectionPage } from '@/pages/knowledge-graph/KnowledgeGraphSectionPage'
 import { KnowledgeGraphsPage } from '@/pages/knowledge-graphs/KnowledgeGraphsPage'
+import { OntologyTab } from '@/pages/knowledge-graph/versions/OntologyTab'
+import { OntologyVersionPage } from '@/pages/knowledge-graph/versions/OntologyVersionPage'
 import { OntologyVersionsPage } from '@/pages/knowledge-graph/versions/OntologyVersionsPage'
+import { OverviewTab } from '@/pages/knowledge-graph/versions/OverviewTab'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { SettingsPage } from '@/pages/settings/SettingsPage'
 import { AppLayout } from './AppLayout'
@@ -27,7 +30,21 @@ const knowledgeGraphSectionRoutes: Record<
   KnowledgeGraphSectionPath,
   { page?: ReactNode; children?: RouteObject[] }
 > = {
-  versions: { page: <OntologyVersionsPage /> },
+  versions: {
+    page: <OntologyVersionsPage />,
+    children: [
+      {
+        path: ':number',
+        element: <OntologyVersionPage />,
+        handle: crumb(({ number }) => `v${number}`),
+        // The version page's tabs (see TABS in OntologyVersionPage).
+        children: [
+          { index: true, element: <OverviewTab /> },
+          { path: 'ontology', element: <OntologyTab /> },
+        ],
+      },
+    ],
+  },
   runs: {},
   'use-case': {},
   observations: {},

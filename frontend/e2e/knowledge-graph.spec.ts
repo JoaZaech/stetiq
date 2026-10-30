@@ -54,3 +54,50 @@ test('the Ontology Version table lists versions newest first with Alias chips an
   await rows.nth(2).getByRole('link', { name: 'v2' }).click()
   await expect(page).toHaveURL('/ui/kg/support/versions/2')
 })
+
+test('the version Overview shows its metadata, Evaluator results and latest Gate result', async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  await page.goto('/ui/kg/support/versions/2')
+
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('v2')
+  await expect(page.getByRole('main').getByText('staging')).toBeVisible()
+  await expect(page.getByRole('navigation', { name: 'breadcrumb' })).toHaveText(
+    /Knowledge Graphs.*support.*Ontology Versions.*v2/,
+  )
+  await expect(page.getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page')
+
+  const details = page.getByRole('region', { name: 'Details' })
+  await expect(details).toContainText(/Number\s*2/)
+  await expect(details).toContainText(/Origin\s*registered/)
+  await expect(details).toContainText(/Content hash\s*[0-9a-f]{12}/)
+  await details.getByRole('button', { name: 'Copy content hash' }).click()
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/^[0-9a-f]{64}$/)
+  await expect(details).not.toContainText('Construction Run')
+
+  const results = page.getByRole('table', { name: 'Evaluator results' })
+  await expect(results.getByRole('row').first()).toHaveText(/Evaluator.*Metric.*Value.*Use Case Version/)
+  await expect(
+    results.getByRole('row').filter({ hasText: 'structural_answerability' }).filter({ hasText: 'answerable_ratio' }),
+  ).toHaveText(/answerable_ratio\s*1\s*1$/)
+  await expect(results.getByRole('row').filter({ hasText: 'max_depth' })).toHaveText(/hierarchy.*max_depth\s*2/)
+
+  await expect(page.getByRole('region', { name: 'Latest Gate result' })).toContainText('Passed')
+})
+
+test('a run-originated version links its Construction Run; an ungated version has no Gate result', async ({
+  page,
+  stetiq,
+}) => {
+  await page.goto('/ui/kg/support/versions/3')
+
+  const details = page.getByRole('region', { name: 'Details' })
+  await expect(details).toContainText(/Origin\s*run/)
+  await expect(details.getByRole('link', { name: String(stetiq.seeded.run_id) })).toHaveAttribute(
+    'href',
+    `/ui/kg/support/runs/${String(stetiq.seeded.run_id)}`,
+  )
+  await expect(page.getByRole('region', { name: 'Latest Gate result' })).toContainText('None')
+})

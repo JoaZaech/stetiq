@@ -71,7 +71,7 @@ export const ontologyVersionQuery = (kg: string, number: number) => ({
   queryFn: () => api<OntologyVersion>(`${versionsPath(kg)}/${number}`),
 })
 export const useOntologyVersion = (kg: string, number: number) =>
-  useQuery(ontologyVersionQuery(kg, number))
+  useQuery({ ...ontologyVersionQuery(kg, number), enabled: Number.isInteger(number) })
 
 export const versionEvaluationsQuery = (kg: string, number: number) => ({
   queryKey: ['ontology-versions', kg, number, 'evaluations'],
