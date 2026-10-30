@@ -3,6 +3,7 @@ import { useAliases, useContractAlias } from '@/api/aliases'
 import { isNotFound } from '@/api/client'
 import { useOntologyVersion } from '@/api/ontology-versions'
 import { ErrorAlert } from '@/components/ErrorAlert'
+import { NeedsEditAccess } from '@/components/NeedsEditAccess'
 import { PageHeader } from '@/components/PageHeader'
 import { RouteTabs, type RouteTab } from '@/components/RouteTabs'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -10,6 +11,7 @@ import { NotFoundPage } from '@/pages/NotFoundPage'
 import { useKnowledgeGraphName } from '../params'
 import { AliasChips } from './AliasChips'
 import { aliasesByVersion } from './lineage'
+import { PromoteDialog } from './PromoteDialog'
 
 /**
  * The version page's tabs. A tab is a child route of `versions/:number` in
@@ -44,6 +46,13 @@ export function OntologyVersionPage() {
       <PageHeader
         title={`v${version.data.number}`}
         description={<VersionAliases name={name} number={version.data.number} />}
+        actions={
+          <NeedsEditAccess knowledgeGraph={name}>
+            {(disabled) => (
+              <PromoteDialog name={name} number={version.data.number} disabled={disabled} />
+            )}
+          </NeedsEditAccess>
+        }
       />
       <RouteTabs label="Ontology Version" tabs={TABS} />
       <Outlet context={version.data} />
