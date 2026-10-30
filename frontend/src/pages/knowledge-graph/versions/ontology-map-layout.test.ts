@@ -92,11 +92,17 @@ describe('layoutOntologyMap', () => {
     expect(order(larger, 'y')).toEqual(order(plain, 'y'))
   })
 
-  it('lays out an Ontology of 100 classes in under a second', async () => {
-    const started = performance.now()
-    await layoutOntologyMap(ontologyMap(generatedOntology(100)))
+  it('lays out an Ontology of 100 classes in under 0.4 s', async () => {
+    const map = ontologyMap(generatedOntology(100))
+    // The fastest of three, so a moment of load on a shared machine does not count.
+    const times: number[] = []
+    for (let run = 0; run < 3; run++) {
+      const started = performance.now()
+      await layoutOntologyMap(map)
+      times.push(performance.now() - started)
+    }
 
-    expect(performance.now() - started).toBeLessThan(1000)
+    expect(Math.min(...times)).toBeLessThan(400)
   })
 })
 

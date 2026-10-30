@@ -55,9 +55,10 @@ export async function layoutOntologyMap(
     layoutOptions: {
       'elk.algorithm': 'stress',
       'elk.stress.desiredEdgeLength': String(EDGE_LENGTH),
-      // Stress starts from a force layout, whose default 300 iterations take most of
-      // the time (~0.7 s at 100 classes); stress refines a rougher start just as well.
-      'elk.force.iterations': '100',
+      // Stress starts from a force layout, which takes nearly all the time: each
+      // iteration costs ~2.5 ms at 100 classes (the default 300 took ~0.7 s alone). Stress
+      // untangles a rough start just as well, with no more crossings, so a few will do.
+      'elk.force.iterations': '10',
       'elk.randomSeed': '1',
     },
     children: map.nodes.map((n) => ({ id: n.label, ...NODE_SIZE })),
