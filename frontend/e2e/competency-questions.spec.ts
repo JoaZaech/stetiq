@@ -1,4 +1,4 @@
-import { expect, test } from './fixtures'
+import { expect, signIn, test } from './fixtures'
 import type { Page } from '@playwright/test'
 
 // support_lineage: Use Case Version 1 asks `customer-names` (concepts Customer.name).
@@ -119,6 +119,55 @@ test.describe('with three Use Case Versions', () => {
       'Nothing changed: this content is already Use Case Version 3, so no new version was created.',
     )
     await expect(page.getByRole('table', { name: 'Use Case Versions' }).getByRole('row')).toHaveCount(4)
+  })
+})
+
+test.describe('signed in with an API Token', () => {
+  // described_support: ada can edit `support`, grace can only read it.
+  test.use({ mode: 'server', seed: 'described_support' })
+
+  const token = (seeded: Record<string, unknown>, user: string) =>
+    (seeded[user] as { value: string }).value
+
+  test('an editor saves through the sign-in cookie, with the CSRF header', async ({ page, stetiq }) => {
+    await signIn(page, token(stetiq.seeded, 'ada'))
+    await page.goto('/ui/kg/support/use-case')
+
+    await page.getByRole('button', { name: 'Edit customer-names' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Edit customer-names' })
+    await dialog.getByRole('textbox', { name: 'Question' }).fill('Who are our customers?')
+    const saved = page.waitForResponse(
+      (r) => r.url().endsWith('/use-case-versions') && r.request().method() === 'POST',
+    )
+    await dialog.getByRole('button', { name: 'Save' }).click()
+    const response = await saved
+    expect(response.status()).toBe(200)
+    expect(await response.request().headerValue('x-csrf-token')).toBeTruthy()
+    await expect(page.getByRole('region', { name: 'Use Case Version 2' })).toBeVisible()
+  })
+
+  test('a reader sees every edit control disabled, and the server refuses the write', async ({
+    page,
+    stetiq,
+  }) => {
+    const grace = token(stetiq.seeded, 'grace')
+    await signIn(page, grace)
+    await page.goto('/ui/kg/support/use-case')
+    await expect(page.getByRole('region', { name: 'Use Case Version 1' })).toBeVisible()
+
+    for (const name of ['Add Competency Question', 'Edit customer-names', 'Remove customer-names']) {
+      await expect(page.getByRole('button', { name })).toBeDisabled()
+    }
+    await page.getByRole('button', { name: 'Remove customer-names' }).hover({ force: true })
+    await expect(page.getByRole('tooltip')).toHaveText('Needs edit access')
+
+    const refused = await page.request.post('/api/v1/knowledge-graphs/support/use-case-versions', {
+      headers: { Authorization: `Bearer ${grace}` },
+      data: { use_case: { competency_questions: [{ id: 'x', question: 'Anything?' }] } },
+    })
+    expect(refused.status()).toBe(403)
+    await page.reload()
+    await expect(page.getByRole('table', { name: 'Use Case Versions' }).getByRole('row')).toHaveCount(2)
   })
 })
 

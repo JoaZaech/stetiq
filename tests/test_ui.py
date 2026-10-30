@@ -427,6 +427,41 @@ def test_an_unknown_version_or_one_outside_the_tokens_grants_is_a_uniform_404(
     assert hidden_unknown.json()["error"]["message"] == "Knowledge Graph 'nope' does not exist"
 
 
+# --- Competency Question editing ------------------------------------------------------------
+# The UI saves an edited Use Case through the existing Use Case Version registration route.
+
+
+def register_use_case(http, headers=None):
+    return http.post(
+        "/api/v1/knowledge-graphs/support/use-case-versions",
+        json={"use_case": {"competency_questions": [{"id": "names", "question": "Who?"}]}},
+        headers=headers,
+    )
+
+
+def test_a_read_only_cookie_cannot_register_a_use_case_version(http, database_url, two_graphs):
+    sign_in(http, database_url, {"support": "read"})
+
+    r = register_use_case(http, {"X-CSRF-Token": http.cookies["stetiq_csrf"]})
+
+    assert r.status_code == 403
+    assert r.json()["error"]["type"] == "PermissionDeniedError"
+    assert http.get("/api/v1/knowledge-graphs/support/use-case-versions").json() == []
+
+
+def test_an_editor_registers_a_use_case_version_through_the_sign_in_cookie(
+    http, database_url, two_graphs
+):
+    sign_in(http, database_url, {"support": "edit"})
+    csrf = {"X-CSRF-Token": http.cookies["stetiq_csrf"]}
+
+    first = register_use_case(http, csrf)
+    unchanged = register_use_case(http, csrf)
+
+    assert first.status_code == unchanged.status_code == 200
+    assert first.json()["number"] == unchanged.json()["number"] == 1
+
+
 # --- stetiq ui ----------------------------------------------------------------------------
 
 
