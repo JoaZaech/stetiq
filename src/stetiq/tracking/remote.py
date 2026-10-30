@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 from urllib.parse import quote
 
@@ -10,7 +10,7 @@ import httpx
 
 from stetiq.errors import EvaluatorError, StetiqError
 from stetiq.evaluation.framework import Evaluation, ParameterValue, SubjectKind
-from stetiq.gates import GateOutcome, outcome_to_dict
+from stetiq.gates import Gate
 from stetiq.graph_source import GraphSourceScope
 from stetiq.ontology import Ontology, to_dict
 from stetiq.tracking import wire
@@ -22,11 +22,9 @@ from stetiq.tracking.entities import (
     EvaluationResult,
     EvolutionMode,
     GateResult,
-    GateSubjectKind,
     KnowledgeGraph,
     Observation,
     OntologyVersion,
-    Origin,
     UseCaseVersion,
 )
 from stetiq import use_case as use_case_format
@@ -85,10 +83,8 @@ class RemoteTrackingService:
     def list_knowledge_graphs(self) -> list[KnowledgeGraph]:
         return [wire.knowledge_graph_from_json(k) for k in self._call("GET", "/knowledge-graphs")]
 
-    def register_ontology(
-        self, knowledge_graph: str, ontology: Ontology, origin: Origin = "registered"
-    ) -> OntologyVersion:
-        body = {"ontology": to_dict(ontology), "origin": origin}
+    def register_ontology(self, knowledge_graph: str, ontology: Ontology) -> OntologyVersion:
+        body = {"ontology": to_dict(ontology)}
         data = self._call("POST", self._kg_path(knowledge_graph) + "/ontology-versions", body)
         return wire.ontology_version_from_json(data)
 
@@ -273,18 +269,15 @@ class RemoteTrackingService:
 
     # --- Gates --------------------------------------------------------------------------
 
-    def record_gate_result(
+    def evaluate_gates(
         self,
         knowledge_graph: str,
-        subject_kind: GateSubjectKind,
-        subject_id: str,
-        outcomes: tuple[GateOutcome, ...],
+        gates: Sequence[Gate],
+        *,
+        version: int | None = None,
+        run: str | None = None,
     ) -> GateResult:
-        body = {
-            "subject_kind": subject_kind,
-            "subject_id": subject_id,
-            "outcomes": [outcome_to_dict(o) for o in outcomes],
-        }
+        body = {"gates": [g.to_dict() for g in gates], "version": version, "run": run}
         data = self._call("POST", self._kg_path(knowledge_graph) + "/gate-results", body)
         return wire.gate_result_from_json(data)
 

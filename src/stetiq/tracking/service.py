@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Protocol
 
@@ -22,6 +22,7 @@ from stetiq.conformance import assess_conformance, candidate_ontology
 from stetiq.drift import DriftThresholds, assess_drift
 from stetiq.errors import (
     EvaluatorError,
+    GateConfigError,
     GraphSourceNotBoundError,
     InvalidEvolutionModeError,
     MissingDeclaredOntologyError,
@@ -47,7 +48,9 @@ from stetiq.evaluation.run import (
     NoGraphSource,
     RunSubject,
 )
-from stetiq.gates import GateOutcome
+from stetiq.gates import Gate, GateInputs
+from stetiq.gates import evaluate_gates as run_gates
+from stetiq.ontology.diff import diff_ontologies
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import Ontology, content_hash, from_dict, to_dict
 from stetiq.tracking.entities import (
@@ -59,7 +62,6 @@ from stetiq.tracking.entities import (
     EvaluationResult,
     EvolutionMode,
     GateResult,
-    GateSubjectKind,
     KnowledgeGraph,
     Observation,
     ObservationOutcome,
@@ -100,9 +102,10 @@ class TrackingService(Protocol):
     def list_knowledge_graphs(self) -> list[KnowledgeGraph]:
         """By name. In server mode, only those the API token can read."""
 
-    def register_ontology(
-        self, knowledge_graph: str, ontology: Ontology, origin: Origin = "registered"
-    ) -> OntologyVersion: ...
+    def register_ontology(self, knowledge_graph: str, ontology: Ontology) -> OntologyVersion:
+        """Register a version by hand (origin "registered"; "run" versions only arise
+        from ending a Construction Run)."""
+        ...
 
     def list_ontology_versions(self, knowledge_graph: str) -> list[OntologyVersion]: ...
 
@@ -210,16 +213,18 @@ class TrackingService(Protocol):
 
     def get_use_case_version(self, knowledge_graph: str, number: int) -> UseCaseVersion: ...
 
-    def record_gate_result(
+    def evaluate_gates(
         self,
         knowledge_graph: str,
-        subject_kind: GateSubjectKind,
-        subject_id: str,
-        outcomes: tuple[GateOutcome, ...],
+        gates: Sequence[Gate],
+        *,
+        version: int | None = None,
+        run: str | None = None,
     ) -> GateResult:
-        """Record a Gate evaluation (computed by the SDK from the repo's Gates) together
-        with the Gate definitions it used. The service resolves which Ontology Version
-        the subject stands for."""
+        """Evaluate the Gate definitions (from the repo config) for an Ontology Version
+        (default: the latest) or a Construction Run against the stored results, and
+        record the outcome together with the definitions used. The outcome is always
+        computed here, never taken from the caller."""
         ...
 
     def list_gate_results(self, knowledge_graph: str) -> list[GateResult]:
@@ -260,12 +265,10 @@ class LocalTrackingService:
     def list_knowledge_graphs(self) -> list[KnowledgeGraph]:
         return self._store.list_knowledge_graphs()
 
-    def register_ontology(
-        self, knowledge_graph: str, ontology: Ontology, origin: Origin = "registered"
-    ) -> OntologyVersion:
+    def register_ontology(self, knowledge_graph: str, ontology: Ontology) -> OntologyVersion:
         with self._store.transaction():
             self.get_knowledge_graph(knowledge_graph)
-            return self._register(knowledge_graph, ontology, origin)
+            return self._register(knowledge_graph, ontology, "registered")
 
     def _register(self, knowledge_graph: str, ontology: Ontology, origin: Origin) -> OntologyVersion:
         # Hold the canonical form, so the returned version equals it fetched back.
@@ -725,48 +728,86 @@ class LocalTrackingService:
 
     # --- Gates ----------------------------------------------------------------------
 
-    def record_gate_result(
+    def evaluate_gates(
         self,
         knowledge_graph: str,
-        subject_kind: GateSubjectKind,
-        subject_id: str,
-        outcomes: tuple[GateOutcome, ...],
+        gates: Sequence[Gate],
+        *,
+        version: int | None = None,
+        run: str | None = None,
     ) -> GateResult:
+        if version is not None and run is not None:
+            raise GateConfigError("Gates are evaluated for a version or a run, not both")
+        if not gates:
+            raise GateConfigError("No Gates to evaluate")
         with self._store.transaction():
+            subject_kind: SubjectKind
+            if run is not None:
+                subject = self.get_run(run)
+                if subject.knowledge_graph != knowledge_graph:
+                    raise NotFoundError(
+                        f"Knowledge Graph {knowledge_graph!r} has no Construction Run {run!r}"
+                    )
+                number = subject.candidate_version or subject.ontology_version
+                subject_kind, subject_id = "construction_run", run
+            else:
+                versions = self.list_ontology_versions(knowledge_graph)
+                number = versions[-1].number if version is None else version
+                subject = self._latest_run_standing_for(knowledge_graph, number)
+                subject_kind, subject_id = "ontology_version", str(number)
+            inputs = self._gate_inputs(knowledge_graph, number, subject)
             result = GateResult(
                 knowledge_graph=knowledge_graph,
                 subject_kind=subject_kind,
                 subject_id=subject_id,
-                ontology_version=self._gate_subject_version(knowledge_graph, subject_kind, subject_id),
-                outcomes=tuple(outcomes),
+                ontology_version=number,
+                outcomes=run_gates(gates, inputs),
                 evaluated_at=_now(),
             )
             self._store.add_gate_result(result)
             return result
 
+    def _latest_run_standing_for(self, knowledge_graph: str, version: int) -> ConstructionRun | None:
+        """The latest run with Conformance whose Candidate (else consumed version) is `version`."""
+        runs = [
+            r
+            for r in self._store.list_runs(knowledge_graph)
+            if r.conformance is not None and (r.candidate_version or r.ontology_version) == version
+        ]
+        return runs[-1] if runs else None
+
+    def _gate_inputs(
+        self, knowledge_graph: str, number: int, run: ConstructionRun | None
+    ) -> GateInputs:
+        contract = self.get_ontology_version(
+            knowledge_graph,
+            self.get_alias(knowledge_graph, self.get_contract_alias(knowledge_graph)).version,
+        )
+        target = self.get_ontology_version(knowledge_graph, number)
+        observed = baseline = None
+        if run is not None and run.observation_id is not None:
+            observations = self._store.list_observations(knowledge_graph)
+            index = next(i for i, o in enumerate(observations) if o.id == run.observation_id)
+            observed = observations[index].schema
+            baseline = observations[index - 1].schema if index > 0 else None
+        return GateInputs(
+            ontology_version=number,
+            contract_version=contract.number,
+            diff=diff_ontologies(contract.ontology, target.ontology),
+            conformance=None if run is None else run.conformance,
+            evaluations=tuple(
+                self.get_evaluation_results(knowledge_graph, "ontology_version", str(number))
+            ),
+            observed=observed,
+            baseline=baseline,
+            run_evaluations=()
+            if run is None
+            else tuple(self.get_evaluation_results(knowledge_graph, "construction_run", run.id)),
+        )
+
     def list_gate_results(self, knowledge_graph: str) -> list[GateResult]:
         self.get_knowledge_graph(knowledge_graph)
         return self._store.list_gate_results(knowledge_graph)
-
-    def _gate_subject_version(
-        self, knowledge_graph: str, subject_kind: GateSubjectKind, subject_id: str
-    ) -> int:
-        """The Ontology Version a Gate subject stands for: the version itself; for a run
-        the Candidate it gave rise to, else the version it consumed."""
-        if subject_kind == "ontology_version":
-            if not subject_id.isdigit():
-                raise NotFoundError(
-                    f"Knowledge Graph {knowledge_graph!r} has no Ontology Version {subject_id!r}"
-                )
-            return self.get_ontology_version(knowledge_graph, int(subject_id)).number
-        if subject_kind == "construction_run":
-            run = self.get_run(subject_id)
-            if run.knowledge_graph != knowledge_graph:
-                raise NotFoundError(
-                    f"Knowledge Graph {knowledge_graph!r} has no Construction Run {subject_id!r}"
-                )
-            return run.candidate_version or run.ontology_version
-        raise NotFoundError(f"Unknown Gate subject kind {subject_kind!r}")
 
     def _latest_gate_verdict(self, knowledge_graph: str, version: int) -> str | None:
         """"passed"/"failed" for the version's latest Gate result; None if never gated."""

@@ -20,7 +20,7 @@ from urllib.parse import parse_qs, quote
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
-from stetiq.auth import ApiToken, TokenRegistry
+from stetiq.auth import ApiToken, TokenRegistry, bearer_token
 from stetiq.client import Client
 from stetiq.errors import AuthenticationError, NotFoundError, PermissionDeniedError
 from stetiq.tracking import TrackingService
@@ -38,10 +38,9 @@ def ui_router(tracking: TrackingService, registry: TokenRegistry) -> APIRouter:
     ui = APIRouter(prefix=UI_PREFIX, include_in_schema=False)
 
     def current_token(request: Request) -> ApiToken:
-        value = request.cookies.get(TOKEN_COOKIE)
-        scheme, _, bearer = request.headers.get("authorization", "").partition(" ")
-        if scheme.lower() == "bearer" and bearer.strip():
-            value = bearer.strip()
+        value = bearer_token(request.headers.get("authorization")) or request.cookies.get(
+            TOKEN_COOKIE
+        )
         try:
             return registry.authenticate(value)
         except AuthenticationError:

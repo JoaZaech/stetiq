@@ -69,6 +69,12 @@ def validate_grants(grants: Mapping[str, str]) -> dict[str, Permission]:
     return dict(grants)  # type: ignore[arg-type]
 
 
+def bearer_token(authorization: str | None) -> str | None:
+    """The token value of an `Authorization: Bearer <token>` header, else None."""
+    scheme, _, value = (authorization or "").partition(" ")
+    return value.strip() or None if scheme.lower() == "bearer" else None
+
+
 def _hash(secret: str) -> str:
     return hashlib.sha256(secret.encode()).hexdigest()
 

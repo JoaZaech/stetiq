@@ -2,8 +2,9 @@
 
 `evaluate_gates(gates, inputs)` takes Gate definitions and the results available for
 one subject (an Ontology Version or a Construction Run) and returns pass/fail with
-reasons per Gate. It does no I/O: the SDK gathers `GateInputs` from the tracking
-service, and records the outcome there.
+reasons per Gate. It does no I/O: the tracking service gathers `GateInputs` from its
+own stored results, evaluates, and records the outcome (clients only send the Gate
+definitions, so a recorded outcome cannot be forged).
 
 Config (`gates:` section of `stetiq.yaml`), one entry per Gate::
 

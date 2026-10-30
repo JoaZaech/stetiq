@@ -7,15 +7,15 @@ over a `SqlStore` (SQLite or Postgres) and translates JSON <-> entities with
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any
 
 from fastapi import APIRouter, Body, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from stetiq.evaluation.answerability import CompetencyQuestionMapper
-from stetiq.auth import Permission, TokenRegistry
-from stetiq.errors import PermissionDeniedError, StetiqError
-from stetiq.gates import outcome_from_dict
+from stetiq.auth import ApiToken, Permission, TokenRegistry, bearer_token
+from stetiq.errors import NotFoundError, PermissionDeniedError, StetiqError
+from stetiq.gates import parse_gates
 from stetiq.ontology import parse_dict
 from stetiq.use_case import parse_use_case_dict
 from stetiq.tracking import LocalTrackingService, SqlStore, TrackingService, wire
@@ -47,23 +47,34 @@ def create_app(
         tokens = tokens or TokenRegistry(store)
     tracking, registry = service, tokens
 
-    def _target_knowledge_graph(path_params: dict[str, str]) -> str | None:
-        """Which Knowledge Graph a request acts on, from its path parameters."""
+    def _target_knowledge_graph(token: ApiToken, path_params: dict[str, str]) -> str | None:
+        """Which Knowledge Graph a request acts on, from its path parameters.
+
+        A run or Observation the token cannot read answers exactly like an unknown one,
+        so ids do not reveal what exists outside the token's grants."""
         if "name" in path_params:
             return path_params["name"]
-        if "run_id" in path_params:
-            return tracking.get_run(path_params["run_id"]).knowledge_graph
-        if "observation_id" in path_params:
-            return tracking.get_observation(path_params["observation_id"]).knowledge_graph
+        lookups = (
+            ("run_id", tracking.get_run, "Construction Run {} does not exist"),
+            ("observation_id", tracking.get_observation, "Observation {} does not exist"),
+        )
+        for param, lookup, missing in lookups:
+            if param in path_params:
+                entity_id = path_params[param]
+                try:
+                    kg = lookup(entity_id).knowledge_graph
+                except NotFoundError:
+                    kg = None
+                if kg is None or not token.allows(kg, "read"):
+                    raise NotFoundError(missing.format(repr(entity_id)))
+                return kg
         return None
 
     def authorize(request: Request) -> None:
-        header = request.headers.get("authorization", "")
-        scheme, _, value = header.partition(" ")
-        token = registry.authenticate(value.strip() if scheme.lower() == "bearer" else None)
+        token = registry.authenticate(bearer_token(request.headers.get("authorization")))
         request.state.token = token
         needed: Permission = "read" if request.method in ("GET", "HEAD") else "edit"
-        kg = _target_knowledge_graph(request.path_params)
+        kg = _target_knowledge_graph(token, request.path_params)
         if kg is not None:
             token.require(kg, needed)
         elif not (
@@ -113,12 +124,9 @@ def create_app(
         return wire.knowledge_graph_to_json(tracking.get_knowledge_graph(name))
 
     @api.post("/knowledge-graphs/{name}/ontology-versions")
-    def register_ontology(
-        name: str,
-        ontology: dict[str, Any] = Body(),
-        origin: Literal["registered", "run"] = Body("registered"),
-    ) -> dict[str, Any]:
-        version = tracking.register_ontology(name, parse_dict(ontology), origin)
+    def register_ontology(name: str, ontology: dict[str, Any] = Body(embed=True)) -> dict[str, Any]:
+        # Always origin "registered": "run" versions only arise from ending a run.
+        version = tracking.register_ontology(name, parse_dict(ontology))
         return wire.ontology_version_to_json(version)
 
     @api.get("/knowledge-graphs/{name}/ontology-versions")
@@ -341,16 +349,15 @@ def create_app(
     # --- Gates (ticket #14) ----------------------------------------------------------
 
     @api.post("/knowledge-graphs/{name}/gate-results", status_code=201)
-    def record_gate_result(
+    def evaluate_gates(
         name: str,
-        subject_kind: Literal["ontology_version", "construction_run"] = Body(),
-        subject_id: str = Body(),
-        outcomes: list[dict[str, Any]] = Body(),
+        gates: list[dict[str, Any]] = Body(),
+        version: int | None = Body(None),
+        run: str | None = Body(None),
     ) -> dict[str, Any]:
-        parsed = tuple(outcome_from_dict(o) for o in outcomes)
-        return wire.gate_result_to_json(
-            tracking.record_gate_result(name, subject_kind, subject_id, parsed)
-        )
+        # The client sends Gate definitions only; the server computes every outcome.
+        result = tracking.evaluate_gates(name, parse_gates(gates), version=version, run=run)
+        return wire.gate_result_to_json(result)
 
     @api.get("/knowledge-graphs/{name}/gate-results")
     def list_gate_results(name: str) -> list[dict[str, Any]]:
