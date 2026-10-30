@@ -1,12 +1,21 @@
 import { Link } from 'react-router'
 import { PageHeader } from '@/components/PageHeader'
 
-export function NotFoundPage() {
+interface NotFoundPageProps {
+  title?: string
+  message?: string
+}
+
+/** Unknown addresses, and ids the user cannot read (shown exactly like unknown ones). */
+export function NotFoundPage({
+  title = 'Page not found',
+  message = 'There is no page at this address.',
+}: NotFoundPageProps) {
   return (
     <>
-      <PageHeader title="Page not found" />
+      <PageHeader title={title} />
       <p className="text-sm">
-        There is no page at this address.{' '}
+        {message}{' '}
         <Link to="/" className="text-primary underline-offset-4 hover:underline">
           Back to Knowledge Graphs
         </Link>

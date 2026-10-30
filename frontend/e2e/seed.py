@@ -13,9 +13,11 @@ from __future__ import annotations
 import json
 import sys
 from collections.abc import Callable
+from datetime import date
 from typing import Any
 
 import stetiq
+from stetiq.graph_source import GraphSourceScope
 
 Scenario = Callable[[stetiq.Client], dict[str, Any]]
 
@@ -25,7 +27,66 @@ def empty(client: stetiq.Client) -> dict[str, Any]:
     return {}
 
 
-SCENARIOS: dict[str, Scenario] = {"empty": empty}
+SUPPORT_V1 = """
+node_types:
+  - label: Party
+    properties: [{name: name, type: STRING, required: true}]
+  - {label: Customer, parent: Party, description: Someone who opens tickets}
+  - label: Ticket
+    properties: [{name: opened_at, type: DATE}]
+relationship_types: [OPENED]
+patterns: [[Customer, OPENED, Ticket]]
+constraints:
+  - {type: UNIQUENESS, node_type: Customer, property_name: name}
+"""
+
+# v2 adds an Agent class under Party: an additive change.
+SUPPORT_V2 = SUPPORT_V1.replace(
+    "  - label: Ticket\n", "  - {label: Agent, parent: Party}\n  - label: Ticket\n"
+)
+
+SUPPORT_USE_CASE = """
+description: Support agents triage tickets
+competency_questions:
+  - id: customer-names
+    question: What are our customers called?
+    concepts: [Customer.name]
+"""
+
+NO_BREAKING_GATE = """
+gates:
+  - name: no-breaking-changes
+    check: ontology_diff
+    max_classification: deprecating
+"""
+
+
+def support_lineage(_client: stetiq.Client) -> dict[str, Any]:
+    """Knowledge Graph `support` with three Ontology Versions:
+
+    - v1, registered on creation, `production` (the Contract Alias) points to it;
+    - v2, registered by hand with a Use Case, `staging` points to it, its Gate passed;
+    - v3, a Candidate produced by an evolving Construction Run (origin `run`).
+    """
+    graph = stetiq.InMemoryGraphSource()
+    client = stetiq.Client(_client.tracking_uri, graph_source=graph)
+    client.create_knowledge_graph("support", ontology=SUPPORT_V1)
+    client.register_use_case("support", SUPPORT_USE_CASE)
+    client.register_ontology("support", SUPPORT_V2)
+    client.set_alias("support", "staging", 2)
+    client.evaluate_gates("support", NO_BREAKING_GATE, version=2)
+
+    client.bind_graph_source("support", GraphSourceScope(database="neo4j"))
+    ada = graph.add_node(["Customer"], {"name": "Ada"})
+    ticket = graph.add_node(["Ticket"], {"opened_at": date(2026, 1, 1), "priority": 2})
+    graph.add_relationship(ada, "OPENED", ticket)
+    with client.start_run("support", ontology_version=2) as run:
+        pass
+    ended = client.get_run(run.id)
+    return {"run_id": ended.id, "candidate_version": ended.candidate_version}
+
+
+SCENARIOS: dict[str, Scenario] = {"empty": empty, "support_lineage": support_lineage}
 
 
 def main(scenario: str, tracking_uri: str) -> None:

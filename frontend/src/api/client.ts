@@ -23,7 +23,15 @@ export class ApiError extends Error {
   }
 }
 
-type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+/**
+ * True for an id the user cannot see: unknown (404), or a Knowledge Graph outside the
+ * token's grants (403). Pages show both as "not found", so ids reveal nothing.
+ */
+export function isNotFound(error: unknown): boolean {
+  return error instanceof ApiError && (error.status === 404 || error.status === 403)
+}
+
+type Method ='GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
 /** Call `API_PREFIX + path`; returns the parsed JSON body or throws `ApiError`. */
 export async function api<T>(path: string, method: Method = 'GET', body?: unknown): Promise<T> {
