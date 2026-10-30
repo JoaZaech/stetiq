@@ -19,6 +19,8 @@ import {
 import { createDataTableColumnHelper, filterColumn, useDataTable } from '@/lib/data-table'
 import { type DataTableParamsOptions, useDataTableParams } from '@/lib/data-table-params'
 import { useViewParam } from '@/lib/view-param'
+import { attributeRows } from './attribute-rows'
+import { AttributesGrid } from './AttributesGrid'
 import { type ClassRow, type ConceptTables, conceptTables, searchConcepts } from './concepts'
 import { MAP_VIEW_OPTIONS, MAP_VIEWS } from './map-view'
 import { OntologyMap } from './OntologyMap'
@@ -94,7 +96,8 @@ const SECTIONS: readonly { id: SectionId; title: string; purpose: string }[] = [
 
 function OntologyTables({ ontology, query }: { ontology: Ontology; query: string }) {
   const all = useMemo(() => conceptTables(ontology), [ontology])
-  const { relations, attributes } = searchConcepts(all, query)
+  const { relations } = searchConcepts(all, query)
+  const attributes = useMemo(() => attributeRows(ontology), [ontology])
   const [collapsed, setCollapsed] = useState<ReadonlySet<SectionId>>(new Set())
   const sections = useRef(new Map<SectionId, HTMLElement>())
 
@@ -112,7 +115,7 @@ function OntologyTables({ ontology, query }: { ontology: Ontology; query: string
   const body: Record<SectionId, ReactNode> = {
     classes: <ClassesGrid classes={all.classes} />,
     relations: <RelationsTable relations={relations} query={query} />,
-    attributes: <AttributesTable attributes={attributes} query={query} />,
+    attributes: <AttributesGrid attributes={attributes} />,
   }
 
   return (
@@ -341,34 +344,6 @@ function RelationsTable({ relations, query }: { relations: ConceptTables['relati
                 <div key={p}>{p}</div>
               ))}
             </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  )
-}
-
-function AttributesTable({ attributes, query }: { attributes: ConceptTables['attributes']; query: string }) {
-  if (attributes.length === 0) return <Empty title="attributes" query={query} />
-  return (
-    <Table aria-label="Attributes">
-      <TableHeader>
-        <TableRow>
-          <TableHead>Class or relation</TableHead>
-          <TableHead>Attribute</TableHead>
-          <TableHead>Type</TableHead>
-          <TableHead>Required</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {attributes.map((a) => (
-          <TableRow key={`${a.owner}.${a.name}`}>
-            <TableCell>{a.owner}</TableCell>
-            <TableCell>
-              <ConceptName label={a.name} description={a.description} />
-            </TableCell>
-            <TableCell className="font-mono text-xs">{a.type}</TableCell>
-            <TableCell>{a.required && 'Required'}</TableCell>
           </TableRow>
         ))}
       </TableBody>

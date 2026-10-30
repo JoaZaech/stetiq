@@ -219,10 +219,16 @@ test('the Ontology tab lists Concepts grouped, with hierarchy and constraints, a
   ])
   await expect(relations.getByRole('row').nth(1)).toHaveText(/OPENED.*\(Customer\)-\[OPENED\]->\(Ticket\)/)
   await expect(attributes.getByRole('row')).toHaveText([
-    /Class or relation.*Attribute.*Type.*Required/,
-    /Party\s*name\s*STRING\s*Required/,
-    /Ticket\s*opened_at\s*DATE/,
-    /Ticket\s*priority\s*INTEGER/,
+    /Owner.*Attribute.*Type.*Required.*Unique.*Description/,
+    /^Party · class/,
+    /^name\s*STRING\s*Required/,
+    /^Agent · class/,
+    /^name\s*from Party/,
+    /^Customer · class/,
+    /^name\s*from Party\s*STRING\s*Required\s*Unique/,
+    /^Ticket · class/,
+    /^opened_at\s*DATE/,
+    /^priority\s*INTEGER/,
   ])
 
   await page.getByRole('searchbox', { name: 'Search Concepts' }).fill('ticket')
@@ -230,7 +236,7 @@ test('the Ontology tab lists Concepts grouped, with hierarchy and constraints, a
   await expect(classes.getByRole('row')).toHaveText([/Class/, /^Customer/, /^Ticket/])
   await expect(relations).toHaveCount(0)
   await expect(page.getByText('No relations match “ticket”.')).toBeVisible()
-  await expect(attributes.getByRole('row')).toHaveCount(3)
+  await expect(attributes.getByRole('row')).toHaveText([/Owner/, /^Ticket · class · 2 attributes/, /^opened_at/, /^priority/])
 })
 
 test('an unknown Knowledge Graph or version shows a not-found page', async ({ page }) => {
