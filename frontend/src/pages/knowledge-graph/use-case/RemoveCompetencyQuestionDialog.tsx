@@ -32,7 +32,10 @@ export function RemoveCompetencyQuestionDialog({
   onSaved,
 }: RemoveCompetencyQuestionDialogProps) {
   const [open, setOpen] = useState(false)
-  const saving = useSaveUseCase(knowledgeGraph)
+  const saving = useSaveUseCase(knowledgeGraph, (saved) => {
+    setOpen(false)
+    onSaved(saved)
+  })
 
   const onOpenChange = (next: boolean) => {
     if (next) saving.reset()
@@ -56,14 +59,7 @@ export function RemoveCompetencyQuestionDialog({
           <Button
             variant="destructive"
             disabled={saving.isPending}
-            onClick={() =>
-              saving.mutate(withoutQuestion(useCase, question.id), {
-                onSuccess: (saved) => {
-                  setOpen(false)
-                  onSaved(saved)
-                },
-              })
-            }
+            onClick={() => saving.mutate(withoutQuestion(useCase, question.id))}
           >
             {saving.isPending ? 'Removing…' : 'Remove'}
           </Button>

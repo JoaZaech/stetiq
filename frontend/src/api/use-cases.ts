@@ -56,9 +56,12 @@ export interface SavedUseCase {
  * A new version is then judged for structural answerability against the latest
  * Ontology Version (`POST .../evaluate`), so the page can show the result straight away.
  */
-export function useSaveUseCase(kg: string) {
+export function useSaveUseCase(kg: string, onSaved: (saved: SavedUseCase) => void) {
   const queryClient = useQueryClient()
   return useMutation({
+    // Here rather than in `mutate()`'s callbacks: those are skipped once the caller
+    // unmounts, as a removed question's row (and its dialog) does on the refetch.
+    onSuccess: onSaved,
     mutationFn: async (useCase: UseCase): Promise<SavedUseCase> => {
       const before = await queryClient.fetchQuery(listUseCaseVersionsQuery(kg))
       const latest = before.at(-1)?.number ?? 0

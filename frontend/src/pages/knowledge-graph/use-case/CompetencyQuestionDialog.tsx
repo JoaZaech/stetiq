@@ -54,7 +54,10 @@ export function CompetencyQuestionDialog({
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState<QuestionDraft>(EMPTY_DRAFT)
   const [errors, setErrors] = useState<DraftErrors>({})
-  const saving = useSaveUseCase(knowledgeGraph)
+  const saving = useSaveUseCase(knowledgeGraph, (saved) => {
+    setOpen(false)
+    onSaved(saved)
+  })
   const title = question ? `Edit ${question.id}` : 'Add Competency Question'
 
   const onOpenChange = (next: boolean) => {
@@ -88,10 +91,6 @@ export function CompetencyQuestionDialog({
             setErrors(invalid)
             if (Object.keys(invalid).length) return
             saving.mutate(withQuestion(useCase, questionOf(draft)), {
-              onSuccess: (saved) => {
-                setOpen(false)
-                onSaved(saved)
-              },
               onError: (error) => {
                 // The server re-validates: put what it refuses on its field too.
                 const field = error instanceof ApiError ? serverErrorField(error.message) : undefined
