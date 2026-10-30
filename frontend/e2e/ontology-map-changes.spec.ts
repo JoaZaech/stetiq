@@ -102,6 +102,37 @@ test('v1 still has nothing to compare, even on the Map', async ({ page }) => {
   await expect(ontologyMap(page)).toHaveCount(0)
 })
 
+test.describe('with an attribute renamed and another made required', () => {
+  test.use({ seed: 'ontology_map_attributes' })
+
+  test('a changed class lists just its changed attributes, diff-style, in their severity', async ({ page }) => {
+    await page.goto('/ui/kg/transit/versions/2/changes')
+    const map = ontologyMap(page)
+    const stop = map.getByRole('group', { name: 'Stop', exact: true })
+    const attributes = stop.getByRole('list', { name: 'Changed attributes' }).getByRole('listitem')
+
+    // The rename is a removal and an addition; the unchanged `code` stays hidden.
+    await expect(attributes).toHaveText(['~ name now required', '− wheelchairBoarding', '+ wheelchair_boarding'])
+    const severities = await attributes.evaluateAll((items) => items.map((i) => (i as HTMLElement).dataset.severity))
+    expect(severities).toEqual(['breaking', 'breaking', 'additive'])
+    // The unchanged Route lists none.
+    await expect(map.getByRole('group', { name: 'Route', exact: true }).getByRole('list')).toHaveCount(0)
+
+    // The expanded Stop keeps clear of Route.
+    const [s, r] = [await stop.boundingBox(), await map.getByRole('group', { name: 'Route', exact: true }).boundingBox()]
+    const overlap = s!.x < r!.x + r!.width && r!.x < s!.x + s!.width && s!.y < r!.y + r!.height && r!.y < s!.y + s!.height
+    expect(overlap).toBe(false)
+  })
+
+  test('the plain Map lists no attributes on a class', async ({ page }) => {
+    await page.goto('/ui/kg/transit/versions/2/ontology')
+    const stop = ontologyMap(page).getByRole('group', { name: 'Stop', exact: true })
+
+    await expect(stop).toBeVisible()
+    await expect(stop.getByRole('list')).toHaveCount(0)
+  })
+})
+
 test.describe('with a Pattern added beside another of its relation', () => {
   test.use({ seed: 'ontology_map_patterns' })
 

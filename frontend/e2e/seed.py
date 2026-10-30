@@ -422,6 +422,33 @@ def ontology_map_patterns(client: stetiq.Client) -> dict[str, Any]:
     return {}
 
 
+# Changed attributes on the Ontology Map: v2 renames Stop.wheelchairBoarding to
+# wheelchair_boarding and makes Stop.name required; Stop.code and Route are untouched.
+MAP_ATTRIBUTES_V1 = """
+node_types:
+  - label: Route
+    properties: [{name: short_name, type: STRING}]
+  - label: Stop
+    properties:
+      - {name: code, type: STRING}
+      - {name: name, type: STRING}
+      - {name: wheelchairBoarding, type: INTEGER}
+relationship_types: [SERVES]
+patterns: [[Route, SERVES, Stop]]
+"""
+
+MAP_ATTRIBUTES_V2 = MAP_ATTRIBUTES_V1.replace(
+    "{name: name, type: STRING}", "{name: name, type: STRING, required: true}"
+).replace("wheelchairBoarding", "wheelchair_boarding")
+
+
+def ontology_map_attributes(client: stetiq.Client) -> dict[str, Any]:
+    """Knowledge Graph `transit` with v1 = `MAP_ATTRIBUTES_V1` and v2 = `MAP_ATTRIBUTES_V2`."""
+    client.create_knowledge_graph("transit", ontology=MAP_ATTRIBUTES_V1)
+    client.register_ontology("transit", MAP_ATTRIBUTES_V2)
+    return {}
+
+
 # For selecting on the Ontology Map: a superclass, properties, a constraint, a described relation.
 MAP_DETAILS_ONTOLOGY = """
 node_types:
@@ -480,6 +507,33 @@ def ontology_map_path(client: stetiq.Client) -> dict[str, Any]:
     return {}
 
 
+# For searching the Ontology Map, from the retail-orders example: Bin mentions warehouses in
+# its description and an attribute without being one, and so does SHIPPED_FROM's description.
+MAP_SEARCH_ONTOLOGY = """
+node_types:
+  - label: Bin
+    description: A storage location inside a warehouse
+    properties: [{name: code, type: STRING}, {name: warehouse, type: STRING}]
+  - {label: Order}
+  - {label: Shipment}
+  - {label: Warehouse, description: A fulfilment site shipments leave from}
+relationship_types:
+  - {label: FULFILLS}
+  - {label: SHIPPED_FROM, description: The warehouse a shipment left}
+  - {label: STORED_IN}
+patterns:
+  - [Shipment, FULFILLS, Order]
+  - [Shipment, SHIPPED_FROM, Warehouse]
+  - [Bin, STORED_IN, Warehouse]
+"""
+
+
+def ontology_map_search(client: stetiq.Client) -> dict[str, Any]:
+    """Knowledge Graph `retail` with v1 = `MAP_SEARCH_ONTOLOGY`."""
+    client.create_knowledge_graph("retail", ontology=MAP_SEARCH_ONTOLOGY)
+    return {}
+
+
 SCENARIOS: dict[str, Scenario] = {
     "construction_runs": construction_runs,
     "construction_runs_reader": construction_runs_reader,
@@ -498,7 +552,9 @@ SCENARIOS: dict[str, Scenario] = {
     "ontology_map": ontology_map,
     "ontology_map_details": ontology_map_details,
     "ontology_map_patterns": ontology_map_patterns,
+    "ontology_map_attributes": ontology_map_attributes,
     "ontology_map_path": ontology_map_path,
+    "ontology_map_search": ontology_map_search,
 }
 
 
