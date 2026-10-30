@@ -203,9 +203,9 @@ def create_app(
     def list_knowledge_graphs(request: Request) -> list[dict[str, Any]]:
         token = request.state.token
         return [
-            wire.knowledge_graph_to_json(kg)
-            for kg in tracking.list_knowledge_graphs()
-            if token.allows(kg.name, "read")
+            wire.knowledge_graph_summary_to_json(s)
+            for s in tracking.list_knowledge_graphs()
+            if token.allows(s.knowledge_graph.name, "read")
         ]
 
     @api.get("/knowledge-graphs/{name}")

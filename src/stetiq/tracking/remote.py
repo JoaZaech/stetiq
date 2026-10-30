@@ -24,6 +24,7 @@ from stetiq.tracking.entities import (
     EvolutionMode,
     GateResult,
     KnowledgeGraph,
+    KnowledgeGraphSummary,
     Observation,
     ObservationOutcome,
     OntologyVersion,
@@ -86,8 +87,9 @@ class RemoteTrackingService:
         data = self._call("PUT", self._kg_path(name) + "/description", body)
         return wire.knowledge_graph_from_json(data)
 
-    def list_knowledge_graphs(self) -> list[KnowledgeGraph]:
-        return [wire.knowledge_graph_from_json(k) for k in self._call("GET", "/knowledge-graphs")]
+    def list_knowledge_graphs(self) -> list[KnowledgeGraphSummary]:
+        data = self._call("GET", "/knowledge-graphs")
+        return [wire.knowledge_graph_summary_from_json(k) for k in data]
 
     def register_ontology(self, knowledge_graph: str, ontology: Ontology) -> OntologyVersion:
         body = {"ontology": to_dict(ontology)}

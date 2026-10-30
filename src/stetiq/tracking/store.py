@@ -41,6 +41,12 @@ class Store(Protocol):
         """All Knowledge Graphs, by name."""
         ...
 
+    def last_change_at(self, knowledge_graph: str) -> datetime | None:
+        """The newest timestamp recorded for the Knowledge Graph: its creation, an
+        Ontology Version, a run's start or end, a Promotion, a Use Case Version or an
+        Observation. None for an unknown Knowledge Graph."""
+        ...
+
     def add_ontology_version(self, version: OntologyVersion) -> None:
         """Insert-only: Ontology Versions are immutable, there is no update."""
         ...

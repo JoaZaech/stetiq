@@ -34,9 +34,11 @@ from sqlalchemy import (
     create_engine,
     delete,
     event,
+    func,
     insert,
     inspect,
     select,
+    union_all,
     update,
 )
 from sqlalchemy.engine import make_url
@@ -415,6 +417,24 @@ class SqlStore:
         with self._connection() as conn:
             rows = conn.execute(query).mappings().all()
         return [_knowledge_graph_from_row(r) for r in rows]
+
+    def last_change_at(self, knowledge_graph: str) -> datetime | None:
+        stamped = (
+            (knowledge_graphs.c.created_at, knowledge_graphs.c.name),
+            (ontology_versions.c.created_at, ontology_versions.c.knowledge_graph),
+            (construction_runs.c.started_at, construction_runs.c.knowledge_graph),
+            (construction_runs.c.ended_at, construction_runs.c.knowledge_graph),
+            (promotions.c.promoted_at, promotions.c.knowledge_graph),
+            (use_case_versions.c.created_at, use_case_versions.c.knowledge_graph),
+            (observations.c.observed_at, observations.c.knowledge_graph),
+        )
+        # One MAX per table, so nothing but the timestamps is read.
+        query = union_all(
+            *(select(func.max(at).label("at")).where(kg == knowledge_graph) for at, kg in stamped)
+        )
+        with self._connection() as conn:
+            found = [datetime.fromisoformat(at) for at in conn.execute(query).scalars() if at]
+        return max(found, default=None)
 
     def add_ontology_version(self, version: OntologyVersion) -> None:
         with self._connection() as conn:

@@ -158,7 +158,7 @@ def kg_list(tracking_uri: TrackingUri = None) -> None:
     except StetiqError as e:
         raise _fail(e) from None
     typer.echo(f"{'NAME':<32} CREATED")
-    for kg in kgs:
+    for kg in (s.knowledge_graph for s in kgs):
         typer.echo(f"{kg.name:<32} {kg.created_at.isoformat()}")
 
 

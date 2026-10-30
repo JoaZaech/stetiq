@@ -27,6 +27,7 @@ from stetiq.tracking.entities import (
     EvaluationResult,
     GateResult,
     KnowledgeGraph,
+    KnowledgeGraphSummary,
     Observation,
     ObservationOutcome,
     OntologyVersion,
@@ -50,26 +51,38 @@ def _dt(value: str | None) -> datetime | None:
     return None if value is None else datetime.fromisoformat(value)
 
 
+def _iso(value: datetime | None) -> str | None:
+    return None if value is None else value.isoformat()
+
+
 def knowledge_graph_to_json(kg: KnowledgeGraph) -> dict[str, Any]:
-    return {
-        "name": kg.name,
-        "created_at": kg.created_at.isoformat(),
-        "description": kg.description,
-        "contract_version": kg.contract_version,
-        "latest_version": kg.latest_version,
-        "last_run_status": kg.last_run_status,
-        "last_modified_at": (
-            None if kg.last_modified_at is None else kg.last_modified_at.isoformat()
-        ),
-    }
+    return {"name": kg.name, "created_at": kg.created_at.isoformat(), "description": kg.description}
 
 
 def knowledge_graph_from_json(d: dict[str, Any]) -> KnowledgeGraph:
-    # The description and summary fields are optional: older servers do not send them.
+    # The description is optional: older servers do not send it.
     return KnowledgeGraph(
         name=d["name"],
         created_at=datetime.fromisoformat(d["created_at"]),
         description=d.get("description"),
+    )
+
+
+def knowledge_graph_summary_to_json(s: KnowledgeGraphSummary) -> dict[str, Any]:
+    """A list item: the Knowledge Graph's own fields with the summary fields beside them."""
+    return {
+        **knowledge_graph_to_json(s.knowledge_graph),
+        "contract_version": s.contract_version,
+        "latest_version": s.latest_version,
+        "last_run_status": s.last_run_status,
+        "last_modified_at": _iso(s.last_modified_at),
+    }
+
+
+def knowledge_graph_summary_from_json(d: dict[str, Any]) -> KnowledgeGraphSummary:
+    # The summary fields are optional: older servers do not send them.
+    return KnowledgeGraphSummary(
+        knowledge_graph=knowledge_graph_from_json(d),
         contract_version=d.get("contract_version"),
         latest_version=d.get("latest_version"),
         last_run_status=d.get("last_run_status"),
@@ -211,7 +224,7 @@ def run_to_json(run: ConstructionRun) -> dict[str, Any]:
         "ontology_version": run.ontology_version,
         "status": run.status,
         "started_at": run.started_at.isoformat(),
-        "ended_at": None if run.ended_at is None else run.ended_at.isoformat(),
+        "ended_at": _iso(run.ended_at),
         "params": dict(run.params),
         "metrics": dict(run.metrics),
         "observation_id": run.observation_id,

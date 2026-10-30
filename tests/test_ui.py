@@ -325,15 +325,25 @@ def test_the_knowledge_graph_list_shows_only_readable_ones_with_their_summary(
     )
 
 
-def test_a_knowledge_graph_payload_without_summary_fields_still_parses():
-    kg = wire.knowledge_graph_from_json({"name": "support", "created_at": "2026-01-02T03:04:05"})
+def test_a_knowledge_graph_list_item_without_summary_fields_still_parses():
+    listed = wire.knowledge_graph_summary_from_json(
+        {"name": "support", "created_at": "2026-01-02T03:04:05"}
+    )
 
-    assert kg.name == "support"
-    assert kg.contract_version is None
-    assert kg.latest_version is None
-    assert kg.last_run_status is None
-    assert kg.last_modified_at is None
-    assert kg.description is None
+    assert listed.knowledge_graph.name == "support"
+    assert listed.knowledge_graph.description is None
+    assert listed.contract_version is None
+    assert listed.latest_version is None
+    assert listed.last_run_status is None
+    assert listed.last_modified_at is None
+
+
+def test_a_single_knowledge_graph_carries_no_summary_fields(http, database_url, support_ontology):
+    stetiq.Client(database_url).create_knowledge_graph("support", ontology=support_ontology)
+
+    r = http.get("/api/v1/knowledge-graphs/support", headers=bearer(database_url, {"*": "read"}))
+
+    assert set(r.json()) == {"name", "created_at", "description"}
 
 
 # --- Knowledge Graph description ------------------------------------------------------------

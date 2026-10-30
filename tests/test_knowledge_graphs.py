@@ -46,7 +46,10 @@ def test_knowledge_graphs_are_listed_by_name(client, support_ontology):
     client.create_knowledge_graph("support", ontology=support_ontology)
     client.create_knowledge_graph("billing", ontology=support_ontology)
 
-    assert [kg.name for kg in client.list_knowledge_graphs()] == ["billing", "support"]
+    assert [s.knowledge_graph.name for s in client.list_knowledge_graphs()] == [
+        "billing",
+        "support",
+    ]
 
 
 def test_knowledge_graphs_persist_across_clients(client_factory, support_ontology):
@@ -73,6 +76,7 @@ def test_listed_knowledge_graphs_carry_a_summary_of_their_state(client, support_
 
     [kg] = client.list_knowledge_graphs()
 
+    assert kg.knowledge_graph == client.get_knowledge_graph("support")
     assert kg.contract_version == 1
     assert kg.latest_version == 2
     assert kg.last_run_status == "failed"
@@ -122,7 +126,7 @@ def test_the_description_is_set_and_read_back_as_markdown(client_factory, suppor
     other = client_factory()
     assert other.get_knowledge_graph("support").description == "Answers **support** questions."
     [listed] = other.list_knowledge_graphs()
-    assert listed.description == "Answers **support** questions."
+    assert listed.knowledge_graph.description == "Answers **support** questions."
 
 
 def test_a_blank_description_clears_it(client, support_ontology):

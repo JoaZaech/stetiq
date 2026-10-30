@@ -37,6 +37,7 @@ from stetiq.tracking import (
     EvaluationResult,
     GateResult,
     KnowledgeGraph,
+    KnowledgeGraphSummary,
     LocalTrackingService,
     Observation,
     OntologyVersion,
@@ -191,8 +192,9 @@ class Client:
         """Replace the Knowledge Graph's markdown description; None or blank clears it."""
         return self._service.set_knowledge_graph_description(name, description)
 
-    def list_knowledge_graphs(self) -> list[KnowledgeGraph]:
-        """All Knowledge Graphs by name (in server mode: those the API token can read)."""
+    def list_knowledge_graphs(self) -> list[KnowledgeGraphSummary]:
+        """All Knowledge Graphs by name, each with a summary of its state (in server
+        mode: those the API token can read)."""
         return self._service.list_knowledge_graphs()
 
     def register_ontology(self, knowledge_graph: str, ontology: OntologyInput) -> OntologyVersion:
