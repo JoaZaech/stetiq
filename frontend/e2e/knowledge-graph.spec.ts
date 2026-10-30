@@ -75,6 +75,29 @@ test.describe('the Knowledge Graph switcher', () => {
     await expect(page).toHaveURL('/ui/kg/billing/use-case')
   })
 
+  test('picks the first match even when the list loads after the search is typed', async ({ page }) => {
+    // Hold the list back until the search is typed, as a slow server would.
+    let release = () => {}
+    const typed = new Promise<void>((resolve) => (release = resolve))
+    await page.route(/\/api\/v1\/knowledge-graphs$/, async (route) => {
+      await typed
+      await route.continue()
+    })
+    await page.goto('/ui/kg/support/use-case')
+    const switcher = page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Knowledge Graph: support' })
+
+    await switcher.focus()
+    await page.keyboard.press('Enter')
+    await page.getByRole('combobox', { name: 'Search Knowledge Graphs' }).fill('bill')
+    release()
+
+    const list = page.getByRole('listbox', { name: 'Knowledge Graphs' })
+    await expect(list.getByRole('option')).toHaveText(['billing', 'All Knowledge Graphs'])
+    await page.keyboard.press('Enter')
+
+    await expect(page).toHaveURL('/ui/kg/billing/use-case')
+  })
+
   test('from a detail or compare page, switching opens that section of the other Knowledge Graph', async ({
     page,
   }) => {

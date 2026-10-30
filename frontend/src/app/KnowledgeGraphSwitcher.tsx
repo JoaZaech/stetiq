@@ -82,7 +82,17 @@ export function KnowledgeGraphSwitcher({ current, knowledgeGraphs, open, onOpenC
               )}
               <CommandSeparator alwaysRender />
               <CommandGroup forceMount>
-                <CommandItem value={ALL_KNOWLEDGE_GRAPHS} forceMount onSelect={() => go(kgListUrl)}>
+                {/*
+                  Disabled while the list loads: the highlight goes to the first item there
+                  is and stays while it is there, so a search typed meanwhile would leave it
+                  here instead of on the first Knowledge Graph it matches.
+                */}
+                <CommandItem
+                  value={ALL_KNOWLEDGE_GRAPHS}
+                  forceMount
+                  disabled={knowledgeGraphs.isPending}
+                  onSelect={() => go(kgListUrl)}
+                >
                   <List />
                   {ALL_KNOWLEDGE_GRAPHS}
                 </CommandItem>
