@@ -114,6 +114,9 @@ export interface OntologyComparison {
    * only the base has. What to detail or search for any item of `map`.
    */
   ontology: Ontology
+  /** The two Ontologies compared, from `base` to `target`. */
+  base: Ontology
+  target: Ontology
   /** The core's Ontology Diff from the base to the target, behind every severity. */
   diff: OntologyDiff
   /** Each item's change, by class label, Pattern link id and subclass link id. */
@@ -133,20 +136,49 @@ const mostSevere = (classifications: Classification[]): Classification | null =>
     null,
   )
 
+/** A comparison's two Ontologies and the Diff between them. */
+type ComparedOntologies = Pick<OntologyComparison, 'base' | 'target' | 'diff'>
+
 /**
  * The Diff's changes to one class or relation: those to the Concept itself and to its
  * attributes (`<owner>.<attribute>`), which the Diff records apart from their owner.
  */
 export function changesOfConcept(
-  diff: OntologyDiff,
+  { base, target, diff }: ComparedOntologies,
   kind: 'node_type' | 'relationship_type',
   label: string,
 ): OntologyChange[] {
   return diff.changes.filter((c) =>
     c.concept_kind === 'property'
-      ? c.concept.slice(0, c.concept.lastIndexOf('.')) === label
+      ? c.concept.startsWith(`${label}.`) &&
+        attributeChanged(base, target, kind, label, c.concept.slice(label.length + 1))
       : c.concept_kind === kind && c.concept === label,
   )
+}
+
+/**
+ * Whether the class or relation `label` declares attribute `name` differently in `base`
+ * and `target`, a class's constraints on it included. The Diff names a class's and a
+ * relation's attributes alike, so this tells which of two Concepts sharing a label owns
+ * an attribute change.
+ */
+function attributeChanged(
+  base: Ontology,
+  target: Ontology,
+  kind: 'node_type' | 'relationship_type',
+  label: string,
+  name: string,
+): boolean {
+  const declaration = (ontology: Ontology) => {
+    const concepts = kind === 'node_type' ? ontology.node_types : ontology.relationship_types
+    const attribute = concepts.find((c) => c.label === label)?.properties?.find((p) => p.name === name)
+    const constraints =
+      kind === 'node_type'
+        ? (ontology.constraints ?? []).filter((c) => c.node_type === label && c.property_name === name)
+        : []
+    return JSON.stringify([attribute ?? null, constraints])
+  }
+  return declaration(base) !== declaration(target)
 }
 
 /**
@@ -162,8 +194,8 @@ const endpointPattern = (change: OntologyChange) =>
  * an endpoint change belongs to the one link it names, any other change to every link
  * of the relation.
  */
-function changesOfLink(diff: OntologyDiff, link: PatternLink): OntologyChange[] {
-  return changesOfConcept(diff, 'relationship_type', link.relation).filter((c) => {
+function changesOfLink(compared: ComparedOntologies, link: PatternLink): OntologyChange[] {
+  return changesOfConcept(compared, 'relationship_type', link.relation).filter((c) => {
     const pattern = endpointPattern(c)
     return pattern === null || pattern === link.id
   })
@@ -198,7 +230,7 @@ export function compareOntologies(base: Ontology, target: Ontology, diff: Ontolo
   const [baseClasses, targetClasses] = [baseMap, targetMap].map((m) => new Set(m.nodes.map((n) => n.label)))
   const [baseLinks, targetLinks] = [baseMap, targetMap].map((m) => new Set(m.links.map((l) => l.id)))
   const severity = (kind: 'node_type' | 'relationship_type', label: string) =>
-    mostSevere(changesOfConcept(diff, kind, label).map((c) => c.classification))
+    mostSevere(changesOfConcept({ base, target, diff }, kind, label).map((c) => c.classification))
 
   const classes = Object.fromEntries(
     map.nodes.map((n): [string, MapChange] => {
@@ -209,7 +241,7 @@ export function compareOntologies(base: Ontology, target: Ontology, diff: Ontolo
   // A link takes the severity of its own endpoint change and of its relation's other changes.
   const links = Object.fromEntries(
     map.links.map((l): [string, MapChange] => {
-      const s = mostSevere(changesOfLink(diff, l).map((c) => c.classification))
+      const s = mostSevere(changesOfLink({ base, target, diff }, l).map((c) => c.classification))
       return [l.id, { kind: changeKind(baseLinks.has(l.id), targetLinks.has(l.id), s), severity: s }]
     }),
   )
@@ -231,6 +263,8 @@ export function compareOntologies(base: Ontology, target: Ontology, diff: Ontolo
   return {
     map: { ...map, subclassLinks },
     ontology,
+    base,
+    target,
     diff,
     changes: { classes, links, subclassLinks: subclassLinkChanges },
   }
@@ -241,14 +275,11 @@ export function compareOntologies(base: Ontology, target: Ontology, diff: Ontolo
  * attributes' included), or a link's relation's. Empty when nothing changed or nothing
  * is selected.
  */
-export function changesOf(
-  { map, diff }: OntologyComparison,
-  selection: MapSelection | null,
-): OntologyChange[] {
-  if (selection?.kind === 'class') return changesOfConcept(diff, 'node_type', selection.label)
+export function changesOf(comparison: OntologyComparison, selection: MapSelection | null): OntologyChange[] {
+  if (selection?.kind === 'class') return changesOfConcept(comparison, 'node_type', selection.label)
   if (selection?.kind === 'link') {
-    const link = map.links.find((l) => l.id === selection.id)
-    return link ? changesOfLink(diff, link) : []
+    const link = comparison.map.links.find((l) => l.id === selection.id)
+    return link ? changesOfLink(comparison, link) : []
   }
   return []
 }

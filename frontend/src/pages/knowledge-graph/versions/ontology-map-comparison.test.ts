@@ -94,7 +94,15 @@ describe('compareOntologies', () => {
   })
 
   it("marks every Pattern of a relation modified, in that change's severity, when one of its attributes changes", () => {
-    const { changes } = compareOntologies(BASE, TARGET, {
+    const target: Ontology = {
+      ...TARGET,
+      relationship_types: [
+        { label: 'ABOUT' },
+        { label: 'ASSIGNED' },
+        { label: 'OPENED', properties: [{ name: 'channel', type: 'STRING', required: true }] },
+      ],
+    }
+    const { changes } = compareOntologies(BASE, target, {
       classification: 'breaking',
       changes: [
         ...DIFF.changes,
@@ -157,6 +165,34 @@ describe('changesOf', () => {
       'property Ticket.priority removed',
     ])
     expect(changesOf(comparison, { kind: 'class', label: 'Product' })).toEqual([])
+  })
+
+  it('gives an attribute change to the class or the relation that declares it, when the two share a label', () => {
+    // A class and a relation both named Rating: the Diff names either one's attributes `Rating.<name>`.
+    const base: Ontology = {
+      node_types: [{ label: 'Customer' }, { label: 'Rating', properties: [{ name: 'stars', type: 'INTEGER' }] }],
+      relationship_types: [{ label: 'Rating', properties: [{ name: 'weight', type: 'FLOAT' }] }],
+      patterns: [['Customer', 'Rating', 'Rating']],
+    }
+    const target: Ontology = {
+      ...base,
+      relationship_types: [{ label: 'Rating' }],
+      constraints: [{ type: 'UNIQUENESS', node_type: 'Rating', property_name: 'stars' }],
+    }
+    const comparison = compareOntologies(base, target, {
+      classification: 'breaking',
+      changes: [
+        { concept: 'Rating.weight', concept_kind: 'property', kind: 'removed', classification: 'breaking', detail: 'property Rating.weight removed' },
+        { concept: 'Rating.stars', concept_kind: 'property', kind: 'changed', classification: 'breaking', detail: 'UNIQUENESS constraint added' },
+      ],
+    })
+
+    expect(changesOf(comparison, { kind: 'class', label: 'Rating' }).map((c) => c.detail)).toEqual([
+      'UNIQUENESS constraint added',
+    ])
+    expect(
+      changesOf(comparison, { kind: 'link', id: '(Customer)-[Rating]->(Rating)' }).map((c) => c.detail),
+    ).toEqual(['property Rating.weight removed'])
   })
 
   it("lists the Diff's changes to a selected link: its own Pattern's, and its relation's", () => {
