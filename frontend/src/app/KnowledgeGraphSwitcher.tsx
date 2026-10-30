@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { ChevronsUpDown, List, Network } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router'
 import type { UseQueryResult } from '@tanstack/react-query'
@@ -21,10 +20,11 @@ const ALL_KNOWLEDGE_GRAPHS = 'All Knowledge Graphs'
 interface KnowledgeGraphSwitcherProps {
   /** The open Knowledge Graph, if any. */
   current: string | undefined
-  /** The readable Knowledge Graphs (`useKnowledgeGraphs`). */
+  /** The readable Knowledge Graphs (a `knowledgeGraphsQuery` result), loaded or not. */
   knowledgeGraphs: UseQueryResult<KnowledgeGraphSummary[]>
-  /** Called when the list opens or closes, so the caller can load it on demand. */
-  onOpenChange?: (open: boolean) => void
+  /** Whether the list is open: the caller holds it, so it can load the list on demand. */
+  open: boolean
+  onOpenChange: (open: boolean) => void
 }
 
 /**
@@ -32,24 +32,18 @@ interface KnowledgeGraphSwitcherProps {
  * opens a searchable list of all of them. Picking one keeps the open section
  * (`switchKnowledgeGraphUrl`); "All Knowledge Graphs" opens the list page.
  */
-export function KnowledgeGraphSwitcher({ current, knowledgeGraphs, onOpenChange }: KnowledgeGraphSwitcherProps) {
-  const [open, setOpen] = useState(false)
+export function KnowledgeGraphSwitcher({ current, knowledgeGraphs, open, onOpenChange }: KnowledgeGraphSwitcherProps) {
   const navigate = useNavigate()
   const { pathname, search } = useLocation()
 
-  function changeOpen(next: boolean) {
-    setOpen(next)
-    onOpenChange?.(next)
-  }
-
   function go(to: string) {
-    changeOpen(false)
+    onOpenChange(false)
     void navigate(to)
   }
 
   return (
     <SidebarMenuItem>
-      <Popover open={open} onOpenChange={changeOpen}>
+      <Popover open={open} onOpenChange={onOpenChange}>
         <PopoverTrigger asChild>
           <SidebarMenuButton
             variant="outline"

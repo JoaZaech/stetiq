@@ -22,9 +22,10 @@ function sidebarWasOpen(): boolean {
 /**
  * The sidebar plus the rounded main card holding the breadcrumbs and the page.
  *
- * On Help it must not ask for session data (`/api/v1`): Help renders in it signed out,
- * and in server mode any such request sends a signed-out reader to sign-in. The
- * sidebar's Knowledge Graph list is the one exception elsewhere (see `AppSidebar`).
+ * On Help it must not ask for session data (`/api/v1`) on its own: Help renders in it
+ * signed out, and in server mode any such request sends a signed-out reader to sign-in.
+ * The one exception is the user opening the sidebar's Knowledge Graph switcher, an
+ * explicit action that loads the Knowledge Graph list (see `AppSidebar`).
  */
 export function AppLayout() {
   return (

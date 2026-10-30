@@ -92,6 +92,35 @@ test.describe('the Knowledge Graph switcher', () => {
     await expect(page).toHaveURL('/ui/kg/billing/versions')
   })
 
+  test('the switcher stays highlighted while its list is open, expanded or collapsed to an icon', async ({
+    page,
+  }) => {
+    await page.goto('/ui/kg/support/versions')
+    const sidebar = page.getByRole('navigation', { name: 'Main' })
+    const switcher = sidebar.getByRole('button', { name: 'Knowledge Graph: support' })
+    const background = () => switcher.evaluate((el) => getComputedStyle(el).backgroundColor)
+
+    for (const collapsed of [false, true]) {
+      if (collapsed) {
+        await page.getByRole('button', { name: 'Toggle Sidebar' }).first().click()
+        await expect.poll(async () => (await sidebar.boundingBox())!.width).toBeLessThan(64)
+      }
+      await page.mouse.move(0, 0)
+      const closed = await background()
+
+      // By keyboard, so no hover style is in play; focus also opens the collapsed tooltip.
+      await switcher.focus()
+      await page.keyboard.press('Enter')
+      await expect(page.getByRole('listbox', { name: 'Knowledge Graphs' })).toBeVisible()
+      await expect.poll(background).not.toBe(closed)
+
+      await page.keyboard.press('Escape')
+      await expect(page.getByRole('listbox', { name: 'Knowledge Graphs' })).toHaveCount(0)
+      await switcher.blur()
+      await expect.poll(background).toBe(closed)
+    }
+  })
+
   test('"All Knowledge Graphs" opens the list page', async ({ page }) => {
     await page.goto('/ui/settings')
 

@@ -85,6 +85,53 @@ test.describe('with Knowledge Graphs', () => {
     await expect(sidebar.getByRole('button', { name: 'Knowledge Graph: billing' })).toBeVisible()
   })
 
+  test('while the Knowledge Graph list loads, the section items already lead into the last one opened', async ({
+    page,
+  }) => {
+    await page.goto('/ui/kg/billing/runs')
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('billing')
+
+    let release = () => {}
+    const held = new Promise<void>((resolve) => (release = resolve))
+    await page.route('**/api/v1/knowledge-graphs', async (route) => {
+      await held
+      await route.continue()
+    })
+    await page.goto('/ui/settings')
+
+    const sidebar = page.getByRole('navigation', { name: 'Main' })
+    await expect(sidebar.getByRole('link', { name: 'Construction Runs' })).toHaveAttribute(
+      'href',
+      '/ui/kg/billing/runs',
+    )
+    release()
+  })
+
+  test('on Help, the section items lead into the last one opened without loading the list, until the switcher opens', async ({
+    page,
+  }) => {
+    await page.goto('/ui/kg/billing/runs')
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('billing')
+
+    const listRequests: string[] = []
+    page.on('request', (request) => {
+      if (new URL(request.url()).pathname === '/api/v1/knowledge-graphs') listRequests.push(request.url())
+    })
+    await page.goto('/ui/help')
+
+    const sidebar = page.getByRole('navigation', { name: 'Main' })
+    await expect(sidebar.getByRole('link', { name: 'Construction Runs' })).toHaveAttribute(
+      'href',
+      '/ui/kg/billing/runs',
+    )
+    expect(listRequests).toEqual([])
+
+    await sidebar.getByRole('button', { name: 'Select a Knowledge Graph' }).click()
+
+    await expect(page.getByRole('option', { name: 'billing' })).toBeVisible()
+    expect(listRequests).toHaveLength(1)
+  })
+
   test('a last-opened Knowledge Graph that does not exist leaves the section items disabled', async ({
     page,
   }) => {

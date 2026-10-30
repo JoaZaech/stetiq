@@ -27,8 +27,9 @@ const LAST_KNOWLEDGE_GRAPH_KEY = 'stetiq.last-knowledge-graph'
  * The left sidebar: Home, the Knowledge Graph switcher, the sections of a Knowledge
  * Graph (from `KNOWLEDGE_GRAPH_SECTIONS`, so add a section there, not here), then Help
  * and Settings. The layout is the same on every page; only where the sections lead
- * changes: into the open Knowledge Graph, else the last one opened if it still exists,
- * else nowhere (disabled).
+ * changes: into the open Knowledge Graph, else the last one opened, else nowhere
+ * (disabled). The last one opened is trusted until a loaded Knowledge Graph list lacks
+ * it, so the items lead into it while the list loads, or on Help, where it is not loaded.
  *
  * On Help, which renders signed out, the sidebar asks for no session data (see
  * `AppLayout`): it uses a Knowledge Graph list already loaded, and loads one only when
@@ -47,9 +48,10 @@ export function AppSidebar() {
     if (current !== undefined) writeStored(LAST_KNOWLEDGE_GRAPH_KEY, current)
   }, [current])
 
-  const remembered = readStored(LAST_KNOWLEDGE_GRAPH_KEY)
-  const target =
-    current ?? knowledgeGraphs.data?.find((kg) => kg.name === remembered)?.name
+  const remembered = readStored(LAST_KNOWLEDGE_GRAPH_KEY) ?? undefined
+  const rememberedIsGone =
+    knowledgeGraphs.data !== undefined && !knowledgeGraphs.data.some((kg) => kg.name === remembered)
+  const target = current ?? (rememberedIsGone ? undefined : remembered)
 
   return (
     <Sidebar variant="inset" collapsible="icon">
@@ -84,6 +86,7 @@ export function AppSidebar() {
                 <KnowledgeGraphSwitcher
                   current={current}
                   knowledgeGraphs={knowledgeGraphs}
+                  open={switcherOpen}
                   onOpenChange={setSwitcherOpen}
                 />
                 {KNOWLEDGE_GRAPH_SECTIONS.map((section) => (
