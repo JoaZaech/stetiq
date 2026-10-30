@@ -16,6 +16,7 @@ import { OntologyTab } from '@/pages/knowledge-graph/versions/OntologyTab'
 import { OntologyVersionPage } from '@/pages/knowledge-graph/versions/OntologyVersionPage'
 import { OntologyVersionsPage } from '@/pages/knowledge-graph/versions/OntologyVersionsPage'
 import { OverviewTab } from '@/pages/knowledge-graph/versions/OverviewTab'
+import { PromotionsPage } from '@/pages/knowledge-graph/promotions/PromotionsPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { SettingsPage } from '@/pages/settings/SettingsPage'
 import { SignInPage } from '@/pages/sign-in/SignInPage'
@@ -81,7 +82,7 @@ const knowledgeGraphSectionRoutes: Record<
     children: [{ path: 'compare', element: <UseCaseComparePage />, handle: crumb(() => 'Compare') }],
   },
   observations: { page: <ObservationsPage /> },
-  promotions: {},
+  promotions: { page: <PromotionsPage /> },
 }
 
 const knowledgeGraphRoute: RouteObject = {

@@ -236,7 +236,11 @@ def test_a_cookie_authenticated_write_needs_the_matching_csrf_header(
 def test_a_cookie_still_needs_edit_to_write(http, database_url, two_graphs):
     sign_in(http, database_url, {"support": "read"})
 
-    r = move_staging(http, {"X-CSRF-Token": http.cookies["stetiq_csrf"]})
+    r = http.put(
+        "/api/v1/knowledge-graphs/support/aliases/staging",
+        json={"version": 1},
+        headers={"X-CSRF-Token": http.cookies["stetiq_csrf"]},
+    )
 
     assert r.status_code == 403
     assert r.json()["error"]["type"] == "PermissionDeniedError"
@@ -246,6 +250,26 @@ def test_bearer_writes_need_no_csrf_header(http, database_url, two_graphs):
     r = move_staging(http, bearer(database_url, {"support": "edit"}))
 
     assert r.status_code == 200
+
+
+def test_the_ui_promotes_without_sending_an_actor_and_the_audit_records_the_tokens_user(
+    http, database_url, two_graphs
+):
+    sign_in(http, database_url, {"support": "edit"}, user="grace")
+
+    r = http.put(
+        "/api/v1/knowledge-graphs/support/aliases/staging",
+        json={"version": 1},
+        headers={"X-CSRF-Token": http.cookies["stetiq_csrf"]},
+    )
+
+    assert r.status_code == 200, r.text
+    promotions = http.get("/api/v1/knowledge-graphs/support/promotions").json()
+    assert [(p["alias"], p["to_version"], p["actor"]) for p in promotions][-1] == (
+        "staging",
+        1,
+        "grace",
+    )
 
 
 def test_signing_out_clears_the_cookies(http, database_url):
