@@ -6,3 +6,6 @@ __pycache__/
 *.db
 dist/
 .claude/worktrees/
+
+# Built web UI (frontend/ -> npm run build); shipped in the wheel, not committed.
+src/stetiq/_frontend/

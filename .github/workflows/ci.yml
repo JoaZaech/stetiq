@@ -6,7 +6,43 @@ on:
   pull_request:
 
 jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      # Playwright drives a real `stetiq ui`, seeded through the Python SDK.
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked
+        working-directory: .
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: frontend/playwright-report
+      # The Python job checks that the wheel ships this build.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: src/stetiq/_frontend
+          if-no-files-found: error
+
   check:
+    needs: frontend
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -24,9 +60,13 @@ jobs:
       STETIQ_TEST_POSTGRES_URL: postgresql+psycopg://postgres:stetiq@localhost:5432/stetiq_test
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+          path: src/stetiq/_frontend
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --locked
-      - run: uv run ruff check src tests
-      - run: uv run ruff format --check src tests
+      - run: uv run ruff check src tests frontend/e2e
+      - run: uv run ruff format --check src tests frontend/e2e
       - run: uv run pyright
       - run: uv run pytest -q
