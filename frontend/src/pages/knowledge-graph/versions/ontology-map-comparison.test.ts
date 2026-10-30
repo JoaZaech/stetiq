@@ -137,20 +137,20 @@ describe('layoutOntologyMap: a comparison', () => {
 
 describe('changesOf', () => {
   it("lists the Diff's changes to a selected class, those to its attributes included", () => {
-    const { map } = compareOntologies(BASE, TARGET, DIFF)
+    const comparison = compareOntologies(BASE, TARGET, DIFF)
 
-    expect(changesOf(map, DIFF, { kind: 'class', label: 'Ticket' }).map((c) => c.detail)).toEqual([
+    expect(changesOf(comparison, { kind: 'class', label: 'Ticket' }).map((c) => c.detail)).toEqual([
       'property Ticket.priority removed',
     ])
-    expect(changesOf(map, DIFF, { kind: 'class', label: 'Product' })).toEqual([])
+    expect(changesOf(comparison, { kind: 'class', label: 'Product' })).toEqual([])
   })
 
   it("lists the Diff's changes to a selected link's relation", () => {
-    const { map } = compareOntologies(BASE, TARGET, DIFF)
+    const comparison = compareOntologies(BASE, TARGET, DIFF)
 
-    expect(changesOf(map, DIFF, { kind: 'link', id: '(Customer)-[OPENED]->(Ticket)' }).map((c) => c.detail)).toEqual([
+    expect(changesOf(comparison, { kind: 'link', id: '(Customer)-[OPENED]->(Ticket)' }).map((c) => c.detail)).toEqual([
       'endpoint pattern (Agent)-[OPENED]->(Ticket) added',
     ])
-    expect(changesOf(map, DIFF, null)).toEqual([])
+    expect(changesOf(comparison, null)).toEqual([])
   })
 })

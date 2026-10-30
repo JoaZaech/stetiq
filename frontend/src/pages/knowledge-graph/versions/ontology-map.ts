@@ -114,6 +114,8 @@ export interface OntologyComparison {
    * only the base has. What to detail or search for any item of `map`.
    */
   ontology: Ontology
+  /** The core's Ontology Diff from the base to the target, behind every severity. */
+  diff: OntologyDiff
   /** Each item's change, by class label, Pattern link id and subclass link id. */
   changes: {
     classes: Record<string, MapChange>
@@ -209,6 +211,7 @@ export function compareOntologies(base: Ontology, target: Ontology, diff: Ontolo
   return {
     map: { ...map, subclassLinks },
     ontology,
+    diff,
     changes: { classes, links, subclassLinks: subclassLinkChanges },
   }
 }
@@ -218,7 +221,10 @@ export function compareOntologies(base: Ontology, target: Ontology, diff: Ontolo
  * attributes' included), or a link's relation's. Empty when nothing changed or nothing
  * is selected.
  */
-export function changesOf(map: OntologyMap, diff: OntologyDiff, selection: MapSelection | null): OntologyChange[] {
+export function changesOf(
+  { map, diff }: OntologyComparison,
+  selection: MapSelection | null,
+): OntologyChange[] {
   if (selection?.kind === 'class') return changesOfConcept(diff, 'node_type', selection.label)
   if (selection?.kind === 'link') {
     const link = map.links.find((l) => l.id === selection.id)
