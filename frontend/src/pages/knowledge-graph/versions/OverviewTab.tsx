@@ -1,7 +1,7 @@
 import { useId, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { latestGateResult, useGateResults } from '@/api/gate-results'
-import { useVersionEvaluations } from '@/api/ontology-versions'
+import { type EvaluationResult, useVersionEvaluations } from '@/api/ontology-versions'
 import { useRuns } from '@/api/runs'
 import { kgUrl } from '@/app/knowledge-graph-sections'
 import { CopyButton } from '@/components/CopyButton'
@@ -59,7 +59,7 @@ export function OverviewTab() {
   )
 }
 
-function Panel({ title, children }: { title: string; children: ReactNode }) {
+export function Panel({ title, children }: { title: string; children: ReactNode }) {
   const id = useId()
   return (
     <section aria-labelledby={id} className="min-w-0 space-y-3">
@@ -71,7 +71,7 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
   )
 }
 
-function Fact({ label, children }: { label: string; children: ReactNode }) {
+export function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <>
       <dt className="text-muted-foreground">{label}</dt>
@@ -104,10 +104,19 @@ function EvaluatorResults({ name, number }: { name: string; number: number }) {
   const results = useVersionEvaluations(name, number)
   if (results.isPending) return <Skeleton className="h-32 w-full" />
   if (results.isError) return <ErrorAlert error={results.error} />
-  const rows = metricRows(results.data)
-  if (rows.length === 0) {
-    return <p className="text-sm text-muted-foreground">No Evaluator results for this version.</p>
-  }
+  return <EvaluatorResultTable results={results.data} empty="No Evaluator results for this version." />
+}
+
+/** Evaluator results (of a version or a run), one row per metric. */
+export function EvaluatorResultTable({
+  results,
+  empty,
+}: {
+  results: readonly EvaluationResult[]
+  empty: string
+}) {
+  const rows = metricRows(results)
+  if (rows.length === 0) return <p className="text-sm text-muted-foreground">{empty}</p>
   return (
     <Table aria-label="Evaluator results">
       <TableHeader>

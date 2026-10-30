@@ -4,7 +4,7 @@ import { Link } from 'react-router'
 import {
   type DriftEvent,
   type DriftThresholds,
-  type GraphSourceScope,
+  formatScope,
   type Observation,
   useDriftEvents,
   useObservations,
@@ -186,17 +186,6 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
       <dd className="min-w-0">{children}</dd>
     </>
   )
-}
-
-/** `database neo4j · label Support`; the label and namespace only when narrowed. */
-function formatScope(scope: GraphSourceScope): string {
-  return [
-    `database ${scope.database}`,
-    scope.label && `label ${scope.label}`,
-    scope.namespace && `namespace ${scope.namespace}`,
-  ]
-    .filter(Boolean)
-    .join(' · ')
 }
 
 const percent = new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 1 })
