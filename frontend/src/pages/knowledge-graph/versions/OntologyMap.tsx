@@ -611,7 +611,7 @@ function PatternEdgeView({ id, source, target, data, markerEnd }: EdgeProps<Patt
   const from = useInternalNode(source)
   const to = useInternalNode(target)
   // Re-rendered only when the label shows or hides, not on every step of a zoom.
-  const shown = useStore((s) => labelShown(s.transform[2], { focused: data?.focused ?? false, change: data?.change }))
+  const labelVisible = useStore((s) => labelShown(s.transform[2], { focused: data?.focused ?? false, change: data?.change }))
   if (!from || !to || !data) return null
   const { path, label } = linkShape(data, box(from), box(to))
 
@@ -637,7 +637,7 @@ function PatternEdgeView({ id, source, target, data, markerEnd }: EdgeProps<Patt
           cursor: 'pointer',
         }}
       />
-      {shown && (
+      {labelVisible && (
         // The top layer, above every node and link. The pill stays solid, so a link or a
         // faded item never shows through; only its text fades.
         <ViewportPortal>
