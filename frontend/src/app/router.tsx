@@ -153,16 +153,24 @@ export const routes: RouteObject[] = [
   { path: 'sign-in', element: <SignInPage /> },
   {
     path: '/',
+    // The shell only (sidebar, breadcrumbs): it asks for no session data.
     element: <AppLayout />,
     children: [
-      {
-        // Pathless: puts "Knowledge Graphs" first in the breadcrumbs of every page below.
-        handle: crumb(() => 'Knowledge Graphs'),
-        children: [{ index: true, element: <KnowledgeGraphsPage /> }, knowledgeGraphRoute],
-      },
-      { path: 'settings', element: <SettingsPage />, handle: crumb(() => 'Settings') },
+      // Readable signed out in server mode, so a reader can find out how to get an API Token.
       helpRoute,
-      { path: '*', element: <NotFoundPage /> },
+      {
+        // Pathless: the signed-in pages. They read `/api/v1`, and a 401 there sends a
+        // signed-out reader to sign-in (api/client.ts).
+        children: [
+          {
+            // Pathless: puts "Knowledge Graphs" first in the breadcrumbs of every page below.
+            handle: crumb(() => 'Knowledge Graphs'),
+            children: [{ index: true, element: <KnowledgeGraphsPage /> }, knowledgeGraphRoute],
+          },
+          { path: 'settings', element: <SettingsPage />, handle: crumb(() => 'Settings') },
+          { path: '*', element: <NotFoundPage /> },
+        ],
+      },
     ],
   },
 ]

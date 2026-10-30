@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useId, useState, type FormEvent } from 'react'
-import { useNavigate, useSearchParams } from 'react-router'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 import { afterSignIn, signIn } from '@/api/session'
 import { whoAmIQuery } from '@/api/whoami'
 import { ErrorAlert } from '@/components/ErrorAlert'
@@ -8,6 +8,10 @@ import { Logo } from '@/components/Logo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { helpUrl } from '@/pages/help/guide-index'
+
+/** The guide page (docs/guide/05-server-and-api-tokens.md) on getting an API Token. */
+const SERVER_GUIDE_PAGE = 'server-and-api-tokens'
 
 /**
  * Server mode: paste an existing API Token (ADR 0002: the UI never issues one). The
@@ -50,7 +54,11 @@ export function SignInPage() {
           <h1 className="text-xl font-semibold tracking-tight">Sign in</h1>
           <p className="text-sm text-muted-foreground">
             Paste an API Token. An administrator issues one with{' '}
-            <code className="font-mono">stetiq token create</code>.
+            <code className="font-mono">stetiq token create</code>. See{' '}
+            <Link to={helpUrl(SERVER_GUIDE_PAGE)} className="font-medium underline underline-offset-4">
+              Server &amp; API Tokens
+            </Link>{' '}
+            in Help.
           </p>
         </div>
         <form onSubmit={submit} className="space-y-4">

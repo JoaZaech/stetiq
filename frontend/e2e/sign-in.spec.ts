@@ -82,3 +82,26 @@ test('a revoked token sends the user back to sign-in', async ({ page, stetiq }) 
   await expect(page).toHaveURL(/\/ui\/sign-in/)
   await expect(page.getByLabel('API Token')).toBeVisible()
 })
+
+test('Help opens signed out, without asking for a token or any session data', async ({ page }) => {
+  const apiCalls: string[] = []
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.startsWith('/api/')) apiCalls.push(request.url())
+  })
+
+  await page.goto('/ui/help/getting-started')
+
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Getting started')
+  await expect(page).toHaveURL('/ui/help/getting-started')
+  await expect(page.getByRole('navigation', { name: 'Guide' })).toBeVisible()
+  expect(apiCalls).toEqual([])
+})
+
+test("the sign-in page's help link opens the Server & API Tokens guide page", async ({ page }) => {
+  await page.goto('/ui/sign-in')
+
+  await page.getByRole('link', { name: 'Server & API Tokens' }).click()
+
+  await expect(page).toHaveURL('/ui/help/server-and-api-tokens')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Server & API Tokens')
+})
