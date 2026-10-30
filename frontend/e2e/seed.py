@@ -347,9 +347,31 @@ patterns:
 """
 
 
+# MAP_ONTOLOGY's next version: Queue and IN_QUEUE added (additive), Product and ABOUT
+# removed (breaking), and Ticket given a required property (breaking).
+MAP_ONTOLOGY_V2 = """
+node_types:
+  - {label: Agent, parent: Party}
+  - {label: Customer, parent: Party}
+  - {label: LegacyTicket, parent: Ticket, deprecated: true}
+  - Party
+  - Queue
+  - label: Ticket
+    properties: [{name: priority, type: STRING, required: true}]
+relationship_types: [DUPLICATES, {label: FILED, deprecated: true}, FOLLOWS, IN_QUEUE, OPENED]
+patterns:
+  - [Customer, OPENED, Ticket]
+  - [Customer, FOLLOWS, Ticket]
+  - [Ticket, DUPLICATES, Ticket]
+  - [Customer, FILED, LegacyTicket]
+  - [Ticket, IN_QUEUE, Queue]
+"""
+
+
 def ontology_map(client: stetiq.Client) -> dict[str, Any]:
-    """Knowledge Graph `support` with v1 = `MAP_ONTOLOGY`."""
+    """Knowledge Graph `support` with v1 = `MAP_ONTOLOGY` and v2 = `MAP_ONTOLOGY_V2`."""
     client.create_knowledge_graph("support", ontology=MAP_ONTOLOGY)
+    client.register_ontology("support", MAP_ONTOLOGY_V2)
     return {}
 
 

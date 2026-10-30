@@ -57,8 +57,8 @@ test('the Changes tab shows the Ontology Diff against the previous version', asy
 
   await expect(page).toHaveURL('/ui/kg/support/versions/4/changes')
   await expect(page.getByRole('link', { name: 'Changes' })).toHaveAttribute('aria-current', 'page')
+  await expect(page.getByText('Changes from v3')).toBeVisible()
   const diff = page.getByRole('region', { name: 'Ontology Diff' })
-  await expect(diff).toContainText('Changes from v3')
   await expect(diff.getByText('Overall: breaking')).toBeVisible()
   await expect(diff.getByRole('row', { name: /Ticket\.priority/ })).toHaveText(/breaking.*removed/)
 
