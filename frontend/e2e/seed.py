@@ -327,6 +327,24 @@ def observed_support(_client: stetiq.Client) -> dict[str, Any]:
     return {"run_id": run.id, "observation_id": outcome.observation.id}
 
 
+# For the Ontology Map: two relations between Customer and Ticket, and a self-loop.
+MAP_ONTOLOGY = """
+node_types: [Customer, Product, Ticket]
+relationship_types: [ABOUT, DUPLICATES, FOLLOWS, OPENED]
+patterns:
+  - [Customer, OPENED, Ticket]
+  - [Customer, FOLLOWS, Ticket]
+  - [Ticket, ABOUT, Product]
+  - [Ticket, DUPLICATES, Ticket]
+"""
+
+
+def ontology_map(client: stetiq.Client) -> dict[str, Any]:
+    """Knowledge Graph `support` with v1 = `MAP_ONTOLOGY`."""
+    client.create_knowledge_graph("support", ontology=MAP_ONTOLOGY)
+    return {}
+
+
 SCENARIOS: dict[str, Scenario] = {
     "construction_runs": construction_runs,
     "construction_runs_reader": construction_runs_reader,
@@ -342,6 +360,7 @@ SCENARIOS: dict[str, Scenario] = {
     "support_use_case_versions": support_use_case_versions,
     "observed_support": observed_support,
     "compared_runs": compared_runs,
+    "ontology_map": ontology_map,
 }
 
 

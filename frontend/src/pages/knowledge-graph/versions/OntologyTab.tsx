@@ -1,6 +1,8 @@
 import { useId, useMemo, type ReactNode } from 'react'
-import { Search } from 'lucide-react'
+import { Network, Search, Table2 } from 'lucide-react'
 import { useSearchParams } from 'react-router'
+import type { Ontology } from '@/api/ontology-versions'
+import { ViewToggle, type ViewOption } from '@/components/ViewToggle'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import {
@@ -11,15 +13,42 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { useViewParam } from '@/lib/view-param'
 import { conceptTables, searchConcepts } from './concepts'
+import { OntologyMap } from './OntologyMap'
 import { useOntologyVersionTab } from './version-context'
 
-/** The version page's Ontology tab: its Concepts grouped as classes, relations and attributes. */
+type OntologyView = 'map' | 'table'
+
+const VIEWS: readonly [OntologyView, ...OntologyView[]] = ['map', 'table']
+
+const VIEW_OPTIONS: readonly ViewOption<OntologyView>[] = [
+  { value: 'table', label: 'Table', icon: Table2 },
+  { value: 'map', label: 'Map', icon: Network },
+]
+
+/**
+ * The version page's Ontology tab: a Map of the Ontology by default (`?view=` absent), or
+ * its Concepts as tables (`?view=table`) grouped as classes, relations and attributes.
+ */
 export function OntologyTab() {
   const version = useOntologyVersionTab()
+  const [view, setView] = useViewParam(VIEWS)
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <ViewToggle options={VIEW_OPTIONS} mode={view} onChange={setView} />
+      </div>
+      {view === 'map' ? <OntologyMap ontology={version.ontology} /> : <OntologyTables ontology={version.ontology} />}
+    </div>
+  )
+}
+
+function OntologyTables({ ontology }: { ontology: Ontology }) {
   const [params, setParams] = useSearchParams()
   const query = params.get('q') ?? ''
-  const all = useMemo(() => conceptTables(version.ontology), [version.ontology])
+  const all = useMemo(() => conceptTables(ontology), [ontology])
   const { classes, relations, attributes } = searchConcepts(all, query)
 
   return (
@@ -33,7 +62,14 @@ export function OntologyTab() {
           className="pl-8"
           value={query}
           onChange={(e) =>
-            setParams(e.target.value ? { q: e.target.value } : {}, { replace: true })
+            setParams(
+              (p) => {
+                if (e.target.value) p.set('q', e.target.value)
+                else p.delete('q')
+                return p
+              },
+              { replace: true },
+            )
           }
         />
       </div>

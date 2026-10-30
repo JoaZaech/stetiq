@@ -205,6 +205,7 @@ test('the Ontology tab lists Concepts grouped, with hierarchy and constraints, a
   await page.goto('/ui/kg/support/versions/3')
   await page.getByRole('navigation', { name: 'Ontology Version' }).getByRole('link', { name: 'Ontology' }).click()
   await expect(page).toHaveURL('/ui/kg/support/versions/3/ontology')
+  await page.getByRole('radio', { name: 'Table' }).click()
 
   const classes = page.getByRole('table', { name: 'Classes' })
   const relations = page.getByRole('table', { name: 'Relations' })
