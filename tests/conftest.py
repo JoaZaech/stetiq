@@ -109,13 +109,27 @@ def support_ontology():
 # --- Neo4j (testcontainers) -------------------------------------------------------------
 
 NEO4J_IMAGE_ENV = "STETIQ_TEST_NEO4J_IMAGE"
-# Enterprise (evaluation licence) so tests can create a second database for scoping.
-NEO4J_DEFAULT_IMAGE = "neo4j:2026.10-enterprise"
-NEO4J_DATABASES = ("neo4j", "other")
+# Community by default. Set STETIQ_TEST_NEO4J_IMAGE to an Enterprise image to also cover
+# database scoping (a second database) and the built-in `reader` role.
+NEO4J_DEFAULT_IMAGE = "neo4j:2026.10-community"
+
+
+def _neo4j_image() -> str:
+    return os.environ.get(NEO4J_IMAGE_ENV, NEO4J_DEFAULT_IMAGE)
 
 
 @pytest.fixture(scope="session")
-def neo4j_container():
+def neo4j_enterprise() -> bool:
+    return "enterprise" in _neo4j_image()
+
+
+@pytest.fixture(scope="session")
+def neo4j_databases(neo4j_enterprise) -> tuple[str, ...]:
+    return ("neo4j", "other") if neo4j_enterprise else ("neo4j",)
+
+
+@pytest.fixture(scope="session")
+def neo4j_container(neo4j_enterprise):
     """A throwaway Neo4j server for the whole session; skipped when Docker is unavailable."""
     try:
         import docker
@@ -126,21 +140,22 @@ def neo4j_container():
         docker.from_env().ping()
     except Exception as exc:  # noqa: BLE001 - any failure means "no Docker here"
         pytest.skip(f"Docker is unavailable: {exc}")
-    container = Neo4jContainer(
-        os.environ.get(NEO4J_IMAGE_ENV, NEO4J_DEFAULT_IMAGE), password="testpassword"
-    ).with_env("NEO4J_ACCEPT_LICENSE_AGREEMENT", "yes")
+    container = Neo4jContainer(_neo4j_image(), password="testpassword")
+    if neo4j_enterprise:
+        container = container.with_env("NEO4J_ACCEPT_LICENSE_AGREEMENT", "yes")
     with container:
-        with container.get_driver() as driver:
-            driver.execute_query("CREATE DATABASE other IF NOT EXISTS WAIT", database_="system")
+        if neo4j_enterprise:
+            with container.get_driver() as driver:
+                driver.execute_query("CREATE DATABASE other IF NOT EXISTS WAIT", database_="system")
         yield container
 
 
 @pytest.fixture
-def neo4j_admin_driver(neo4j_container):
+def neo4j_admin_driver(neo4j_container, neo4j_databases):
     """A write-capable driver for seeding (the test plays the user's pipeline); every
     test starts with empty databases."""
     with neo4j_container.get_driver() as driver:
-        for database in NEO4J_DATABASES:
+        for database in neo4j_databases:
             driver.execute_query("MATCH (n) DETACH DELETE n", database_=database)
         yield driver
 
