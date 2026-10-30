@@ -73,6 +73,7 @@ knowledge_graphs = Table(
     metadata,
     Column("name", Text, primary_key=True),
     Column("created_at", Text, nullable=False),  # ISO-8601, UTC
+    Column("description", Text),  # markdown; NULL when unset
 )
 
 ontology_versions = Table(
@@ -286,6 +287,7 @@ use_case_versions = Table(
 _ADDED_COLUMNS = [
     ("evaluation_results", "use_case_version", "INTEGER"),
     ("evaluation_results", "parameters_json", "TEXT NOT NULL DEFAULT '{}'"),
+    ("knowledge_graphs", "description", "TEXT"),
 ]
 
 
@@ -398,20 +400,21 @@ class SqlStore:
             query = query.with_for_update()
         with self._connection() as conn:
             row = conn.execute(query).mappings().first()
-        if row is None:
-            return None
-        return KnowledgeGraph(
-            name=row["name"], created_at=datetime.fromisoformat(row["created_at"])
-        )
+        return None if row is None else _knowledge_graph_from_row(row)
+
+    def set_knowledge_graph_description(self, name: str, description: str | None) -> None:
+        with self._connection() as conn:
+            conn.execute(
+                update(knowledge_graphs)
+                .where(knowledge_graphs.c.name == name)
+                .values(description=description)
+            )
 
     def list_knowledge_graphs(self) -> list[KnowledgeGraph]:
         query = select(knowledge_graphs).order_by(knowledge_graphs.c.name)
         with self._connection() as conn:
             rows = conn.execute(query).mappings().all()
-        return [
-            KnowledgeGraph(name=r["name"], created_at=datetime.fromisoformat(r["created_at"]))
-            for r in rows
-        ]
+        return [_knowledge_graph_from_row(r) for r in rows]
 
     def add_ontology_version(self, version: OntologyVersion) -> None:
         with self._connection() as conn:
@@ -900,6 +903,14 @@ class SqlStore:
 
     def list_use_case_versions(self, knowledge_graph: str) -> list[UseCaseVersion]:
         return self._use_case_versions(use_case_versions.c.knowledge_graph == knowledge_graph)
+
+
+def _knowledge_graph_from_row(row) -> KnowledgeGraph:
+    return KnowledgeGraph(
+        name=row["name"],
+        created_at=datetime.fromisoformat(row["created_at"]),
+        description=row["description"],
+    )
 
 
 def _evaluation_from_row(row) -> EvaluationResult:

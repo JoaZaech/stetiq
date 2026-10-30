@@ -5,6 +5,7 @@ import { KnowledgeGraphSectionPage } from '@/pages/knowledge-graph/KnowledgeGrap
 import { KnowledgeGraphsPage } from '@/pages/knowledge-graphs/KnowledgeGraphsPage'
 import { ChangesTab } from '@/pages/knowledge-graph/versions/ChangesTab'
 import { OntologyDiffPage } from '@/pages/knowledge-graph/versions/OntologyDiffPage'
+import { ObservationsPage } from '@/pages/knowledge-graph/observations/ObservationsPage'
 import { OntologyTab } from '@/pages/knowledge-graph/versions/OntologyTab'
 import { OntologyVersionPage } from '@/pages/knowledge-graph/versions/OntologyVersionPage'
 import { OntologyVersionsPage } from '@/pages/knowledge-graph/versions/OntologyVersionsPage'
@@ -53,7 +54,7 @@ const knowledgeGraphSectionRoutes: Record<
   },
   runs: {},
   'use-case': {},
-  observations: {},
+  observations: { page: <ObservationsPage /> },
   promotions: {},
 }
 

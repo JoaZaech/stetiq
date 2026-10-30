@@ -218,6 +218,13 @@ def create_app(
     def get_knowledge_graph(name: str) -> dict[str, Any]:
         return wire.knowledge_graph_to_json(tracking.get_knowledge_graph(name))
 
+    @api.put("/knowledge-graphs/{name}/description")
+    def set_knowledge_graph_description(
+        name: str, description: str | None = Body(embed=True)
+    ) -> dict[str, Any]:
+        kg = tracking.set_knowledge_graph_description(name, description)
+        return wire.knowledge_graph_to_json(kg)
+
     @api.post("/knowledge-graphs/{name}/ontology-versions")
     def register_ontology(name: str, ontology: dict[str, Any] = Body(embed=True)) -> dict[str, Any]:
         # Always origin "registered": "run" versions only arise from ending a run.

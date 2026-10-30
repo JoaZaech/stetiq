@@ -309,6 +309,42 @@ def test_a_knowledge_graph_payload_without_summary_fields_still_parses():
     assert kg.latest_version is None
     assert kg.last_run_status is None
     assert kg.last_modified_at is None
+    assert kg.description is None
+
+
+# --- Knowledge Graph description ------------------------------------------------------------
+
+
+def describe_support(http, headers=None):
+    return http.put(
+        "/api/v1/knowledge-graphs/support/description",
+        json={"description": "Answers support questions."},
+        headers=headers,
+    )
+
+
+def test_a_read_only_token_cannot_set_the_description(http, database_url, two_graphs):
+    r = describe_support(http, bearer(database_url, {"support": "read"}))
+
+    assert r.status_code == 403
+    assert r.json()["error"]["type"] == "PermissionDeniedError"
+    readable = http.get(
+        "/api/v1/knowledge-graphs/support", headers=bearer(database_url, {"*": "read"})
+    )
+    assert readable.json()["description"] is None
+
+
+def test_an_editor_sets_the_description_through_the_sign_in_cookie(http, database_url, two_graphs):
+    sign_in(http, database_url, {"support": "edit"})
+
+    refused = describe_support(http)
+    r = describe_support(http, {"X-CSRF-Token": http.cookies["stetiq_csrf"]})
+
+    assert refused.status_code == 403
+    assert r.status_code == 200
+    assert http.get("/api/v1/knowledge-graphs/support").json()["description"] == (
+        "Answers support questions."
+    )
 
 
 # --- Ontology Diff ------------------------------------------------------------------------

@@ -54,6 +54,7 @@ def knowledge_graph_to_json(kg: KnowledgeGraph) -> dict[str, Any]:
     return {
         "name": kg.name,
         "created_at": kg.created_at.isoformat(),
+        "description": kg.description,
         "contract_version": kg.contract_version,
         "latest_version": kg.latest_version,
         "last_run_status": kg.last_run_status,
@@ -64,10 +65,11 @@ def knowledge_graph_to_json(kg: KnowledgeGraph) -> dict[str, Any]:
 
 
 def knowledge_graph_from_json(d: dict[str, Any]) -> KnowledgeGraph:
-    # The summary fields are optional: older servers do not send them.
+    # The description and summary fields are optional: older servers do not send them.
     return KnowledgeGraph(
         name=d["name"],
         created_at=datetime.fromisoformat(d["created_at"]),
+        description=d.get("description"),
         contract_version=d.get("contract_version"),
         latest_version=d.get("latest_version"),
         last_run_status=d.get("last_run_status"),

@@ -100,6 +100,10 @@ class TrackingService(Protocol):
 
     def get_knowledge_graph(self, name: str) -> KnowledgeGraph: ...
 
+    def set_knowledge_graph_description(self, name: str, description: str | None) -> KnowledgeGraph:
+        """Replace the markdown description; a blank one clears it."""
+        ...
+
     def list_knowledge_graphs(self) -> list[KnowledgeGraph]:
         """By name, with their summary fields. In server mode, only those the API token
         can read."""
@@ -262,6 +266,13 @@ class LocalTrackingService:
         if kg is None:
             raise NotFoundError(f"Knowledge Graph {name!r} does not exist")
         return kg
+
+    def set_knowledge_graph_description(self, name: str, description: str | None) -> KnowledgeGraph:
+        description = description.strip() if description is not None else None
+        with self._store.transaction():
+            self.get_knowledge_graph(name)
+            self._store.set_knowledge_graph_description(name, description or None)
+            return self.get_knowledge_graph(name)
 
     def list_knowledge_graphs(self) -> list[KnowledgeGraph]:
         """All Knowledge Graphs by name, each with its summary fields filled in."""

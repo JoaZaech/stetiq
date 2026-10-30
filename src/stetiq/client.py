@@ -186,6 +186,10 @@ class Client:
     def get_knowledge_graph(self, name: str) -> KnowledgeGraph:
         return self._service.get_knowledge_graph(name)
 
+    def set_knowledge_graph_description(self, name: str, description: str | None) -> KnowledgeGraph:
+        """Replace the Knowledge Graph's markdown description; None or blank clears it."""
+        return self._service.set_knowledge_graph_description(name, description)
+
     def list_knowledge_graphs(self) -> list[KnowledgeGraph]:
         """All Knowledge Graphs by name (in server mode: those the API token can read)."""
         return self._service.list_knowledge_graphs()
