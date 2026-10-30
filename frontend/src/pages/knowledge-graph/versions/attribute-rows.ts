@@ -1,5 +1,5 @@
 import type { Ontology } from '@/api/ontology-versions'
-import { conceptTables, constraintsOn, superclassChain } from './concepts'
+import { type ClassOrRelation, conceptTables, constraintsOn, superclassChain } from './concepts'
 import { type DetailProperty, detailsOf } from './ontology-map-focus'
 
 /** An attribute as the Attributes grid lists it: one row per attribute a class or relation has. */
@@ -8,7 +8,7 @@ export interface AttributeGridRow {
   id: string
   /** The class or relation that has it, by declaring or inheriting it. */
   owner: string
-  ownerKind: 'class' | 'relation'
+  ownerKind: ClassOrRelation['kind']
   /** The owner's superclass; classes only. */
   ownerParent?: string
   name: string

@@ -1,4 +1,30 @@
+import type { ConceptKind, OwnerKind } from '@/api/ontology-diff'
 import type { Ontology, OntologyConcept } from '@/api/ontology-versions'
+
+/** Each kind of Concept as the Map and the Table name it. */
+export const CONCEPT_NOUN = {
+  node_type: 'class',
+  relationship_type: 'relation',
+  property: 'attribute',
+} as const satisfies Record<ConceptKind, string>
+
+/** A kind of Concept in the Map's and the Table's words: class, relation or attribute. */
+export type ConceptNoun = (typeof CONCEPT_NOUN)[ConceptKind]
+
+/**
+ * A class or a relation, by name: a row of the Table, a search result, what "Show on Map"
+ * shows.
+ */
+export interface ClassOrRelation {
+  kind: (typeof CONCEPT_NOUN)[OwnerKind]
+  label: string
+}
+
+/** An attribute's Concept, `<owner>.<attribute>` as the Diff names it, split into the two. */
+export function attributeReference(concept: string): { owner: string; attribute: string } {
+  const dot = concept.indexOf('.')
+  return { owner: concept.slice(0, dot), attribute: concept.slice(dot + 1) }
+}
 
 /** A class Concept, placed in the hierarchy: `depth` 0 has no (known) superclass. */
 export interface ClassRow {

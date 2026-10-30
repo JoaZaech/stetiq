@@ -1,5 +1,6 @@
 import { useId, type KeyboardEvent } from 'react'
-import type { SearchResult, SearchResults } from './ontology-map-search'
+import type { ClassOrRelation } from './concepts'
+import type { SearchResults } from './ontology-map-search'
 
 /**
  * The Map's search results beside it: the Concepts the search names, then the other
@@ -15,8 +16,8 @@ export function MapSearchResults({
 }: {
   query: string
   results: SearchResults
-  canPick: (result: SearchResult) => boolean
-  onPick: (result: SearchResult) => void
+  canPick: (result: ClassOrRelation) => boolean
+  onPick: (result: ClassOrRelation) => void
 }) {
   const empty = results.names.length === 0 && results.others.length === 0
   return (
@@ -44,9 +45,9 @@ function ResultGroup({
   onPick,
 }: {
   title: string
-  results: (SearchResult & { reasons?: string[] })[]
-  canPick: (result: SearchResult) => boolean
-  onPick: (result: SearchResult) => void
+  results: (ClassOrRelation & { reasons?: string[] })[]
+  canPick: (result: ClassOrRelation) => boolean
+  onPick: (result: ClassOrRelation) => void
 }) {
   const id = useId()
   if (results.length === 0) return null

@@ -6,11 +6,17 @@ export const CLASSIFICATIONS = ['additive', 'deprecating', 'breaking'] as const
 
 export type Classification = (typeof CLASSIFICATIONS)[number]
 
+/** What kind of Concept: a class, a relation or an attribute (`ConceptKind` in ontology/model.py). */
+export type ConceptKind = 'node_type' | 'relationship_type' | 'property'
+
+/** A class's or a relation's Concept kind: the Concepts that own attributes. */
+export type OwnerKind = Exclude<ConceptKind, 'property'>
+
 /** One change to one Concept (wire.ontology_diff_to_json). */
 export interface OntologyChange {
   /** A class or relation label, or `<owner>.<attribute>`. */
   concept: string
-  concept_kind: 'node_type' | 'relationship_type' | 'property'
+  concept_kind: ConceptKind
   kind: 'added' | 'removed' | 'changed' | 'deprecated'
   classification: Classification
   detail: string

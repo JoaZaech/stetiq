@@ -1,13 +1,11 @@
 import { createContext, use } from 'react'
 import type { ConceptSelection } from './concept-selection'
-
-/** A class or relation, as the Table names and links it. */
-export type TableConcept = { kind: 'class' | 'relation'; label: string }
+import type { ClassOrRelation } from './concepts'
 
 /** What the Ontology Table's links do (see `OntologyTables`). */
 export interface TableLinks {
   /** Selects `concept` and scrolls to its row, opening its section. */
-  select: (concept: TableConcept) => void
+  select: (concept: ClassOrRelation) => void
   /** Scrolls to `owner`'s group of attributes, grouping by owner and opening it. */
   openGroup: (owner: string) => void
   /** Switches to the Map with `concept` selected. */
@@ -23,7 +21,7 @@ export function useTableLinks(): TableLinks {
 }
 
 /** The DOM id of a class's or relation's row in the Table. */
-export const conceptRowId = ({ kind, label }: TableConcept) => `ontology-${kind}-${label}`
+export const conceptRowId = ({ kind, label }: ClassOrRelation) => `ontology-${kind}-${label}`
 
 /** The DOM id of an owner's group header in the Attributes grid. */
 export const attributeGroupId = (owner: string) => `ontology-attributes-${owner}`

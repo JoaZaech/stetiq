@@ -28,6 +28,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { type ConceptSelection, formatSelection, useConceptSelection } from './concept-selection'
+import type { ClassOrRelation } from './concepts'
 import { ChangeLevelBadge, MapChangeSummary } from './MapChangeSummary'
 import { MapDetailsPanel } from './MapDetailsPanel'
 import { MapPathPanel } from './MapPathPanel'
@@ -44,7 +45,7 @@ import { detailsOf, focusOf, searchMap, type MapSelection } from './ontology-map
 import { layoutOntologyMap, NODE_SIZE, type Point, type Size } from './ontology-map-layout'
 import { LABEL_FONT_SIZE, labelShown, linkShape, READABLE_ZOOM, straightPath, type Box } from './ontology-map-links'
 import { shortestPaths } from './ontology-map-paths'
-import { searchOntology, type SearchResult } from './ontology-map-search'
+import { searchOntology } from './ontology-map-search'
 import { levelOf } from './ontology-map-summary'
 
 /**
@@ -284,7 +285,7 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
   // which the Map stays centred on while it lasts.
   const [located, setLocated] = useState(() => (selected ? formatSelection(selected) : null))
   /** What picking `result` selects; null when it is not shown. */
-  const pick = ({ kind, label }: SearchResult): ConceptSelection | null => {
+  const pick = ({ kind, label }: ClassOrRelation): ConceptSelection | null => {
     if (kind === 'relation') return selectionFor({ kind, label }) && { kind, label }
     return shown.nodes.some((n) => n.label === label) ? { kind, label } : null
   }

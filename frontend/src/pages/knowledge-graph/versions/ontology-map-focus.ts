@@ -3,10 +3,10 @@
  * matches.
  */
 import type { Ontology, OntologyProperty } from '@/api/ontology-versions'
-import { constraintsOf, superclassChain } from './concepts'
+import { type ClassOrRelation, constraintsOf, superclassChain } from './concepts'
 import { ontologyMap, type OntologyMap } from './ontology-map'
 import { shortestPaths } from './ontology-map-paths'
-import { searchOntology, type SearchResult } from './ontology-map-search'
+import { searchOntology } from './ontology-map-search'
 
 /** The classes and links next to one class, each sorted. */
 export interface Neighbourhood {
@@ -165,7 +165,7 @@ export function detailsOf(ontology: Ontology, selection: MapSelection | null): M
 export function searchMap(ontology: Ontology, query: string): MapFocus | null {
   if (query.trim() === '') return null
   const { names } = searchOntology(ontology, query)
-  const named = (kind: SearchResult['kind']) => new Set(names.filter((r) => r.kind === kind).map((r) => r.label))
+  const named = (kind: ClassOrRelation['kind']) => new Set(names.filter((r) => r.kind === kind).map((r) => r.label))
   const relations = named('relation')
   return {
     classes: named('class'),

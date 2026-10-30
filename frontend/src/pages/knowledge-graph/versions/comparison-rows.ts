@@ -3,20 +3,9 @@
  * weighs at in the comparison (documentation-only its own) and where it is on the Map.
  */
 import type { OntologyChange } from '@/api/ontology-diff'
-import { changesOfConcept, type OntologyComparison, type OwnerKind } from './ontology-map-comparison'
+import { attributeReference, type ClassOrRelation, CONCEPT_NOUN, type ConceptNoun } from './concepts'
+import { changesOfConcept, type OntologyComparison } from './ontology-map-comparison'
 import { CHANGE_LEVELS, type ChangeLevel, levelOf } from './ontology-map-summary'
-import type { TableConcept } from './table-links'
-
-/** What kind of Concept a change is to, in the Table's words. */
-export type ComparisonConceptKind = 'class' | 'relation' | 'attribute'
-
-const CONCEPT_KIND: Record<OntologyChange['concept_kind'], ComparisonConceptKind> = {
-  node_type: 'class',
-  relationship_type: 'relation',
-  property: 'attribute',
-}
-
-const TABLE_KIND: Record<OwnerKind, TableConcept['kind']> = { node_type: 'class', relationship_type: 'relation' }
 
 /** One Diff change, as a row of the comparison's Table. */
 export interface ComparisonRow {
@@ -24,23 +13,24 @@ export interface ComparisonRow {
   id: string
   /** The class or relation label, or `<owner>.<attribute>`. */
   concept: string
-  conceptKind: ComparisonConceptKind
+  /** What kind of Concept it changed, in the Table's words. */
+  conceptKind: ConceptNoun
   change: OntologyChange['kind']
   level: ChangeLevel
   detail: string
   /** The class or relation to show on the Map: the Concept itself, or an attribute's owner. */
-  owner: TableConcept | null
+  owner: ClassOrRelation | null
 }
 
 /** Where `change` is on the Map: its class or relation, or the one owning the attribute. */
-function ownerOf(comparison: OntologyComparison, change: OntologyChange): TableConcept | null {
-  if (change.concept_kind !== 'property') return { kind: TABLE_KIND[change.concept_kind], label: change.concept }
-  const label = change.concept.slice(0, change.concept.indexOf('.'))
+function ownerOf(comparison: OntologyComparison, change: OntologyChange): ClassOrRelation | null {
+  if (change.concept_kind !== 'property') return { kind: CONCEPT_NOUN[change.concept_kind], label: change.concept }
+  const label = attributeReference(change.concept).owner
   // A class and a relation may share a label: the one whose attribute changed.
   const kind = (['node_type', 'relationship_type'] as const).find((k) =>
     changesOfConcept(comparison, k, label).includes(change),
   )
-  return kind ? { kind: TABLE_KIND[kind], label } : null
+  return kind ? { kind: CONCEPT_NOUN[kind], label } : null
 }
 
 /** The comparison's Diff changes as rows, the weightiest first, otherwise in the Diff's order. */
@@ -49,7 +39,7 @@ export function comparisonRows(comparison: OntologyComparison): ComparisonRow[] 
     (change, i): ComparisonRow => ({
       id: String(i),
       concept: change.concept,
-      conceptKind: CONCEPT_KIND[change.concept_kind],
+      conceptKind: CONCEPT_NOUN[change.concept_kind],
       change: change.kind,
       level: levelOf(comparison, change),
       detail: change.detail,

@@ -4,10 +4,10 @@ import { ClassificationBadge } from '@/components/OntologyDiff'
 import { Badge } from '@/components/ui/badge'
 import { formatCount } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { CONCEPT_NOUN } from './concepts'
 import type { OntologyComparison } from './ontology-map-comparison'
 import type { MapSelection } from './ontology-map-focus'
 import {
-  CONCEPT_NOUN,
   summarizeChanges,
   summaryConceptOf,
   type ChangeLevel,

@@ -15,10 +15,10 @@ import { useViewParam } from '@/lib/view-param'
 import { attributeRows } from './attribute-rows'
 import { AttributesGrid, type GroupRequest } from './AttributesGrid'
 import { type ConceptSelection, selectedRows, useConceptSelection, useShowOnMap } from './concept-selection'
-import { type ClassRow, type RelationRow, conceptTables } from './concepts'
+import { type ClassOrRelation, type ClassRow, type RelationRow, conceptTables } from './concepts'
 import { MAP_VIEW_OPTIONS, MAP_VIEWS } from './map-view'
 import { OntologyMap } from './OntologyMap'
-import { conceptRowId, type TableConcept, type TableLinks, TableLinksContext } from './table-links'
+import { conceptRowId, type TableLinks, TableLinksContext } from './table-links'
 import { AttributeCountLink, ConceptLink, ShowOnMap } from './TableLinks'
 import { useOntologyVersionTab } from './version-context'
 
@@ -98,7 +98,7 @@ const SECTIONS: readonly { id: SectionId; title: string; row: [string, string]; 
 ]
 
 /** The row a selection highlights first: a link's relation, a path's first class. */
-function rowOf(ontology: Ontology, selection: ConceptSelection | null): TableConcept | null {
+function rowOf(ontology: Ontology, selection: ConceptSelection | null): ClassOrRelation | null {
   const { classes, relations } = selectedRows(ontology, selection)
   const [label] = [...classes, ...relations]
   if (label === undefined) return null
@@ -259,7 +259,7 @@ function Section({
 }
 
 /** A row's props: its id to scroll to, and its highlight when selected. */
-const rowProps = (concept: TableConcept, selected: ReadonlySet<string>) => {
+const rowProps = (concept: ClassOrRelation, selected: ReadonlySet<string>) => {
   const current = selected.has(concept.label)
   return {
     id: conceptRowId(concept),
@@ -269,7 +269,7 @@ const rowProps = (concept: TableConcept, selected: ReadonlySet<string>) => {
 }
 
 /** The column every row ends in: its "Show on Map". */
-const showOnMapColumn = (kind: TableConcept['kind']) => ({
+const showOnMapColumn = (kind: ClassOrRelation['kind']) => ({
   id: 'map',
   header: '',
   cell: ({ row }: { row: { original: { label: string } } }) => <ShowOnMap concept={{ kind, label: row.original.label }} />,

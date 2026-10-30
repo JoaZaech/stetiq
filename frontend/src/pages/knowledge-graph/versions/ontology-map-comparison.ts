@@ -1,7 +1,13 @@
 /** Two Ontology Versions superimposed on one Map, each item marked with how it changed. */
-import { CLASSIFICATIONS, type Classification, type OntologyChange, type OntologyDiff } from '@/api/ontology-diff'
+import {
+  CLASSIFICATIONS,
+  type Classification,
+  type OntologyChange,
+  type OntologyDiff,
+  type OwnerKind,
+} from '@/api/ontology-diff'
 import type { Ontology } from '@/api/ontology-versions'
-import { constraintsOn } from './concepts'
+import { attributeReference, constraintsOn } from './concepts'
 import { ontologyMap, type OntologyMap, type PatternLink } from './ontology-map'
 import type { MapSelection } from './ontology-map-focus'
 
@@ -70,9 +76,6 @@ const mostSevere = (classifications: Classification[]): Classification | null =>
 
 /** A comparison's two Ontologies and the Diff between them. */
 type ComparedOntologies = Pick<OntologyComparison, 'base' | 'target' | 'diff'>
-
-/** A class's or a relation's Concept kind: the Concepts that own attributes. */
-export type OwnerKind = Exclude<OntologyChange['concept_kind'], 'property'>
 
 /**
  * The Diff's changes to one class or relation: those to the Concept itself and to its
@@ -156,8 +159,7 @@ export function isDocumentationOnly(
     const kind = change.concept_kind
     return declaredAlike(base, target, (o) => conceptDeclaration(o, kind, change.concept)) === 'description'
   }
-  const dot = change.concept.indexOf('.')
-  const [label, name] = [change.concept.slice(0, dot), change.concept.slice(dot + 1)]
+  const { owner: label, attribute: name } = attributeReference(change.concept)
   // The owners that changed it: a class and a relation may share a label.
   const owners = (['node_type', 'relationship_type'] as const).map((kind) =>
     declaredAlike(base, target, (o) => attributeDeclaration(o, kind, label, name)),
@@ -294,7 +296,7 @@ export function compareOntologies(base: Ontology, target: Ontology, diff: Ontolo
 function attributeChanges(changes: OntologyChange[]): AttributeChange[] {
   const byName = new Map<string, OntologyChange[]>()
   for (const c of changes.filter((c) => c.concept_kind === 'property')) {
-    const name = c.concept.slice(c.concept.indexOf('.') + 1)
+    const name = attributeReference(c.concept).attribute
     byName.set(name, [...(byName.get(name) ?? []), c])
   }
   return [...byName]

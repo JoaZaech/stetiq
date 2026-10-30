@@ -2,13 +2,9 @@
  * The change summary beside a comparison's Map: how many changes there are at each level,
  * and each changed Concept's changes in words.
  */
-import { CLASSIFICATIONS, type Classification, type OntologyChange } from '@/api/ontology-diff'
-import {
-  changesOfConcept,
-  isDocumentationOnly,
-  type OntologyComparison,
-  type OwnerKind,
-} from './ontology-map-comparison'
+import { CLASSIFICATIONS, type Classification, type OntologyChange, type OwnerKind } from '@/api/ontology-diff'
+import { attributeReference, CONCEPT_NOUN } from './concepts'
+import { changesOfConcept, isDocumentationOnly, type OntologyComparison } from './ontology-map-comparison'
 import type { MapSelection } from './ontology-map-focus'
 
 /**
@@ -73,15 +69,13 @@ export interface ChangeSummary {
   documentationOnly: ConceptChanges[]
 }
 
-/** The words for a class and a relation, as the Map says them. */
-export const CONCEPT_NOUN: Record<OwnerKind, string> = { node_type: 'class', relationship_type: 'relation' }
 /** How the Diff words them (`_KIND_NAMES` in ontology/diff.py). */
 const DIFF_NOUN: Record<OwnerKind, string> = { node_type: 'node type', relationship_type: 'relationship type' }
 
 /** `change`, to the class or relation `label` or to one of its attributes, in words. */
 function statementOf(kind: OwnerKind, label: string, change: OntologyChange, level: ChangeLevel): ChangeStatement {
   if (change.concept_kind === 'property') {
-    const attribute = change.concept.slice(label.length + 1)
+    const { attribute } = attributeReference(change.concept)
     const text =
       change.kind === 'added'
         ? change.detail.startsWith('required ') ? 'added, required' : 'added'

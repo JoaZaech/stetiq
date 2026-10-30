@@ -3,21 +3,16 @@
  * Concepts a search mentions, each with its reason.
  */
 import type { Ontology, OntologyConcept } from '@/api/ontology-versions'
-
-/** A class or relation the search found. */
-export interface SearchResult {
-  kind: 'class' | 'relation'
-  label: string
-}
+import type { ClassOrRelation } from './concepts'
 
 /** A Concept found by something other than its name, e.g. "description mentions 'warehouse'". */
-export interface OtherSearchResult extends SearchResult {
+export interface OtherSearchResult extends ClassOrRelation {
   reasons: string[]
 }
 
 export interface SearchResults {
   /** Concepts whose name contains the search: the exact name first, then names that start with it. */
-  names: SearchResult[]
+  names: ClassOrRelation[]
   /** Every other Concept whose description or attributes mention it, classes first. */
   others: OtherSearchResult[]
 }
@@ -57,7 +52,7 @@ export function searchOntology(ontology: Ontology, query: string): SearchResults
     ...ontology.node_types.map((c) => ({ kind: 'class' as const, concept: c })),
     ...ontology.relationship_types.map((c) => ({ kind: 'relation' as const, concept: c })),
   ]
-  const names: (SearchResult & { rank: number })[] = []
+  const names: (ClassOrRelation & { rank: number })[] = []
   const others: OtherSearchResult[] = []
   for (const { kind, concept } of concepts) {
     const name = concept.label.toLowerCase()

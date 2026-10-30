@@ -4,7 +4,8 @@ import { useSearchParams } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { formatCount } from '@/lib/format'
 import { formatSelection, SELECT_PARAM } from './concept-selection'
-import { attributeGroupId, type TableConcept, useTableLinks } from './table-links'
+import type { ClassOrRelation } from './concepts'
+import { attributeGroupId, useTableLinks } from './table-links'
 
 /** A plain click, which the Table handles; any other (e.g. to open a new tab) the browser does. */
 const plainClick = (e: MouseEvent) => e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey
@@ -15,7 +16,7 @@ const LINK = 'underline-offset-2 hover:underline focus-visible:underline'
  * A class or relation name that links to its row: clicking selects it (`?select=`) and
  * scrolls to its row. Its href is the same page with it selected, so it opens in a new tab.
  */
-export function ConceptLink({ concept, children }: { concept: TableConcept; children?: ReactNode }) {
+export function ConceptLink({ concept, children }: { concept: ClassOrRelation; children?: ReactNode }) {
   const links = useTableLinks()
   const [params] = useSearchParams()
   const href = new URLSearchParams(params)
@@ -64,7 +65,7 @@ export function AttributeCountLink({
 }
 
 /** A row's "Show on Map": switches to the Map with `concept` selected and centred. */
-export function ShowOnMap({ concept }: { concept: TableConcept }) {
+export function ShowOnMap({ concept }: { concept: ClassOrRelation }) {
   const links = useTableLinks()
   return (
     <Button
