@@ -131,12 +131,35 @@ def support_lineage_reader(client: stetiq.Client) -> dict[str, Any]:
     return {**seeded, "grace": issue_token(client, "grace", {"support": "read"})}
 
 
+class ReviewScore(stetiq.OntologyVersionEvaluator):
+    """A custom Evaluator scoring each version with a fixed `review/score`."""
+
+    name = "review"
+
+    def __init__(self, scores: dict[int, float]) -> None:
+        self._scores = scores
+
+    def evaluate(self, version: stetiq.OntologyVersion) -> stetiq.Evaluation:
+        return stetiq.Evaluation(metrics={"score": self._scores[version.number]})
+
+
+def support_metrics(client: stetiq.Client) -> dict[str, Any]:
+    """`support_lineage`, plus a custom `review` Evaluator scoring v1 0.9 and v3 0.7;
+    v2 has no `review/score`."""
+    seeded = support_lineage(client)
+    review = ReviewScore({1: 0.9, 3: 0.7})
+    for number in (1, 3):
+        client.evaluate("support", number, evaluators=[review])
+    return seeded
+
+
 SCENARIOS: dict[str, Scenario] = {
     "empty": empty,
     "knowledge_graphs": knowledge_graphs,
     "signed_in_users": signed_in_users,
     "support_lineage": support_lineage,
     "support_lineage_reader": support_lineage_reader,
+    "support_metrics": support_metrics,
 }
 
 
