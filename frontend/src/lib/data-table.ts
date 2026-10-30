@@ -8,7 +8,8 @@
  *   return <DataTable table={table} empty="Nothing yet" />
  *
  * Registered features: sorting (click a header), column filtering + global filtering
- * (e.g. a search box), column visibility (column choosers) and row selection (Compare).
+ * (e.g. a search box), column visibility (column choosers), row selection (Compare), and
+ * grouping by a column with collapsible groups (`DataTable`'s `groupHeader`).
  *
  * A grid (e.g. the Ontology Table's sections) also gives columns a filter in their
  * header with `...filterColumn('text' | 'values' | 'toggle')`, keeps its sort, filters
@@ -17,14 +18,18 @@
  */
 import {
   columnFilteringFeature,
+  columnGroupingFeature,
   columnVisibilityFeature,
+  createExpandedRowModel,
   createFilteredRowModel,
+  createGroupedRowModel,
   createSortedRowModel,
   createTableHook,
   type FilterFn,
   filterFn_includesString,
   globalFilteringFeature,
   type RowData,
+  rowExpandingFeature,
   rowSelectionFeature,
   rowSortingFeature,
   sortFn_alphanumeric,
@@ -101,6 +106,10 @@ export const dataTableFeatures = tableFeatures({
   },
   columnVisibilityFeature,
   rowSelectionFeature,
+  columnGroupingFeature,
+  groupedRowModel: createGroupedRowModel(),
+  rowExpandingFeature,
+  expandedRowModel: createExpandedRowModel(),
   columnMeta: {} as DataTableColumnMeta,
 })
 
