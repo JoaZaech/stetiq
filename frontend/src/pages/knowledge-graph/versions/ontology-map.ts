@@ -67,6 +67,50 @@ export function ontologyMap(ontology: Ontology): OntologyMap {
   return { nodes, links }
 }
 
+/** The classes and links next to one class, each sorted. */
+export interface Neighbourhood {
+  /** Classes linked to it, in either direction; not the class itself. */
+  classes: string[]
+  /** Link ids of the links in and out of it, its self-loops included. */
+  links: string[]
+}
+
+/** What a class connects to: its outgoing and incoming Pattern links and the classes at their other end. */
+export function neighboursOf(map: OntologyMap, label: string): Neighbourhood {
+  const links = map.links.filter((l) => l.source === label || l.target === label)
+  const classes = new Set(links.flatMap((l) => [l.source, l.target]))
+  classes.delete(label)
+  return { classes: [...classes].sort(), links: links.map((l) => l.id).sort() }
+}
+
+/** What is selected on the Map: one class, by label, or one Pattern link, by id. */
+export type MapSelection = { kind: 'class'; label: string } | { kind: 'link'; id: string }
+
+/** The classes and links a selection keeps in focus; the rest of the Map fades. */
+export interface MapFocus {
+  classes: Set<string>
+  links: Set<string>
+}
+
+/**
+ * What stays in focus for a selection: a class with its neighbours and the links to them,
+ * or a link with the two classes it joins. Null when nothing (that still exists) is
+ * selected, so nothing fades.
+ */
+export function focusOf(map: OntologyMap, selection: MapSelection | null): MapFocus | null {
+  if (selection?.kind === 'class') {
+    if (!map.nodes.some((n) => n.label === selection.label)) return null
+    const { classes, links } = neighboursOf(map, selection.label)
+    return { classes: new Set([selection.label, ...classes]), links: new Set(links) }
+  }
+  if (selection?.kind === 'link') {
+    const link = map.links.find((l) => l.id === selection.id)
+    if (!link) return null
+    return { classes: new Set([link.source, link.target]), links: new Set([link.id]) }
+  }
+  return null
+}
+
 export interface Point {
   x: number
   y: number

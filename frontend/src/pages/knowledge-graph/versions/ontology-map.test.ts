@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { Ontology } from '@/api/ontology-versions'
-import { layoutOntologyMap, NODE_SIZE, ontologyMap, type Point } from './ontology-map'
+import {
+  focusOf,
+  layoutOntologyMap,
+  neighboursOf,
+  NODE_SIZE,
+  ontologyMap,
+  type Point,
+} from './ontology-map'
 
 // Canonical form, as the server sends it: Concepts sorted by label.
 const ONTOLOGY: Ontology = {
@@ -53,6 +60,54 @@ describe('ontologyMap', () => {
 
     expect(route('(Ticket)-[DUPLICATES]->(Ticket)')).toEqual({ kind: 'loop', size: 1 })
     expect(route('(Ticket)-[SPLIT_FROM]->(Ticket)')).toEqual({ kind: 'loop', size: 2 })
+  })
+})
+
+describe('neighboursOf', () => {
+  it('finds the classes a class links to and the classes that link to it', () => {
+    const map = ontologyMap(ONTOLOGY)
+
+    // Ticket links out to Product, and Customer links in to it.
+    expect(neighboursOf(map, 'Ticket')).toEqual({
+      classes: ['Customer', 'Product'],
+      links: [
+        '(Customer)-[FOLLOWS]->(Ticket)',
+        '(Customer)-[OPENED]->(Ticket)',
+        '(Ticket)-[ABOUT]->(Product)',
+        '(Ticket)-[DUPLICATES]->(Ticket)',
+      ],
+    })
+    // Product has only an incoming link, Customer only outgoing ones.
+    expect(neighboursOf(map, 'Product')).toEqual({ classes: ['Ticket'], links: ['(Ticket)-[ABOUT]->(Product)'] })
+    expect(neighboursOf(map, 'Customer').classes).toEqual(['Ticket'])
+  })
+})
+
+describe('focusOf', () => {
+  it('keeps a selected class and its neighbours in focus', () => {
+    const map = ontologyMap(ONTOLOGY)
+
+    expect(focusOf(map, { kind: 'class', label: 'Product' })).toEqual({
+      classes: new Set(['Product', 'Ticket']),
+      links: new Set(['(Ticket)-[ABOUT]->(Product)']),
+    })
+  })
+
+  it('keeps a selected link and the two classes it joins in focus', () => {
+    const map = ontologyMap(ONTOLOGY)
+
+    expect(focusOf(map, { kind: 'link', id: '(Customer)-[OPENED]->(Ticket)' })).toEqual({
+      classes: new Set(['Customer', 'Ticket']),
+      links: new Set(['(Customer)-[OPENED]->(Ticket)']),
+    })
+  })
+
+  it('keeps everything in focus when nothing is selected, or the selection is gone', () => {
+    const map = ontologyMap(ONTOLOGY)
+
+    expect(focusOf(map, null)).toBeNull()
+    expect(focusOf(map, { kind: 'class', label: 'Agent' })).toBeNull()
+    expect(focusOf(map, { kind: 'link', id: '(Agent)-[OPENED]->(Ticket)' })).toBeNull()
   })
 })
 
