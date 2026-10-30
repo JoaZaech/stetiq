@@ -1,6 +1,7 @@
 """stetiq: versioning, evaluation and governance of knowledge-graph ontologies."""
 
 from stetiq.client import ActiveRun, Client
+from stetiq.entry_point import EntryPoint, EntryPointError, InvalidEntryPointError
 from stetiq.conformance import Conformance, Mismatch, MismatchKind
 from stetiq.errors import (
     EvaluatorError,
@@ -74,4 +75,7 @@ __all__ = [
     "RunComparison",
     "RunNotActiveError",
     "StetiqError",
+    "EntryPoint",
+    "EntryPointError",
+    "InvalidEntryPointError",
 ]

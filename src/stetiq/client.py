@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import getpass
 import os
+import subprocess
+import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 
+from stetiq.entry_point import EntryPoint, EntryPointError, placeholder_values
 from stetiq.errors import EvaluatorError, GraphSourceUnavailableError
 from stetiq.evaluation.framework import (
     Evaluator,
@@ -17,6 +20,7 @@ from stetiq.evaluation.framework import (
 from stetiq.evaluation.structural import BUILT_IN_EVALUATORS
 from stetiq.graph_source import GraphSource, GraphSourceScope, graph_source_from_env
 from stetiq.ontology import Ontology, parse_yaml
+from stetiq.ontology.yaml_format import to_yaml
 from stetiq.ontology.diff import OntologyDiff, diff_ontologies
 from stetiq.tracking import (
     Alias,
@@ -331,6 +335,47 @@ class Client:
         run = self._service.start_run(knowledge_graph, ontology_version)
         declared = self._service.get_ontology_version(knowledge_graph, ontology_version)
         return ActiveRun(self._service, self._graph_source, run, declared.ontology)
+
+    def run_entry_point(
+        self,
+        knowledge_graph: str,
+        entry_point: EntryPoint,
+        *,
+        ontology_version: int | None = None,
+        alias: str | None = None,
+        cwd: str | os.PathLike[str] | None = None,
+    ) -> ConstructionRun:
+        """Invoke the Construction Entry Point as a Construction Run (what `stetiq run` does).
+
+        The Declared Ontology (chosen as for `start_run`) is written to a temporary file
+        and the command runs with its placeholders filled in, inheriting this process's
+        environment and output streams. A zero exit ends the run the same way SDK
+        instrumentation does (Observation, Conformance, Evolution Mode); a non-zero exit
+        fails the run without observing, so it never yields a Candidate. The exit code
+        is logged as the run param `entry_point.exit_code`. Returns the final run:
+        check `status`, since a strict Evolution Mode can also fail it."""
+        with self.start_run(knowledge_graph, ontology_version=ontology_version, alias=alias) as run:
+            with tempfile.TemporaryDirectory(prefix="stetiq-run-") as tmp:
+                ontology_path = Path(tmp) / f"declared-ontology-v{run.ontology_version}.yaml"
+                ontology_path.write_text(to_yaml(run.declared_ontology))
+                scope = self._service.get_graph_source(knowledge_graph)
+                argv = entry_point.argv(
+                    placeholder_values(
+                        ontology_path=str(ontology_path),
+                        scope=scope,
+                        knowledge_graph=knowledge_graph,
+                        ontology_version=run.ontology_version,
+                        run_id=run.id,
+                    )
+                )
+                try:
+                    exit_code = subprocess.run(argv, cwd=cwd).returncode
+                except OSError as e:
+                    raise EntryPointError(f"could not start the Construction Entry Point {argv[0]!r}: {e}") from e
+            run.log_param("entry_point.exit_code", exit_code)
+            if exit_code != 0:
+                run.fail()
+        return self.get_run(run.id)
 
     def get_run(self, run_id: str) -> ConstructionRun:
         return self._service.get_run(run_id)

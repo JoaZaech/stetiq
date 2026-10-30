@@ -7,8 +7,11 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+import yaml
 
 from stetiq.client import Client
+from stetiq.config import DEFAULT_CONFIG_PATH, load_config
+from stetiq.entry_point import EntryPoint
 from stetiq.errors import EvaluatorError, StetiqError
 
 app = typer.Typer(no_args_is_help=True, help="Version, evaluate and govern knowledge-graph ontologies.")
@@ -254,3 +257,65 @@ def alias_contract(
         typer.echo(client.get_contract_alias(knowledge_graph))
     except StetiqError as e:
         raise _fail(e) from None
+
+
+ConfigFile = Annotated[
+    Path,
+    typer.Option("--config", dir_okay=False, help="Repo config file declaring the Construction Entry Point"),
+]
+
+
+@app.command("run")
+def run(
+    knowledge_graph: Annotated[
+        str | None, typer.Argument(help="Default: `knowledge_graph` from the repo config")
+    ] = None,
+    config: ConfigFile = Path(DEFAULT_CONFIG_PATH),
+    ontology_version: Annotated[
+        int | None, typer.Option("--ontology-version", help="Declared Ontology (default: the Contract Alias's version)")
+    ] = None,
+    alias: Annotated[str | None, typer.Option("--alias", help="Use the version this Alias points to")] = None,
+    tracking_uri: TrackingUri = None,
+) -> None:
+    """Invoke the Construction Entry Point as a Construction Run, then observe the Graph Source.
+
+    The command runs from the config file's directory. Exits non-zero when the run
+    fails: the entry point exited non-zero, or strict Evolution Mode saw new Concepts."""
+    try:
+        settings = load_config(config)
+        entry_point = EntryPoint.from_config(settings)
+    except (OSError, ValueError, yaml.YAMLError) as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(code=1) from None
+    knowledge_graph = knowledge_graph or settings.get("knowledge_graph")
+    if not knowledge_graph:
+        typer.echo("error: name the Knowledge Graph, or set knowledge_graph in the repo config", err=True)
+        raise typer.Exit(code=1)
+    try:
+        result = _client(tracking_uri).run_entry_point(
+            knowledge_graph,
+            entry_point,
+            ontology_version=ontology_version,
+            alias=alias,
+            cwd=config.resolve().parent,
+        )
+    except (StetiqError, ValueError) as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(code=1) from None
+    _echo_run(result)
+    if result.status != "finished":
+        raise typer.Exit(code=1)
+
+
+def _echo_run(run) -> None:
+    typer.echo(f"Construction Run {run.id} {run.status} (Ontology Version {run.ontology_version})")
+    exit_code = run.params.get("entry_point.exit_code")
+    if exit_code not in (None, "0"):
+        typer.echo(f"  entry point exited with code {exit_code}")
+    if run.conformance is not None:
+        typer.echo(f"  Conformance: {run.conformance.score:.3f}")
+        if run.status == "failed":
+            new = ", ".join(m.subject for m in run.conformance.undeclared)
+            typer.echo(f"  strict Evolution Mode: new Concepts observed: {new}")
+    if run.candidate_version is not None:
+        typer.echo(f"  Candidate: Ontology Version {run.candidate_version}")
