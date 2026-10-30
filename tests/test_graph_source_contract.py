@@ -31,13 +31,18 @@ class _MemoryHarness:
 class _Neo4jHarness:
     """Seeds through a write session on the testcontainer; `.source` is the adapter."""
 
-    def __init__(self, driver, container) -> None:
+    def __init__(self, driver, container, databases) -> None:
         self._driver = driver
+        self._databases = databases
         self.source = Neo4jGraphSource.connect(
             container.get_connection_url(), user=container.username, password=container.password
         )
 
     def add_node(self, labels, properties=None, database="neo4j"):
+        if database not in self._databases:
+            # Community has a single database: the out-of-scope node can't exist, so
+            # database scoping is only exercised against an Enterprise image.
+            return (database, None)
         label_expr = ":".join(f"`{label}`" for label in labels)
         records, _, _ = self._driver.execute_query(
             f"CREATE (n:{label_expr}) SET n = $props RETURN elementId(n) AS id",
@@ -70,6 +75,7 @@ def graph(request):
         harness = _Neo4jHarness(
             request.getfixturevalue("neo4j_admin_driver"),
             request.getfixturevalue("neo4j_container"),
+            request.getfixturevalue("neo4j_databases"),
         )
         yield harness
         harness.close()
