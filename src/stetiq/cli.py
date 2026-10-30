@@ -94,6 +94,76 @@ def kg_create(
     typer.echo(f"Created Knowledge Graph {kg.name} with Ontology Version 1")
 
 
+@kg_app.command("list")
+def kg_list(tracking_uri: TrackingUri = None) -> None:
+    """List Knowledge Graphs (in server mode: those the API token can read)."""
+    try:
+        kgs = _client(tracking_uri).list_knowledge_graphs()
+    except StetiqError as e:
+        raise _fail(e) from None
+    typer.echo(f"{'NAME':<32} CREATED")
+    for kg in kgs:
+        typer.echo(f"{kg.name:<32} {kg.created_at.isoformat()}")
+
+
+@kg_app.command("bind-source")
+def kg_bind_source(
+    knowledge_graph: str,
+    database: Annotated[str, typer.Option("--database", help="Graph Source database")] = "neo4j",
+    label: Annotated[str | None, typer.Option("--label", help="Only nodes carrying this label")] = None,
+    namespace: Annotated[
+        str | None, typer.Option("--namespace", help="Only nodes in this namespace")
+    ] = None,
+    tracking_uri: TrackingUri = None,
+) -> None:
+    """Bind the Knowledge Graph to a Graph Source scope (replacing any earlier one)."""
+    from stetiq.graph_source import GraphSourceScope
+
+    scope = GraphSourceScope(database=database, label=label, namespace=namespace)
+    try:
+        _client(tracking_uri).bind_graph_source(knowledge_graph, scope)
+    except StetiqError as e:
+        raise _fail(e) from None
+    typer.echo(f"Bound {knowledge_graph} to {_scope_text(scope)}")
+
+
+def _scope_text(scope) -> str:
+    parts = [f"database={scope.database}"]
+    if scope.label is not None:
+        parts.append(f"label={scope.label}")
+    if scope.namespace is not None:
+        parts.append(f"namespace={scope.namespace}")
+    return " ".join(parts)
+
+
+@kg_app.command("source")
+def kg_source(knowledge_graph: str, tracking_uri: TrackingUri = None) -> None:
+    """Show the Graph Source scope the Knowledge Graph is bound to."""
+    try:
+        scope = _client(tracking_uri).get_graph_source(knowledge_graph)
+    except StetiqError as e:
+        raise _fail(e) from None
+    typer.echo(_scope_text(scope))
+
+
+@kg_app.command("evolution-mode")
+def kg_evolution_mode(
+    knowledge_graph: str,
+    mode: Annotated[
+        str | None, typer.Argument(help="strict or evolving; omit to show the current mode")
+    ] = None,
+    tracking_uri: TrackingUri = None,
+) -> None:
+    """Show or set the Evolution Mode: what a run introducing new Concepts does."""
+    try:
+        client = _client(tracking_uri)
+        if mode is not None:
+            client.set_evolution_mode(knowledge_graph, mode)  # type: ignore[arg-type]
+        typer.echo(client.get_evolution_mode(knowledge_graph))
+    except StetiqError as e:
+        raise _fail(e) from None
+
+
 @ontology_app.command("register")
 def ontology_register(knowledge_graph: str, ontology: OntologyFile, tracking_uri: TrackingUri = None) -> None:
     """Register an Ontology by hand; identical content returns the existing version."""
@@ -219,6 +289,30 @@ def use_case_register(
         raise _fail(e) from None
     count = len(version.use_case.competency_questions)
     typer.echo(f"Use Case version {version.number} ({count} Competency Questions)")
+
+
+@use_case_app.command("add-question")
+def use_case_add_question(
+    knowledge_graph: str,
+    id: Annotated[str, typer.Option("--id", help="Stable id, unique within the Use Case")],
+    question: Annotated[str, typer.Option("--question", help="The natural-language question")],
+    query: Annotated[str | None, typer.Option("--query", help="Cypher query answering it")] = None,
+    concept: Annotated[
+        list[str] | None,
+        typer.Option("--concept", help="Concept reference it needs (repeatable)"),
+    ] = None,
+    tracking_uri: TrackingUri = None,
+) -> None:
+    """Add a Competency Question to the latest Use Case, creating a new Use Case version."""
+    from stetiq.use_case import CompetencyQuestion
+
+    cq = CompetencyQuestion(id=id, question=question, query=query, concepts=tuple(concept or ()))
+    try:
+        version = _client(tracking_uri).add_competency_question(knowledge_graph, cq)
+    except StetiqError as e:
+        raise _fail(e) from None
+    count = len(version.use_case.competency_questions)
+    typer.echo(f"Use Case version {version.number} ({count} questions)")
 
 
 @use_case_app.command("list")
@@ -595,3 +689,132 @@ def gate(
         f"{len(result.failed)} of {len(result.outcomes)} Gates failed for {knowledge_graph} {subject}"
     )
     raise typer.Exit(code=GATE_FAILED_EXIT_CODE)
+
+
+@app.command("gate-results")
+def gate_results(knowledge_graph: str, tracking_uri: TrackingUri = None) -> None:
+    """List every recorded Gate evaluation of the Knowledge Graph, oldest first."""
+    try:
+        results = _client(tracking_uri).list_gate_results(knowledge_graph)
+    except StetiqError as e:
+        raise _fail(e) from None
+    for r in results:
+        subject = f"run {r.subject_id}" if r.subject_kind == "construction_run" else "version"
+        verdict = "PASS" if r.passed else "FAIL"
+        typer.echo(
+            f"{r.evaluated_at.isoformat()}  {verdict}  Ontology Version {r.ontology_version} ({subject})"
+        )
+        for outcome in r.outcomes:
+            typer.echo(f"  {'PASS' if outcome.passed else 'FAIL'}  {outcome.gate.name}")
+
+
+# --- Construction Runs and Observations -------------------------------------------------
+
+runs_app = typer.Typer(no_args_is_help=True, help="Construction Runs and their evaluation.")
+app.add_typer(runs_app, name="runs")
+observations_app = typer.Typer(no_args_is_help=True, help="Observations of the Graph Source.")
+app.add_typer(observations_app, name="observations")
+
+
+@runs_app.command("list")
+def runs_list(knowledge_graph: str, tracking_uri: TrackingUri = None) -> None:
+    """List a Knowledge Graph's Construction Runs, oldest first."""
+    try:
+        runs = _client(tracking_uri).list_runs(knowledge_graph)
+    except StetiqError as e:
+        raise _fail(e) from None
+    typer.echo(f"{'ID':<33} {'STATUS':<9} {'VERSION':<8} {'CANDIDATE':<10} STARTED")
+    for r in runs:
+        candidate = "-" if r.candidate_version is None else str(r.candidate_version)
+        typer.echo(
+            f"{r.id:<33} {r.status:<9} {r.ontology_version:<8} {candidate:<10} "
+            f"{r.started_at.isoformat()}"
+        )
+
+
+@runs_app.command("get")
+def runs_get(run_id: str, tracking_uri: TrackingUri = None) -> None:
+    """Show a Construction Run with its params and metrics."""
+    try:
+        found = _client(tracking_uri).get_run(run_id)
+    except StetiqError as e:
+        raise _fail(e) from None
+    _echo_run(found)
+    for key, value in sorted(found.params.items()):
+        typer.echo(f"  param  {key} = {value}")
+    for key, value in sorted(found.metrics.items()):
+        typer.echo(f"  metric {key} = {value:g}")
+
+
+@runs_app.command("compare")
+def runs_compare(run_ids: list[str], tracking_uri: TrackingUri = None) -> None:
+    """Compare Construction Runs side by side: params, metrics, Conformance and
+    run-level Evaluator results."""
+    try:
+        cmp = _client(tracking_uri).compare_runs(run_ids)
+    except StetiqError as e:
+        raise _fail(e) from None
+
+    def cell(value) -> str:
+        if value is None:
+            return "-"
+        return f"{value:g}" if isinstance(value, float) else str(value)
+
+    rows = [("run", tuple(r.id[:12] for r in cmp.runs))]
+    rows.append(("ontology_version", cmp.ontology_versions))
+    rows += [(f"param {k}", v) for k, v in cmp.params.items()]
+    rows += [(f"metric {k}", v) for k, v in cmp.metrics.items()]
+    rows.append(("conformance", tuple(None if c is None else c.score for c in cmp.conformance)))
+    rows += list(cmp.evaluations.items())
+    width = max(len(name) for name, _ in rows)
+    for name, values in rows:
+        typer.echo(f"{name:<{width}}  " + "  ".join(f"{cell(v):<14}" for v in values).rstrip())
+
+
+@runs_app.command("evaluate")
+def runs_evaluate(
+    run_id: str,
+    evaluator: Annotated[
+        list[str] | None,
+        typer.Option("--evaluator", help="Custom run Evaluator as module:Class (repeatable)"),
+    ] = None,
+    use_case_version: Annotated[
+        int | None,
+        typer.Option("--use-case-version", help="Execute this Use Case version's questions (default latest)"),
+    ] = None,
+    tracking_uri: TrackingUri = None,
+) -> None:
+    """Re-run run-level evaluation on a Construction Run that has an Observation."""
+    try:
+        extra = [_load_evaluator(spec) for spec in evaluator or []]
+        results = _client(tracking_uri).evaluate_run(
+            run_id, evaluators=extra, use_case_version=use_case_version
+        )
+    except StetiqError as e:
+        raise _fail(e) from None
+    _echo_results(results)
+
+
+@runs_app.command("evaluations")
+def runs_evaluations(run_id: str, tracking_uri: TrackingUri = None) -> None:
+    """Show the latest result of every run-level Evaluator for a Construction Run."""
+    try:
+        results = _client(tracking_uri).get_run_evaluation_results(run_id)
+    except StetiqError as e:
+        raise _fail(e) from None
+    _echo_results(results)
+
+
+@observations_app.command("list")
+def observations_list(knowledge_graph: str, tracking_uri: TrackingUri = None) -> None:
+    """List the Knowledge Graph's Observations, oldest first (RUN is - for on-demand ones)."""
+    try:
+        observations = _client(tracking_uri).list_observations(knowledge_graph)
+    except StetiqError as e:
+        raise _fail(e) from None
+    typer.echo(f"{'ID':<33} {'OBSERVED':<33} {'NODES':<6} {'RELS':<6} RUN")
+    for o in observations:
+        typer.echo(
+            f"{o.id:<33} {o.observed_at.isoformat():<33} {len(o.schema.node_types):<6} "
+            f"{len(o.schema.relationship_types):<6} {o.run_id or '-'}"
+        )
