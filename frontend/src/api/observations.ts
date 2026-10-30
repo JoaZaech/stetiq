@@ -8,6 +8,17 @@ export interface GraphSourceScope {
   namespace: string | null
 }
 
+/** `database neo4j · label Support`; the label and namespace only when narrowed. */
+export function formatScope(scope: GraphSourceScope): string {
+  return [
+    `database ${scope.database}`,
+    scope.label && `label ${scope.label}`,
+    scope.namespace && `namespace ${scope.namespace}`,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
+
 /** wire.observation_to_json, without the Observed Schema (no page shows it yet). */
 export interface Observation {
   id: string
@@ -60,3 +71,16 @@ export const driftEventsQuery = (kg: string) => ({
   queryFn: () => api<DriftEvent[]>(kgPath(kg) + '/drift-events'),
 })
 export const useDriftEvents = (kg: string) => useQuery(driftEventsQuery(kg))
+
+/** wire.observation_to_json in full; the run page reads only the Observed Schema's sizes. */
+export interface ObservationWithSchema extends Observation {
+  schema: { node_types: unknown[]; relationship_types: unknown[]; patterns: unknown[] }
+}
+
+/** One Observation, e.g. the one a Construction Run ended with; idle while `id` is null. */
+export const useObservation = (id: string | null) =>
+  useQuery({
+    queryKey: ['observation', id],
+    queryFn: () => api<ObservationWithSchema>(`/observations/${encodeURIComponent(id ?? '')}`),
+    enabled: id !== null,
+  })

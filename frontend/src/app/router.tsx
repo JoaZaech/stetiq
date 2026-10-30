@@ -2,6 +2,12 @@ import type { ReactNode } from 'react'
 import { createBrowserRouter, Navigate, type RouteObject } from 'react-router'
 import { KnowledgeGraphLayout } from '@/pages/knowledge-graph/KnowledgeGraphLayout'
 import { KnowledgeGraphSectionPage } from '@/pages/knowledge-graph/KnowledgeGraphSectionPage'
+import { ConstructionRunPage } from '@/pages/knowledge-graph/runs/ConstructionRunPage'
+import { ConstructionRunsPage } from '@/pages/knowledge-graph/runs/ConstructionRunsPage'
+import { RunConformanceTab } from '@/pages/knowledge-graph/runs/RunConformanceTab'
+import { RunEvaluationsTab } from '@/pages/knowledge-graph/runs/RunEvaluationsTab'
+import { RunOverviewTab } from '@/pages/knowledge-graph/runs/RunOverviewTab'
+import { shortRunId } from '@/pages/knowledge-graph/runs/runs'
 import { KnowledgeGraphsPage } from '@/pages/knowledge-graphs/KnowledgeGraphsPage'
 import { ChangesTab } from '@/pages/knowledge-graph/versions/ChangesTab'
 import { OntologyDiffPage } from '@/pages/knowledge-graph/versions/OntologyDiffPage'
@@ -55,7 +61,22 @@ const knowledgeGraphSectionRoutes: Record<
       },
     ],
   },
-  runs: {},
+  runs: {
+    page: <ConstructionRunsPage />,
+    children: [
+      {
+        path: ':runId',
+        element: <ConstructionRunPage />,
+        handle: crumb(({ runId }) => shortRunId(runId ?? '')),
+        // The run page's tabs (see TABS in ConstructionRunPage).
+        children: [
+          { index: true, element: <RunOverviewTab /> },
+          { path: 'conformance', element: <RunConformanceTab /> },
+          { path: 'evaluations', element: <RunEvaluationsTab /> },
+        ],
+      },
+    ],
+  },
   'use-case': {
     page: <UseCasePage />,
     children: [{ path: 'compare', element: <UseCaseComparePage />, handle: crumb(() => 'Compare') }],
