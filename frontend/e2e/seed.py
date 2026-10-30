@@ -384,6 +384,33 @@ def ontology_map_details(client: stetiq.Client) -> dict[str, Any]:
     return {}
 
 
+# For paths on the Ontology Map: Customer reaches Address only through its superclass Party's
+# Pattern, and nothing connects Agent.
+MAP_PATH_ONTOLOGY = """
+node_types:
+  - {label: Address}
+  - {label: Agent}
+  - {label: Party}
+  - {label: Customer, parent: Party}
+  - {label: Product}
+  - {label: Ticket}
+relationship_types:
+  - {label: ABOUT}
+  - {label: LIVES_AT}
+  - {label: OPENED}
+patterns:
+  - [Customer, OPENED, Ticket]
+  - [Party, LIVES_AT, Address]
+  - [Ticket, ABOUT, Product]
+"""
+
+
+def ontology_map_path(client: stetiq.Client) -> dict[str, Any]:
+    """Knowledge Graph `support` with v1 = `MAP_PATH_ONTOLOGY`."""
+    client.create_knowledge_graph("support", ontology=MAP_PATH_ONTOLOGY)
+    return {}
+
+
 SCENARIOS: dict[str, Scenario] = {
     "construction_runs": construction_runs,
     "construction_runs_reader": construction_runs_reader,
@@ -401,6 +428,7 @@ SCENARIOS: dict[str, Scenario] = {
     "compared_runs": compared_runs,
     "ontology_map": ontology_map,
     "ontology_map_details": ontology_map_details,
+    "ontology_map_path": ontology_map_path,
 }
 
 

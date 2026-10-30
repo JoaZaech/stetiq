@@ -23,6 +23,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { MapDetailsPanel } from './MapDetailsPanel'
+import { MapPathPanel } from './MapPathPanel'
 import {
   detailsOf,
   filterOntologyMap,
@@ -31,6 +32,7 @@ import {
   NODE_SIZE,
   ontologyMap,
   searchMap,
+  shortestPaths,
   type LinkRoute,
   type MapFilters,
   type MapSelection,
@@ -74,8 +76,17 @@ export function OntologyMap({ ontology, query = '' }: { ontology: Ontology; quer
   const [filters, setFilters] = useState<MapFilters>({ hideDeprecated: false, hideSubclassLinks: false })
   const shown = useMemo(() => filterOntologyMap(map, filters), [map, filters])
   const [selection, setSelection] = useState<MapSelection | null>(null)
-  // Focus is over what is shown, so a selection a filter hides is no selection.
-  const focus = useMemo(() => focusOf(shown, selection), [shown, selection])
+  // Focus is over what is shown, so a selection a filter hides is no selection. Hiding
+  // subclass links only declutters: a path through an inherited Pattern still counts.
+  const reachable = useMemo(
+    () => (filters.hideSubclassLinks ? filterOntologyMap(map, { ...filters, hideSubclassLinks: false }) : shown),
+    [map, filters, shown],
+  )
+  const focus = useMemo(() => focusOf(reachable, selection), [reachable, selection])
+  const paths = useMemo(
+    () => (focus && selection?.kind === 'path' ? shortestPaths(reachable, selection.from, selection.to) : null),
+    [focus, reachable, selection],
+  )
   const matches = useMemo(() => searchMap(ontology, query), [ontology, query])
   const details = useMemo(() => (focus ? detailsOf(ontology, selection) : null), [focus, ontology, selection])
 
@@ -101,7 +112,10 @@ export function OntologyMap({ ontology, query = '' }: { ontology: Ontology; quer
       return {
         selected:
           (kind === 'class' && selection?.kind === 'class' && selection.label === key) ||
-          (kind === 'link' && selection?.kind === 'link' && selection.id === key),
+          (kind === 'link' && selection?.kind === 'link' && selection.id === key) ||
+          // A path's two classes, and the links along it.
+          (kind === 'class' && selection?.kind === 'path' && (selection.from === key || selection.to === key)) ||
+          (kind === 'link' && selection?.kind === 'path' && (focus?.links.has(key) ?? false)),
         match: matched?.has(key) ?? false,
         faded: focused ? !focused.has(key) : matched ? !matched.has(key) : false,
       }
@@ -154,7 +168,14 @@ export function OntologyMap({ ontology, query = '' }: { ontology: Ontology; quer
         nodesConnectable={false}
         // The Map keeps its own selection (focus and details), not React Flow's.
         elementsSelectable={false}
-        onNodeClick={(_, node) => setSelection({ kind: 'class', label: node.id })}
+        // Shift-clicking a second class asks for the shortest paths from the first.
+        onNodeClick={(event, node) =>
+          setSelection(
+            event.shiftKey && selection?.kind === 'class' && selection.label !== node.id
+              ? { kind: 'path', from: selection.label, to: node.id }
+              : { kind: 'class', label: node.id },
+          )
+        }
         onEdgeClick={(_, edge) => edge.type === 'pattern' && setSelection({ kind: 'link', id: edge.id })}
         onPaneClick={() => setSelection(null)}
         minZoom={0.2}
@@ -176,7 +197,16 @@ export function OntologyMap({ ontology, query = '' }: { ontology: Ontology; quer
           />
         </Panel>
       </ReactFlow>
-      {details && <MapDetailsPanel details={details} onClose={() => setSelection(null)} />}
+      {details && (
+        <MapDetailsPanel details={details} onClose={() => setSelection(null)}>
+          {details.kind === 'class' && (
+            <p className="text-xs text-muted-foreground">Shift-click another class for the shortest path to it.</p>
+          )}
+        </MapDetailsPanel>
+      )}
+      {paths && selection?.kind === 'path' && (
+        <MapPathPanel from={selection.from} to={selection.to} paths={paths} onClose={() => setSelection(null)} />
+      )}
       <SubclassArrowhead />
     </div>
   )
