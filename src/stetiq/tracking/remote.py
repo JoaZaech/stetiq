@@ -24,7 +24,10 @@ from stetiq.tracking.entities import (
     Observation,
     OntologyVersion,
     Origin,
+    UseCaseVersion,
 )
+from stetiq import use_case as use_case_format
+from stetiq.use_case import UseCase
 from stetiq.tracking.service import ObservationInput
 
 
@@ -182,10 +185,14 @@ class RemoteTrackingService:
         raise EvaluatorError(f"Unsupported evaluation subject kind {subject_kind!r}")
 
     def evaluate_ontology_version(
-        self, knowledge_graph: str, number: int
+        self, knowledge_graph: str, number: int, use_case_version: int | None = None
     ) -> list[EvaluationResult]:
         path = self._subject_path(knowledge_graph, "ontology_version", str(number))
-        return [wire.evaluation_result_from_json(r) for r in self._call("POST", path + "/evaluate")]
+        body = {"use_case_version": use_case_version}
+        return [
+            wire.evaluation_result_from_json(r)
+            for r in self._call("POST", path + "/evaluate", body)
+        ]
 
     def record_evaluation(
         self,
@@ -209,3 +216,18 @@ class RemoteTrackingService:
     ) -> list[EvaluationResult]:
         path = self._subject_path(knowledge_graph, subject_kind, subject_id) + "/evaluations"
         return [wire.evaluation_result_from_json(r) for r in self._call("GET", path)]
+
+    # --- Use Cases ------------------------------------------------------------------
+
+    def register_use_case(self, knowledge_graph: str, use_case: UseCase) -> UseCaseVersion:
+        body = {"use_case": use_case_format.to_dict(use_case_format.check_use_case(use_case))}
+        data = self._call("POST", self._kg_path(knowledge_graph) + "/use-case-versions", body)
+        return wire.use_case_version_from_json(data)
+
+    def list_use_case_versions(self, knowledge_graph: str) -> list[UseCaseVersion]:
+        data = self._call("GET", self._kg_path(knowledge_graph) + "/use-case-versions")
+        return [wire.use_case_version_from_json(v) for v in data]
+
+    def get_use_case_version(self, knowledge_graph: str, number: int) -> UseCaseVersion:
+        data = self._call("GET", f"{self._kg_path(knowledge_graph)}/use-case-versions/{number}")
+        return wire.use_case_version_from_json(data)

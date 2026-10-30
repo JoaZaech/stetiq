@@ -12,9 +12,11 @@ from typing import Any, Literal
 from fastapi import APIRouter, Body, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from stetiq.evaluation.answerability import CompetencyQuestionMapper
 from stetiq.auth import Permission, TokenRegistry
 from stetiq.errors import PermissionDeniedError, StetiqError
 from stetiq.ontology import parse_dict
+from stetiq.use_case import parse_use_case_dict
 from stetiq.tracking import LocalTrackingService, SqlStore, TrackingService, wire
 
 DATABASE_URL_ENV = "STETIQ_DATABASE_URL"
@@ -27,15 +29,19 @@ def create_app(
     *,
     service: TrackingService | None = None,
     tokens: TokenRegistry | None = None,
+    question_mapper: CompetencyQuestionMapper | None = None,
 ) -> FastAPI:
     """Build the app over `service`, or over a `SqlStore` at `database_url`.
 
     Every API request needs an API token from `tokens` (default: the registry in the
     same database). GET needs `read` on the targeted Knowledge Graph, anything else `edit`.
+
+    `question_mapper` is the model structural answerability maps unmapped Competency
+    Questions with (ticket #12); it only applies when `service` is not given.
     """
     if service is None or tokens is None:
         store = SqlStore(database_url or DEFAULT_DATABASE_URL)
-        service = service or LocalTrackingService(store)
+        service = service or LocalTrackingService(store, question_mapper=question_mapper)
         tokens = tokens or TokenRegistry(store)
     tracking, registry = service, tokens
 
@@ -234,9 +240,26 @@ def create_app(
         return wire.evaluation_result_to_json(result)
 
     @api.post(version_path + "/evaluate")
-    def evaluate_version(name: str, number: int) -> list[dict[str, Any]]:
-        results = tracking.evaluate_ontology_version(name, number)
+    def evaluate_version(
+        name: str, number: int, use_case_version: int | None = Body(None, embed=True)
+    ) -> list[dict[str, Any]]:
+        results = tracking.evaluate_ontology_version(name, number, use_case_version)
         return [wire.evaluation_result_to_json(r) for r in results]
+
+    # --- Use Cases ------------------------------------------------------------------
+
+    @api.post("/knowledge-graphs/{name}/use-case-versions")
+    def register_use_case(name: str, use_case: dict[str, Any] = Body(embed=True)) -> dict[str, Any]:
+        version = tracking.register_use_case(name, parse_use_case_dict(use_case))
+        return wire.use_case_version_to_json(version)
+
+    @api.get("/knowledge-graphs/{name}/use-case-versions")
+    def list_use_case_versions(name: str) -> list[dict[str, Any]]:
+        return [wire.use_case_version_to_json(v) for v in tracking.list_use_case_versions(name)]
+
+    @api.get("/knowledge-graphs/{name}/use-case-versions/{number}")
+    def get_use_case_version(name: str, number: int) -> dict[str, Any]:
+        return wire.use_case_version_to_json(tracking.get_use_case_version(name, number))
 
     app.include_router(api)
     return app

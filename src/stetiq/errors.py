@@ -38,6 +38,10 @@ class RunNotActiveError(StetiqError):
     """The Construction Run has already ended (finished or failed)."""
 
 
+class UseCaseValidationError(StetiqError):
+    """A Use Case or Competency Question is malformed; the message names the element."""
+
+
 class InvalidAliasNameError(StetiqError):
     """An Alias name is empty or contains characters other than letters, digits, `_`, `-`, `.`."""
 

@@ -35,6 +35,7 @@ from sqlalchemy import (
     delete,
     event,
     insert,
+    inspect,
     select,
     update,
 )
@@ -47,6 +48,7 @@ from stetiq.errors import KnowledgeGraphAlreadyExistsError
 from stetiq.evaluation.framework import Detail
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import canonical_json, from_canonical_json
+from stetiq import use_case as use_case_format
 from stetiq.tracking.entities import (
     Alias,
     ConstructionRun,
@@ -57,6 +59,7 @@ from stetiq.tracking.entities import (
     OntologyVersion,
     Promotion,
     RunStatus,
+    UseCaseVersion,
 )
 
 metadata = MetaData()
@@ -222,6 +225,7 @@ evaluation_results = Table(
     Column("created_at", Text, nullable=False),
     # The Evaluator's parameters (e.g. its reference Ontology Version), JSON; "{}" if none.
     Column("parameters_json", Text, nullable=False, server_default="{}"),
+    Column("use_case_version", Integer, nullable=True),  # ticket #10; added to old DBs on start
 )
 Index(
     "ix_evaluation_results_subject",
@@ -242,6 +246,35 @@ api_tokens = Table(
     Column("created_at", Text, nullable=False),
     Column("revoked_at", Text, nullable=True),
 )
+
+
+# Use Case versions: numbered per Knowledge Graph, independently of Ontology Versions.
+use_case_versions = Table(
+    "use_case_versions",
+    metadata,
+    Column("knowledge_graph", Text, ForeignKey("knowledge_graphs.name"), nullable=False),
+    Column("number", Integer, nullable=False),
+    Column("content_hash", Text, nullable=False),
+    Column("canonical_json", Text, nullable=False),
+    Column("created_at", Text, nullable=False),
+    PrimaryKeyConstraint("knowledge_graph", "number"),
+    UniqueConstraint("knowledge_graph", "content_hash"),
+)
+
+# Columns added to existing tables after their first release: (table, column, DDL type).
+# `create_all` never alters a table, so stores created before get them on start.
+_ADDED_COLUMNS = [
+    ("evaluation_results", "use_case_version", "INTEGER"),
+    ("evaluation_results", "parameters_json", "TEXT NOT NULL DEFAULT '{}'"),
+]
+
+
+def _add_missing_columns(engine) -> None:
+    with engine.begin() as conn:
+        inspector = inspect(conn)
+        for table, column, ddl_type in _ADDED_COLUMNS:
+            if column not in {c["name"] for c in inspector.get_columns(table)}:
+                conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}")
 
 
 def _engine(database_url: str):
@@ -279,6 +312,7 @@ class SqlStore:
         self._engine = _engine(database_url)
         self._local = threading.local()  # the open transaction's connection, per thread
         metadata.create_all(self._engine)
+        _add_missing_columns(self._engine)
 
     def drop_all(self) -> None:
         """Delete every table (test helper); they are recreated on next construction."""
@@ -666,11 +700,13 @@ class SqlStore:
                     details_json=json.dumps(
                         [
                             {"item": d.item, "message": d.message, "metric": d.metric}
+                            | ({} if d.data is None else {"data": dict(d.data)})
                             for d in result.details
                         ]
                     ),
                     created_at=result.created_at.isoformat(),
                     parameters_json=json.dumps(result.parameters, sort_keys=True),
+                    use_case_version=result.use_case_version,
                 )
             )
 
@@ -690,6 +726,54 @@ class SqlStore:
             rows = conn.execute(query).mappings().all()
         return [_evaluation_from_row(r) for r in rows]
 
+    # --- Use Cases ------------------------------------------------------------------
+
+    def add_use_case_version(self, version: UseCaseVersion) -> None:
+        with self._connection() as conn:
+            conn.execute(
+                insert(use_case_versions).values(
+                    knowledge_graph=version.knowledge_graph,
+                    number=version.number,
+                    content_hash=version.content_hash,
+                    canonical_json=use_case_format.canonical_json(version.use_case),
+                    created_at=version.created_at.isoformat(),
+                )
+            )
+
+    def _use_case_versions(self, *where) -> list[UseCaseVersion]:
+        query = select(use_case_versions).where(*where).order_by(use_case_versions.c.number)
+        with self._connection() as conn:
+            rows = conn.execute(query).mappings().all()
+        return [
+            UseCaseVersion(
+                knowledge_graph=r["knowledge_graph"],
+                number=r["number"],
+                content_hash=r["content_hash"],
+                created_at=datetime.fromisoformat(r["created_at"]),
+                use_case=use_case_format.from_canonical_json(r["canonical_json"]),
+            )
+            for r in rows
+        ]
+
+    def get_use_case_version(self, knowledge_graph: str, number: int) -> UseCaseVersion | None:
+        found = self._use_case_versions(
+            use_case_versions.c.knowledge_graph == knowledge_graph,
+            use_case_versions.c.number == number,
+        )
+        return found[0] if found else None
+
+    def find_use_case_version_by_hash(
+        self, knowledge_graph: str, content_hash: str
+    ) -> UseCaseVersion | None:
+        found = self._use_case_versions(
+            use_case_versions.c.knowledge_graph == knowledge_graph,
+            use_case_versions.c.content_hash == content_hash,
+        )
+        return found[0] if found else None
+
+    def list_use_case_versions(self, knowledge_graph: str) -> list[UseCaseVersion]:
+        return self._use_case_versions(use_case_versions.c.knowledge_graph == knowledge_graph)
+
 
 def _evaluation_from_row(row) -> EvaluationResult:
     return EvaluationResult(
@@ -701,6 +785,7 @@ def _evaluation_from_row(row) -> EvaluationResult:
         details=tuple(Detail(**d) for d in json.loads(row["details_json"])),
         created_at=datetime.fromisoformat(row["created_at"]),
         parameters=json.loads(row["parameters_json"]),
+        use_case_version=row["use_case_version"],
     )
 
 

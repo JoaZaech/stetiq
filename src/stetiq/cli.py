@@ -13,12 +13,15 @@ from stetiq.client import Client
 from stetiq.config import DEFAULT_CONFIG_PATH, load_config
 from stetiq.entry_point import EntryPoint
 from stetiq.errors import EvaluatorError, StetiqError
+from stetiq.use_case import to_yaml as to_use_case_yaml
 
 app = typer.Typer(no_args_is_help=True, help="Version, evaluate and govern knowledge-graph ontologies.")
 kg_app = typer.Typer(no_args_is_help=True, help="Knowledge Graphs.")
 ontology_app = typer.Typer(no_args_is_help=True, help="Ontology Versions.")
 app.add_typer(kg_app, name="kg")
 app.add_typer(ontology_app, name="ontology")
+use_case_app = typer.Typer(no_args_is_help=True, help="Use Cases (Competency Questions).")
+app.add_typer(use_case_app, name="use-case")
 alias_app = typer.Typer(no_args_is_help=True, help="Aliases, the Contract Alias and Promotion.")
 app.add_typer(alias_app, name="alias")
 
@@ -123,7 +126,8 @@ def _load_evaluator(spec: str):
 def _echo_results(results) -> None:
     for r in results:
         metrics = "  ".join(f"{k}={v:g}" for k, v in sorted(r.metrics.items()))
-        typer.echo(f"{r.evaluator}: {metrics}")
+        against = "" if r.use_case_version is None else f" (Use Case version {r.use_case_version})"
+        typer.echo(f"{r.evaluator}{against}: {metrics}")
         for d in r.details:
             metric = f" [{d.metric}]" if d.metric else ""
             typer.echo(f"  - {d.item}{metric}: {d.message}" if d.message else f"  - {d.item}{metric}")
@@ -147,6 +151,10 @@ def ontology_evaluate(
         list[str] | None,
         typer.Option("--evaluator", help="Custom Evaluator as module:Class (repeatable)"),
     ] = None,
+    use_case_version: Annotated[
+        int | None,
+        typer.Option("--use-case-version", help="Judge answerability against this Use Case version (default latest)"),
+    ] = None,
     tracking_uri: TrackingUri = None,
 ) -> None:
     """Re-run the built-in (and any given custom) Evaluators on an Ontology Version."""
@@ -154,7 +162,7 @@ def ontology_evaluate(
         client = _client(tracking_uri)
         for spec in evaluator or []:
             client.register_evaluator(_load_evaluator(spec))
-        results = client.evaluate(knowledge_graph, version)
+        results = client.evaluate(knowledge_graph, version, use_case_version=use_case_version)
     except StetiqError as e:
         raise _fail(e) from None
     _echo_results(results)
@@ -179,6 +187,46 @@ def ontology_diff(
     for c in d.changes:
         typer.echo(f"{c.classification:<12} {c.kind:<11} {c.concept:<{width}}  {c.detail}")
     typer.echo(f"Overall: {d.classification}")
+
+
+@use_case_app.command("register")
+def use_case_register(
+    knowledge_graph: str,
+    use_case: Annotated[Path, typer.Argument(exists=True, dir_okay=False, help="Use Case YAML file")],
+    tracking_uri: TrackingUri = None,
+) -> None:
+    """Register the Knowledge Graph's Use Case as a new Use Case version."""
+    try:
+        version = _client(tracking_uri).register_use_case(knowledge_graph, use_case)
+    except StetiqError as e:
+        raise _fail(e) from None
+    count = len(version.use_case.competency_questions)
+    typer.echo(f"Use Case version {version.number} ({count} Competency Questions)")
+
+
+@use_case_app.command("list")
+def use_case_list(knowledge_graph: str, tracking_uri: TrackingUri = None) -> None:
+    """List a Knowledge Graph's Use Case versions."""
+    try:
+        versions = _client(tracking_uri).list_use_case_versions(knowledge_graph)
+    except StetiqError as e:
+        raise _fail(e) from None
+    typer.echo(f"{'VERSION':<8} {'QUESTIONS':<10} {'HASH':<13} CREATED")
+    for v in versions:
+        typer.echo(
+            f"{v.number:<8} {len(v.use_case.competency_questions):<10} "
+            f"{v.content_hash[:12]:<13} {v.created_at.isoformat()}"
+        )
+
+
+@use_case_app.command("get")
+def use_case_get(knowledge_graph: str, version: int, tracking_uri: TrackingUri = None) -> None:
+    """Print a Use Case version as YAML."""
+    try:
+        found = _client(tracking_uri).get_use_case_version(knowledge_graph, version)
+    except StetiqError as e:
+        raise _fail(e) from None
+    typer.echo(to_use_case_yaml(found.use_case), nl=False)
 
 
 Actor = Annotated[

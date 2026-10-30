@@ -10,6 +10,7 @@ from stetiq.tracking.entities import (
     Observation,
     OntologyVersion,
     RunComparison,
+    UseCaseVersion,
 )
 from stetiq.tracking.remote import RemoteTrackingService
 from stetiq.tracking.service import LocalTrackingService, TrackingService
@@ -31,4 +32,5 @@ __all__ = [
     "SqlStore",
     "Store",
     "TrackingService",
+    "UseCaseVersion",
 ]

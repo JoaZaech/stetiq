@@ -12,6 +12,7 @@ from stetiq.errors import InvalidAliasNameError
 from stetiq.evaluation.framework import Detail, MetricValue, ParameterValue, SubjectKind
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import Ontology, to_yaml
+from stetiq.use_case import UseCase
 
 # "registered": registered by hand; "run": created as a Candidate by a Construction Run (later ticket).
 Origin = Literal["registered", "run"]
@@ -147,3 +148,19 @@ class EvaluationResult:
     created_at: datetime
     # The Evaluator's configuration (e.g. its reference Ontology Version); {} if none.
     parameters: dict[str, ParameterValue] = field(default_factory=dict)
+    # The Use Case version the Evaluator judged against (structural answerability);
+    # None for Evaluators that use no Use Case.
+    use_case_version: int | None = None
+
+
+@dataclass(frozen=True)
+class UseCaseVersion:
+    """An immutable snapshot of a Knowledge Graph's Use Case (its Competency Questions),
+    numbered independently of Ontology Versions. `use_case` is in canonical order
+    (questions sorted by id)."""
+
+    knowledge_graph: str
+    number: int
+    content_hash: str
+    created_at: datetime
+    use_case: UseCase

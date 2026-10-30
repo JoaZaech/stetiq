@@ -16,6 +16,7 @@ unique `name`, and register it with `Client.register_evaluator`.
 
 from __future__ import annotations
 
+import json
 import math
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
@@ -38,12 +39,15 @@ class Detail:
     """One per-item finding, e.g. the Concept that made a metric non-zero.
 
     `item` names the thing (a Concept label, a pattern, a Competency Question id);
-    `metric` optionally names the metric it contributes to.
+    `metric` optionally names the metric it contributes to; `data` optionally carries
+    structured, JSON-serialisable facts about the item (e.g. a Competency Question's
+    required and missing Concepts) for Gates and tools to read.
     """
 
     item: str
     message: str = ""
     metric: str | None = None
+    data: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -160,6 +164,16 @@ def check_evaluation(evaluator_name: str, evaluation: Any) -> Evaluation:
             raise EvaluatorError(
                 f"Evaluator {evaluator_name!r}: details must be Detail values, got {detail!r}"
             )
+        if detail.data is not None:
+            try:
+                if not isinstance(detail.data, Mapping):
+                    raise TypeError
+                json.dumps(detail.data, allow_nan=False)
+            except (TypeError, ValueError):
+                raise EvaluatorError(
+                    f"Evaluator {evaluator_name!r}: detail {detail.item!r} data must be a "
+                    "JSON-serialisable mapping"
+                ) from None
     return Evaluation(dict(evaluation.metrics), tuple(evaluation.details))
 
 

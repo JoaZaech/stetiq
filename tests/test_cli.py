@@ -102,6 +102,32 @@ def test_cli_diffs_two_ontology_versions(tmp_path, monkeypatch, support_ontology
     assert "No changes" in unchanged.output
 
 
+def test_cli_registers_a_use_case_and_evaluates_answerability(tmp_path, monkeypatch, support_ontology):
+    monkeypatch.setenv("STETIQ_TRACKING_URI", f"sqlite:///{tmp_path / 'stetiq.db'}")
+    ontology = tmp_path / "ontology.yaml"
+    ontology.write_text(support_ontology)
+    use_case = tmp_path / "use-case.yaml"
+    use_case.write_text(
+        "competency_questions:\n"
+        "  - {id: agents, question: 'Who handles tickets?', concepts: [Agent]}\n"
+    )
+    runner = CliRunner()
+    runner.invoke(app, ["kg", "create", "kg", "--ontology", str(ontology)])
+
+    registered = runner.invoke(app, ["use-case", "register", "kg", str(use_case)])
+    listed = runner.invoke(app, ["use-case", "list", "kg"])
+    fetched = runner.invoke(app, ["use-case", "get", "kg", "1"])
+    evaluated = runner.invoke(app, ["ontology", "evaluate", "kg", "1", "--use-case-version", "1"])
+
+    assert registered.exit_code == 0, registered.output
+    assert "Use Case version 1" in registered.output
+    assert [line.split()[0] for line in listed.output.strip().splitlines()[1:]] == ["1"]
+    assert yaml.safe_load(fetched.output)["competency_questions"][0]["id"] == "agents"
+    assert evaluated.exit_code == 0, evaluated.output
+    assert "structural_answerability (Use Case version 1):" in evaluated.output
+    assert "agents [unanswerable_questions]: missing Agent" in evaluated.output
+
+
 def test_cli_moves_lists_and_fetches_aliases_with_an_audit_log(tmp_path, monkeypatch, support_ontology):
     monkeypatch.setenv("STETIQ_TRACKING_URI", f"sqlite:///{tmp_path / 'stetiq.db'}")
     ontology = tmp_path / "ontology.yaml"

@@ -22,7 +22,9 @@ from stetiq.tracking.entities import (
     KnowledgeGraph,
     Observation,
     OntologyVersion,
+    UseCaseVersion,
 )
+from stetiq import use_case as use_case_format
 from stetiq.tracking.entities import Alias, Promotion
 
 API_PREFIX = "/api/v1"
@@ -68,11 +70,16 @@ def ontology_version_from_json(d: dict[str, Any]) -> OntologyVersion:
 
 
 def _detail_to_json(d: Detail) -> dict[str, Any]:
-    return {"item": d.item, "message": d.message, "metric": d.metric}
+    out: dict[str, Any] = {"item": d.item, "message": d.message, "metric": d.metric}
+    if d.data is not None:
+        out["data"] = dict(d.data)
+    return out
 
 
 def _detail_from_json(d: dict[str, Any]) -> Detail:
-    return Detail(item=d["item"], message=d.get("message", ""), metric=d.get("metric"))
+    return Detail(
+        item=d["item"], message=d.get("message", ""), metric=d.get("metric"), data=d.get("data")
+    )
 
 
 def evaluation_to_json(e: Evaluation) -> dict[str, Any]:
@@ -96,6 +103,7 @@ def evaluation_result_to_json(r: EvaluationResult) -> dict[str, Any]:
         "details": [_detail_to_json(d) for d in r.details],
         "created_at": r.created_at.isoformat(),
         "parameters": dict(r.parameters),
+        "use_case_version": r.use_case_version,
     }
 
 
@@ -109,6 +117,7 @@ def evaluation_result_from_json(d: dict[str, Any]) -> EvaluationResult:
         details=tuple(_detail_from_json(x) for x in d["details"]),
         created_at=datetime.fromisoformat(d["created_at"]),
         parameters=dict(d.get("parameters", {})),
+        use_case_version=d.get("use_case_version"),
     )
 
 
@@ -205,6 +214,31 @@ def observation_from_json(d: dict[str, Any]) -> Observation:
         observed_at=datetime.fromisoformat(d["observed_at"]),
         scope=graph_source_scope_from_json(d["scope"]),
         schema=observed_schema_from_json(d["schema"]),
+    )
+
+
+# --- Use Cases (ticket #10) --------------------------------------------------------------
+
+ERROR_STATUS[errors.UseCaseValidationError] = 422
+
+
+def use_case_version_to_json(v: UseCaseVersion) -> dict[str, Any]:
+    return {
+        "knowledge_graph": v.knowledge_graph,
+        "number": v.number,
+        "content_hash": v.content_hash,
+        "created_at": v.created_at.isoformat(),
+        "use_case": use_case_format.to_dict(v.use_case),
+    }
+
+
+def use_case_version_from_json(d: dict[str, Any]) -> UseCaseVersion:
+    return UseCaseVersion(
+        knowledge_graph=d["knowledge_graph"],
+        number=d["number"],
+        content_hash=d["content_hash"],
+        created_at=datetime.fromisoformat(d["created_at"]),
+        use_case=use_case_format.from_dict(d["use_case"]),
     )
 
 
