@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, kgPath } from './client'
 
 /** wire.alias_to_json */
@@ -38,3 +38,22 @@ export const promotionsQuery = (kg: string) => ({
   queryFn: () => api<Promotion[]>(kgPath(kg) + '/promotions'),
 })
 export const usePromotions = (kg: string) => useQuery(promotionsQuery(kg))
+
+/**
+ * Promote: point an Alias (existing or new) at a version (needs `edit`). The server
+ * records the signed-in user as the actor and the version's latest Gate result in the
+ * Promotion audit; a Gate never blocks it.
+ */
+export function usePromote(kg: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ alias, version }: { alias: string; version: number }) =>
+      api<Alias>(`${kgPath(kg)}/aliases/${encodeURIComponent(alias)}`, 'PUT', { version }),
+    onSuccess: () =>
+      Promise.all(
+        [['aliases', kg], ['promotions', kg], ['knowledge-graphs']].map((queryKey) =>
+          queryClient.invalidateQueries({ queryKey }),
+        ),
+      ),
+  })
+}

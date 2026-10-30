@@ -1,12 +1,10 @@
 import { useId, type ReactNode } from 'react'
 import { Link } from 'react-router'
-import { latestGateResult, useGateResults } from '@/api/gate-results'
 import { type EvaluationResult, useVersionEvaluations } from '@/api/ontology-versions'
 import { useRuns } from '@/api/runs'
 import { kgUrl } from '@/app/knowledge-graph-sections'
 import { CopyButton } from '@/components/CopyButton'
 import { ErrorAlert } from '@/components/ErrorAlert'
-import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
@@ -19,6 +17,7 @@ import {
 import { formatDateTime, formatMetric } from '@/lib/format'
 import { useKnowledgeGraphName } from '../params'
 import { metricRows } from './evaluator-metrics'
+import { LatestGateResult } from './LatestGateResult'
 import { useOntologyVersionTab } from './version-context'
 
 /** The version page's Overview tab: metadata, Evaluator results and latest Gate result. */
@@ -140,31 +139,5 @@ export function EvaluatorResultTable({
         ))}
       </TableBody>
     </Table>
-  )
-}
-
-function LatestGateResult({ name, number }: { name: string; number: number }) {
-  const results = useGateResults(name)
-  if (results.isPending) return <Skeleton className="h-6 w-32" />
-  if (results.isError) return <ErrorAlert error={results.error} />
-  const latest = latestGateResult(results.data, 'ontology_version', String(number))
-  if (!latest) {
-    return (
-      <p className="flex items-center gap-2 text-sm">
-        <Badge variant="outline">None</Badge>
-        <span className="text-muted-foreground">No Gates have been evaluated on this version.</span>
-      </p>
-    )
-  }
-  const failed = latest.outcomes.filter((o) => !o.passed).map((o) => o.gate.name)
-  return (
-    <p className="flex flex-wrap items-center gap-2 text-sm">
-      <Badge variant={latest.passed ? 'default' : 'destructive'}>{latest.passed ? 'Passed' : 'Failed'}</Badge>
-      <span className="text-muted-foreground">
-        {formatDateTime(latest.evaluated_at)} · {latest.outcomes.length} Gate
-        {latest.outcomes.length === 1 ? '' : 's'}
-        {failed.length > 0 && `, failed: ${failed.join(', ')}`}
-      </span>
-    </p>
   )
 }

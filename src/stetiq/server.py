@@ -342,9 +342,14 @@ def create_app(
 
     @api.put("/knowledge-graphs/{name}/aliases/{alias}")
     def set_alias(
-        request: Request, name: str, alias: str, version: int = Body(), actor: str = Body()
+        request: Request,
+        name: str,
+        alias: str,
+        version: int = Body(),
+        actor: str | None = Body(None),
     ) -> dict[str, Any]:
-        # The audit log records the token's user; the actor the SDK sends is ignored.
+        # The audit log records the token's user. Older SDKs still send an actor, which is
+        # accepted for wire compatibility and ignored; the web UI sends none.
         del actor
         user = request.state.token.user
         return wire.alias_to_json(tracking.set_alias(name, alias, version, user))
