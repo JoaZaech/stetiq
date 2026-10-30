@@ -1,3 +1,4 @@
+import { Fragment, useEffect, useRef } from 'react'
 import type { Row } from '@tanstack/react-table'
 import { ColumnPicker } from '@/components/ColumnPicker'
 import { DataTable, DataTableRowCount } from '@/components/DataTable'
@@ -10,6 +11,8 @@ import {
 } from '@/lib/data-table'
 import { type DataTableParamsOptions, useDataTableParams } from '@/lib/data-table-params'
 import type { AttributeGridRow } from './attribute-rows'
+import { attributeGroupId } from './table-links'
+import { ConceptLink, ShowOnMap } from './TableLinks'
 
 const column = createDataTableColumnHelper<AttributeGridRow>()
 
@@ -17,7 +20,11 @@ const columns = column.columns([
   column.accessor('owner', {
     header: 'Owner',
     ...filterColumn('text'),
-    cell: ({ getValue }) => <span className="font-medium">{getValue()}</span>,
+    cell: ({ row }) => (
+      <span className="font-medium">
+        <ConceptLink concept={{ kind: row.original.ownerKind, label: row.original.owner }} />
+      </span>
+    ),
   }),
   column.accessor('ownerKind', {
     header: 'Owner kind',
@@ -31,7 +38,9 @@ const columns = column.columns([
       <span>
         {row.original.name}
         {row.original.inheritedFrom !== undefined && (
-          <span className="ml-2 text-xs text-muted-foreground">from {row.original.inheritedFrom}</span>
+          <span className="ml-2 text-xs text-muted-foreground">
+            from <ConceptLink concept={{ kind: 'class', label: row.original.inheritedFrom }} />
+          </span>
         )}
       </span>
     ),
@@ -59,12 +68,22 @@ const columns = column.columns([
     ...filterColumn('values'),
     enableGlobalFilter: false,
     sortUndefined: 'last',
+    cell: ({ getValue }) => {
+      const from = getValue()
+      return from === undefined ? null : <ConceptLink concept={{ kind: 'class', label: from }} />
+    },
   }),
   column.accessor('description', {
     header: 'Description',
     ...filterColumn('text'),
     enableSorting: false,
     cell: ({ getValue }) => <span className="text-muted-foreground">{getValue()}</span>,
+  }),
+  // An attribute is shown on the Map as its owner.
+  column.display({
+    id: 'map',
+    header: '',
+    cell: ({ row }) => <ShowOnMap concept={{ kind: row.original.ownerKind, label: row.original.owner }} />,
   }),
 ])
 
@@ -98,19 +117,50 @@ const GROUP_BY = [
 
 const count = (n: number) => `${n} ${n === 1 ? 'attribute' : 'attributes'}`
 
-/** A group's header: the owner with its kind and superclass, or the type, and how many attributes it holds. */
+/**
+ * A group's header: the owner (a link) with its kind and superclass (a link), or the type,
+ * and how many attributes it holds.
+ */
 function groupHeader(row: Row<DataTableFeatures, AttributeGridRow>) {
   const leaves = row.getLeafRows()
   const first = leaves[0]?.original
   if (row.groupingColumnId === 'owner' && first) {
-    const parent = first.ownerParent === undefined ? [] : [`subclass of ${first.ownerParent}`]
-    return [first.owner, first.ownerKind, ...parent, count(leaves.length)].join(' · ')
+    const parts = [
+      <ConceptLink concept={{ kind: first.ownerKind, label: first.owner }} />,
+      first.ownerKind,
+      ...(first.ownerParent === undefined
+        ? []
+        : [
+            <>
+              subclass of <ConceptLink concept={{ kind: 'class', label: first.ownerParent }} />
+            </>,
+          ]),
+      count(leaves.length),
+    ]
+    return parts.map((part, i) => (
+      <Fragment key={i}>
+        {i > 0 && ' · '}
+        {part}
+      </Fragment>
+    ))
   }
   return `${String(row.groupingValue)} · ${count(leaves.length)}`
 }
 
-/** The Ontology Table's Attributes section: every attribute of every class and relation, grouped. */
-export function AttributesGrid({ attributes }: { attributes: AttributeGridRow[] }) {
+/** A request to scroll to `owner`'s group; `seq` tells a repeated request from the last. */
+export type GroupRequest = { owner: string; seq: number }
+
+/**
+ * The Ontology Table's Attributes section: every attribute of every class and relation,
+ * grouped. A `reveal` request groups it by owner and scrolls to that owner's group, open.
+ */
+export function AttributesGrid({
+  attributes,
+  reveal,
+}: {
+  attributes: AttributeGridRow[]
+  reveal?: GroupRequest | null
+}) {
   const grid = useDataTableParams(ATTRIBUTES_GRID)
   const table = useDataTable({
     data: attributes,
@@ -122,6 +172,17 @@ export function AttributesGrid({ attributes }: { attributes: AttributeGridRow[] 
     ...grid.tableOptions,
   })
   const [groupedBy = 'none'] = table.store.state.grouping
+  // Grouping by owner goes through the URL, so a request may take a render to be met.
+  const revealed = useRef<number | null>(null)
+  useEffect(() => {
+    if (!reveal || revealed.current === reveal.seq) return
+    if (groupedBy !== 'owner') return table.setGrouping(['owner'])
+    const group = table.getGroupedRowModel().rows.find((r) => r.groupingValue === reveal.owner)
+    if (!group) return
+    revealed.current = reveal.seq
+    table.setExpanded((expanded) => (expanded === true ? true : { ...expanded, [group.id]: true }))
+    document.getElementById(attributeGroupId(reveal.owner))?.scrollIntoView({ block: 'center' })
+  }, [reveal, groupedBy, table])
   return (
     <>
       <div className="flex items-center justify-between gap-4">
@@ -159,7 +220,15 @@ export function AttributesGrid({ attributes }: { attributes: AttributeGridRow[] 
           />
         </div>
       </div>
-      <DataTable table={table} label="Attributes" empty="No attributes match." groupHeader={groupHeader} />
+      <DataTable
+        table={table}
+        label="Attributes"
+        empty="No attributes match."
+        groupHeader={groupHeader}
+        rowProps={(row) =>
+          row.getIsGrouped() && row.groupingColumnId === 'owner' ? { id: attributeGroupId(String(row.groupingValue)) } : {}
+        }
+      />
     </>
   )
 }
