@@ -1,5 +1,5 @@
 /** Two Ontology Versions superimposed on one Map, each item marked with how it changed. */
-import type { Classification, OntologyChange, OntologyDiff } from '@/api/ontology-diff'
+import { CLASSIFICATIONS, type Classification, type OntologyChange, type OntologyDiff } from '@/api/ontology-diff'
 import type { Ontology } from '@/api/ontology-versions'
 import { ontologyMap, type OntologyMap, type PatternLink } from './ontology-map'
 import type { MapSelection } from './ontology-map-focus'
@@ -39,12 +39,10 @@ export interface OntologyComparison {
   }
 }
 
-const SEVERITIES: readonly Classification[] = ['additive', 'deprecating', 'breaking']
-
 /** The most severe of `classifications`, or null for none. */
 const mostSevere = (classifications: Classification[]): Classification | null =>
   classifications.reduce<Classification | null>(
-    (a, c) => (a === null || SEVERITIES.indexOf(c) > SEVERITIES.indexOf(a) ? c : a),
+    (a, c) => (a === null || CLASSIFICATIONS.indexOf(c) > CLASSIFICATIONS.indexOf(a) ? c : a),
     null,
   )
 

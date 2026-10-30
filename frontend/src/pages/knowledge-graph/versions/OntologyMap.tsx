@@ -16,7 +16,7 @@ import {
   type Node,
   type NodeProps,
 } from '@xyflow/react'
-import type { Classification } from '@/api/ontology-diff'
+import { CLASSIFICATIONS, type Classification } from '@/api/ontology-diff'
 import type { Ontology } from '@/api/ontology-versions'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { ClassificationBadge } from '@/components/OntologyDiff'
@@ -307,7 +307,7 @@ function ComparisonLegend() {
           {kind}
         </span>
       ))}
-      {(['additive', 'deprecating', 'breaking'] as const).map((s) => (
+      {CLASSIFICATIONS.map((s) => (
         <ClassificationBadge key={s} classification={s} />
       ))}
     </Panel>

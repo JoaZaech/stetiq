@@ -2,7 +2,9 @@ import { useQuery } from '@tanstack/react-query'
 import { api, kgPath } from './client'
 
 /** Consumer impact of a change, from least to most severe (ontology/diff.py). */
-export type Classification = 'additive' | 'deprecating' | 'breaking'
+export const CLASSIFICATIONS = ['additive', 'deprecating', 'breaking'] as const
+
+export type Classification = (typeof CLASSIFICATIONS)[number]
 
 /** One change to one Concept (wire.ontology_diff_to_json). */
 export interface OntologyChange {

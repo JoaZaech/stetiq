@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import {
+  CLASSIFICATIONS,
   type Classification,
   type OntologyChange,
   type OntologyDiff,
@@ -18,9 +19,10 @@ import {
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 
-/** Most severe first; the Diff colours are used for nothing else in the app. */
-const CLASSIFICATIONS: readonly Classification[] = ['breaking', 'deprecating', 'additive']
+/** Most severe first. */
+const MOST_SEVERE_FIRST = [...CLASSIFICATIONS].reverse()
 
+/** The Diff colours, used for nothing else in the app. */
 const CLASSIFICATION_STYLE: Record<Classification, string> = {
   additive: 'border-diff-additive/40 bg-diff-additive/10 text-diff-additive',
   deprecating: 'border-diff-deprecating/40 bg-diff-deprecating/10 text-diff-deprecating',
@@ -79,7 +81,7 @@ export function OntologyDiffView({ diff, base, target, caption }: OntologyDiffVi
               Overall: <ClassificationBadge classification={diff.classification} />
             </p>
             <p className="text-muted-foreground">
-              {CLASSIFICATIONS.map((c) => ({
+              {MOST_SEVERE_FIRST.map((c) => ({
                 c,
                 n: changes.filter((x) => x.classification === c).length,
               }))
@@ -126,6 +128,6 @@ export function ClassificationBadge({ classification }: { classification: Classi
 }
 
 function bySeverity(changes: OntologyChange[]): OntologyChange[] {
-  const rank = (c: OntologyChange) => CLASSIFICATIONS.indexOf(c.classification)
+  const rank = (c: OntologyChange) => MOST_SEVERE_FIRST.indexOf(c.classification)
   return [...changes].sort((a, b) => rank(a) - rank(b))
 }
