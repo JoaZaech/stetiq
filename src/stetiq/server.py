@@ -85,13 +85,17 @@ def create_app(
     if tokens is None and local_actor is None:
         tokens = TokenRegistry(store or SqlStore(database_url or DEFAULT_DATABASE_URL))
     tracking, registry = service, tokens
-    local_token = ApiToken(
-        id="local", user=local_actor or "", grants={ALL_KNOWLEDGE_GRAPHS: "edit"}
+    # Local mode: whoever runs `stetiq ui` owns the database.
+    local_token = (
+        None
+        if local_actor is None
+        else ApiToken(id="local", user=local_actor, grants={ALL_KNOWLEDGE_GRAPHS: "edit"})
     )
 
     def authenticate(request: Request) -> ApiToken:
-        if registry is None:  # local mode: whoever runs `stetiq ui` owns the database
+        if local_token is not None:
             return local_token
+        assert registry is not None  # tokens are only left out in local mode
         bearer = bearer_token(request.headers.get("authorization"))
         if bearer is not None:
             return registry.authenticate(bearer)
@@ -154,8 +158,7 @@ def create_app(
     api = APIRouter(prefix=wire.API_PREFIX, dependencies=[Depends(authorize)])
 
     def describe(token: ApiToken) -> dict[str, Any]:
-        mode = "local" if registry is None else "server"
-        return {"mode": mode, "user": token.user, "grants": dict(token.grants)}
+        return wire.whoami_to_json(token, local=local_token is not None)
 
     @api.get("/whoami")
     def whoami(request: Request) -> dict[str, Any]:
@@ -170,7 +173,7 @@ def create_app(
         request: Request, response: Response, token: str = Body(embed=True)
     ) -> dict[str, Any]:
         """Check a pasted API Token and keep it in an HttpOnly cookie for the web UI."""
-        if registry is None:
+        if registry is None or local_token is not None:
             raise StetiqError("stetiq ui runs without tokens: there is nothing to sign in to")
         signed_in = registry.authenticate(token)
         secure = request.url.scheme == "https"

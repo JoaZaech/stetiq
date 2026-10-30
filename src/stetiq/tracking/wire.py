@@ -13,6 +13,7 @@ from typing import Any
 
 from stetiq import errors
 from stetiq import use_case as use_case_format
+from stetiq.auth import ApiToken
 from stetiq.conformance import Conformance
 from stetiq.drift import DriftFinding, DriftThresholds
 from stetiq.evaluation.framework import Detail, Evaluation
@@ -88,6 +89,15 @@ def knowledge_graph_summary_from_json(d: dict[str, Any]) -> KnowledgeGraphSummar
         last_run_status=d.get("last_run_status"),
         last_modified_at=_dt(d.get("last_modified_at")),
     )
+
+
+def whoami_to_json(token: ApiToken, *, local: bool) -> dict[str, Any]:
+    """Who a request acts as: `local` under `stetiq ui`, else a server API Token."""
+    return {
+        "mode": "local" if local else "server",
+        "user": token.user,
+        "grants": dict(token.grants),
+    }
 
 
 def ontology_version_to_json(
