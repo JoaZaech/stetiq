@@ -106,6 +106,39 @@ Deterministic (seeded) stress / force layout, computed once over the union netwo
 - **Idiom**: severity legible in light and dark themes; layout stable between two versions.
 - **Algorithm**: layout under ~1 s at 100 classes.
 
+## Round 2: after the first build
+
+Feedback from using the v1 Map on the example Knowledge Graphs, with the level of the nested model each finding sits at:
+
+- **Task: summarize → changes was missing.** The comparison Map showed *where* a change landed but never *what* changed. Attribute-level changes are invisible on the canvas, and documentation-only edits drowned the real ones (city-transit v2→v3: two breaking attribute renames, eight relation description edits, so every link turned green).
+- **Task: search mixed two tasks.** Locating a Concept by name and exploring where a term appears shared one full-text box, so `Bin` lit up for "Warehouse" through its description and its `warehouse` attribute, with no reason shown.
+- **Idiom: link labels were unreadable**, drawn under nodes and links, with fit-to-view shrinking text below legibility.
+- **Idiom: the Table did not read like a database.**
+
+Decisions:
+
+- **Change summary.** A comparison always shows a summary panel beside the Map: a headline count per level ("2 breaking · 2 additive · 8 documentation-only"), then changes grouped by Concept and sorted by severity. It is linked both ways: hovering or clicking an entry focuses its Concept on the Map, and selecting on the Map scrolls to its entry.
+- **Documentation-only changes** (only a description differs) are their own quiet level: a small neutral dot, no severity hue, no emphasis, collapsed to one line in the summary. They are detected by comparing the two Ontologies structurally, not by parsing Diff text. The core's classification is untouched; this changes visual weight only.
+- **Changed attributes on the canvas, in comparisons only.** A changed class expands to list just its changed attributes, diff-style (`− wheelchairBoarding`, `+ wheelchair_boarding`); unchanged attributes stay hidden. The plain Map keeps attributes off the canvas — a narrow exception to details-on-demand, because in a comparison the change is the detail being asked for.
+- **The Table** keeps its three sections (classes, relations, attributes) and their row structure — relations stay one row per relation with its Patterns, not foreign keys — but gains grid behaviour, grouping, purpose and connection back to the Ontology:
+  - **Layout**: the sections stay stacked on one page, each collapsible, under a sticky jump bar with counts (`Classes 8 · Relations 8 · Attributes 34`).
+  - **Purpose**: each section opens with one line, in glossary words, saying what it means in the Ontology (classes are the kinds of things stored, indented ones are subclasses that inherit; relations say how classes connect, each Pattern which class may link to which; attributes are the fields stored on a class or relation).
+  - **Grid behaviour**: sortable columns, a filter per column (text for names, a value list for type and kind, a toggle for required, unique and deprecated), a row count ("12 of 34"), full-text search across the grid, type names in monospace. Sort, filters and search live in the URL.
+  - **Grouping**: attributes are grouped by owner by default — collapsible groups headed by the owner, its kind, its superclass and its attribute count — with inherited attributes listed under each subclass and marked ("from Person"). A Group-by control switches between Owner, Type and None.
+  - **Columns** (bold visible by default, the rest in the column picker):
+    - Classes: **Class**, **Superclass**, **Attributes** (own count, inherited count in parentheses), **Outgoing** and **Incoming** (relation names as links, `HAS_TRIP → Trip`), **Constraints**, **Description**, Deprecated.
+    - Relations: **Relation**, **Patterns** (one per line, each class name a link), **Attributes** (count, linking to its group), **Description**, Deprecated.
+    - Attributes: **Owner**, Owner kind, **Attribute**, **Type**, **Required**, **Unique**, Inherited from, **Description**.
+  - **Connection**: every class and relation name in any section is a link that scrolls to and highlights its row; each row has "Show on Map"; the selection is shared between Table and Map. A mini Map in the Table is left for later.
+  - **Comparison Table**: the Diff list on the Changes tab and the Compare page becomes the same kind of grid — Concept, Concept kind, Change (added, removed, changed, deprecated), Severity (documentation-only its own value), Detail — with the same sorting, filters and "Show on Map", and documentation-only changes filtered out by default.
+- **Search is labels first.** Typing shows a results list that separates name matches from other matches, each with its reason ("`Bin`: description mentions 'warehouse'; attribute `warehouse`"). Picking a result selects and centers it. The Map highlights only name matches while typing; Table filtering keeps full-text matching.
+- **Link labels**:
+  - drawn in a top layer above nodes and links, on a solid background pill
+  - the layout leaves room for labels, and parallel links' labels are staggered
+  - below a zoom threshold, labels are hidden except on the selected or focused neighbourhood and on changed links in a comparison
+  - fit-to-view never zooms out below readable text
+- **Shipping.** PR #74 goes back to draft; this round lands as new sub-tickets of #62 on the same branch, and the Map merges only once it is right.
+
 ## Later layers (out of v1)
 
 - Declared Ontology ↔ Observed Schema on the same union-network abstraction (Conformance, Drift, Pending Migration).
