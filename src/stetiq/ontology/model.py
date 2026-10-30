@@ -7,6 +7,10 @@ other module (diff, conformance, evaluators) works on them only.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Literal
+
+# The kinds of Concept: classes (node types), relations and attributes.
+ConceptKind = Literal["node_type", "relationship_type", "property"]
 
 
 @dataclass(frozen=True)

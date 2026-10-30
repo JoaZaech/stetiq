@@ -28,7 +28,7 @@ from stetiq import use_case as use_case_format
 from stetiq.tracking.entities import Alias, Promotion
 from stetiq.drift import DriftFinding, DriftThresholds
 from stetiq.tracking.entities import DriftEvent, ObservationOutcome
-from stetiq.tracking.entities import Alias, GateResult, Promotion
+from stetiq.tracking.entities import GateResult
 from stetiq.gates import outcome_from_dict, outcome_to_dict
 
 API_PREFIX = "/api/v1"

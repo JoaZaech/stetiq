@@ -21,11 +21,12 @@ from stetiq.graph_source import (
 )
 from stetiq.ontology import NodeType, Ontology, Pattern, Property, RelationshipType
 from stetiq.ontology.diff import WIDENING_TYPE_CHANGES
+from stetiq.ontology.model import ConceptKind
 
 # What a mismatch is about. Concepts are node types, relationship types and properties
 # (identity `Owner.property`, as in the Ontology Diff); patterns are endpoint patterns
 # `(Source)-[REL]->(Target)`, which are not Concepts of their own.
-SubjectKind = Literal["node_type", "relationship_type", "property", "pattern"]
+MismatchSubjectKind = ConceptKind | Literal["pattern"]
 
 
 class MismatchKind(StrEnum):
@@ -38,7 +39,7 @@ class MismatchKind(StrEnum):
 @dataclass(frozen=True)
 class Mismatch:
     subject: str
-    subject_kind: SubjectKind
+    subject_kind: MismatchSubjectKind
     kind: MismatchKind
     detail: str = ""
 
@@ -146,14 +147,14 @@ class _Checks:
         self._conforms: dict[tuple[str, str], bool] = {}
         self._mismatches: list[Mismatch] = []
 
-    def record(self, subject: str, kind: SubjectKind, found: list[Mismatch]) -> None:
+    def record(self, subject: str, kind: MismatchSubjectKind, found: list[Mismatch]) -> None:
         self._conforms[
             (kind, subject)
         ] = not found  # a node and a relationship may share a label
         self._mismatches.extend(found)
 
     def presence(
-        self, subject: str, kind: SubjectKind, is_declared: bool, is_observed: bool
+        self, subject: str, kind: MismatchSubjectKind, is_declared: bool, is_observed: bool
     ) -> bool:
         """Record an absent/undeclared item; True when it is on both sides."""
         if not is_declared:
@@ -172,7 +173,7 @@ class _Checks:
 
 def _check_concepts(
     checks: _Checks,
-    kind: SubjectKind,
+    kind: MismatchSubjectKind,
     declared: tuple[NodeType, ...] | tuple[RelationshipType, ...],
     observed: tuple[ObservedNodeType, ...] | tuple[ObservedRelationshipType, ...],
     properties_of: PropertiesOf,

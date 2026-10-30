@@ -8,9 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Literal
 
-from stetiq.ontology.model import NodeType, Ontology, Pattern, Property, RelationshipType
+from stetiq.ontology.model import ConceptKind, NodeType, Ontology, Pattern, Property, RelationshipType
 
 
 class ChangeKind(StrEnum):
@@ -32,7 +31,6 @@ class Classification(StrEnum):
         return list(Classification).index(self)
 
 
-ConceptKind = Literal["node_type", "relationship_type", "property"]
 
 
 @dataclass(frozen=True)

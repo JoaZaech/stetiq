@@ -21,15 +21,13 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any, Literal
+from typing import Any
 
 from stetiq.conformance import MismatchKind, assess_conformance
 from stetiq.errors import InvalidDriftConfigError
 from stetiq.graph_source import ObservedSchema
 from stetiq.ontology import Ontology
-
-SubjectKind = Literal["node_type", "relationship_type", "property"]
-
+from stetiq.ontology.model import ConceptKind
 
 class DriftKind(StrEnum):
     UNDECLARED = "undeclared"  # observed, not declared by the contract
@@ -44,7 +42,7 @@ class DriftFinding:
 
     kind: DriftKind
     subject: str  # a label, or `Owner.property`
-    subject_kind: SubjectKind
+    subject_kind: ConceptKind
     detail: str = ""
     previous_count: int | None = None
     observed_count: int | None = None
@@ -159,7 +157,7 @@ def _statistical(
     observed: ObservedSchema, previous: ObservedSchema, thresholds: DriftThresholds
 ) -> list[DriftFinding]:
     findings = []
-    kinds: tuple[tuple[SubjectKind, str], ...] = (
+    kinds: tuple[tuple[ConceptKind, str], ...] = (
         ("node_type", "node_types"),
         ("relationship_type", "relationship_types"),
     )

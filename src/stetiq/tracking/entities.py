@@ -219,10 +219,6 @@ class ObservationOutcome:
 
 # --- Gates ---------------------------------------------------------------------------
 
-# What a Gate evaluation was run for: an Ontology Version (e.g. a Candidate) or a run.
-GateSubjectKind = Literal["ontology_version", "construction_run"]
-
-
 @dataclass(frozen=True)
 class GateResult:
     """One recorded Gate evaluation: each Gate's outcome together with the Gate
@@ -233,7 +229,7 @@ class GateResult:
     Promotion audit entries take the target version's latest `GateResult`."""
 
     knowledge_graph: str
-    subject_kind: GateSubjectKind
+    subject_kind: SubjectKind  # an Ontology Version (e.g. a Candidate) or a run
     subject_id: str
     ontology_version: int
     outcomes: tuple[GateOutcome, ...]

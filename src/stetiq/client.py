@@ -13,7 +13,6 @@ from stetiq.entry_point import EntryPoint, EntryPointError, placeholder_values
 from stetiq.errors import (
     EvaluatorError,
     GraphSourceUnavailableError,
-    NotFoundError,
     UseCaseValidationError,
 )
 from stetiq.evaluation.framework import (
