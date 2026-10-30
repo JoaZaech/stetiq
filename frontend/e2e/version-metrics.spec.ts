@@ -10,13 +10,13 @@ test('Evaluator metric columns can be added to the version table and sorted', as
   await expect(rows).toHaveCount(4)
   await expect(table.getByRole('columnheader', { name: 'review/score' })).toHaveCount(0)
 
-  await page.getByRole('button', { name: 'Metric columns' }).click()
+  await page.getByRole('button', { name: 'Columns' }).click()
   await page.getByRole('menuitemcheckbox', { name: 'review/score' }).click()
   await page.getByRole('menuitemcheckbox', { name: 'hierarchy/max_children' }).click()
   await page.keyboard.press('Escape')
 
   await expect(rows.first()).toHaveText(/Version.*Origin.*Created.*Aliases.*hierarchy\/max_children.*review\/score/)
-  await expect(page).toHaveURL(/metric=review%2Fscore/)
+  await expect(page).toHaveURL(/col=metric%3Areview%2Fscore/)
   // Newest first, until sorted otherwise; a version without the metric shows a dash.
   await expect(rows.nth(1)).toHaveText(/^v3.*2\s*0\.7$/)
   await expect(rows.nth(2)).toHaveText(/^v2.*2\s*—$/)

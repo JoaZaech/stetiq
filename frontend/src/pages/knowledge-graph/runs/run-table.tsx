@@ -6,6 +6,7 @@ import { RunStatusLabel } from '@/components/RunStatusLabel'
 import { Checkbox } from '@/components/ui/checkbox'
 import { createDataTableColumnHelper, useDataTable } from '@/lib/data-table'
 import { formatDateTime, formatMetric } from '@/lib/format'
+import { metricColumnId, paramColumnId } from '@/lib/metric-view-params'
 import { formatDuration, runDurationMs, shortRunId } from './runs'
 
 /** One row of the run table. */
@@ -13,10 +14,6 @@ export interface RunRow {
   run: ConstructionRun
   durationMs: number
 }
-
-/** Column ids of the optional columns, as the column picker and the URL name them. */
-export const paramColumnId = (key: string) => `param:${key}`
-export const metricColumnId = (key: string) => `metric:${key}`
 
 const column = createDataTableColumnHelper<RunRow>()
 const linkClass = 'text-primary underline-offset-4 hover:underline'
