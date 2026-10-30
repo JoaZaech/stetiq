@@ -30,6 +30,8 @@ if TYPE_CHECKING:
 
 SubjectKind = Literal["ontology_version", "construction_run"]
 MetricValue = int | float
+# An Evaluator's configuration, e.g. which gold Ontology Version it compares against.
+ParameterValue = str | int | float
 
 
 @dataclass(frozen=True)
@@ -61,6 +63,15 @@ class OntologyVersionEvaluator(ABC):
 
     subject_kind: ClassVar[SubjectKind] = "ontology_version"
     name: str
+
+    @property
+    def parameters(self) -> Mapping[str, ParameterValue]:
+        """Configuration this instance runs with; stored with its result.
+
+        Results are kept per (name, parameters): evaluating with different
+        parameters (e.g. another reference Ontology) adds a separate result.
+        """
+        return {}
 
     @abstractmethod
     def evaluate(self, version: OntologyVersion) -> Evaluation: ...
@@ -106,6 +117,11 @@ class ConstructionRunEvaluator(ABC):
 
     subject_kind: ClassVar[SubjectKind] = "construction_run"
     name: str
+
+    @property
+    def parameters(self) -> Mapping[str, ParameterValue]:
+        """Configuration this instance runs with; stored with its result."""
+        return {}
 
     @abstractmethod
     def evaluate(self, run: ConstructionRunSubject) -> Evaluation: ...
@@ -159,3 +175,20 @@ def check_evaluation(evaluator_name: str, evaluation: Any) -> Evaluation:
                     "JSON-serialisable mapping"
                 ) from None
     return Evaluation(dict(evaluation.metrics), tuple(evaluation.details))
+
+
+def check_parameters(evaluator_name: str, parameters: Any) -> dict[str, ParameterValue]:
+    """Validate an Evaluator's parameters: string keys, str/int/float (finite) values."""
+    if not isinstance(parameters, Mapping):
+        raise EvaluatorError(f"Evaluator {evaluator_name!r}: parameters must be a mapping")
+    for key, value in parameters.items():
+        if not isinstance(key, str) or not key:
+            raise EvaluatorError(f"Evaluator {evaluator_name!r}: parameter names must be strings")
+        if isinstance(value, bool) or not isinstance(value, (str, int, float)) or (
+            isinstance(value, float) and not math.isfinite(value)
+        ):
+            raise EvaluatorError(
+                f"Evaluator {evaluator_name!r}: parameter {key!r} must be a string or "
+                f"finite number, got {value!r}"
+            )
+    return dict(parameters)

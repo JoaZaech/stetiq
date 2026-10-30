@@ -1,10 +1,14 @@
 """stetiq: versioning, evaluation and governance of knowledge-graph ontologies."""
 
 from stetiq.client import ActiveRun, Client
+from stetiq.conformance import Conformance, Mismatch, MismatchKind
 from stetiq.errors import (
     EvaluatorError,
     GraphSourceNotBoundError,
     GraphSourceUnavailableError,
+    GraphSourceWriteRejectedError,
+    InvalidAliasNameError,
+    InvalidEvolutionModeError,
     KnowledgeGraphAlreadyExistsError,
     MissingDeclaredOntologyError,
     NotFoundError,
@@ -17,22 +21,28 @@ from stetiq.evaluation import (
     ConstructionRunEvaluator,
     Detail,
     Evaluation,
+    GoldOntologyAlignment,
     OntologyVersionEvaluator,
 )
 from stetiq.graph_source import GraphSource, GraphSourceScope, InMemoryGraphSource
 from stetiq.ontology.diff import Change, ChangeKind, Classification, OntologyDiff
 from stetiq.tracking import (
+    Alias,
     ConstructionRun,
     EvaluationResult,
     KnowledgeGraph,
     Observation,
     OntologyVersion,
+    Promotion,
     RunComparison,
     UseCaseVersion,
 )
 from stetiq.use_case import CompetencyQuestion, UseCase
 
 __all__ = [
+    "Alias",
+    "InvalidAliasNameError",
+    "Promotion",
     "ActiveRun",
     "Change",
     "ChangeKind",
@@ -44,12 +54,18 @@ __all__ = [
     "Evaluation",
     "EvaluationResult",
     "EvaluatorError",
+    "Conformance",
+    "Mismatch",
+    "MismatchKind",
     "ConstructionRun",
+    "GoldOntologyAlignment",
     "GraphSource",
     "GraphSourceNotBoundError",
     "GraphSourceScope",
     "GraphSourceUnavailableError",
+    "GraphSourceWriteRejectedError",
     "InMemoryGraphSource",
+    "InvalidEvolutionModeError",
     "KnowledgeGraph",
     "KnowledgeGraphAlreadyExistsError",
     "MissingDeclaredOntologyError",

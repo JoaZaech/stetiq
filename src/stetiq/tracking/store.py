@@ -9,10 +9,14 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
+from stetiq.conformance import Conformance
 from stetiq.graph_source import GraphSourceScope
 from stetiq.tracking.entities import (
+    Alias,
+    Promotion,
     ConstructionRun,
     EvaluationResult,
+    EvolutionMode,
     KnowledgeGraph,
     Observation,
     OntologyVersion,
@@ -61,12 +65,41 @@ class Store(Protocol):
         self, run_id: str, status: RunStatus, ended_at: datetime, observation_id: str | None
     ) -> None: ...
 
+    def set_run_conformance(self, run_id: str, conformance: Conformance) -> None: ...
+
+    def set_run_candidate(self, run_id: str, knowledge_graph: str, ontology_version: int) -> None:
+        """Link the run to the Candidate Ontology Version it gave rise to."""
+
+    def set_evolution_mode(self, knowledge_graph: str, mode: EvolutionMode) -> None: ...
+
+    def get_evolution_mode(self, knowledge_graph: str) -> EvolutionMode | None:
+        """None when never set (callers apply the default)."""
+
     def add_observation(self, observation: Observation) -> None: ...
 
     def get_observation(self, observation_id: str) -> Observation | None: ...
 
     def list_observations(self, knowledge_graph: str) -> list[Observation]:
         """Ordered by observation time ascending."""
+
+    def set_alias(self, alias: Alias) -> None:
+        """Create the Alias or move it (upsert on knowledge graph + name)."""
+
+    def get_alias(self, knowledge_graph: str, name: str) -> Alias | None: ...
+
+    def list_aliases(self, knowledge_graph: str) -> list[Alias]:
+        """Ordered by name."""
+
+    def add_promotion(self, promotion: Promotion) -> None:
+        """Append to the Alias audit log (insert-only)."""
+
+    def list_promotions(self, knowledge_graph: str) -> list[Promotion]:
+        """Ordered oldest first."""
+
+    def set_contract_alias(self, knowledge_graph: str, alias: str) -> None: ...
+
+    def get_contract_alias(self, knowledge_graph: str) -> str | None:
+        """None when never designated (the service then uses the default)."""
 
     def add_evaluation_result(self, result: EvaluationResult) -> None:
         """Insert-only: re-running an Evaluator adds a newer result."""

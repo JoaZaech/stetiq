@@ -15,6 +15,7 @@ from stetiq.evaluation.framework import (
     ReadOnlyGraphSource,
     SubjectKind,
 )
+from stetiq.evaluation.alignment import GoldOntologyAlignment
 
 __all__ = [
     "ANSWERABILITY_EVALUATOR",
@@ -25,6 +26,7 @@ __all__ = [
     "Detail",
     "Evaluation",
     "Evaluator",
+    "GoldOntologyAlignment",
     "OntologyVersionEvaluator",
     "ReadOnlyGraphSource",
     "SubjectKind",

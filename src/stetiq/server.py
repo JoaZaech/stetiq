@@ -93,6 +93,17 @@ def create_app(
     def get_graph_source(name: str) -> dict[str, Any]:
         return wire.graph_source_scope_to_json(tracking.get_graph_source(name))
 
+    # --- Evolution Mode ---------------------------------------------------------------
+
+    @api.put("/knowledge-graphs/{name}/evolution-mode")
+    def set_evolution_mode(name: str, mode: str = Body(embed=True)) -> dict[str, str]:
+        tracking.set_evolution_mode(name, mode)  # validates the mode
+        return {"mode": mode}
+
+    @api.get("/knowledge-graphs/{name}/evolution-mode")
+    def get_evolution_mode(name: str) -> dict[str, str]:
+        return {"mode": tracking.get_evolution_mode(name)}
+
     # --- Construction Runs and Observations -------------------------------------------
 
     @api.post("/knowledge-graphs/{name}/runs", status_code=201)
@@ -139,6 +150,34 @@ def create_app(
     def get_observation(observation_id: str) -> dict[str, Any]:
         return wire.observation_to_json(tracking.get_observation(observation_id))
 
+    # --- Aliases and Promotion -----------------------------------------------------
+
+    @api.put("/knowledge-graphs/{name}/aliases/{alias}")
+    def set_alias(
+        name: str, alias: str, version: int = Body(), actor: str = Body()
+    ) -> dict[str, Any]:
+        return wire.alias_to_json(tracking.set_alias(name, alias, version, actor))
+
+    @api.get("/knowledge-graphs/{name}/aliases/{alias}")
+    def get_alias(name: str, alias: str) -> dict[str, Any]:
+        return wire.alias_to_json(tracking.get_alias(name, alias))
+
+    @api.get("/knowledge-graphs/{name}/aliases")
+    def list_aliases(name: str) -> list[dict[str, Any]]:
+        return [wire.alias_to_json(a) for a in tracking.list_aliases(name)]
+
+    @api.get("/knowledge-graphs/{name}/promotions")
+    def list_promotions(name: str) -> list[dict[str, Any]]:
+        return [wire.promotion_to_json(p) for p in tracking.list_promotions(name)]
+
+    @api.put("/knowledge-graphs/{name}/contract-alias")
+    def set_contract_alias(name: str, alias: str = Body(embed=True)) -> dict[str, str]:
+        tracking.set_contract_alias(name, alias)
+        return {"alias": alias}
+
+    @api.get("/knowledge-graphs/{name}/contract-alias")
+    def get_contract_alias(name: str) -> dict[str, str]:
+        return {"alias": tracking.get_contract_alias(name)}
     # Evaluation results. Subject paths: ontology-versions/{number} here; Construction
     # Runs add runs/{id}/evaluations with run-level evaluation (ticket #13).
     version_path = "/knowledge-graphs/{name}/ontology-versions/{number}"
@@ -155,10 +194,11 @@ def create_app(
         evaluator: str = Body(),
         metrics: dict[str, Any] = Body(),
         details: list[dict[str, Any]] = Body([]),
+        parameters: dict[str, Any] = Body({}),
     ) -> dict[str, Any]:
         evaluation = wire.evaluation_from_json({"metrics": metrics, "details": details})
         result = tracking.record_evaluation(
-            name, "ontology_version", str(number), evaluator, evaluation
+            name, "ontology_version", str(number), evaluator, evaluation, parameters
         )
         return wire.evaluation_result_to_json(result)
 

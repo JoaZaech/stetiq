@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
-from stetiq.evaluation.framework import Detail, MetricValue, SubjectKind
+from stetiq.conformance import Conformance
+from stetiq.errors import InvalidAliasNameError
+from stetiq.evaluation.framework import Detail, MetricValue, ParameterValue, SubjectKind
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import Ontology, to_yaml
 from stetiq.use_case import UseCase
@@ -38,6 +41,11 @@ class OntologyVersion:
 # "failed" when the run crashed, was aborted, or its Observation could not be made.
 RunStatus = Literal["running", "finished", "failed"]
 
+# A Knowledge Graph's setting for runs that introduce new Concepts: "strict" fails the
+# run, "evolving" (the default) creates a Candidate Ontology Version.
+EvolutionMode = Literal["strict", "evolving"]
+DEFAULT_EVOLUTION_MODE: EvolutionMode = "evolving"
+
 
 @dataclass(frozen=True)
 class ConstructionRun:
@@ -50,6 +58,11 @@ class ConstructionRun:
     params: dict[str, str] = field(default_factory=dict)
     metrics: dict[str, float] = field(default_factory=dict)
     observation_id: str | None = None  # set when the run's ending Observation is stored
+    # Conformance of the ending Observation to the Declared Ontology (None until ended
+    # with an Observation).
+    conformance: Conformance | None = None
+    # The Candidate Ontology Version this run gave rise to (evolving mode, new Concepts).
+    candidate_version: int | None = None
 
 
 @dataclass(frozen=True)
@@ -79,6 +92,44 @@ class RunComparison:
         return tuple(r.ontology_version for r in self.runs)
 
 
+# --- Aliases and Promotion (ticket #9) ---------------------------------------------------
+
+DEFAULT_CONTRACT_ALIAS = "production"
+_ALIAS_NAME = re.compile(r"[A-Za-z0-9_.-]+")
+
+
+def validate_alias_name(name: str) -> None:
+    """Alias names are URL-path safe: letters, digits, `_`, `-`, `.`."""
+    if not _ALIAS_NAME.fullmatch(name):
+        raise InvalidAliasNameError(f"Alias name {name!r} must be letters, digits, '_', '-' or '.'")
+
+
+@dataclass(frozen=True)
+class Alias:
+    """A named, movable pointer to one Ontology Version of a Knowledge Graph."""
+
+    knowledge_graph: str
+    name: str
+    version: int
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
+class Promotion:
+    """One audit-log entry: an Alias moved (or created, `from_version` None) by `actor`.
+
+    `gate_result` is the target version's latest Gate result at the time of the move;
+    it stays None until Gates exist."""
+
+    knowledge_graph: str
+    alias: str
+    from_version: int | None
+    to_version: int
+    actor: str
+    promoted_at: datetime
+    gate_result: str | None = None
+
+
 @dataclass(frozen=True)
 class EvaluationResult:
     """One Evaluator's stored result against one subject.
@@ -95,6 +146,8 @@ class EvaluationResult:
     metrics: dict[str, MetricValue]
     details: tuple[Detail, ...]
     created_at: datetime
+    # The Evaluator's configuration (e.g. its reference Ontology Version); {} if none.
+    parameters: dict[str, ParameterValue] = field(default_factory=dict)
     # The Use Case version the Evaluator judged against (structural answerability);
     # None for Evaluators that use no Use Case.
     use_case_version: int | None = None

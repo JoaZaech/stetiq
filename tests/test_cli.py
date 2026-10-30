@@ -122,3 +122,53 @@ def test_cli_registers_a_use_case_and_evaluates_answerability(tmp_path, monkeypa
     assert evaluated.exit_code == 0, evaluated.output
     assert "structural_answerability (Use Case version 1):" in evaluated.output
     assert "agents [unanswerable_questions]: missing Agent" in evaluated.output
+
+
+def test_cli_moves_lists_and_fetches_aliases_with_an_audit_log(tmp_path, monkeypatch, support_ontology):
+    monkeypatch.setenv("STETIQ_TRACKING_URI", f"sqlite:///{tmp_path / 'stetiq.db'}")
+    ontology = tmp_path / "ontology.yaml"
+    ontology.write_text(support_ontology)
+    evolved = tmp_path / "evolved.yaml"
+    evolved.write_text(support_ontology.replace("  - label: OPENED", "  - label: CLOSED").replace("OPENED", "CLOSED"))
+    runner = CliRunner()
+    runner.invoke(app, ["kg", "create", "kg", "--ontology", str(ontology)])
+    runner.invoke(app, ["ontology", "register", "kg", str(evolved)])
+
+    moved = runner.invoke(app, ["alias", "set", "kg", "staging", "2", "--actor", "ada"])
+    promoted = runner.invoke(app, ["alias", "set", "kg", "production", "2", "--actor", "ada"])
+    listed = runner.invoke(app, ["alias", "list", "kg"])
+    fetched = runner.invoke(app, ["alias", "get", "kg", "production"])
+    diffed = runner.invoke(app, ["ontology", "diff", "kg", "1"])  # BASE 1 -> latest
+    rolled_back = runner.invoke(app, ["alias", "set", "kg", "production", "1", "--actor", "bob"])
+    log = runner.invoke(app, ["alias", "log", "kg"])
+    contract = runner.invoke(app, ["alias", "contract", "kg", "staging"])
+    shown = runner.invoke(app, ["alias", "contract", "kg"])
+
+    for result in (moved, promoted, listed, fetched, diffed, rolled_back, log, contract, shown):
+        assert result.exit_code == 0, result.output
+    assert [line.split()[:2] for line in listed.output.strip().splitlines()[1:]] == [
+        ["production", "2"],
+        ["staging", "2"],
+    ]
+    assert yaml.safe_load(fetched.output)["patterns"] == [["Customer", "CLOSED", "Ticket"]]
+    assert "Overall: breaking" in diffed.output
+    entries = [line.split()[:4] for line in log.output.strip().splitlines()[1:]]
+    assert entries == [
+        ["production", "-", "1", "stetiq"],
+        ["staging", "-", "2", "ada"],
+        ["production", "1", "2", "ada"],
+        ["production", "2", "1", "bob"],
+    ]
+    assert shown.output.strip() == "staging"
+
+
+def test_cli_reports_an_unknown_alias(tmp_path, monkeypatch, support_ontology):
+    monkeypatch.setenv("STETIQ_TRACKING_URI", f"sqlite:///{tmp_path / 'stetiq.db'}")
+    ontology = tmp_path / "ontology.yaml"
+    ontology.write_text(support_ontology)
+    CliRunner().invoke(app, ["kg", "create", "kg", "--ontology", str(ontology)])
+
+    result = CliRunner().invoke(app, ["alias", "get", "kg", "nope"])
+
+    assert result.exit_code == 1
+    assert "nope" in result.output

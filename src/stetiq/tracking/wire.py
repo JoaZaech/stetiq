@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Any
 
 from stetiq import errors
+from stetiq.conformance import Conformance
 from stetiq.evaluation.framework import Detail, Evaluation
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import from_dict, to_dict
@@ -24,6 +25,7 @@ from stetiq.tracking.entities import (
     UseCaseVersion,
 )
 from stetiq import use_case as use_case_format
+from stetiq.tracking.entities import Alias, Promotion
 
 API_PREFIX = "/api/v1"
 
@@ -100,6 +102,7 @@ def evaluation_result_to_json(r: EvaluationResult) -> dict[str, Any]:
         "metrics": r.metrics,
         "details": [_detail_to_json(d) for d in r.details],
         "created_at": r.created_at.isoformat(),
+        "parameters": dict(r.parameters),
         "use_case_version": r.use_case_version,
     }
 
@@ -113,6 +116,7 @@ def evaluation_result_from_json(d: dict[str, Any]) -> EvaluationResult:
         metrics=dict(d["metrics"]),
         details=tuple(_detail_from_json(x) for x in d["details"]),
         created_at=datetime.fromisoformat(d["created_at"]),
+        parameters=dict(d.get("parameters", {})),
         use_case_version=d.get("use_case_version"),
     )
 
@@ -144,6 +148,9 @@ def graph_source_scope_from_json(d: dict[str, Any]) -> GraphSourceScope:
 ERROR_STATUS[errors.RunNotActiveError] = 409
 
 
+ERROR_STATUS[errors.InvalidEvolutionModeError] = 422
+
+
 def _dt(value: str | None) -> datetime | None:
     return None if value is None else datetime.fromisoformat(value)
 
@@ -159,6 +166,8 @@ def run_to_json(run: ConstructionRun) -> dict[str, Any]:
         "params": dict(run.params),
         "metrics": dict(run.metrics),
         "observation_id": run.observation_id,
+        "conformance": None if run.conformance is None else run.conformance.to_dict(),
+        "candidate_version": run.candidate_version,
     }
 
 
@@ -173,6 +182,8 @@ def run_from_json(d: dict[str, Any]) -> ConstructionRun:
         params=dict(d["params"]),
         metrics={k: float(v) for k, v in d["metrics"].items()},
         observation_id=d["observation_id"],
+        conformance=None if d.get("conformance") is None else Conformance.from_dict(d["conformance"]),
+        candidate_version=d.get("candidate_version"),
     )
 
 
@@ -228,4 +239,51 @@ def use_case_version_from_json(d: dict[str, Any]) -> UseCaseVersion:
         content_hash=d["content_hash"],
         created_at=datetime.fromisoformat(d["created_at"]),
         use_case=use_case_format.from_dict(d["use_case"]),
+    )
+
+
+# --- Aliases and Promotion (ticket #9) ---------------------------------------------------
+
+ERROR_STATUS[errors.InvalidAliasNameError] = 422
+
+
+def alias_to_json(alias: Alias) -> dict[str, Any]:
+    return {
+        "knowledge_graph": alias.knowledge_graph,
+        "name": alias.name,
+        "version": alias.version,
+        "updated_at": alias.updated_at.isoformat(),
+    }
+
+
+def alias_from_json(d: dict[str, Any]) -> Alias:
+    return Alias(
+        knowledge_graph=d["knowledge_graph"],
+        name=d["name"],
+        version=d["version"],
+        updated_at=datetime.fromisoformat(d["updated_at"]),
+    )
+
+
+def promotion_to_json(p: Promotion) -> dict[str, Any]:
+    return {
+        "knowledge_graph": p.knowledge_graph,
+        "alias": p.alias,
+        "from_version": p.from_version,
+        "to_version": p.to_version,
+        "actor": p.actor,
+        "promoted_at": p.promoted_at.isoformat(),
+        "gate_result": p.gate_result,
+    }
+
+
+def promotion_from_json(d: dict[str, Any]) -> Promotion:
+    return Promotion(
+        knowledge_graph=d["knowledge_graph"],
+        alias=d["alias"],
+        from_version=d["from_version"],
+        to_version=d["to_version"],
+        actor=d["actor"],
+        promoted_at=datetime.fromisoformat(d["promoted_at"]),
+        gate_result=d["gate_result"],
     )

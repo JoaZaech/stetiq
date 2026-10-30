@@ -19,6 +19,8 @@ app.add_typer(kg_app, name="kg")
 app.add_typer(ontology_app, name="ontology")
 use_case_app = typer.Typer(no_args_is_help=True, help="Use Cases (Competency Questions).")
 app.add_typer(use_case_app, name="use-case")
+alias_app = typer.Typer(no_args_is_help=True, help="Aliases, the Contract Alias and Promotion.")
+app.add_typer(alias_app, name="alias")
 
 TrackingUri = Annotated[
     str | None,
@@ -164,14 +166,19 @@ def ontology_evaluate(
 
 
 @ontology_app.command("diff")
-def ontology_diff(knowledge_graph: str, base: int, target: int, tracking_uri: TrackingUri = None) -> None:
+def ontology_diff(
+    knowledge_graph: str,
+    base: Annotated[int | None, typer.Argument(help="Default: the Contract Alias's version")] = None,
+    target: Annotated[int | None, typer.Argument(help="Default: the latest version")] = None,
+    tracking_uri: TrackingUri = None,
+) -> None:
     """Show the Ontology Diff from version BASE to TARGET, each change additive, deprecating or breaking."""
     try:
         d = _client(tracking_uri).diff_ontology_versions(knowledge_graph, base, target)
     except StetiqError as e:
         raise _fail(e) from None
     if not d.changes:
-        typer.echo(f"No changes between Ontology Versions {base} and {target}")
+        typer.echo(f"No changes between Ontology Versions {base or 'contract'} and {target or 'latest'}")
         return
     width = max(len(c.concept) for c in d.changes)
     for c in d.changes:
@@ -217,3 +224,81 @@ def use_case_get(knowledge_graph: str, version: int, tracking_uri: TrackingUri =
     except StetiqError as e:
         raise _fail(e) from None
     typer.echo(to_use_case_yaml(found.use_case), nl=False)
+
+
+Actor = Annotated[
+    str | None,
+    typer.Option("--actor", envvar="STETIQ_ACTOR", help="Who the audit log records (default: OS user)"),
+]
+
+
+@alias_app.command("set")
+def alias_set(
+    knowledge_graph: str, alias: str, version: int, actor: Actor = None, tracking_uri: TrackingUri = None
+) -> None:
+    """Create ALIAS or move it to VERSION (Promotion, or rollback to an earlier version)."""
+    try:
+        moved = Client(tracking_uri, actor=actor).set_alias(knowledge_graph, alias, version)
+    except StetiqError as e:
+        raise _fail(e) from None
+    typer.echo(f"Alias {moved.name} -> Ontology Version {moved.version}")
+
+
+@alias_app.command("list")
+def alias_list(knowledge_graph: str, tracking_uri: TrackingUri = None) -> None:
+    """List a Knowledge Graph's Aliases; the Contract Alias is marked."""
+    try:
+        client = _client(tracking_uri)
+        aliases = client.list_aliases(knowledge_graph)
+        contract = client.get_contract_alias(knowledge_graph)
+    except StetiqError as e:
+        raise _fail(e) from None
+    width = max([5, *(len(a.name) for a in aliases)])
+    typer.echo(f"{'ALIAS':<{width}} {'VERSION':<8} {'UPDATED':<33} CONTRACT")
+    for a in aliases:
+        mark = "*" if a.name == contract else ""
+        typer.echo(f"{a.name:<{width}} {a.version:<8} {a.updated_at.isoformat():<33} {mark}")
+
+
+@alias_app.command("get")
+def alias_get(knowledge_graph: str, alias: str, tracking_uri: TrackingUri = None) -> None:
+    """Print the Ontology Version ALIAS points to as stetiq YAML."""
+    try:
+        version = _client(tracking_uri).get_ontology_version_by_alias(knowledge_graph, alias)
+    except StetiqError as e:
+        raise _fail(e) from None
+    typer.echo(version.to_yaml(), nl=False)
+
+
+@alias_app.command("log")
+def alias_log(knowledge_graph: str, tracking_uri: TrackingUri = None) -> None:
+    """Show the audit log of Alias moves, oldest first."""
+    try:
+        promotions = _client(tracking_uri).list_promotions(knowledge_graph)
+    except StetiqError as e:
+        raise _fail(e) from None
+    width = max([5, *(len(p.alias) for p in promotions)])
+    typer.echo(f"{'ALIAS':<{width}} {'FROM':<5} {'TO':<5} {'ACTOR':<16} {'GATE':<5} TIME")
+    for p in promotions:
+        from_version = "-" if p.from_version is None else str(p.from_version)
+        gate = p.gate_result or "-"
+        typer.echo(
+            f"{p.alias:<{width}} {from_version:<5} {p.to_version:<5} {p.actor:<16} {gate:<5} "
+            f"{p.promoted_at.isoformat()}"
+        )
+
+
+@alias_app.command("contract")
+def alias_contract(
+    knowledge_graph: str,
+    alias: Annotated[str | None, typer.Argument(help="Designate this Alias; omit to show the current one")] = None,
+    tracking_uri: TrackingUri = None,
+) -> None:
+    """Show the Contract Alias, or designate ALIAS as the Contract Alias."""
+    try:
+        client = _client(tracking_uri)
+        if alias is not None:
+            client.set_contract_alias(knowledge_graph, alias)
+        typer.echo(client.get_contract_alias(knowledge_graph))
+    except StetiqError as e:
+        raise _fail(e) from None

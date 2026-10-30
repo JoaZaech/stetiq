@@ -30,9 +30,21 @@ class GraphSourceUnavailableError(StetiqError):
     """The Client was built without a Graph Source adapter, so it cannot observe."""
 
 
+class InvalidEvolutionModeError(StetiqError, ValueError):
+    """An Evolution Mode other than "strict" or "evolving"."""
+
+
 class RunNotActiveError(StetiqError):
     """The Construction Run has already ended (finished or failed)."""
 
 
 class UseCaseValidationError(StetiqError):
     """A Use Case or Competency Question is malformed; the message names the element."""
+
+
+class InvalidAliasNameError(StetiqError):
+    """An Alias name is empty or contains characters other than letters, digits, `_`, `-`, `.`."""
+
+
+class GraphSourceWriteRejectedError(StetiqError):
+    """A query sent to a Graph Source was not read-only; adapters never issue writes."""
