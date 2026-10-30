@@ -15,6 +15,7 @@ import {
   useStore,
   type Edge,
   type EdgeProps,
+  type InternalNode,
   type Node,
   type NodeProps,
 } from '@xyflow/react'
@@ -31,9 +32,15 @@ import { MapDetailsPanel } from './MapDetailsPanel'
 import { MapPathPanel } from './MapPathPanel'
 import { MapSearchResults } from './MapSearchResults'
 import { filterOntologyMap, ontologyMap, type LinkRoute, type MapFilters } from './ontology-map'
-import { changesOf, type MapChange, type MapChangeKind, type OntologyComparison } from './ontology-map-comparison'
+import {
+  changesOf,
+  type AttributeChange,
+  type MapChange,
+  type MapChangeKind,
+  type OntologyComparison,
+} from './ontology-map-comparison'
 import { detailsOf, focusOf, searchMap, type MapSelection } from './ontology-map-focus'
-import { layoutOntologyMap, NODE_SIZE, type Point } from './ontology-map-layout'
+import { layoutOntologyMap, NODE_SIZE, type Point, type Size } from './ontology-map-layout'
 import { shortestPaths } from './ontology-map-paths'
 import { searchOntology, type SearchResult } from './ontology-map-search'
 
@@ -51,7 +58,16 @@ type Emphasis = {
 /** An item's data for how it changed, set on a comparison's Map only. */
 type MapChangeData = { change?: MapChange }
 
-type ClassNode = Node<{ label: string; deprecated: boolean } & Emphasis & MapChangeData, 'class'>
+type ClassNode = Node<
+  {
+    label: string
+    deprecated: boolean
+    /** A comparison's changed attributes of the class, listed on it; empty or unset lists none. */
+    attributes?: AttributeChange[]
+  } & Emphasis &
+    MapChangeData,
+  'class'
+>
 type PatternEdge = Edge<{ relation: string; route: LinkRoute; deprecated: boolean } & Emphasis & MapChangeData, 'pattern'>
 type SubclassEdge = Edge<MapChangeData, 'subclass'>
 
@@ -68,7 +84,7 @@ const LOOP_REACH = 48
 const LOOP_STEP = 24
 
 /** Severity's channel: the Diff colours, as Tailwind classes for each part of a mark, and as a stroke. */
-const SEVERITY: Record<'border' | 'fill' | 'ring', Record<Classification, string>> = {
+const SEVERITY: Record<'border' | 'fill' | 'ring' | 'text', Record<Classification, string>> = {
   border: {
     additive: 'border-diff-additive',
     deprecating: 'border-diff-deprecating',
@@ -83,6 +99,11 @@ const SEVERITY: Record<'border' | 'fill' | 'ring', Record<Classification, string
     additive: 'ring-diff-additive',
     deprecating: 'ring-diff-deprecating',
     breaking: 'ring-diff-breaking',
+  },
+  text: {
+    additive: 'text-diff-additive',
+    deprecating: 'text-diff-deprecating',
+    breaking: 'text-diff-breaking',
   },
 }
 const severityStroke = (severity: Classification | null) => severity && `var(--diff-${severity})`
@@ -148,6 +169,30 @@ const CHANGE_STYLE: Record<MapChangeKind, ChangeStyle> = {
 /** How `change` is drawn, or nothing outside a comparison. */
 const changeStyle = (change?: MapChange): Partial<ChangeStyle> => (change ? CHANGE_STYLE[change.kind] : {})
 
+/** A changed attribute's marker, diff-style. */
+const ATTRIBUTE_MARKER: Record<AttributeChange['kind'], string> = { removed: '−', added: '+', modified: '~' }
+
+/** A changed attribute's line on its class: marker, name, and a modified one's changes. */
+const attributeLine = (a: AttributeChange) =>
+  [ATTRIBUTE_MARKER[a.kind], a.name, ...(a.details.length > 0 ? [a.details.join('; ')] : [])].join(' ')
+
+/** One attribute line's height, and the widest a class grows to fit its lines (longer ones truncate). */
+const ATTRIBUTE_LINE_HEIGHT = 16
+const EXPANDED_MAX_WIDTH = 320
+/** The width of one character of an attribute line (`text-[11px] font-mono`), and the box's padding. */
+const ATTRIBUTE_CHAR_WIDTH = 6.6
+const EXPANDED_PADDING = 16
+
+/** A class's node size: `NODE_SIZE`, grown to list its changed attributes. */
+function classNodeSize(attributes: AttributeChange[] = []): Size {
+  if (attributes.length === 0) return NODE_SIZE
+  const longest = Math.max(...attributes.map((a) => attributeLine(a).length))
+  return {
+    width: Math.min(EXPANDED_MAX_WIDTH, Math.max(NODE_SIZE.width, longest * ATTRIBUTE_CHAR_WIDTH + EXPANDED_PADDING)),
+    height: NODE_SIZE.height + attributes.length * ATTRIBUTE_LINE_HEIGHT + EXPANDED_PADDING / 2,
+  }
+}
+
 type OntologyMapProps = { query?: string } & (
   | { ontology: Ontology; comparison?: never }
   | { comparison: OntologyComparison; ontology?: never }
@@ -209,10 +254,20 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
     document.addEventListener('keydown', clear)
     return () => document.removeEventListener('keydown', clear)
   }, [selection])
+  // A comparison's changed classes grow to list their changed attributes.
+  const sizes = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(comparison?.changes.attributes ?? {})
+          .filter(([, attributes]) => attributes.length > 0)
+          .map(([label, attributes]) => [label, classNodeSize(attributes)]),
+      ),
+    [comparison],
+  )
   // The whole Map is laid out, and filters only hide, so nothing moves when one changes.
   const layout = useQuery({
-    queryKey: ['ontology-map-layout', map],
-    queryFn: () => layoutOntologyMap(map),
+    queryKey: ['ontology-map-layout', map, sizes],
+    queryFn: () => layoutOntologyMap(map, sizes),
     staleTime: Infinity,
   })
 
@@ -247,10 +302,11 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
         label: n.label,
         deprecated: n.deprecated,
         change: comparison?.changes.classes[n.label],
+        attributes: comparison?.changes.attributes[n.label],
         ...classEmphasis(n.label),
       },
       ariaLabel: n.label,
-      ...NODE_SIZE,
+      ...(sizes[n.label] ?? NODE_SIZE),
     }))
     const patternEdges: PatternEdge[] = shown.links.map((l) => ({
       id: l.id,
@@ -285,17 +341,18 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
       markerEnd: SUBCLASS_ARROWHEAD,
     }))
     return { nodes, edges: [...subclassEdges, ...patternEdges] }
-  }, [layout.data, shown, focus, matches, selection, comparison])
+  }, [layout.data, sizes, shown, focus, matches, selection, comparison])
 
   const centre = useMemo(() => {
     if (!layout.data || !located || located !== selection) return null
-    if (located.kind === 'class') return center(layout.data[located.label])
+    const centreOf = (label: string) => boxAt(layout.data[label], sizes[label] ?? NODE_SIZE).center
+    if (located.kind === 'class') return centreOf(located.label)
     if (located.kind !== 'link') return null
     const link = map.links.find((l) => l.id === located.id)
     if (!link) return null
-    const [a, b] = [center(layout.data[link.source]), center(layout.data[link.target])]
+    const [a, b] = [centreOf(link.source), centreOf(link.target)]
     return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
-  }, [layout.data, located, selection, map])
+  }, [layout.data, sizes, located, selection, map])
 
   if (layout.error) return <ErrorAlert error={layout.error} title="The Map could not be laid out" />
   if (!elements) return <Skeleton className="h-[32rem] w-full" />
@@ -496,7 +553,7 @@ function ClassNodeView({ data }: NodeProps<ClassNode>) {
       data-change={data.change?.kind}
       data-severity={severity ?? undefined}
       className={cn(
-        'flex size-full cursor-pointer items-center justify-center rounded-md border bg-card px-2 text-sm font-medium text-card-foreground shadow-xs transition-opacity',
+        'flex size-full cursor-pointer flex-col items-center justify-center rounded-md border bg-card px-2 text-sm font-medium text-card-foreground shadow-xs transition-opacity',
         // Deprecated: faded, with a struck-through label.
         data.deprecated && 'opacity-50',
         // Change kind as mark style, severity in the Diff colours.
@@ -508,7 +565,13 @@ function ClassNodeView({ data }: NodeProps<ClassNode>) {
         data.faded && 'opacity-30',
       )}
     >
-      <span className={cn('truncate', data.deprecated && 'line-through')}>{data.label}</span>
+      <span
+        className={cn('flex max-w-full shrink-0 items-center truncate', data.deprecated && 'line-through')}
+        style={{ height: NODE_SIZE.height - 2 }}
+      >
+        {data.label}
+      </span>
+      {data.attributes && data.attributes.length > 0 && <ChangedAttributes attributes={data.attributes} />}
       {/* React Flow attaches links to handles; links are drawn centre to centre, so these stay hidden. */}
       <Handle type="target" position={Position.Top} isConnectable={false} className="invisible" />
       <Handle type="source" position={Position.Bottom} isConnectable={false} className="invisible" />
@@ -516,12 +579,33 @@ function ClassNodeView({ data }: NodeProps<ClassNode>) {
   )
 }
 
+/** A comparison's changed attributes of one class, one line each, diff-style, in their severity. */
+function ChangedAttributes({ attributes }: { attributes: AttributeChange[] }) {
+  return (
+    <ul aria-label="Changed attributes" className="w-full pb-1 font-mono text-[11px] font-normal">
+      {attributes.map((a) => (
+        <li
+          key={a.name}
+          data-change={a.kind}
+          data-severity={a.severity}
+          title={attributeLine(a)}
+          className={cn('truncate text-left', SEVERITY.text[a.severity])}
+          style={{ height: ATTRIBUTE_LINE_HEIGHT, lineHeight: `${ATTRIBUTE_LINE_HEIGHT}px` }}
+        >
+          {ATTRIBUTE_MARKER[a.kind]} {a.name}
+          {a.details.length > 0 && <span className="text-muted-foreground"> {a.details.join('; ')}</span>}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function PatternEdgeView({ id, source, target, data, markerEnd }: EdgeProps<PatternEdge>) {
   const from = useInternalNode(source)
   const to = useInternalNode(target)
   if (!from || !to || !data) return null
-  const a = center(from.internals.positionAbsolute)
-  const b = center(to.internals.positionAbsolute)
+  const a = box(from)
+  const b = box(to)
   const { path, label, labelAlign } =
     data.route.kind === 'loop' ? loopPath(a, data.route.size) : linePath(a, b, data.route.bend)
   // A link's label is centred on it; a loop's sits just outside the arc.
@@ -574,7 +658,7 @@ function SubclassEdgeView({ id, source, target, markerEnd, data }: EdgeProps<Sub
   const from = useInternalNode(source)
   const to = useInternalNode(target)
   if (!from || !to) return null
-  const { path } = linePath(center(from.internals.positionAbsolute), center(to.internals.positionAbsolute), 0)
+  const { path } = linePath(box(from), box(to), 0)
   const style = changeStyle(data?.change)
   return (
     <BaseEdge
@@ -592,22 +676,35 @@ function SubclassEdgeView({ id, source, target, markerEnd, data }: EdgeProps<Sub
   )
 }
 
-const center = (topLeft: Point): Point => ({
-  x: topLeft.x + NODE_SIZE.width / 2,
-  y: topLeft.y + NODE_SIZE.height / 2,
+/** A class's node as links attach to it: its centre and its size, which a comparison may grow. */
+type Box = Size & { center: Point }
+
+/** The box of a class's node of `size` placed at `topLeft`. */
+const boxAt = (topLeft: Point, { width, height }: Size): Box => ({
+  width,
+  height,
+  center: { x: topLeft.x + width / 2, y: topLeft.y + height / 2 },
 })
 
+/** A drawn class node's box, at its size on the Map. */
+const box = (node: InternalNode): Box =>
+  boxAt(node.internals.positionAbsolute, {
+    width: node.width ?? NODE_SIZE.width,
+    height: node.height ?? NODE_SIZE.height,
+  })
+
 /** Where the ray from a node's centre towards `toward` leaves the node's box. */
-function boundary(c: Point, toward: Point): Point {
+function boundary({ center: c, width, height }: Box, toward: Point): Point {
   const dx = toward.x - c.x
   const dy = toward.y - c.y
   if (dx === 0 && dy === 0) return c
-  const scale = 1 / Math.max(Math.abs(dx) / (NODE_SIZE.width / 2), Math.abs(dy) / (NODE_SIZE.height / 2))
+  const scale = 1 / Math.max(Math.abs(dx) / (width / 2), Math.abs(dy) / (height / 2))
   return { x: c.x + dx * scale, y: c.y + dy * scale }
 }
 
-/** A quadratic curve between two classes, bent `bend` spacings to the left of a → b. */
-function linePath(a: Point, b: Point, bend: number) {
+/** A quadratic curve between two classes' boxes, bent `bend` spacings to the left of a → b. */
+function linePath(from: Box, to: Box, bend: number) {
+  const [a, b] = [from.center, to.center]
   const length = Math.hypot(b.x - a.x, b.y - a.y) || 1
   // Left of a → b in screen coordinates, where y grows downwards.
   const normal = { x: (b.y - a.y) / length, y: -(b.x - a.x) / length }
@@ -616,8 +713,8 @@ function linePath(a: Point, b: Point, bend: number) {
     x: (a.x + b.x) / 2 + normal.x * bend * BEND_SPACING * 2,
     y: (a.y + b.y) / 2 + normal.y * bend * BEND_SPACING * 2,
   }
-  const start = boundary(a, control)
-  const end = boundary(b, control)
+  const start = boundary(from, control)
+  const end = boundary(to, control)
   return {
     path: `M ${start.x} ${start.y} Q ${control.x} ${control.y} ${end.x} ${end.y}`,
     // The curve's midpoint.
@@ -631,8 +728,8 @@ function linePath(a: Point, b: Point, bend: number) {
  * centre, through the wide node's top or bottom) rarely leave; larger loops nest outside
  * smaller ones.
  */
-function loopPath(c: Point, size: number) {
-  const right = c.x + NODE_SIZE.width / 2
+function loopPath({ center: c, width }: Box, size: number) {
+  const right = c.x + width / 2
   const reach = LOOP_REACH + LOOP_STEP * (size - 1)
   const spread = 8 + 6 * (size - 1)
   const [y0, y1] = [c.y - spread, c.y + spread]
