@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Ontology } from '@/api/ontology-versions'
-import { layoutOntologyMap, NODE_SIZE, ontologyMap, type Point } from './ontology-map'
+import { filterOntologyMap, layoutOntologyMap, NODE_SIZE, ontologyMap, type Point } from './ontology-map'
 
 // Canonical form, as the server sends it: Concepts sorted by label.
 const ONTOLOGY: Ontology = {
@@ -95,6 +95,43 @@ describe('ontologyMap: the subclass hierarchy', () => {
     const map = ontologyMap({ ...HIERARCHY, node_types: [{ label: 'Bug', parent: 'Ticket' }] })
 
     expect(map.subclassLinks).toEqual([])
+  })
+})
+
+describe('ontologyMap: deprecation', () => {
+  it('marks deprecated classes, and the links of a deprecated relation', () => {
+    const map = ontologyMap(HIERARCHY)
+
+    expect(map.nodes.filter((n) => n.deprecated).map((n) => n.label)).toEqual(['LegacyTicket'])
+    expect(map.links.filter((l) => l.deprecated).map((l) => l.id)).toEqual(['(Customer)-[FILED]->(Ticket)'])
+  })
+})
+
+describe('filterOntologyMap', () => {
+  it('hides deprecated classes and relations, and every link to a hidden class', () => {
+    const map = filterOntologyMap(ontologyMap(HIERARCHY), { hideDeprecated: true, hideSubclassLinks: false })
+
+    expect(map.nodes.map((n) => n.label)).toEqual(['Bug', 'Customer', 'Incident', 'Ticket'])
+    expect(map.links.map((l) => l.id)).toEqual([
+      '(Customer)-[OPENED]->(Ticket)',
+      '(Customer)-[REPORTED]->(Incident)',
+    ])
+    expect(map.subclassLinks.map((l) => l.id)).toEqual(['Bug -> Ticket', 'Incident -> Ticket'])
+  })
+
+  it('hides subclass links and keeps every class and Pattern link', () => {
+    const all = ontologyMap(HIERARCHY)
+    const map = filterOntologyMap(all, { hideDeprecated: false, hideSubclassLinks: true })
+
+    expect(map.subclassLinks).toEqual([])
+    expect(map.nodes).toEqual(all.nodes)
+    expect(map.links).toEqual(all.links)
+  })
+
+  it('hides nothing with neither filter on', () => {
+    const all = ontologyMap(HIERARCHY)
+
+    expect(filterOntologyMap(all, { hideDeprecated: false, hideSubclassLinks: false })).toEqual(all)
   })
 })
 
