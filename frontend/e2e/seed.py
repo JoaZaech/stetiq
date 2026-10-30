@@ -131,12 +131,27 @@ def support_lineage_reader(client: stetiq.Client) -> dict[str, Any]:
     return {**seeded, "grace": issue_token(client, "grace", {"support": "read"})}
 
 
+def described_support(client: stetiq.Client) -> dict[str, Any]:
+    """`support_lineage` with a markdown description, a token for ada that can edit
+    `support` and one for grace that can only read it."""
+    seeded = support_lineage(client)
+    client.set_knowledge_graph_description(
+        "support", "Answers **support** questions.\n\n- triage\n- escalation"
+    )
+    return {
+        **seeded,
+        "ada": issue_token(client, "ada", {"support": "edit"}),
+        "grace": issue_token(client, "grace", {"support": "read"}),
+    }
+
+
 SCENARIOS: dict[str, Scenario] = {
     "empty": empty,
     "knowledge_graphs": knowledge_graphs,
     "signed_in_users": signed_in_users,
     "support_lineage": support_lineage,
     "support_lineage_reader": support_lineage_reader,
+    "described_support": described_support,
 }
 
 

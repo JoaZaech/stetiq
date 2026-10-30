@@ -1,25 +1,41 @@
 import type { ReactNode } from 'react'
 import { useAliases, useContractAlias } from '@/api/aliases'
 import { useEvolutionMode, useKnowledgeGraph } from '@/api/knowledge-graph'
+import { Markdown } from '@/components/Markdown'
+import { NeedsEditAccess } from '@/components/NeedsEditAccess'
 import { PageHeader } from '@/components/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { EditDescriptionDialog } from './EditDescriptionDialog'
 
 /**
- * Name, description, Evolution Mode and Contract Alias of a Knowledge Graph: the top of
- * every Knowledge Graph section page. Edit actions (e.g. the description editor) go in
- * `PageHeader`'s `actions`.
+ * Name, markdown description, Evolution Mode and Contract Alias of a Knowledge Graph: the
+ * top of every Knowledge Graph section page. Edit actions (e.g. the description editor)
+ * go in `PageHeader`'s `actions`.
  */
 export function KnowledgeGraphHeader({ name }: { name: string }) {
   const kg = useKnowledgeGraph(name)
-  const description = kg.data?.description
+  const description = kg.data?.description ?? null
   return (
     <section aria-label="Knowledge Graph" className="mb-6">
       <PageHeader
         title={name}
-        description={description ? description : <span className="italic">No description</span>}
+        actions={
+          <NeedsEditAccess knowledgeGraph={name}>
+            {(disabled) => (
+              <EditDescriptionDialog name={name} description={description} disabled={disabled} />
+            )}
+          </NeedsEditAccess>
+        }
       />
-      <dl className="-mt-3 flex flex-wrap gap-x-8 gap-y-2 text-sm">
+      <div className="-mt-5 mb-3 max-w-3xl text-muted-foreground">
+        {description ? (
+          <Markdown>{description}</Markdown>
+        ) : (
+          <p className="text-sm italic">No description</p>
+        )}
+      </div>
+      <dl className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
         <Fact label="Evolution Mode">
           <EvolutionModeValue name={name} />
         </Fact>
