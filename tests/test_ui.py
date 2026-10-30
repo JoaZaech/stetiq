@@ -40,8 +40,13 @@ def http(database_url, frontend_dir):
         yield c
 
 
+def issue(database_url, grants, user="ada"):
+    """A fresh API Token's secret value."""
+    return TokenRegistry(database_url).issue(user, grants)[1]
+
+
 def bearer(database_url, grants, user="ada"):
-    return {"Authorization": f"Bearer {TokenRegistry(database_url).issue(user, grants)[1]}"}
+    return {"Authorization": f"Bearer {issue(database_url, grants, user)}"}
 
 
 # --- The built app at /ui ----------------------------------------------------------------
@@ -113,11 +118,6 @@ def test_who_am_i_reports_local_mode_where_every_knowledge_graph_is_editable(
 
 
 # --- Sign-in with an API Token -------------------------------------------------------------
-
-
-def issue(database_url, grants, user="ada"):
-    """A fresh API Token's secret value."""
-    return TokenRegistry(database_url).issue(user, grants)[1]
 
 
 def set_cookie_headers(response) -> dict[str, str]:
@@ -431,7 +431,7 @@ def test_diffing_a_version_against_itself_shows_no_changes(http, database_url, t
     assert r.json() == {"classification": None, "changes": []}
 
 
-def test_an_unknown_version_or_one_outside_the_tokens_grants_is_a_uniform_404(
+def test_an_unknown_version_is_404_and_a_knowledge_graph_outside_the_grants_is_403(
     http, database_url, two_versions
 ):
     reader = bearer(database_url, {"billing": "read"})
@@ -440,15 +440,12 @@ def test_an_unknown_version_or_one_outside_the_tokens_grants_is_a_uniform_404(
 
     unknown = diff(http, "billing", 1, 9, reader)
     hidden = diff(http, "support", 1, 2, reader)
-    hidden_unknown = diff(http, "nope", 1, 2, reader)
 
-    assert unknown.status_code == hidden.status_code == hidden_unknown.status_code == 404
-    assert {r.json()["error"]["type"] for r in (unknown, hidden, hidden_unknown)} == {
-        "NotFoundError"
-    }
-    # An existing Knowledge Graph outside the grants reads exactly like a missing one.
-    assert hidden.json()["error"]["message"] == "Knowledge Graph 'support' does not exist"
-    assert hidden_unknown.json()["error"]["message"] == "Knowledge Graph 'nope' does not exist"
+    assert unknown.status_code == 404
+    assert unknown.json()["error"]["type"] == "NotFoundError"
+    # Like every other {name} route.
+    assert hidden.status_code == 403
+    assert hidden.json()["error"]["type"] == "PermissionDeniedError"
 
 
 # --- Competency Question editing ------------------------------------------------------------

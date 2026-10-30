@@ -43,9 +43,6 @@ CREATE_KG_PATH = wire.API_PREFIX + "/knowledge-graphs"
 WHOAMI_PATH = wire.API_PREFIX + "/whoami"
 SIGN_IN_PATH = "/auth/sign-in"
 SIGN_OUT_PATH = "/auth/sign-out"
-DIFF_PATH = wire.API_PREFIX + "/knowledge-graphs/{name}/ontology-diff"
-# Routes where a Knowledge Graph the token cannot read answers exactly like a missing one.
-NOT_FOUND_OUTSIDE_GRANTS = frozenset({DIFF_PATH})
 
 
 class RecordedEvaluation(BaseModel):
@@ -134,9 +131,6 @@ def create_app(
         needed: Permission = "read" if request.method in ("GET", "HEAD") else "edit"
         kg = _target_knowledge_graph(token, request.path_params)
         if kg is not None:
-            route = getattr(request.scope.get("route"), "path", None)
-            if route in NOT_FOUND_OUTSIDE_GRANTS and not token.allows(kg, "read"):
-                raise NotFoundError(f"Knowledge Graph {kg!r} does not exist")
             token.require(kg, needed)
         elif (request.method, request.url.path) == ("GET", WHOAMI_PATH):
             pass  # who-am-I describes the token itself, not a Knowledge Graph
@@ -239,7 +233,7 @@ def create_app(
     def get_ontology_version(name: str, number: int) -> dict[str, Any]:
         return wire.ontology_version_to_json(tracking.get_ontology_version(name, number))
 
-    @api.get(DIFF_PATH.removeprefix(wire.API_PREFIX))
+    @api.get("/knowledge-graphs/{name}/ontology-diff")
     def diff_ontology_versions(name: str, base: int, target: int) -> dict[str, Any]:
         # The same pure diff `Client.diff_ontology_versions` composes; no defaults here.
         return wire.ontology_diff_to_json(
