@@ -1,6 +1,7 @@
 import { type Ref, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useSearchParams } from 'react-router'
+import type { ColumnDef } from '@tanstack/react-table'
 import type { Ontology } from '@/api/ontology-versions'
 import { ColumnPicker } from '@/components/ColumnPicker'
 import { DataTable, DataTableRowCount } from '@/components/DataTable'
@@ -8,7 +9,7 @@ import { SearchInput } from '@/components/SearchInput'
 import { ViewToggle } from '@/components/ViewToggle'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { createDataTableColumnHelper, filterColumn, useDataTable } from '@/lib/data-table'
+import { createDataTableColumnHelper, type DataTableFeatures, filterColumn, useDataTable } from '@/lib/data-table'
 import { type DataTableParamsOptions, useDataTableParams } from '@/lib/data-table-params'
 import { formatCount } from '@/lib/format'
 import { setOrDeleteParam } from '@/lib/search-params'
@@ -169,8 +170,18 @@ function OntologyTables({ ontology }: { ontology: Ontology }) {
     attributes: attributes.length,
   }
   const body: Record<SectionId, ReactNode> = {
-    classes: <ClassesGrid classes={all.classes} selected={highlighted} />,
-    relations: <RelationsGrid relations={all.relations} selected={highlighted} />,
+    classes: (
+      <ConceptGrid kind="class" rows={all.classes} columns={classColumns} params={CLASSES_GRID} selected={highlighted} />
+    ),
+    relations: (
+      <ConceptGrid
+        kind="relation"
+        rows={all.relations}
+        columns={relationColumns}
+        params={RELATIONS_GRID}
+        selected={highlighted}
+      />
+    ),
     attributes: <AttributesGrid attributes={attributes} reveal={group} />,
   }
 
@@ -407,19 +418,37 @@ const CLASSES_GRID: DataTableParamsOptions = {
   search: 'q',
 }
 
-function ClassesGrid({ classes, selected }: { classes: ClassRow[]; selected: SelectedRows }) {
-  const grid = useDataTableParams(CLASSES_GRID)
+/**
+ * The Classes or Relations grid: a row per class or relation, with its row count and a
+ * column picker for Deprecated above it, each row its id and its highlight when selected.
+ */
+function ConceptGrid<TRow extends { label: string }>({
+  kind,
+  rows,
+  columns,
+  params,
+  selected,
+}: {
+  kind: ClassOrRelation['kind']
+  rows: TRow[]
+  columns: ColumnDef<DataTableFeatures, TRow, unknown>[]
+  /** The grid's URL state. */
+  params: DataTableParamsOptions
+  selected: SelectedRows
+}) {
+  const grid = useDataTableParams(params)
   const table = useDataTable({
-    data: classes,
-    columns: classColumns,
+    data: rows,
+    columns,
     getRowId: (row) => row.label,
     globalFilterFn: 'includesString',
     ...grid.tableOptions,
   })
+  const { title, plural } = GRID_NAMES[kind]
   return (
     <>
       <div className="flex items-center justify-between gap-4">
-        <DataTableRowCount table={table} noun="classes" />
+        <DataTableRowCount table={table} noun={plural} />
         <ColumnPicker
           groups={[{ label: 'Columns', columns: [{ id: 'deprecated', label: 'Deprecated' }] }]}
           visible={grid.shown}
@@ -428,12 +457,18 @@ function ClassesGrid({ classes, selected }: { classes: ClassRow[]; selected: Sel
       </div>
       <DataTable
         table={table}
-        label="Classes"
-        empty="No classes match."
-        rowProps={(row) => rowProps({ kind: 'class', label: row.original.label }, selected)}
+        label={title}
+        empty={`No ${plural} match.`}
+        rowProps={(row) => rowProps({ kind, label: row.original.label }, selected)}
       />
     </>
   )
+}
+
+/** How a grid of classes or relations names itself and its rows. */
+const GRID_NAMES: Record<ClassOrRelation['kind'], { title: string; plural: string }> = {
+  class: { title: 'Classes', plural: 'classes' },
+  relation: { title: 'Relations', plural: 'relations' },
 }
 
 const relationColumn = createDataTableColumnHelper<RelationRow>()
@@ -527,35 +562,6 @@ const RELATIONS_GRID: DataTableParamsOptions = {
   filters: { label: 'text', patterns: 'text', description: 'text', deprecated: 'toggle' },
   optional: ['deprecated'],
   search: 'q',
-}
-
-function RelationsGrid({ relations, selected }: { relations: RelationRow[]; selected: SelectedRows }) {
-  const grid = useDataTableParams(RELATIONS_GRID)
-  const table = useDataTable({
-    data: relations,
-    columns: relationColumns,
-    getRowId: (row) => row.label,
-    globalFilterFn: 'includesString',
-    ...grid.tableOptions,
-  })
-  return (
-    <>
-      <div className="flex items-center justify-between gap-4">
-        <DataTableRowCount table={table} noun="relations" />
-        <ColumnPicker
-          groups={[{ label: 'Columns', columns: [{ id: 'deprecated', label: 'Deprecated' }] }]}
-          visible={grid.shown}
-          onToggle={grid.setShown}
-        />
-      </div>
-      <DataTable
-        table={table}
-        label="Relations"
-        empty="No relations match."
-        rowProps={(row) => rowProps({ kind: 'relation', label: row.original.label }, selected)}
-      />
-    </>
-  )
 }
 
 export function ConceptName({
