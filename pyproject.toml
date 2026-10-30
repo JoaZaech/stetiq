@@ -1,0 +1,60 @@
+[project]
+name = "stetiq"
+version = "0.1.0"
+description = "Versioning, evaluation and governance of knowledge-graph ontologies"
+authors = [
+    { name = "Zäch", email = "60199908+JoaZaech@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.162.0",
+    "httpx>=0.28.1",
+    "neo4j>=6.4",
+    "pyyaml>=6.0.3",
+    "sqlalchemy>=2.1.6",
+    "typer>=0.27.3",
+    "uvicorn>=0.54.0",
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.3"]
+llm = ["anthropic>=2.3"]
+
+[project.scripts]
+stetiq = "stetiq.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.12.10,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.16.0",
+    "pre-commit>=4.7.0",
+    "psycopg[binary]>=3.3",
+    "pyright>=1.1.414",
+    "pytest>=9.2.0",
+    "ruff>=0.17.3",
+    "testcontainers[neo4j]>=4.15",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "postgres: needs a Postgres database (set STETIQ_TEST_POSTGRES_URL)",
+    "neo4j: needs Docker (throwaway Neo4j testcontainer); skipped when Docker is unavailable",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "BLE"]
+# Typer and FastAPI declare options/dependencies as call defaults by design.
+ignore = ["B008", "E501"]  # line length is left to `ruff format`
+
+[tool.pyright]
+include = ["src"]
+typeCheckingMode = "standard"
+pythonVersion = "3.12"
