@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, kgPath } from './client'
-import { ontologyVersionsQuery } from './ontology-versions'
+import { ontologyVersionQueryKeys } from './ontology-versions'
 
 /** A Competency Question as use_case/format.py `to_dict` sends it: unset fields are omitted. */
 export interface CompetencyQuestion {
@@ -32,9 +32,14 @@ export interface UseCaseVersion {
 
 export const kgUseCaseVersionsPath = (kg: string) => kgPath(kg) + '/use-case-versions'
 
+/** Query keys of a Knowledge Graph's Use Case Versions. */
+export const useCaseQueryKeys = {
+  all: (kg: string) => ['use-case-versions', kg] as const,
+}
+
 /** Oldest first, as the server returns them. */
 export const listUseCaseVersionsQuery = (kg: string) => ({
-  queryKey: ['use-case-versions', kg],
+  queryKey: useCaseQueryKeys.all(kg),
   queryFn: () => api<UseCaseVersion[]>(kgUseCaseVersionsPath(kg)),
 })
 export const useUseCaseVersions = (kg: string) => useQuery(listUseCaseVersionsQuery(kg))
@@ -45,16 +50,16 @@ export interface SavedUseCase {
   version: UseCaseVersion
   /** False when the content was already registered: the server dedupes by content hash. */
   created: boolean
-  /** Why structural answerability could not be judged for the new version, if it could not. */
-  evaluationError?: unknown
+  /** The latest Use Case Version's number after saving. */
+  latest: number
 }
 
 /**
  * Register a complete, edited Use Case as a new Use Case Version (needs `edit`). The
  * server re-validates it and returns the existing version for unchanged content.
  *
- * A new version is then judged for structural answerability against the latest
- * Ontology Version (`POST .../evaluate`), so the page can show the result straight away.
+ * The server judges the latest Ontology Version's structural answerability against a
+ * new version as it registers it, so this only refreshes what the page reads.
  */
 export function useSaveUseCase(kg: string, onSaved: (saved: SavedUseCase) => void) {
   const queryClient = useQueryClient()
@@ -64,28 +69,17 @@ export function useSaveUseCase(kg: string, onSaved: (saved: SavedUseCase) => voi
     onSuccess: onSaved,
     mutationFn: async (useCase: UseCase): Promise<SavedUseCase> => {
       const before = await queryClient.fetchQuery(listUseCaseVersionsQuery(kg))
-      const latest = before.at(-1)?.number ?? 0
+      const previous = before.at(-1)?.number ?? 0
       const version = await api<UseCaseVersion>(kgUseCaseVersionsPath(kg), 'POST', {
         use_case: useCase,
       })
-      const created = version.number > latest
-      if (!created) return { version, created }
-      try {
-        const ontology = (await queryClient.fetchQuery(ontologyVersionsQuery(kg))).at(-1)
-        if (ontology) {
-          await api(`${kgPath(kg)}/ontology-versions/${ontology.number}/evaluate`, 'POST', {
-            use_case_version: version.number,
-          })
-        }
-      } catch (evaluationError) {
-        return { version, created, evaluationError }
-      }
-      return { version, created }
+      const created = version.number > previous
+      return { version, created, latest: created ? version.number : previous }
     },
     onSettled: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['use-case-versions', kg] }),
-        queryClient.invalidateQueries({ queryKey: ['ontology-versions', kg] }),
+        queryClient.invalidateQueries({ queryKey: useCaseQueryKeys.all(kg) }),
+        queryClient.invalidateQueries({ queryKey: ontologyVersionQueryKeys.all(kg) }),
       ])
     },
   })

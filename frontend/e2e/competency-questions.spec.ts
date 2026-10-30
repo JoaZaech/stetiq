@@ -35,6 +35,11 @@ test('an editor adds a Competency Question, which creates a new Use Case Version
 })
 
 test('after saving, the page shows the new version’s structural answerability', async ({ page }) => {
+  // The server judges it while registering the version: the page only reads the result.
+  const writes: string[] = []
+  page.on('request', (r) => {
+    if (r.method() !== 'GET') writes.push(new URL(r.url()).pathname)
+  })
   await page.goto('/ui/kg/support/use-case')
 
   await page.getByRole('button', { name: 'Add Competency Question' }).click()
@@ -53,6 +58,7 @@ test('after saving, the page shows the new version’s structural answerability'
   await expect(rows).toHaveCount(3)
   await expect(rows.nth(1)).toHaveText(/customer-names.*Answerable/)
   await expect(rows.nth(2)).toHaveText(/refunds.*Unanswerable.*Refund/)
+  expect(writes).toEqual(['/api/v1/knowledge-graphs/support/use-case-versions'])
 
   await page.reload()
   await expect(answerability).toContainText('answers 1 of 2 Competency Questions of Use Case Version 2.')
@@ -116,7 +122,7 @@ test.describe('with three Use Case Versions', () => {
     await page.getByRole('dialog', { name: 'Edit ticket-dates' }).getByRole('button', { name: 'Save' }).click()
 
     await expect(page.getByRole('status')).toHaveText(
-      'Nothing changed: this content is already Use Case Version 3, so no new version was created.',
+      'Nothing changed: Use Case Version 3 already has this content, so no new version was created.',
     )
     await expect(page.getByRole('table', { name: 'Use Case Versions' }).getByRole('row')).toHaveCount(4)
   })

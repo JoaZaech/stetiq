@@ -18,6 +18,7 @@ import { useKnowledgeGraphName } from '../params'
 import { CompetencyQuestionDialog } from './CompetencyQuestionDialog'
 import { CompetencyQuestionsTable } from './CompetencyQuestionsTable'
 import { RemoveCompetencyQuestionDialog } from './RemoveCompetencyQuestionDialog'
+import { savedMessage } from './saved-message'
 import { StructuralAnswerability } from './StructuralAnswerability'
 import { UseCaseVersionsTable } from './UseCaseVersionsTable'
 
@@ -92,9 +93,7 @@ export function UseCasePage() {
 function SavedStatus({ saved }: { saved: SavedUseCase }) {
   return (
     <p role="status" className="rounded-lg border bg-muted/40 px-3 py-2 text-sm">
-      {saved.created
-        ? `Saved as Use Case Version ${saved.version.number}.`
-        : `Nothing changed: this content is already Use Case Version ${saved.version.number}, so no new version was created.`}
+      {savedMessage(saved)}
     </p>
   )
 }
