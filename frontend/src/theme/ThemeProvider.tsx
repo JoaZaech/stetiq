@@ -1,20 +1,13 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { readStored, writeStored } from '@/lib/local-storage'
 import { ThemeContext } from './theme-context'
 import { parseTheme, resolveTheme, THEME_STORAGE_KEY, type Theme } from './theme'
 
 const DARK_QUERY = '(prefers-color-scheme: dark)'
 
-function readStoredTheme(): Theme {
-  try {
-    return parseTheme(localStorage.getItem(THEME_STORAGE_KEY))
-  } catch {
-    return 'system'
-  }
-}
-
 /** Applies the chosen theme to <html> and keeps it in localStorage. */
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(readStoredTheme)
+  const [theme, setThemeState] = useState<Theme>(() => parseTheme(readStored(THEME_STORAGE_KEY)))
   const [systemDark, setSystemDark] = useState(() => matchMedia(DARK_QUERY).matches)
 
   useEffect(() => {
@@ -31,11 +24,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next)
-    try {
-      localStorage.setItem(THEME_STORAGE_KEY, next)
-    } catch {
-      // storage unavailable (private mode): the choice lasts for this page only
-    }
+    // Blocked storage (private mode): the choice lasts for this page only.
+    writeStored(THEME_STORAGE_KEY, next)
   }, [])
 
   const value = useMemo(() => ({ theme, setTheme }), [theme, setTheme])
