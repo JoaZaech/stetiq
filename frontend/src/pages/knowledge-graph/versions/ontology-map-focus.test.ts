@@ -137,14 +137,15 @@ describe('detailsOf', () => {
 })
 
 describe('searchMap', () => {
-  it('matches the classes and links whose Concept the tables would find', () => {
-    // "open" is in Customer's description and is the OPENED relation; "tier" is a VipCustomer attribute.
+  it('matches the classes and links the search names, not those it only mentions', () => {
+    // "open" names the OPENED relation and is only in Customer's description.
     expect(searchMap(PARTIES, ' OPEN ')).toEqual({
-      classes: new Set(['Customer']),
+      classes: new Set(),
       links: new Set(['(Customer)-[OPENED]->(Ticket)']),
     })
-    expect(searchMap(PARTIES, 'tier')).toEqual({ classes: new Set(['VipCustomer']), links: new Set() })
-    expect(searchMap(PARTIES, 'nothing like it')).toEqual({ classes: new Set(), links: new Set() })
+    expect(searchMap(PARTIES, 'customer')).toEqual({ classes: new Set(['Customer', 'VipCustomer']), links: new Set() })
+    // "tier" is only a VipCustomer attribute.
+    expect(searchMap(PARTIES, 'tier')).toEqual({ classes: new Set(), links: new Set() })
   })
 
   it('matches nothing in particular for an empty search', () => {

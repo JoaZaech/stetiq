@@ -507,6 +507,33 @@ def ontology_map_path(client: stetiq.Client) -> dict[str, Any]:
     return {}
 
 
+# For searching the Ontology Map, from the retail-orders example: Bin mentions warehouses in
+# its description and an attribute without being one, and so does SHIPPED_FROM's description.
+MAP_SEARCH_ONTOLOGY = """
+node_types:
+  - label: Bin
+    description: A storage location inside a warehouse
+    properties: [{name: code, type: STRING}, {name: warehouse, type: STRING}]
+  - {label: Order}
+  - {label: Shipment}
+  - {label: Warehouse, description: A fulfilment site shipments leave from}
+relationship_types:
+  - {label: FULFILLS}
+  - {label: SHIPPED_FROM, description: The warehouse a shipment left}
+  - {label: STORED_IN}
+patterns:
+  - [Shipment, FULFILLS, Order]
+  - [Shipment, SHIPPED_FROM, Warehouse]
+  - [Bin, STORED_IN, Warehouse]
+"""
+
+
+def ontology_map_search(client: stetiq.Client) -> dict[str, Any]:
+    """Knowledge Graph `retail` with v1 = `MAP_SEARCH_ONTOLOGY`."""
+    client.create_knowledge_graph("retail", ontology=MAP_SEARCH_ONTOLOGY)
+    return {}
+
+
 SCENARIOS: dict[str, Scenario] = {
     "construction_runs": construction_runs,
     "construction_runs_reader": construction_runs_reader,
@@ -527,6 +554,7 @@ SCENARIOS: dict[str, Scenario] = {
     "ontology_map_patterns": ontology_map_patterns,
     "ontology_map_attributes": ontology_map_attributes,
     "ontology_map_path": ontology_map_path,
+    "ontology_map_search": ontology_map_search,
 }
 
 

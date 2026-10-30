@@ -3,9 +3,10 @@
  * matches.
  */
 import type { Ontology, OntologyConcept, OntologyProperty } from '@/api/ontology-versions'
-import { conceptTables, constraintsOf, searchConcepts } from './concepts'
+import { constraintsOf } from './concepts'
 import { ontologyMap, type OntologyMap } from './ontology-map'
 import { shortestPaths } from './ontology-map-paths'
+import { searchOntology, type SearchResult } from './ontology-map-search'
 
 /** The classes and links next to one class, each sorted. */
 export interface Neighbourhood {
@@ -163,22 +164,20 @@ export function detailsOf(ontology: Ontology, selection: MapSelection | null): M
 }
 
 /**
- * The classes and links the Concept search `query` matches, the same Concepts the tables
- * find: a class by its name, description or one of its attributes, and a link by its
- * relation's. Null for an empty search, which matches nothing in particular.
+ * The classes and links the Concept search `query` names: a class by its name, and a link
+ * by its relation's. Concepts it only mentions are listed by `searchOntology`, not
+ * highlighted. Null for an empty search, which matches nothing in particular.
  */
 export function searchMap(ontology: Ontology, query: string): MapFocus | null {
   if (query.trim() === '') return null
-  const { classes, relations, attributes } = searchConcepts(conceptTables(ontology), query)
-  const owners = new Set(attributes.map((a) => a.owner))
-  const matchedRelations = new Set([...relations.map((r) => r.label), ...owners])
+  const { names } = searchOntology(ontology, query)
+  const named = (kind: SearchResult['kind']) => new Set(names.filter((r) => r.kind === kind).map((r) => r.label))
+  const relations = named('relation')
   return {
-    classes: new Set(
-      ontology.node_types.map((n) => n.label).filter((l) => owners.has(l) || classes.some((c) => c.label === l)),
-    ),
+    classes: named('class'),
     links: new Set(
       ontologyMap(ontology)
-        .links.filter((l) => matchedRelations.has(l.relation))
+        .links.filter((l) => relations.has(l.relation))
         .map((l) => l.id),
     ),
   }
