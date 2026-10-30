@@ -15,7 +15,7 @@ from stetiq.evaluation.framework import (
     check_evaluator,
 )
 from stetiq.evaluation.structural import BUILT_IN_EVALUATORS
-from stetiq.graph_source import GraphSource, GraphSourceScope
+from stetiq.graph_source import GraphSource, GraphSourceScope, graph_source_from_env
 from stetiq.ontology import Ontology, parse_yaml
 from stetiq.ontology.diff import OntologyDiff, diff_ontologies
 from stetiq.tracking import (
@@ -27,11 +27,12 @@ from stetiq.tracking import (
     LocalTrackingService,
     Observation,
     OntologyVersion,
-    RunComparison,
     RemoteTrackingService,
+    RunComparison,
     SqlStore,
     TrackingService,
 )
+from stetiq.tracking.entities import EvolutionMode
 
 TRACKING_URI_ENV = "STETIQ_TRACKING_URI"
 DEFAULT_TRACKING_URI = "sqlite:///.stetiq/stetiq.db"
@@ -103,7 +104,9 @@ class Client:
     ) -> None:
         """`graph_source` is the adapter (e.g. Neo4j, with its credentials) used to observe
         the bound Graph Source scope when a Construction Run ends. It runs in this
-        process: the stetiq server never connects to the graph database.
+        process: the stetiq server never connects to the graph database. Without it, a
+        Neo4j adapter is built on first use from `$STETIQ_GRAPH_SOURCE_URI` (plus
+        `$STETIQ_GRAPH_SOURCE_USER` / `$STETIQ_GRAPH_SOURCE_PASSWORD`).
 
         `token` (else $STETIQ_TOKEN) is the API token server mode requires; local mode
         ignores it. In server mode the audit log records the token's user, not `actor`."""
@@ -300,6 +303,16 @@ class Client:
     def get_graph_source(self, knowledge_graph: str) -> GraphSourceScope:
         return self._service.get_graph_source(knowledge_graph)
 
+    # --- Evolution Mode -------------------------------------------------------------
+
+    def set_evolution_mode(self, knowledge_graph: str, mode: EvolutionMode) -> None:
+        """What ending a run that introduces new Concepts does: "strict" fails the run,
+        "evolving" (the default) creates a Candidate Ontology Version linked to it."""
+        self._service.set_evolution_mode(knowledge_graph, mode)
+
+    def get_evolution_mode(self, knowledge_graph: str) -> EvolutionMode:
+        return self._service.get_evolution_mode(knowledge_graph)
+
     # --- Construction Runs ----------------------------------------------------------
 
     def start_run(
@@ -317,8 +330,11 @@ class Client:
         if ontology_version is not None and alias is not None:
             raise ValueError("start_run takes ontology_version or alias, not both")
         if self._graph_source is None:
+            self._graph_source = graph_source_from_env()
+        if self._graph_source is None:
             raise GraphSourceUnavailableError(
-                "Client has no Graph Source adapter to observe with; pass graph_source=..."
+                "Client has no Graph Source adapter to observe with; pass graph_source=... "
+                "or set STETIQ_GRAPH_SOURCE_URI"
             )
         if ontology_version is None:
             alias = alias or self.get_contract_alias(knowledge_graph)

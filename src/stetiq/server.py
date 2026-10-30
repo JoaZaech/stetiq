@@ -121,6 +121,17 @@ def create_app(
     def get_graph_source(name: str) -> dict[str, Any]:
         return wire.graph_source_scope_to_json(tracking.get_graph_source(name))
 
+    # --- Evolution Mode ---------------------------------------------------------------
+
+    @api.put("/knowledge-graphs/{name}/evolution-mode")
+    def set_evolution_mode(name: str, mode: str = Body(embed=True)) -> dict[str, str]:
+        tracking.set_evolution_mode(name, mode)  # validates the mode
+        return {"mode": mode}
+
+    @api.get("/knowledge-graphs/{name}/evolution-mode")
+    def get_evolution_mode(name: str) -> dict[str, str]:
+        return {"mode": tracking.get_evolution_mode(name)}
+
     # --- Construction Runs and Observations -------------------------------------------
 
     @api.post("/knowledge-graphs/{name}/runs", status_code=201)

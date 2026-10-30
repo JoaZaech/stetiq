@@ -19,6 +19,7 @@ from stetiq.tracking.entities import (
     validate_alias_name,
     ConstructionRun,
     EvaluationResult,
+    EvolutionMode,
     KnowledgeGraph,
     Observation,
     OntologyVersion,
@@ -97,6 +98,14 @@ class RemoteTrackingService:
     def get_graph_source(self, knowledge_graph: str) -> GraphSourceScope:
         data = self._call("GET", self._kg_path(knowledge_graph) + "/graph-source")
         return wire.graph_source_scope_from_json(data)
+
+    # --- Evolution Mode -----------------------------------------------------------------
+
+    def set_evolution_mode(self, knowledge_graph: str, mode: EvolutionMode) -> None:
+        self._call("PUT", self._kg_path(knowledge_graph) + "/evolution-mode", {"mode": mode})
+
+    def get_evolution_mode(self, knowledge_graph: str) -> EvolutionMode:
+        return self._call("GET", self._kg_path(knowledge_graph) + "/evolution-mode")["mode"]
 
     # --- Construction Runs and Observations -------------------------------------------
 

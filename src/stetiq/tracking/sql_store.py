@@ -42,18 +42,20 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import StaticPool
 
+from stetiq.conformance import Conformance
 from stetiq.errors import KnowledgeGraphAlreadyExistsError
+from stetiq.evaluation.framework import Detail
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import canonical_json, from_canonical_json
-from stetiq.evaluation.framework import Detail
 from stetiq.tracking.entities import (
     Alias,
-    Promotion,
     ConstructionRun,
     EvaluationResult,
+    EvolutionMode,
     KnowledgeGraph,
     Observation,
     OntologyVersion,
+    Promotion,
     RunStatus,
 )
 
@@ -171,6 +173,38 @@ contract_aliases = Table(
     metadata,
     Column("knowledge_graph", Text, ForeignKey("knowledge_graphs.name"), primary_key=True),
     Column("alias", Text, nullable=False),
+)
+
+# --- Conformance, Evolution Mode, Candidates (ticket #8): new tables only, so stores
+# created before them keep working (create_all adds missing tables).
+
+# Absent row = the default Evolution Mode.
+evolution_modes = Table(
+    "evolution_modes",
+    metadata,
+    Column("knowledge_graph", Text, ForeignKey("knowledge_graphs.name"), primary_key=True),
+    Column("mode", Text, nullable=False),  # strict | evolving
+)
+
+run_conformance = Table(
+    "run_conformance",
+    metadata,
+    Column("run_id", Text, ForeignKey("construction_runs.id"), primary_key=True),
+    Column("score", Float, nullable=False),
+    Column("conformance_json", Text, nullable=False),
+)
+
+# The Candidate Ontology Version a run gave rise to.
+run_candidates = Table(
+    "run_candidates",
+    metadata,
+    Column("run_id", Text, ForeignKey("construction_runs.id"), primary_key=True),
+    Column("knowledge_graph", Text, nullable=False),
+    Column("ontology_version", Integer, nullable=False),
+    ForeignKeyConstraint(
+        ["knowledge_graph", "ontology_version"],
+        ["ontology_versions.knowledge_graph", "ontology_versions.number"],
+    ),
 )
 
 
@@ -385,7 +419,17 @@ class SqlStore:
             ids = [r["id"] for r in rows]
             params: dict[str, dict[str, str]] = {i: {} for i in ids}
             metrics: dict[str, dict[str, float]] = {i: {} for i in ids}
+            conformance: dict[str, Conformance] = {}
+            candidates: dict[str, int] = {}
             if ids:
+                for c in conn.execute(
+                    select(run_conformance).where(run_conformance.c.run_id.in_(ids))
+                ):
+                    conformance[c.run_id] = Conformance.from_dict(json.loads(c.conformance_json))
+                for c in conn.execute(
+                    select(run_candidates).where(run_candidates.c.run_id.in_(ids))
+                ):
+                    candidates[c.run_id] = c.ontology_version
                 for p in conn.execute(select(run_params).where(run_params.c.run_id.in_(ids))):
                     params[p.run_id][p.key] = p.value
                 for m in conn.execute(select(run_metrics).where(run_metrics.c.run_id.in_(ids))):
@@ -401,6 +445,8 @@ class SqlStore:
                 params=params[r["id"]],
                 metrics=metrics[r["id"]],
                 observation_id=r["observation_id"],
+                conformance=conformance.get(r["id"]),
+                candidate_version=candidates.get(r["id"]),
             )
             for r in rows
         ]
@@ -440,6 +486,42 @@ class SqlStore:
                     status=status, ended_at=ended_at.isoformat(), observation_id=observation_id
                 )
             )
+
+    def set_run_conformance(self, run_id: str, conformance: Conformance) -> None:
+        with self._connection() as conn:
+            conn.execute(
+                insert(run_conformance).values(
+                    run_id=run_id,
+                    score=conformance.score,
+                    conformance_json=json.dumps(conformance.to_dict(), sort_keys=True),
+                )
+            )
+
+    def set_run_candidate(self, run_id: str, knowledge_graph: str, ontology_version: int) -> None:
+        with self._connection() as conn:
+            conn.execute(
+                insert(run_candidates).values(
+                    run_id=run_id,
+                    knowledge_graph=knowledge_graph,
+                    ontology_version=ontology_version,
+                )
+            )
+
+    # --- Evolution Mode -------------------------------------------------------------
+
+    def set_evolution_mode(self, knowledge_graph: str, mode: EvolutionMode) -> None:
+        with self._connection() as conn:
+            conn.execute(
+                delete(evolution_modes).where(evolution_modes.c.knowledge_graph == knowledge_graph)
+            )
+            conn.execute(insert(evolution_modes).values(knowledge_graph=knowledge_graph, mode=mode))
+
+    def get_evolution_mode(self, knowledge_graph: str) -> EvolutionMode | None:
+        query = select(evolution_modes.c.mode).where(
+            evolution_modes.c.knowledge_graph == knowledge_graph
+        )
+        with self._connection() as conn:
+            return conn.execute(query).scalar()
 
     # --- Observations ---------------------------------------------------------------
 
