@@ -48,6 +48,7 @@ describe('conceptTables', () => {
         description: undefined,
         deprecated: false,
         patterns: ['(Agent)-[OPENED]->(Ticket)', '(Customer)-[OPENED]->(Ticket)'],
+        attributes: 1,
       },
     ])
     expect(attributes.map((a) => [a.owner, a.name, a.type, a.required])).toEqual([
@@ -110,6 +111,28 @@ describe('conceptTables', () => {
     expect(classes.map((c) => [c.label, c.outgoing, c.incoming])).toEqual([
       ['Paper', ['CITES → Paper'], ['CITES ← Paper', 'WROTE ← Person']],
       ['Person', ['WROTE → Paper'], []],
+    ])
+  })
+
+  it('counts each relation’s attributes, keeping a relation without Patterns or attributes', () => {
+    const { relations } = conceptTables({
+      node_types: [{ label: 'Paper' }],
+      relationship_types: [
+        {
+          label: 'CITES',
+          properties: [
+            { name: 'page', type: 'INTEGER' },
+            { name: 'since', type: 'DATE' },
+          ],
+        },
+        { label: 'UNUSED', deprecated: true },
+      ],
+      patterns: [['Paper', 'CITES', 'Paper']],
+    })
+
+    expect(relations.map((r) => [r.label, r.patterns, r.attributes, r.deprecated])).toEqual([
+      ['CITES', ['(Paper)-[CITES]->(Paper)'], 2, false],
+      ['UNUSED', [], 0, true],
     ])
   })
 })

@@ -25,6 +25,8 @@ export interface RelationRow {
   deprecated: boolean
   /** `(Source)-[REL]->(Target)`, the syntax of `Pattern.__str__`. */
   patterns: string[]
+  /** How many attributes it declares. */
+  attributes: number
 }
 
 export interface AttributeRow {
@@ -102,7 +104,7 @@ export function conceptTables(ontology: Ontology): ConceptTables {
   }
   visit(undefined, 0)
 
-  const relations = ontology.relationship_types.map((rel) => ({
+  const relations = ontology.relationship_types.map((rel): RelationRow => ({
     label: rel.label,
     description: rel.description,
     deprecated: rel.deprecated ?? false,
@@ -110,6 +112,7 @@ export function conceptTables(ontology: Ontology): ConceptTables {
       .filter(([, relationship]) => relationship === rel.label)
       .map(patternId)
       .sort(),
+    attributes: (rel.properties ?? []).length,
   }))
 
   const attributes = [...ontology.node_types, ...ontology.relationship_types].flatMap((owner) =>

@@ -88,7 +88,7 @@ test.describe('on the Map’s Ontology', () => {
     await page.goto('/ui/kg/support/versions/1/ontology?view=table')
     await expect(classes(page).getByRole('columnheader', { name: /Deprecated/ })).toHaveCount(0)
 
-    await page.getByRole('button', { name: 'Columns' }).click()
+    await page.getByRole('region', { name: 'Classes' }).getByRole('button', { name: 'Columns' }).click()
     await page.getByRole('menuitemcheckbox', { name: 'Deprecated' }).click()
     await page.keyboard.press('Escape')
     await expect(classes(page).getByRole('columnheader', { name: /Deprecated/ })).toBeVisible()
