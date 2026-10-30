@@ -7,13 +7,14 @@ over a `SqlStore` (SQLite or Postgres) and translates JSON <-> entities with
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, cast
 
 from fastapi import APIRouter, Body, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from stetiq.auth import ApiToken, Permission, TokenRegistry, bearer_token
+from stetiq.auth import ALL_KNOWLEDGE_GRAPHS, ApiToken, Permission, TokenRegistry, bearer_token
 from stetiq.errors import NotFoundError, PermissionDeniedError, StetiqError
 from stetiq.evaluation.answerability import CompetencyQuestionMapper
 from stetiq.evaluation.framework import SubjectKind
@@ -21,12 +22,13 @@ from stetiq.gates import parse_gates
 from stetiq.ontology import parse_dict
 from stetiq.tracking import LocalTrackingService, SqlStore, TrackingService, wire
 from stetiq.tracking.entities import EvolutionMode
+from stetiq.ui import FRONTEND_DIR, ui_router
 from stetiq.use_case import parse_use_case_dict
-from stetiq.web import ui_router
 
 DATABASE_URL_ENV = "STETIQ_DATABASE_URL"
 DEFAULT_DATABASE_URL = "sqlite:///.stetiq/server.db"
 CREATE_KG_PATH = wire.API_PREFIX + "/knowledge-graphs"
+WHOAMI_PATH = wire.API_PREFIX + "/whoami"
 
 
 class RecordedEvaluation(BaseModel):
@@ -46,20 +48,37 @@ def create_app(
     service: TrackingService | None = None,
     tokens: TokenRegistry | None = None,
     question_mapper: CompetencyQuestionMapper | None = None,
+    frontend_dir: Path = FRONTEND_DIR,
+    local_actor: str | None = None,
 ) -> FastAPI:
     """Build the app over `service`, or over a `SqlStore` at `database_url`.
 
     Every API request needs an API token from `tokens` (default: the registry in the
     same database). GET needs `read` on the targeted Knowledge Graph, anything else `edit`.
 
+    With `local_actor` (`stetiq ui`), authentication is off: every request may edit every
+    Knowledge Graph, and the audit log records `local_actor`.
+
+    The built web UI in `frontend_dir` is served at `/ui`.
+
     `question_mapper` maps Competency Questions with neither a Concept mapping nor a
     query for structural answerability; it only applies when `service` is not given.
     """
-    if service is None or tokens is None:
+    store = None
+    if service is None:
         store = SqlStore(database_url or DEFAULT_DATABASE_URL)
-        service = service or LocalTrackingService(store, question_mapper=question_mapper)
-        tokens = tokens or TokenRegistry(store)
+        service = LocalTrackingService(store, question_mapper=question_mapper)
+    if tokens is None and local_actor is None:
+        tokens = TokenRegistry(store or SqlStore(database_url or DEFAULT_DATABASE_URL))
     tracking, registry = service, tokens
+    local_token = ApiToken(
+        id="local", user=local_actor or "", grants={ALL_KNOWLEDGE_GRAPHS: "edit"}
+    )
+
+    def authenticate(request: Request) -> ApiToken:
+        if registry is None:  # local mode: whoever runs `stetiq ui` owns the database
+            return local_token
+        return registry.authenticate(bearer_token(request.headers.get("authorization")))
 
     def _target_knowledge_graph(token: ApiToken, path_params: dict[str, str]) -> str | None:
         """Which Knowledge Graph a request acts on, from its path parameters.
@@ -85,12 +104,14 @@ def create_app(
         return None
 
     def authorize(request: Request) -> None:
-        token = registry.authenticate(bearer_token(request.headers.get("authorization")))
+        token = authenticate(request)
         request.state.token = token
         needed: Permission = "read" if request.method in ("GET", "HEAD") else "edit"
         kg = _target_knowledge_graph(token, request.path_params)
         if kg is not None:
             token.require(kg, needed)
+        elif (request.method, request.url.path) == ("GET", WHOAMI_PATH):
+            pass  # who-am-I describes the token itself, not a Knowledge Graph
         elif not (request.method in ("POST", "GET") and request.url.path == CREATE_KG_PATH):
             # Fail closed: a route whose Knowledge Graph we cannot tell is not reachable.
             raise PermissionDeniedError(f"Cannot authorize {request.method} {request.url.path}")
@@ -109,6 +130,14 @@ def create_app(
         return {"ok": True}
 
     api = APIRouter(prefix=wire.API_PREFIX, dependencies=[Depends(authorize)])
+
+    @api.get("/whoami")
+    def whoami(request: Request) -> dict[str, Any]:
+        """Who the request acts as: the token's user and grants, or the local actor
+        with edit on every Knowledge Graph under `stetiq ui`."""
+        token: ApiToken = request.state.token
+        mode = "local" if registry is None else "server"
+        return {"mode": mode, "user": token.user, "grants": dict(token.grants)}
 
     @api.post("/knowledge-graphs", status_code=201)
     def create_knowledge_graph(
@@ -357,5 +386,5 @@ def create_app(
         return [wire.gate_result_to_json(r) for r in tracking.list_gate_results(name)]
 
     app.include_router(api)
-    app.include_router(ui_router(tracking, registry))  # read-only web UI
+    app.include_router(ui_router(frontend_dir))
     return app

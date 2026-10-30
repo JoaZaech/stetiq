@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import ipaddress
 from pathlib import Path
 from typing import Annotated
 
@@ -81,6 +82,53 @@ def server(
     except ValueError as e:
         raise typer.BadParameter(str(e), param_hint="--question-mapper") from None
     uvicorn.run(create_app(database_url, question_mapper=mapper), host=host, port=port)
+
+
+def _is_loopback(host: str) -> bool:
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+@app.command("ui")
+def ui(
+    tracking_uri: TrackingUri = None,
+    host: Annotated[str, typer.Option(help="Interface to bind")] = "127.0.0.1",
+    port: Annotated[int, typer.Option(help="Port to listen on")] = 5000,
+    no_auth: Annotated[
+        bool,
+        typer.Option(
+            "--no-auth",
+            help="Confirm that serving an unauthenticated UI on a non-loopback --host is intended",
+        ),
+    ] = False,
+) -> None:
+    """Open the web UI over the local tracking database, with no API Token (like `mlflow ui`).
+
+    Every action is recorded with the local actor ($STETIQ_ACTOR, else the OS user)."""
+    import uvicorn
+
+    from stetiq.client import resolve_actor, resolve_tracking_uri, service_for_uri
+    from stetiq.server import create_app
+    from stetiq.tracking import RemoteTrackingService
+
+    if not (_is_loopback(host) or no_auth):
+        raise typer.BadParameter(
+            f"{host} is not a loopback address and `stetiq ui` has no authentication; "
+            "pass --no-auth to serve it there anyway",
+            param_hint="--host",
+        )
+    uri = resolve_tracking_uri(tracking_uri)
+    service = service_for_uri(uri)
+    if isinstance(service, RemoteTrackingService):
+        raise _fail(
+            StetiqError(f"{uri} is a stetiq server: open its web UI at {uri.rstrip('/')}/ui")
+        )
+    typer.echo(f"stetiq UI over {uri}: http://{host}:{port}/ui")
+    uvicorn.run(create_app(service=service, local_actor=resolve_actor()), host=host, port=port)
 
 
 @kg_app.command("create")
