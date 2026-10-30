@@ -34,6 +34,30 @@ test('an editor adds a Competency Question, which creates a new Use Case Version
   await expect(page.getByRole('table', { name: 'Use Case Versions' }).getByRole('row')).toHaveCount(3)
 })
 
+test('after saving, the page shows the new version’s structural answerability', async ({ page }) => {
+  await page.goto('/ui/kg/support/use-case')
+
+  await page.getByRole('button', { name: 'Add Competency Question' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Add Competency Question' })
+  await dialog.getByRole('textbox', { name: 'Id' }).fill('refunds')
+  await dialog.getByRole('textbox', { name: 'Question' }).fill('Which tickets were refunded?')
+  await dialog.getByRole('textbox', { name: 'Concept mapping' }).fill('Refund')
+  await dialog.getByRole('button', { name: 'Save' }).click()
+
+  // The latest Ontology Version is v3 (the Candidate), which has Customer.name but no Refund.
+  const answerability = page.getByRole('region', { name: 'Structural answerability' })
+  await expect(answerability).toContainText(
+    'Ontology Version v3 answers 1 of 2 Competency Questions of Use Case Version 2.',
+  )
+  const rows = answerability.getByRole('table', { name: 'Structural answerability' }).getByRole('row')
+  await expect(rows).toHaveCount(3)
+  await expect(rows.nth(1)).toHaveText(/customer-names.*Answerable/)
+  await expect(rows.nth(2)).toHaveText(/refunds.*Unanswerable.*Refund/)
+
+  await page.reload()
+  await expect(answerability).toContainText('answers 1 of 2 Competency Questions of Use Case Version 2.')
+})
+
 test.describe('with three Use Case Versions', () => {
   // v3 asks customer-names and ticket-dates.
   test.use({ seed: 'support_use_case_versions' })

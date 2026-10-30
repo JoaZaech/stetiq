@@ -18,6 +18,7 @@ import { useKnowledgeGraphName } from '../params'
 import { CompetencyQuestionDialog } from './CompetencyQuestionDialog'
 import { CompetencyQuestionsTable } from './CompetencyQuestionsTable'
 import { RemoveCompetencyQuestionDialog } from './RemoveCompetencyQuestionDialog'
+import { StructuralAnswerability } from './StructuralAnswerability'
 import { UseCaseVersionsTable } from './UseCaseVersionsTable'
 
 const SECTION = knowledgeGraphSection('use-case')
@@ -71,6 +72,7 @@ export function UseCasePage() {
           {latest ? (
             <>
               <LatestVersion name={name} version={latest} onSaved={setSaved} />
+              <StructuralAnswerability knowledgeGraph={name} useCaseVersion={latest.number} />
               <Panel title="Use Case Versions">
                 <UseCaseVersionsTable name={name} versions={versions.data} />
               </Panel>
