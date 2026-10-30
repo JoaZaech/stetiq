@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from stetiq.evaluation.framework import Detail, Evaluation, OntologyVersionEvaluator
+from stetiq.evaluation.framework import Detail, Evaluation, OntologyVersionEvaluator, ratio
 from stetiq.ontology.model import Ontology
 
 if TYPE_CHECKING:
@@ -26,10 +26,6 @@ def _concepts(ontology: Ontology) -> dict[tuple[str, str], str]:
                 name = f"{t.label}.{p.name}"
                 concepts[(kind, name)] = name
     return concepts
-
-
-def _ratio(part: int, whole: int) -> float:
-    return part / whole if whole else 0.0
 
 
 class GoldOntologyAlignment(OntologyVersionEvaluator):
@@ -58,9 +54,9 @@ class GoldOntologyAlignment(OntologyVersionEvaluator):
         matched = sorted(evaluated.keys() & reference.keys())
         extra = sorted(evaluated.keys() - reference.keys())
         missing = sorted(reference.keys() - evaluated.keys())
-        precision = _ratio(len(matched), len(evaluated))
-        recall = _ratio(len(matched), len(reference))
-        f1 = _ratio(2 * precision * recall, precision + recall)
+        precision = ratio(len(matched), len(evaluated))
+        recall = ratio(len(matched), len(reference))
+        f1 = ratio(2 * precision * recall, precision + recall)
         return Evaluation(
             metrics={
                 "precision": precision,

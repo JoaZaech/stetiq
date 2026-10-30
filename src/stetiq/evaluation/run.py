@@ -125,12 +125,12 @@ class ObservedSchemaStatistics(ConstructionRunEvaluator):
             for t in types
         ] + [
             Detail(
-                item=f"({p.source})-[{p.relationship}]->({p.target})",
+                item=str(p.pattern),
                 message=f"{p.count} observed",
                 data={
                     "count": p.count,
-                    "out_degree": _degree(p.out_degree),
-                    "in_degree": _degree(p.in_degree),
+                    "out_degree": p.out_degree.to_dict(),
+                    "in_degree": p.in_degree.to_dict(),
                 },
             )
             for p in schema.patterns
@@ -250,10 +250,6 @@ def _same_multiset(actual: list[Any], expected: list[Any]) -> bool:
             return False
         del remaining[index]
     return True
-
-
-def _degree(d) -> dict[str, Any]:
-    return {"min": d.min, "max": d.max, "mean": d.mean}
 
 
 # Run in the tracking service at the end of every run with an Observation.

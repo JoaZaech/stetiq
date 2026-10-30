@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from stetiq.ontology.model import Pattern
+
 # A namespace scope selects nodes whose property of this name equals the namespace.
 NAMESPACE_PROPERTY = "namespace"
 
@@ -60,6 +62,13 @@ class Degree:
     max: int
     mean: float
 
+    def to_dict(self) -> dict[str, Any]:
+        return {"min": self.min, "max": self.max, "mean": self.mean}
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> Degree:
+        return cls(d["min"], d["max"], float(d["mean"]))
+
 
 @dataclass(frozen=True)
 class ObservedPattern:
@@ -75,6 +84,11 @@ class ObservedPattern:
     count: int
     out_degree: Degree
     in_degree: Degree
+
+    @property
+    def pattern(self) -> Pattern:
+        """The endpoint pattern observed, without its statistics."""
+        return Pattern(self.source, self.relationship, self.target)
 
 
 @dataclass(frozen=True)
@@ -102,9 +116,6 @@ class ObservedSchema:
                 for p in ps
             ]
 
-        def degree(d: Degree) -> dict[str, Any]:
-            return {"min": d.min, "max": d.max, "mean": d.mean}
-
         return {
             "node_types": [
                 {"label": n.label, "count": n.count, "properties": props(n.properties)}
@@ -120,8 +131,8 @@ class ObservedSchema:
                     "relationship": p.relationship,
                     "target": p.target,
                     "count": p.count,
-                    "out_degree": degree(p.out_degree),
-                    "in_degree": degree(p.in_degree),
+                    "out_degree": p.out_degree.to_dict(),
+                    "in_degree": p.in_degree.to_dict(),
                 }
                 for p in self.patterns
             ],
@@ -134,9 +145,6 @@ class ObservedSchema:
                 ObservedProperty(p["name"], tuple(p["types"]), p["count"], float(p["fill_rate"]))
                 for p in ps
             )
-
-        def degree(x: dict[str, Any]) -> Degree:
-            return Degree(x["min"], x["max"], float(x["mean"]))
 
         return cls(
             node_types=tuple(
@@ -153,8 +161,8 @@ class ObservedSchema:
                     p["relationship"],
                     p["target"],
                     p["count"],
-                    degree(p["out_degree"]),
-                    degree(p["in_degree"]),
+                    Degree.from_dict(p["out_degree"]),
+                    Degree.from_dict(p["in_degree"]),
                 )
                 for p in d["patterns"]
             ),

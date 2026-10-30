@@ -48,6 +48,10 @@ class Pattern:
     relationship: str
     target: str
 
+    def __str__(self) -> str:
+        """`(Source)-[REL]->(Target)`, the syntax reports and Concept references use."""
+        return f"({self.source})-[{self.relationship}]->({self.target})"
+
 
 @dataclass(frozen=True, order=True)
 class Constraint:

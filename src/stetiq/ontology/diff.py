@@ -181,19 +181,15 @@ def _patterns(ontology: Ontology, relationship: str) -> set[Pattern]:
     return {p for p in ontology.patterns if p.relationship == relationship}
 
 
-def _fmt(p: Pattern) -> str:
-    return f"({p.source})-[{p.relationship}]->({p.target})"
-
-
 def _diff_patterns(label: str, base: Ontology, target: Ontology) -> list[Change]:
     """Endpoint patterns: allowing more is additive, allowing less (narrowing) is breaking."""
     old, new = _patterns(base, label), _patterns(target, label)
     changes = [
-        Change(label, "relationship_type", ChangeKind.CHANGED, Classification.ADDITIVE, f"endpoint pattern {_fmt(p)} added")
+        Change(label, "relationship_type", ChangeKind.CHANGED, Classification.ADDITIVE, f"endpoint pattern {p} added")
         for p in sorted(new - old)
     ]
     changes += [
-        Change(label, "relationship_type", ChangeKind.CHANGED, Classification.BREAKING, f"endpoint pattern {_fmt(p)} removed")
+        Change(label, "relationship_type", ChangeKind.CHANGED, Classification.BREAKING, f"endpoint pattern {p} removed")
         for p in sorted(old - new)
     ]
     return changes

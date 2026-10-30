@@ -58,6 +58,11 @@ class Evaluation:
     details: Sequence[Detail] = field(default=())
 
 
+def ratio(part: int, whole: int) -> float:
+    """`part / whole`, 0.0 for an empty whole: the usual shape of a ratio metric."""
+    return part / whole if whole else 0.0
+
+
 class OntologyVersionEvaluator(ABC):
     """Scores an Ontology Version. Has no Graph Source access."""
 

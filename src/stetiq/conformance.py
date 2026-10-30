@@ -111,10 +111,6 @@ class Conformance:
         )
 
 
-def pattern_subject(source: str, relationship: str, target: str) -> str:
-    return f"({source})-[{relationship}]->({target})"
-
-
 def assess_conformance(declared: Ontology, observed: ObservedSchema) -> Conformance:
     """Compare item by item. The checked items are node types, relationship types, their
     properties and endpoint patterns, taken from both sides: every declared one and every
@@ -257,14 +253,10 @@ def _property_mismatches(
 def _check_patterns(
     checks: _Checks, declared: Ontology, observed: ObservedSchema
 ) -> None:
-    declared_patterns = {
-        (p.source, p.relationship, p.target) for p in declared.patterns
-    }
-    observed_patterns = {
-        (p.source, p.relationship, p.target) for p in observed.patterns
-    }
+    declared_patterns = set(declared.patterns)
+    observed_patterns = {p.pattern for p in observed.patterns}
     for key in sorted(declared_patterns | observed_patterns):
-        subject = pattern_subject(*key)
+        subject = str(key)
         if checks.presence(
             subject, "pattern", key in declared_patterns, key in observed_patterns
         ):

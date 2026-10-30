@@ -9,15 +9,11 @@ from __future__ import annotations
 from collections import Counter
 from typing import TYPE_CHECKING
 
-from stetiq.evaluation.framework import Detail, Evaluation, OntologyVersionEvaluator
-from stetiq.ontology.model import NodeType, Ontology, Pattern, Property, RelationshipType
+from stetiq.evaluation.framework import Detail, Evaluation, OntologyVersionEvaluator, ratio
+from stetiq.ontology.model import NodeType, Ontology, Property, RelationshipType
 
 if TYPE_CHECKING:
     from stetiq.tracking.entities import OntologyVersion
-
-
-def _ratio(part: int, whole: int) -> float:
-    return part / whole if whole else 0.0
 
 
 def _levels(ontology: Ontology) -> dict[str, int]:
@@ -81,7 +77,7 @@ class IsolatedNodeTypes(OntologyVersionEvaluator):
         return Evaluation(
             metrics={
                 "isolated_node_types": len(isolated),
-                "isolated_node_type_ratio": _ratio(len(isolated), len(o.node_types)),
+                "isolated_node_type_ratio": ratio(len(isolated), len(o.node_types)),
             },
             details=tuple(
                 Detail(label, "is connected to no pattern", "isolated_node_types")
@@ -118,7 +114,7 @@ class OrphanConcepts(OntologyVersionEvaluator):
                 "orphan_concepts": len(nodes) + len(relationships),
                 "orphan_node_types": len(nodes),
                 "orphan_relationship_types": len(relationships),
-                "orphan_concept_ratio": _ratio(len(nodes) + len(relationships), total),
+                "orphan_concept_ratio": ratio(len(nodes) + len(relationships), total),
             },
             details=(
                 *(Detail(n, "in no pattern and no hierarchy", "orphan_node_types") for n in nodes),
@@ -128,10 +124,6 @@ class OrphanConcepts(OntologyVersionEvaluator):
                 ),
             ),
         )
-
-
-def _pattern_text(p: Pattern) -> str:
-    return f"({p.source})-[{p.relationship}]->({p.target})"
 
 
 def _signature(properties: tuple[Property, ...]) -> frozenset[tuple[str, str]]:
@@ -154,7 +146,7 @@ def _redundant_patterns(o: Ontology, lineage: dict[str, list[str]]) -> list[Deta
         )
         if general is not None:
             details.append(
-                Detail(_pattern_text(p), f"implied by {_pattern_text(general)}", "redundant_patterns")
+                Detail(str(p), f"implied by {general}", "redundant_patterns")
             )
     return details
 

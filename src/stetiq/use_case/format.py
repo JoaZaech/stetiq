@@ -14,9 +14,10 @@ Cases hash equally (identical content registers as the existing version).
 
 from __future__ import annotations
 
-import hashlib
 import json
 from typing import Any
+
+from stetiq import digest
 
 import yaml
 
@@ -150,7 +151,7 @@ def canonicalize(use_case: UseCase) -> UseCase:
 
 
 def canonical_json(use_case: UseCase) -> str:
-    return json.dumps(to_dict(use_case), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return digest.canonical_json(to_dict(use_case))
 
 
 def from_canonical_json(text: str) -> UseCase:
@@ -158,7 +159,7 @@ def from_canonical_json(text: str) -> UseCase:
 
 
 def content_hash(use_case: UseCase) -> str:
-    return hashlib.sha256(canonical_json(use_case).encode("utf-8")).hexdigest()
+    return digest.content_hash(to_dict(use_case))
 
 
 def to_yaml(use_case: UseCase) -> str:

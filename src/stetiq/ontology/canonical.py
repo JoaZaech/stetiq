@@ -7,9 +7,10 @@ always produce byte-identical JSON and therefore the same hash.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from typing import Any
+
+from stetiq import digest
 
 from stetiq.ontology.model import (
     Constraint,
@@ -101,7 +102,7 @@ def from_dict(d: dict[str, Any]) -> Ontology:
 
 
 def canonical_json(ontology: Ontology) -> str:
-    return json.dumps(to_dict(ontology), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return digest.canonical_json(to_dict(ontology))
 
 
 def from_canonical_json(text: str) -> Ontology:
@@ -109,4 +110,4 @@ def from_canonical_json(text: str) -> Ontology:
 
 
 def content_hash(ontology: Ontology) -> str:
-    return hashlib.sha256(canonical_json(ontology).encode("utf-8")).hexdigest()
+    return digest.content_hash(to_dict(ontology))
