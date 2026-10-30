@@ -10,7 +10,8 @@ import { ViewToggle } from '@/components/ViewToggle'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { parseVersionNumber } from '@/lib/version-number'
 import { useComparedIds, useKnowledgeGraphName } from '../params'
-import { COMPARISON_VIEW_OPTIONS, useComparisonView } from './comparison-view'
+import { useComparisonView } from './comparison-view'
+import { MAP_VIEW_OPTIONS } from './map-view'
 import { OntologyComparisonMap } from './OntologyComparisonMap'
 
 /**
@@ -43,7 +44,7 @@ export function OntologyDiffPage() {
             <VersionLink name={name} number={target} />.
           </>
         }
-        actions={<ViewToggle options={COMPARISON_VIEW_OPTIONS} mode={view} onChange={setView} />}
+        actions={<ViewToggle options={MAP_VIEW_OPTIONS} mode={view} onChange={setView} />}
       />
       {diff.isError ? (
         <ErrorAlert error={diff.error} />

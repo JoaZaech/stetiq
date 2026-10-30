@@ -1,8 +1,8 @@
 import { useId, useMemo, type ReactNode } from 'react'
-import { Network, Search, Table2 } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import type { Ontology } from '@/api/ontology-versions'
-import { ViewToggle, type ViewOption } from '@/components/ViewToggle'
+import { ViewToggle } from '@/components/ViewToggle'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import {
@@ -15,17 +15,9 @@ import {
 } from '@/components/ui/table'
 import { useViewParam } from '@/lib/view-param'
 import { conceptTables, searchConcepts } from './concepts'
+import { MAP_VIEW_OPTIONS, MAP_VIEWS } from './map-view'
 import { OntologyMap } from './OntologyMap'
 import { useOntologyVersionTab } from './version-context'
-
-type OntologyView = 'map' | 'table'
-
-const VIEWS: readonly [OntologyView, ...OntologyView[]] = ['map', 'table']
-
-const VIEW_OPTIONS: readonly ViewOption<OntologyView>[] = [
-  { value: 'table', label: 'Table', icon: Table2 },
-  { value: 'map', label: 'Map', icon: Network },
-]
 
 /**
  * The version page's Ontology tab: a Map of the Ontology by default (`?view=` absent), or
@@ -34,7 +26,7 @@ const VIEW_OPTIONS: readonly ViewOption<OntologyView>[] = [
  */
 export function OntologyTab() {
   const version = useOntologyVersionTab()
-  const [view, setView] = useViewParam(VIEWS)
+  const [view, setView] = useViewParam(MAP_VIEWS)
   const [params, setParams] = useSearchParams()
   const query = params.get('q') ?? ''
 
@@ -61,7 +53,7 @@ export function OntologyTab() {
             }
           />
         </div>
-        <ViewToggle options={VIEW_OPTIONS} mode={view} onChange={setView} />
+        <ViewToggle options={MAP_VIEW_OPTIONS} mode={view} onChange={setView} />
       </div>
       {view === 'map' ? (
         <OntologyMap ontology={version.ontology} query={query} />

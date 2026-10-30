@@ -1,6 +1,7 @@
 import { OntologyDiffPanel } from '@/components/OntologyDiff'
 import { ViewToggle } from '@/components/ViewToggle'
-import { COMPARISON_VIEW_OPTIONS, useComparisonView } from './comparison-view'
+import { useComparisonView } from './comparison-view'
+import { MAP_VIEW_OPTIONS } from './map-view'
 import { OntologyComparisonMap } from './OntologyComparisonMap'
 import { useOntologyVersionTab } from './version-context'
 
@@ -23,7 +24,7 @@ export function ChangesTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
         <p className="text-sm text-muted-foreground">Changes from v{base}</p>
-        <ViewToggle options={COMPARISON_VIEW_OPTIONS} mode={view} onChange={setView} />
+        <ViewToggle options={MAP_VIEW_OPTIONS} mode={view} onChange={setView} />
       </div>
       {view === 'map' ? (
         <OntologyComparisonMap knowledgeGraph={version.knowledge_graph} base={base} target={version.number} />
