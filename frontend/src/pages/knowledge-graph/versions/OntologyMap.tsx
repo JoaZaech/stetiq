@@ -1,5 +1,5 @@
 import '@xyflow/react/dist/style.css'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   BaseEdge,
@@ -27,6 +27,7 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
+import { type ConceptSelection, formatSelection, useConceptSelection } from './concept-selection'
 import { MapChangeSummary } from './MapChangeSummary'
 import { MapDetailsPanel } from './MapDetailsPanel'
 import { MapPathPanel } from './MapPathPanel'
@@ -202,9 +203,10 @@ type OntologyMapProps = { query?: string } & (
 
 /**
  * An Ontology as a node-link Map: classes as nodes, Patterns as links named by relation.
- * Selecting a class or link focuses its neighbourhood and opens its details; `query`, the
- * Concept search, highlights the Concepts it names and lists its results beside the Map,
- * where picking one selects it and centres the Map on it.
+ * Selecting a class or link focuses its neighbourhood and opens its details; the selection
+ * is the page's `?select=` (`useConceptSelection`), shared with the Table, and the Map
+ * opens centred on it. `query`, the Concept search, highlights the Concepts it names and
+ * lists its results beside the Map, where picking one selects it and centres the Map on it.
  *
  * Given a `comparison` instead, it draws both versions superimposed: change kind as mark
  * style (added solid, removed a dashed ghost, modified ringed, unchanged muted), severity
@@ -215,7 +217,7 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
   const map = useMemo(() => comparison?.map ?? ontologyMap(ontology), [comparison, ontology])
   const [filters, setFilters] = useState<MapFilters>({ hideDeprecated: false, hideSubclassLinks: false })
   const shown = useMemo(() => filterOntologyMap(map, filters), [map, filters])
-  const [selection, setSelection] = useState<MapSelection | null>(null)
+  const [selected, setSelection] = useConceptSelection()
   // What the change summary points at: its focus shows, without selecting it.
   const [preview, setPreview] = useState<MapSelection | null>(null)
   // Focus is over what is shown, so a selection a filter hides is no selection. Hiding
@@ -224,6 +226,16 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
     () => (filters.hideSubclassLinks ? filterOntologyMap(map, { ...filters, hideSubclassLinks: false }) : shown),
     [map, filters, shown],
   )
+  /** What selecting `concept` selects on the Map: a class, or a relation's first Pattern link; null when none is shown. */
+  const selectionFor = useCallback(
+    (concept: ConceptSelection | null): MapSelection | null => {
+      if (concept?.kind !== 'relation') return concept
+      const link = shown.links.find((l) => l.relation === concept.label)
+      return link ? { kind: 'link', id: link.id } : null
+    },
+    [shown],
+  )
+  const selection = useMemo(() => selectionFor(selected), [selectionFor, selected])
   const selectedFocus = useMemo(() => focusOf(reachable, selection), [reachable, selection])
   const focus = useMemo(
     () => (preview ? focusOf(reachable, preview) : selectedFocus),
@@ -236,14 +248,13 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
   )
   const matches = useMemo(() => searchMap(ontology, query), [ontology, query])
   const results = useMemo(() => searchOntology(ontology, query), [ontology, query])
-  // The selection a search result picked, which the Map stays centred on while it lasts.
-  const [located, setLocated] = useState<MapSelection | null>(null)
-  /** What picking `result` selects: a class, or a relation's first Pattern link; null when none is shown. */
-  const selectionFor = (result: SearchResult): MapSelection | null => {
-    if (result.kind === 'class')
-      return shown.nodes.some((n) => n.label === result.label) ? { kind: 'class', label: result.label } : null
-    const link = shown.links.find((l) => l.relation === result.label)
-    return link ? { kind: 'link', id: link.id } : null
+  // The selection the Map opened on or a search result picked (as a `?select=` value),
+  // which the Map stays centred on while it lasts.
+  const [located, setLocated] = useState(() => (selected ? formatSelection(selected) : null))
+  /** What picking `result` selects; null when it is not shown. */
+  const pick = ({ kind, label }: SearchResult): ConceptSelection | null => {
+    if (kind === 'relation') return selectionFor({ kind, label }) && { kind, label }
+    return shown.nodes.some((n) => n.label === label) ? { kind, label } : null
   }
   const details = useMemo(
     () => (selectedFocus ? detailsOf(ontology, selection) : null),
@@ -255,7 +266,7 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
     const clear = (e: KeyboardEvent) => e.key === 'Escape' && setSelection(null)
     document.addEventListener('keydown', clear)
     return () => document.removeEventListener('keydown', clear)
-  }, [selection])
+  }, [selection, setSelection])
   // A comparison's changed classes grow to list their changed attributes.
   const sizes = useMemo(
     () =>
@@ -347,18 +358,18 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
   }, [layout.data, sizes, shown, focus, matches, selection, comparison])
 
   const centre = useMemo(() => {
-    if (!layout.data || !located || located !== selection) return null
+    if (!layout.data || !selection || !selected || located !== formatSelection(selected)) return null
     const centreOf = (label: string): Point => {
       const { width, height } = sizes[label] ?? NODE_SIZE
       return { x: layout.data[label].x + width / 2, y: layout.data[label].y + height / 2 }
     }
-    if (located.kind === 'class') return centreOf(located.label)
-    if (located.kind !== 'link') return null
-    const link = map.links.find((l) => l.id === located.id)
+    if (selection.kind === 'class') return centreOf(selection.label)
+    if (selection.kind !== 'link') return null
+    const link = map.links.find((l) => l.id === selection.id)
     if (!link) return null
     const [a, b] = [centreOf(link.source), centreOf(link.target)]
     return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
-  }, [layout.data, sizes, located, selection, map])
+  }, [layout.data, sizes, located, selected, selection, map])
 
   if (layout.error) return <ErrorAlert error={layout.error} title="The Map could not be laid out" />
   if (!elements) return <Skeleton className="h-[32rem] w-full" />
@@ -376,11 +387,11 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
         <MapSearchResults
           query={query}
           results={results}
-          canPick={(r) => selectionFor(r) !== null}
+          canPick={(r) => pick(r) !== null}
           onPick={(r) => {
-            const picked = selectionFor(r)
+            const picked = pick(r)
             setSelection(picked)
-            setLocated(picked)
+            setLocated(picked && formatSelection(picked))
           }}
         />
       )}
@@ -406,7 +417,8 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
         onEdgeClick={(_, edge) => edge.type === 'pattern' && setSelection({ kind: 'link', id: edge.id })}
         onPaneClick={() => setSelection(null)}
         minZoom={0.2}
-        fitView
+        // Opening on a selection centres on it instead.
+        fitView={located === null}
         fitViewOptions={FIT_VIEW_OPTIONS}
       >
         <Controls showInteractive={false} fitViewOptions={FIT_VIEW_OPTIONS} />
