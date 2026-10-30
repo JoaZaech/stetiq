@@ -5,8 +5,9 @@
  * link, a separate link type keyed by (child, parent). No React and no I/O here.
  *
  * Its siblings build on it: `ontology-map-comparison` (two versions superimposed),
- * `ontology-map-focus` (selection, details and search), `ontology-map-paths` (shortest
- * paths) and `ontology-map-layout` (where each class goes).
+ * `ontology-map-focus` (selection, details and search highlights), `ontology-map-search`
+ * (search results by name, then the rest with their reasons), `ontology-map-paths`
+ * (shortest paths) and `ontology-map-layout` (where each class goes).
  */
 import type { Ontology } from '@/api/ontology-versions'
 import { patternId } from './concepts'
