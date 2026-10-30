@@ -9,6 +9,18 @@ const ontologyMap = (page: Page) => page.getByRole('application', { name: 'Ontol
 const linkPath = (map: Locator, pattern: string) =>
   map.getByRole('group', { name: pattern, exact: true }).locator('path.react-flow__edge-path')
 
+test.describe('in a tall window', () => {
+  test.use({ viewport: { width: 1280, height: 1000 } })
+
+  test('the Map fills most of the window’s height, all of it in view', async ({ page }) => {
+    await page.goto('/ui/kg/support/versions/1/ontology')
+
+    const box = await ontologyMap(page).boundingBox()
+    expect(box!.height).toBeGreaterThan(650)
+    expect(box!.y + box!.height).toBeLessThanOrEqual(1000)
+  })
+})
+
 test('the Ontology tab opens on a Map of classes and the Patterns between them', async ({ page }) => {
   await page.goto('/ui/kg/support/versions/1/ontology')
 

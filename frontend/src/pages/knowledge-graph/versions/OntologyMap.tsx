@@ -31,6 +31,7 @@ import { type ConceptSelection, formatSelection, useConceptSelection } from './c
 import type { ClassOrRelation } from './concepts'
 import { ChangeLevelBadge, MapChangeSummary } from './MapChangeSummary'
 import { MapDetailsPanel } from './MapDetailsPanel'
+import { MAP_HEIGHT } from './map-view'
 import { MapPathPanel } from './MapPathPanel'
 import { MapSearchResults } from './MapSearchResults'
 import { filterOntologyMap, ontologyMap, type LinkRoute, type MapFilters } from './ontology-map'
@@ -353,9 +354,9 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
   )
 
   if (layout.error) return <ErrorAlert error={layout.error} title="The Map could not be laid out" />
-  if (!elements) return <Skeleton className="h-[32rem] w-full" />
+  if (!elements) return <Skeleton className={cn(MAP_HEIGHT, 'w-full')} />
   return (
-    <div className="flex h-[32rem] overflow-hidden rounded-md border">
+    <div className={cn('flex overflow-hidden rounded-md border', MAP_HEIGHT)}>
       {comparison && (
         <MapChangeSummary
           comparison={comparison}

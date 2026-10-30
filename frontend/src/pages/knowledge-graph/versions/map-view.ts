@@ -12,3 +12,10 @@ export const MAP_VIEW_OPTIONS: readonly ViewOption<MapView>[] = [
   { value: 'table', label: 'Table', icon: Table2 },
   { value: 'map', label: 'Map', icon: Network },
 ]
+
+/**
+ * How tall the Map is: down to near the window's bottom from where it sits under the
+ * page's header, tabs and toolbar (about 18rem), so the readable zoom rarely leaves a
+ * small Ontology to pan; never less than 32rem. Its loading placeholder is as tall.
+ */
+export const MAP_HEIGHT = 'h-[max(32rem,calc(100dvh-18rem))]'
