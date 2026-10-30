@@ -49,11 +49,15 @@ A pluggable measurement applied to an Ontology that produces one or more metrics
 _Avoid_: Metric (for the measurement itself), check
 
 **Competency Question**:
-A domain question the knowledge graph must be able to answer, used to judge an Ontology against its Use Case.
+A domain question the knowledge graph must be able to answer, used to judge an Ontology against its Use Case; identified by an id that is stable across Use Case Versions, so changing the id is a removal plus an addition.
 _Avoid_: Test query, requirement
 
 **Use Case**:
 The problem a Knowledge Graph exists to solve, expressed as a set of Competency Questions and tasks, versioned independently of the Ontology.
+
+**Use Case Version**:
+An immutable snapshot of a Knowledge Graph's Use Case; adding, changing or removing a Competency Question yields a new one, and results stay tied to the version they were judged against.
+_Avoid_: Revision, question set
 _Avoid_: Scenario, goal
 
 **Construction Run**:
