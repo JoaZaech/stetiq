@@ -97,7 +97,7 @@ test.describe('with Construction Runs', () => {
     await expect(metrics.getByRole('row').nth(2)).toHaveText(/recall\s*0\.8/)
 
     const observation = page.getByRole('region', { name: 'Observation' })
-    await expect(observation).toContainText(/Graph Source\s*neo4j/)
+    await expect(observation).toContainText(/Graph Source\s*database neo4j/)
     await expect(observation).toContainText(/Classes\s*2/)
     await expect(observation).toContainText(/Relations\s*2/)
   })

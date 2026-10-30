@@ -214,6 +214,28 @@ def support_breaking_change(client: stetiq.Client) -> dict[str, Any]:
     return seeded
 
 
+class ReviewScore(stetiq.OntologyVersionEvaluator):
+    """A custom Evaluator scoring each version with a fixed `review/score`."""
+
+    name = "review"
+
+    def __init__(self, scores: dict[int, float]) -> None:
+        self._scores = scores
+
+    def evaluate(self, version: stetiq.OntologyVersion) -> stetiq.Evaluation:
+        return stetiq.Evaluation(metrics={"score": self._scores[version.number]})
+
+
+def support_metrics(client: stetiq.Client) -> dict[str, Any]:
+    """`support_lineage`, plus a custom `review` Evaluator scoring v1 0.9 and v3 0.7;
+    v2 has no `review/score`."""
+    seeded = support_lineage(client)
+    review = ReviewScore({1: 0.9, 3: 0.7})
+    for number in (1, 3):
+        client.evaluate("support", number, evaluators=[review])
+    return seeded
+
+
 def described_support(client: stetiq.Client) -> dict[str, Any]:
     """`support_lineage` with a markdown description, a token for ada that can edit
     `support` and one for grace that can only read it."""
@@ -290,6 +312,7 @@ SCENARIOS: dict[str, Scenario] = {
     "support_lineage": support_lineage,
     "support_lineage_reader": support_lineage_reader,
     "support_breaking_change": support_breaking_change,
+    "support_metrics": support_metrics,
     "described_support": described_support,
     "support_use_case_versions": support_use_case_versions,
     "observed_support": observed_support,

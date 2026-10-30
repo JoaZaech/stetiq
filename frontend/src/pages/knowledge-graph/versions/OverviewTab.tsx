@@ -1,7 +1,7 @@
 import { useId, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { latestGateResult, useGateResults } from '@/api/gate-results'
-import { useVersionEvaluations, type EvaluationResult } from '@/api/ontology-versions'
+import { type EvaluationResult, useVersionEvaluations } from '@/api/ontology-versions'
 import { useRuns } from '@/api/runs'
 import { kgUrl } from '@/app/knowledge-graph-sections'
 import { CopyButton } from '@/components/CopyButton'
@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/table'
 import { formatDateTime, formatMetric } from '@/lib/format'
 import { useKnowledgeGraphName } from '../params'
+import { metricRows } from './evaluator-metrics'
 import { useOntologyVersionTab } from './version-context'
 
 /** The version page's Overview tab: metadata, Evaluator results and latest Gate result. */
@@ -97,28 +98,6 @@ function SourceRun({ name, number }: { name: string; number: number }) {
       <CopyButton value={run.id} label="Copy run id" />
     </span>
   )
-}
-
-/** One row per metric, as `evaluator · metric · value · Use Case Version`. */
-function metricRows(results: readonly EvaluationResult[]) {
-  return [...results]
-    .sort((a, b) => a.evaluator.localeCompare(b.evaluator))
-    .flatMap((result) => {
-      const params = Object.entries(result.parameters)
-      const evaluator =
-        params.length === 0
-          ? result.evaluator
-          : `${result.evaluator} (${params.map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(', ')})`
-      return Object.entries(result.metrics)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([metric, value]) => ({
-          key: `${evaluator}/${metric}`,
-          evaluator,
-          metric,
-          value,
-          useCaseVersion: result.use_case_version,
-        }))
-    })
 }
 
 function EvaluatorResults({ name, number }: { name: string; number: number }) {
