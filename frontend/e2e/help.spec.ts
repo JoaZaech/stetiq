@@ -122,6 +122,20 @@ test('a mermaid block renders as a diagram', async ({ page }) => {
   await expect(diagram.locator('pre')).toHaveCount(0)
 })
 
+test('Python SDK and CLI follow Concepts in the table of contents; the SDK diagram draws', async ({
+  page,
+}) => {
+  await page.goto('/ui/help/python-sdk')
+
+  const contents = page.getByRole('navigation', { name: 'Guide' }).getByRole('link')
+  await expect(contents.nth(2)).toHaveText('Python SDK')
+  await expect(contents.nth(3)).toHaveText('CLI')
+  const diagram = page.getByRole('article').getByRole('figure')
+  await expect(diagram.locator('svg')).toBeVisible()
+  await expect(diagram).toContainText('Tracking service')
+  await expect(diagram).not.toContainText("This diagram couldn't be drawn")
+})
+
 test('a diagram that does not parse shows its source and an error note', async ({ page }) => {
   // Break the Getting started diagram (bundled at build time) by unclosing a node label.
   await page.route('**/ui/assets/*.js', async (route) => {
