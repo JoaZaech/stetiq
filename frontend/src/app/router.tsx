@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate, type RouteObject } from 'react-router'
 import { KnowledgeGraphLayout } from '@/pages/knowledge-graph/KnowledgeGraphLayout'
 import { KnowledgeGraphSectionPage } from '@/pages/knowledge-graph/KnowledgeGraphSectionPage'
 import { KnowledgeGraphsPage } from '@/pages/knowledge-graphs/KnowledgeGraphsPage'
+import { ObservationsPage } from '@/pages/knowledge-graph/observations/ObservationsPage'
 import { OntologyTab } from '@/pages/knowledge-graph/versions/OntologyTab'
 import { OntologyVersionPage } from '@/pages/knowledge-graph/versions/OntologyVersionPage'
 import { OntologyVersionsPage } from '@/pages/knowledge-graph/versions/OntologyVersionsPage'
@@ -53,7 +54,7 @@ const knowledgeGraphSectionRoutes: Record<
     page: <UseCasePage />,
     children: [{ path: 'compare', element: <UseCaseComparePage />, handle: crumb(() => 'Compare') }],
   },
-  observations: {},
+  observations: { page: <ObservationsPage /> },
   promotions: {},
 }
 
