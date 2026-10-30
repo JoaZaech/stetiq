@@ -42,7 +42,7 @@ test.describe('with Drift', () => {
 
     await expect(fromRun.getByRole('region', { name: 'Drift' })).toHaveCount(0)
     await expect(fromRun).toContainText('No Drift')
-    await expect(page.getByText('The graph matches its contract')).toHaveCount(0)
+    await expect(page.getByText('The Knowledge Graph matches the Ontology Version of its Contract Alias')).toHaveCount(0)
   })
 })
 
@@ -52,7 +52,7 @@ test.describe('without Drift', () => {
   test('no Drift shows the empty state', async ({ page }) => {
     await page.goto('/ui/kg/support/observations')
     await expect(page.getByRole('article')).toHaveCount(1)
-    await expect(page.getByText('No Drift. The graph matches its contract.')).toBeVisible()
+    await expect(page.getByText('No Drift. The Knowledge Graph matches the Ontology Version of its Contract Alias.')).toBeVisible()
   })
 })
 

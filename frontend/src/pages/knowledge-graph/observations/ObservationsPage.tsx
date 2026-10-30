@@ -71,7 +71,7 @@ function ObservationList() {
       {driftEvents.data.length === 0 && (
         <Alert>
           <CircleCheck aria-hidden />
-          <AlertDescription>No Drift. The graph matches its contract.</AlertDescription>
+          <AlertDescription>No Drift. The Knowledge Graph matches the Ontology Version of its Contract Alias.</AlertDescription>
         </Alert>
       )}
       {newestFirst.map((observation) => (
