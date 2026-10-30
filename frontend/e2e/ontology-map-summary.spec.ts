@@ -56,7 +56,8 @@ test('documentation-only changes collapse to one line in the summary, and to a n
   expect(severities.length).toBeGreaterThan(0)
   expect(severities.every((s) => s === null)).toBe(true)
   // One dot among the link labels: HAS_TRIP's (the legend has its own).
-  await expect(map.locator('.react-flow__edgelabel-renderer [data-documentation-dot]')).toHaveCount(1)
+  await expect(map.locator('[data-link-label] [data-documentation-dot]')).toHaveCount(1)
+  await expect(map.locator('[data-link-label]', { hasText: 'HAS_TRIP' }).locator('[data-documentation-dot]')).toHaveCount(1)
 })
 
 test('an entry focuses its Concept on the Map, and selecting on the Map finds its entry', async ({ page }) => {

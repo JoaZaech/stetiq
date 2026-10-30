@@ -228,8 +228,7 @@ test('the Ontology tab lists Concepts grouped, with hierarchy and constraints, a
   await page.getByRole('searchbox', { name: 'Search Concepts' }).fill('ticket')
 
   await expect(classes.getByRole('row')).toHaveText([/Class/, /^Customer/, /^Ticket/])
-  await expect(relations).toHaveCount(0)
-  await expect(page.getByText('No relations match “ticket”.')).toBeVisible()
+  await expect(relations.getByRole('row')).toHaveText([/Relation/, /^No relations match\.$/])
   await expect(attributes.getByRole('row')).toHaveCount(3)
 })
 
