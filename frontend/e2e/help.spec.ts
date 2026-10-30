@@ -140,17 +140,13 @@ test('a diagram that does not parse shows its source and an error note', async (
 test('diagrams are redrawn in the colours of the current theme', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' })
   await page.goto('/ui/help/getting-started')
-  const shape = page
-    .getByRole('article')
-    .getByRole('figure')
-    .locator('svg .node')
-    .first()
-    .locator('rect, path')
-    .first()
-  // Relative luminance of the node's fill, 0 (black) to 1 (white).
+  const shapes = page.getByRole('article').getByRole('figure').locator('svg .node :is(rect, path)')
+  // Relative luminance of the first filled node shape, 0 (black) to 1 (white); NaN while
+  // none is drawn, so the poll waits.
   const lightness = () =>
-    shape.evaluate((el) => {
-      const [r, g, b] = getComputedStyle(el).fill.match(/\d+/g)!.map(Number)
+    shapes.evaluateAll((els) => {
+      const fill = els.map((el) => getComputedStyle(el).fill).find((f) => f.startsWith('rgb'))
+      const [r, g, b] = fill?.match(/\d+/g)?.map(Number) ?? [NaN, NaN, NaN]
       return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
     })
   await expect.poll(lightness).toBeGreaterThan(0.6)
