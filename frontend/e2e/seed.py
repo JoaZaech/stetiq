@@ -20,6 +20,7 @@ from typing import Any
 
 import stetiq
 from stetiq.auth import TokenRegistry
+from stetiq.drift import DriftThresholds
 from stetiq.graph_source import GraphSourceScope
 
 Scenario = Callable[[stetiq.Client], dict[str, Any]]
@@ -131,12 +132,34 @@ def support_lineage_reader(client: stetiq.Client) -> dict[str, Any]:
     return {**seeded, "grace": issue_token(client, "grace", {"support": "read"})}
 
 
+def observed_support(_client: stetiq.Client) -> dict[str, Any]:
+    """`support` observed twice: once at the end of a Construction Run (no Drift), then
+    on demand after a `Refund` node type and more Tickets appeared, which raises a Drift
+    event against the Contract Alias (`production` -> v1)."""
+    graph = stetiq.InMemoryGraphSource()
+    client = stetiq.Client(_client.tracking_uri, graph_source=graph)
+    client.create_knowledge_graph("support", ontology=SUPPORT_V1)
+    client.bind_graph_source("support", GraphSourceScope(database="neo4j", label="Support"))
+    ada = graph.add_node(["Support", "Party", "Customer"], {"name": "Ada"})
+    ticket = graph.add_node(["Support", "Ticket"], {"opened_at": date(2026, 1, 1)})
+    graph.add_relationship(ada, "OPENED", ticket)
+    with client.start_run("support", ontology_version=1) as run:
+        pass
+    for day in (2, 3, 4):
+        graph.add_node(["Support", "Ticket"], {"opened_at": date(2026, 1, day)})
+    graph.add_node(["Support", "Refund"], {})
+    outcome = client.observe("support", thresholds=DriftThresholds(max_count_increase=0.5))
+    assert outcome.drift is not None
+    return {"run_id": run.id, "observation_id": outcome.observation.id}
+
+
 SCENARIOS: dict[str, Scenario] = {
     "empty": empty,
     "knowledge_graphs": knowledge_graphs,
     "signed_in_users": signed_in_users,
     "support_lineage": support_lineage,
     "support_lineage_reader": support_lineage_reader,
+    "observed_support": observed_support,
 }
 
 
