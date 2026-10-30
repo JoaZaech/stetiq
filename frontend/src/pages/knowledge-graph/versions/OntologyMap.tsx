@@ -26,23 +26,11 @@ import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { MapDetailsPanel } from './MapDetailsPanel'
 import { MapPathPanel } from './MapPathPanel'
-import {
-  changesOf,
-  detailsOf,
-  filterOntologyMap,
-  focusOf,
-  layoutOntologyMap,
-  NODE_SIZE,
-  ontologyMap,
-  searchMap,
-  shortestPaths,
-  type LinkRoute,
-  type MapChange,
-  type MapFilters,
-  type MapSelection,
-  type OntologyComparison,
-  type Point,
-} from './ontology-map'
+import { filterOntologyMap, ontologyMap, type LinkRoute, type MapFilters } from './ontology-map'
+import { changesOf, type MapChange, type OntologyComparison } from './ontology-map-comparison'
+import { detailsOf, focusOf, searchMap, type MapSelection } from './ontology-map-focus'
+import { layoutOntologyMap, NODE_SIZE, type Point } from './ontology-map-layout'
+import { shortestPaths } from './ontology-map-paths'
 
 /**
  * How an item is drawn against the selection and the search: `selected` is the selection

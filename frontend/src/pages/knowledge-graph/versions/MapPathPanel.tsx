@@ -1,6 +1,6 @@
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { MapPath } from './ontology-map'
+import type { MapPath } from './ontology-map-paths'
 
 /**
  * The shortest paths between two selected classes, each as the classes it passes, with

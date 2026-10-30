@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import type { DetailProperty, MapDetails } from './ontology-map'
+import type { DetailProperty, MapDetails } from './ontology-map-focus'
 
 /**
  * The Map's details on demand for the selected class or link: description, superclass,

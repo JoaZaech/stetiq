@@ -3,7 +3,7 @@ import { useOntologyDiff } from '@/api/ontology-diff'
 import { useOntologyVersion } from '@/api/ontology-versions'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Skeleton } from '@/components/ui/skeleton'
-import { compareOntologies } from './ontology-map'
+import { compareOntologies } from './ontology-map-comparison'
 import { OntologyMap } from './OntologyMap'
 
 /**
