@@ -4,6 +4,7 @@
  */
 import { CLASSIFICATIONS, type Classification, type OntologyChange } from '@/api/ontology-diff'
 import { changesOfConcept, type OntologyComparison, type OwnerKind } from './ontology-map-comparison'
+import type { MapSelection } from './ontology-map-focus'
 
 /**
  * How much a change weighs in the summary. For now the Diff's classification; the core's
@@ -44,6 +45,11 @@ export interface ConceptChanges {
   level: ChangeLevel
   /** The weightiest first, otherwise in the Diff's order. */
   statements: ChangeStatement[]
+  /**
+   * Where it is on the Map: a class itself, and a relation as its first changed Pattern
+   * link (relations are not nodes). Null for a relation without Patterns.
+   */
+  selection: MapSelection | null
 }
 
 /** A comparison's changes, summarized. */
@@ -98,10 +104,37 @@ export function summarizeChanges(comparison: OntologyComparison): ChangeSummary 
       const statements = changesOfConcept(comparison, kind, label)
         .map((c) => statementOf(kind, label, c))
         .sort(byWeight)
-      return statements.length === 0 ? [] : [{ kind, label, level: statements[0].level, statements }]
+      if (statements.length === 0) return []
+      return [{ kind, label, level: statements[0].level, statements, selection: selectionOf(comparison, kind, label) }]
     })
     .sort((a, b) => byWeight(a, b) || compare(a.label, b.label) || compare(a.kind, b.kind))
   return { counts, concepts }
+}
+
+/** Where the class or relation `label` is on the comparison's Map. */
+function selectionOf(comparison: OntologyComparison, kind: OwnerKind, label: string): MapSelection | null {
+  if (kind === 'node_type') return { kind: 'class', label }
+  const links = comparison.map.links.filter((l) => l.relation === label)
+  const link = links.find((l) => comparison.changes.links[l.id]?.kind !== 'unchanged') ?? links[0]
+  return link ? { kind: 'link', id: link.id } : null
+}
+
+/**
+ * The summary's entry for what is selected on the Map: a class's own, or a link's
+ * relation's. Null when that has no changes, or for any other selection.
+ */
+export function summaryConceptOf(
+  comparison: OntologyComparison,
+  summary: ChangeSummary,
+  selection: MapSelection | null,
+): ConceptChanges | null {
+  const [kind, label] =
+    selection?.kind === 'class'
+      ? ['node_type', selection.label]
+      : selection?.kind === 'link'
+        ? ['relationship_type', comparison.map.links.find((l) => l.id === selection.id)?.relation]
+        : []
+  return summary.concepts.find((c) => c.kind === kind && c.label === label) ?? null
 }
 
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)

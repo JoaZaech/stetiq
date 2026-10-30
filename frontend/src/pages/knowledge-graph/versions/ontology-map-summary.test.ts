@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { OntologyDiff } from '@/api/ontology-diff'
 import type { Ontology } from '@/api/ontology-versions'
 import { compareOntologies } from './ontology-map-comparison'
-import { summarizeChanges } from './ontology-map-summary'
+import { summarizeChanges, summaryConceptOf } from './ontology-map-summary'
 
 // Canonical form, as the server sends it: a city transit network, v2 → v3.
 const V2: Ontology = {
@@ -129,5 +129,42 @@ describe('summarizeChanges', () => {
     const summary = summarizeChanges(compareOntologies(V2, V2, { classification: null, changes: [] }))
 
     expect(summary).toMatchObject({ counts: [], concepts: [] })
+  })
+})
+
+describe('linking the summary and the Map', () => {
+  it('selects a class entry as its class, and a relation entry as its first changed link', () => {
+    const target: Ontology = { ...V3, patterns: [...V3.patterns, ['Stop', 'HAS_TRIP', 'Trip']] }
+    const { concepts } = summarizeChanges(
+      compareOntologies(V2, target, {
+        classification: 'breaking',
+        changes: [
+          ...DIFF.changes.filter((c) => c.concept !== 'HAS_TRIP'),
+          { concept: 'HAS_TRIP', concept_kind: 'relationship_type', kind: 'changed', classification: 'additive', detail: 'endpoint pattern (Stop)-[HAS_TRIP]->(Trip) added' },
+        ],
+      }),
+    )
+
+    expect(Object.fromEntries(concepts.map((c) => [c.label, c.selection]))).toEqual({
+      Stop: { kind: 'class', label: 'Stop' },
+      Trip: { kind: 'class', label: 'Trip' },
+      // (Route)-[HAS_TRIP]->(Trip) is unchanged.
+      HAS_TRIP: { kind: 'link', id: '(Stop)-[HAS_TRIP]->(Trip)' },
+    })
+  })
+
+  it("finds the entry of a selected class, or of a selected link's relation", () => {
+    const comparison = compareOntologies(V2, V3, DIFF)
+    const summary = summarizeChanges(comparison)
+    const labelOf = (selection: Parameters<typeof summaryConceptOf>[2]) =>
+      summaryConceptOf(comparison, summary, selection)?.label ?? null
+
+    expect(labelOf({ kind: 'class', label: 'Trip' })).toBe('Trip')
+    expect(labelOf({ kind: 'link', id: '(Route)-[HAS_TRIP]->(Trip)' })).toBe('HAS_TRIP')
+    // Unchanged: no entry.
+    expect(labelOf({ kind: 'class', label: 'Route' })).toBeNull()
+    expect(labelOf({ kind: 'link', id: '(Trip)-[SERVES]->(Stop)' })).toBeNull()
+    expect(labelOf({ kind: 'path', from: 'Route', to: 'Stop' })).toBeNull()
+    expect(labelOf(null)).toBeNull()
   })
 })
