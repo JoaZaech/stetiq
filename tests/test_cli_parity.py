@@ -57,6 +57,14 @@ def test_cli_sets_and_shows_the_evolution_mode(cli_env):
     assert CliRunner().invoke(app, ["kg", "evolution-mode", "support", "loose"]).exit_code == 1
 
 
+def test_cli_sets_and_shows_the_knowledge_graph_description(cli_env):
+    _invoke("kg", "description", "support", "Answers **support** questions.")
+
+    assert cli_env.get_knowledge_graph("support").description == "Answers **support** questions."
+    assert _invoke("kg", "description", "support").strip() == "Answers **support** questions."
+    assert CliRunner().invoke(app, ["kg", "description", "nope", "x"]).exit_code == 1
+
+
 def _two_runs(sdk):
     sdk.bind_graph_source("support", GraphSourceScope(database="neo4j"))
     with sdk.start_run("support", ontology_version=1) as a:

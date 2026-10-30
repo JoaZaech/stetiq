@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate, type RouteObject } from 'react-router'
 import { KnowledgeGraphLayout } from '@/pages/knowledge-graph/KnowledgeGraphLayout'
 import { KnowledgeGraphSectionPage } from '@/pages/knowledge-graph/KnowledgeGraphSectionPage'
 import { KnowledgeGraphsPage } from '@/pages/knowledge-graphs/KnowledgeGraphsPage'
+import { ObservationsPage } from '@/pages/knowledge-graph/observations/ObservationsPage'
 import { OntologyTab } from '@/pages/knowledge-graph/versions/OntologyTab'
 import { OntologyVersionPage } from '@/pages/knowledge-graph/versions/OntologyVersionPage'
 import { OntologyVersionsPage } from '@/pages/knowledge-graph/versions/OntologyVersionsPage'
@@ -10,6 +11,8 @@ import { OverviewTab } from '@/pages/knowledge-graph/versions/OverviewTab'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { SettingsPage } from '@/pages/settings/SettingsPage'
 import { SignInPage } from '@/pages/sign-in/SignInPage'
+import { UseCaseComparePage } from '@/pages/knowledge-graph/use-case/UseCaseComparePage'
+import { UseCasePage } from '@/pages/knowledge-graph/use-case/UseCasePage'
 import { AppLayout } from './AppLayout'
 import type { RouteHandle } from './breadcrumbs'
 import {
@@ -47,8 +50,11 @@ const knowledgeGraphSectionRoutes: Record<
     ],
   },
   runs: {},
-  'use-case': {},
-  observations: {},
+  'use-case': {
+    page: <UseCasePage />,
+    children: [{ path: 'compare', element: <UseCaseComparePage />, handle: crumb(() => 'Compare') }],
+  },
+  observations: { page: <ObservationsPage /> },
   promotions: {},
 }
 

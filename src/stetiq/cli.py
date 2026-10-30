@@ -222,6 +222,27 @@ def kg_evolution_mode(
         raise _fail(e) from None
 
 
+@kg_app.command("description")
+def kg_description(
+    knowledge_graph: str,
+    description: Annotated[
+        str | None,
+        typer.Argument(help="Markdown; an empty string clears it. Omit to show the current one"),
+    ] = None,
+    tracking_uri: TrackingUri = None,
+) -> None:
+    """Show or set the Knowledge Graph's markdown description."""
+    try:
+        client = _client(tracking_uri)
+        if description is not None:
+            kg = client.set_knowledge_graph_description(knowledge_graph, description)
+        else:
+            kg = client.get_knowledge_graph(knowledge_graph)
+    except StetiqError as e:
+        raise _fail(e) from None
+    typer.echo(kg.description or "")
+
+
 @ontology_app.command("register")
 def ontology_register(
     knowledge_graph: str, ontology: OntologyFile, tracking_uri: TrackingUri = None

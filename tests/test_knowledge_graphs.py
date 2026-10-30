@@ -1,3 +1,5 @@
+import sqlite3
+
 import pytest
 
 import stetiq
@@ -102,3 +104,50 @@ def test_the_summary_follows_the_contract_alias_when_it_is_promoted(client, supp
     [kg] = client.list_knowledge_graphs()
     assert kg.contract_version == 2
     assert kg.last_modified_at == promoted.updated_at
+
+
+def test_a_new_knowledge_graph_has_no_description(client, support_ontology):
+    client.create_knowledge_graph("support", ontology=support_ontology)
+
+    assert client.get_knowledge_graph("support").description is None
+
+
+def test_the_description_is_set_and_read_back_as_markdown(client_factory, support_ontology):
+    client = client_factory()
+    client.create_knowledge_graph("support", ontology=support_ontology)
+
+    updated = client.set_knowledge_graph_description("support", "Answers **support** questions.")
+
+    assert updated.description == "Answers **support** questions."
+    other = client_factory()
+    assert other.get_knowledge_graph("support").description == "Answers **support** questions."
+    [listed] = other.list_knowledge_graphs()
+    assert listed.description == "Answers **support** questions."
+
+
+def test_a_blank_description_clears_it(client, support_ontology):
+    client.create_knowledge_graph("support", ontology=support_ontology)
+    client.set_knowledge_graph_description("support", "Answers support questions.")
+
+    client.set_knowledge_graph_description("support", "  \n")
+
+    assert client.get_knowledge_graph("support").description is None
+
+
+def test_describing_an_unknown_knowledge_graph_is_rejected(client):
+    with pytest.raises(stetiq.NotFoundError):
+        client.set_knowledge_graph_description("nope", "Anything.")
+
+
+def test_a_database_from_before_descriptions_gains_the_column_on_startup(
+    tmp_path, support_ontology
+):
+    url = f"sqlite:///{tmp_path / 'stetiq.db'}"
+    stetiq.Client(url).create_knowledge_graph("support", ontology=support_ontology)
+    with sqlite3.connect(tmp_path / "stetiq.db") as db:
+        db.execute("ALTER TABLE knowledge_graphs DROP COLUMN description")
+
+    client = stetiq.Client(url)
+    client.set_knowledge_graph_description("support", "Answers support questions.")
+
+    assert client.get_knowledge_graph("support").description == "Answers support questions."
