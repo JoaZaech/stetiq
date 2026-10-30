@@ -1,28 +1,9 @@
-import type { ReactNode } from 'react'
+import { lazy, type ComponentType, type ReactNode } from 'react'
 import { createBrowserRouter, Navigate, type RouteObject } from 'react-router'
 import { KnowledgeGraphLayout } from '@/pages/knowledge-graph/KnowledgeGraphLayout'
 import { KnowledgeGraphSectionPage } from '@/pages/knowledge-graph/KnowledgeGraphSectionPage'
-import { ConstructionRunPage } from '@/pages/knowledge-graph/runs/ConstructionRunPage'
-import { ConstructionRunsPage } from '@/pages/knowledge-graph/runs/ConstructionRunsPage'
-import { RunComparePage } from '@/pages/knowledge-graph/runs/RunComparePage'
-import { RunConformanceTab } from '@/pages/knowledge-graph/runs/RunConformanceTab'
-import { RunEvaluationsTab } from '@/pages/knowledge-graph/runs/RunEvaluationsTab'
-import { RunOverviewTab } from '@/pages/knowledge-graph/runs/RunOverviewTab'
 import { shortRunId } from '@/pages/knowledge-graph/runs/runs'
-import { KnowledgeGraphsPage } from '@/pages/knowledge-graphs/KnowledgeGraphsPage'
-import { ChangesTab } from '@/pages/knowledge-graph/versions/ChangesTab'
-import { OntologyDiffPage } from '@/pages/knowledge-graph/versions/OntologyDiffPage'
-import { ObservationsPage } from '@/pages/knowledge-graph/observations/ObservationsPage'
-import { OntologyTab } from '@/pages/knowledge-graph/versions/OntologyTab'
-import { OntologyVersionPage } from '@/pages/knowledge-graph/versions/OntologyVersionPage'
-import { OntologyVersionsPage } from '@/pages/knowledge-graph/versions/OntologyVersionsPage'
-import { OverviewTab } from '@/pages/knowledge-graph/versions/OverviewTab'
-import { PromotionsPage } from '@/pages/knowledge-graph/promotions/PromotionsPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
-import { SettingsPage } from '@/pages/settings/SettingsPage'
-import { SignInPage } from '@/pages/sign-in/SignInPage'
-import { UseCaseComparePage } from '@/pages/knowledge-graph/use-case/UseCaseComparePage'
-import { UseCasePage } from '@/pages/knowledge-graph/use-case/UseCasePage'
 import { AppLayout } from './AppLayout'
 import type { RouteHandle } from './breadcrumbs'
 import {
@@ -32,6 +13,34 @@ import {
 } from './knowledge-graph-sections'
 
 const crumb = (label: RouteHandle['crumb']): RouteHandle => ({ crumb: label })
+
+/**
+ * A page loaded the first time it is shown, so the main bundle holds only the app shell.
+ * Router navigations are transitions: the previous page stays up while one loads.
+ */
+function lazyPage<M>(load: () => Promise<M>, pick: (module: M) => ComponentType): ComponentType {
+  return lazy(async () => ({ default: pick(await load()) }))
+}
+
+const ConstructionRunPage = lazyPage(() => import('@/pages/knowledge-graph/runs/ConstructionRunPage'), (m) => m.ConstructionRunPage)
+const ConstructionRunsPage = lazyPage(() => import('@/pages/knowledge-graph/runs/ConstructionRunsPage'), (m) => m.ConstructionRunsPage)
+const RunComparePage = lazyPage(() => import('@/pages/knowledge-graph/runs/RunComparePage'), (m) => m.RunComparePage)
+const RunConformanceTab = lazyPage(() => import('@/pages/knowledge-graph/runs/RunConformanceTab'), (m) => m.RunConformanceTab)
+const RunEvaluationsTab = lazyPage(() => import('@/pages/knowledge-graph/runs/RunEvaluationsTab'), (m) => m.RunEvaluationsTab)
+const RunOverviewTab = lazyPage(() => import('@/pages/knowledge-graph/runs/RunOverviewTab'), (m) => m.RunOverviewTab)
+const KnowledgeGraphsPage = lazyPage(() => import('@/pages/knowledge-graphs/KnowledgeGraphsPage'), (m) => m.KnowledgeGraphsPage)
+const ChangesTab = lazyPage(() => import('@/pages/knowledge-graph/versions/ChangesTab'), (m) => m.ChangesTab)
+const OntologyDiffPage = lazyPage(() => import('@/pages/knowledge-graph/versions/OntologyDiffPage'), (m) => m.OntologyDiffPage)
+const ObservationsPage = lazyPage(() => import('@/pages/knowledge-graph/observations/ObservationsPage'), (m) => m.ObservationsPage)
+const OntologyTab = lazyPage(() => import('@/pages/knowledge-graph/versions/OntologyTab'), (m) => m.OntologyTab)
+const OntologyVersionPage = lazyPage(() => import('@/pages/knowledge-graph/versions/OntologyVersionPage'), (m) => m.OntologyVersionPage)
+const OntologyVersionsPage = lazyPage(() => import('@/pages/knowledge-graph/versions/OntologyVersionsPage'), (m) => m.OntologyVersionsPage)
+const OverviewTab = lazyPage(() => import('@/pages/knowledge-graph/versions/OverviewTab'), (m) => m.OverviewTab)
+const PromotionsPage = lazyPage(() => import('@/pages/knowledge-graph/promotions/PromotionsPage'), (m) => m.PromotionsPage)
+const SettingsPage = lazyPage(() => import('@/pages/settings/SettingsPage'), (m) => m.SettingsPage)
+const SignInPage = lazyPage(() => import('@/pages/sign-in/SignInPage'), (m) => m.SignInPage)
+const UseCaseComparePage = lazyPage(() => import('@/pages/knowledge-graph/use-case/UseCaseComparePage'), (m) => m.UseCaseComparePage)
+const UseCasePage = lazyPage(() => import('@/pages/knowledge-graph/use-case/UseCasePage'), (m) => m.UseCasePage)
 
 /**
  * What each Knowledge Graph section shows at `/kg/:name/<section>`:
@@ -47,7 +56,7 @@ const knowledgeGraphSectionRoutes: Record<
   versions: {
     page: <OntologyVersionsPage />,
     children: [
-      // ?base=&target=: two rows selected in the version table.
+      // ?id=<base>&id=<target>: two rows selected in the version table.
       { path: 'compare', element: <OntologyDiffPage />, handle: crumb(() => 'Compare') },
       {
         path: ':number',
@@ -65,7 +74,7 @@ const knowledgeGraphSectionRoutes: Record<
   runs: {
     page: <ConstructionRunsPage />,
     children: [
-      // ?run=&run=…: the runs selected in the run table.
+      // ?id=&id=…: the runs selected in the run table.
       { path: 'compare', element: <RunComparePage />, handle: crumb(() => 'Compare') },
       {
         path: ':runId',

@@ -1,4 +1,4 @@
-import { Fragment } from 'react'
+import { Fragment, Suspense } from 'react'
 import { Link, Outlet, useMatches } from 'react-router'
 import {
   Breadcrumb,
@@ -9,6 +9,7 @@ import {
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
 import { Separator } from '@/components/ui/separator'
+import { Skeleton } from '@/components/ui/skeleton'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
 import { AppSidebar } from './AppSidebar'
 import { breadcrumbs } from './breadcrumbs'
@@ -30,7 +31,10 @@ export function AppLayout() {
           <Breadcrumbs />
         </div>
         <main className="flex-1 p-6">
-          <Outlet />
+          {/* While a lazily loaded page (router.tsx) arrives on a first visit. */}
+          <Suspense fallback={<Skeleton className="h-32 w-full" />}>
+            <Outlet />
+          </Suspense>
         </main>
       </SidebarInset>
     </SidebarProvider>

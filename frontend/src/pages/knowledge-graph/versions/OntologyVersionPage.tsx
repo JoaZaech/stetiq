@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { Outlet, useParams } from 'react-router'
 import { useAliases, useContractAlias } from '@/api/aliases'
 import { isNotFound } from '@/api/client'
@@ -8,6 +9,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { RouteTabs, type RouteTab } from '@/components/RouteTabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { NotFoundPage } from '@/pages/NotFoundPage'
+import { parseVersionNumber } from '@/lib/version-number'
 import { useKnowledgeGraphName } from '../params'
 import { AliasChips } from './AliasChips'
 import { aliasesByVersion } from './lineage'
@@ -28,10 +30,10 @@ const TABS: readonly RouteTab[] = [
 export function OntologyVersionPage() {
   const name = useKnowledgeGraphName()
   const raw = useParams().number ?? ''
-  const number = /^\d+$/.test(raw) ? Number(raw) : NaN
-  const version = useOntologyVersion(name, number)
+  const number = parseVersionNumber(raw)
+  const version = useOntologyVersion(name, number ?? NaN)
 
-  if (Number.isNaN(number) || (version.isError && isNotFound(version.error))) {
+  if (number === undefined || (version.isError && isNotFound(version.error))) {
     return (
       <NotFoundPage
         title="Ontology Version not found"
@@ -55,7 +57,9 @@ export function OntologyVersionPage() {
         }
       />
       <RouteTabs label="Ontology Version" tabs={TABS} />
-      <Outlet context={version.data} />
+      <Suspense fallback={<Skeleton className="h-32 w-full" />}>
+        <Outlet context={version.data} />
+      </Suspense>
     </>
   )
 }

@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from 'react-router'
 import { ApiError } from '@/api/client'
@@ -21,7 +22,10 @@ export function App() {
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
-          <RouterProvider router={router} />
+          {/* Pages load lazily (router.tsx); the sign-in page has no layout to wait in. */}
+          <Suspense fallback={null}>
+            <RouterProvider router={router} />
+          </Suspense>
         </TooltipProvider>
       </QueryClientProvider>
     </ThemeProvider>

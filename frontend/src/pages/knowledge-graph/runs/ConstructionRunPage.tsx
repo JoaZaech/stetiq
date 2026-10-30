@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { CircleX } from 'lucide-react'
 import { Outlet, useParams } from 'react-router'
 import { isNotFound } from '@/api/client'
@@ -52,7 +52,9 @@ export function ConstructionRunPage() {
       />
       <FailedRunAlert run={run.data} />
       <RouteTabs label="Construction Run" tabs={TABS} />
-      <Outlet context={run.data} />
+      <Suspense fallback={<Skeleton className="h-32 w-full" />}>
+        <Outlet context={run.data} />
+      </Suspense>
     </>
   )
 }
