@@ -1,11 +1,10 @@
 import { useMemo } from 'react'
-import { Search } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { ClassificationBadge } from '@/components/OntologyDiff'
 import { DataTable, DataTableRowCount } from '@/components/DataTable'
 import { ErrorAlert } from '@/components/ErrorAlert'
+import { SearchInput } from '@/components/SearchInput'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { createDataTableColumnHelper, filterColumn, useDataTable } from '@/lib/data-table'
 import { type DataTableParamsOptions, useDataTableParams } from '@/lib/data-table-params'
@@ -129,20 +128,12 @@ function ComparisonGrid({ comparison, base, target }: { comparison: OntologyComp
             <p className="text-muted-foreground">{counts.map((c) => `${c.count} ${c.level}`).join(' · ')}</p>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-            <div className="relative w-full max-w-sm">
-              <Search
-                className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-                aria-hidden
-              />
-              <Input
-                type="search"
-                aria-label="Search changes"
-                placeholder="Search changes"
-                className="pl-8"
-                value={table.store.state.globalFilter ?? ''}
-                onChange={(e) => table.setGlobalFilter(e.target.value)}
-              />
-            </div>
+            <SearchInput
+              label="Search changes"
+              className="w-full max-w-sm"
+              value={table.store.state.globalFilter ?? ''}
+              onChange={table.setGlobalFilter}
+            />
             <div className="flex items-center gap-3">
               {documentationOnly > 0 && (
                 <p className="text-xs text-muted-foreground">

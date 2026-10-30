@@ -1,13 +1,13 @@
 import { type Ref, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ChevronDown, ChevronRight, Search } from 'lucide-react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import type { Ontology } from '@/api/ontology-versions'
 import { ColumnPicker } from '@/components/ColumnPicker'
 import { DataTable, DataTableRowCount } from '@/components/DataTable'
+import { SearchInput } from '@/components/SearchInput'
 import { ViewToggle } from '@/components/ViewToggle'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { createDataTableColumnHelper, filterColumn, useDataTable } from '@/lib/data-table'
 import { type DataTableParamsOptions, useDataTableParams } from '@/lib/data-table-params'
 import { formatCount } from '@/lib/format'
@@ -54,19 +54,12 @@ export function OntologyTab() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
-        <div className="relative w-full max-w-sm">
-          <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-          <Input
-            type="search"
-            aria-label="Search Concepts"
-            placeholder="Search Concepts"
-            className="pl-8"
-            value={query}
-            onChange={(e) =>
-              setParams((p) => setOrDeleteParam(p, 'q', e.target.value), { replace: true })
-            }
-          />
-        </div>
+        <SearchInput
+          label="Search Concepts"
+          className="w-full max-w-sm"
+          value={query}
+          onChange={(value) => setParams((p) => setOrDeleteParam(p, 'q', value), { replace: true })}
+        />
         <ViewToggle options={MAP_VIEW_OPTIONS} mode={view} onChange={setView} />
       </div>
       {view === 'map' ? (
