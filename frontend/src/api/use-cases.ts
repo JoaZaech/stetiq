@@ -1,5 +1,6 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, kgPath } from './client'
+import { ontologyVersionsQuery } from './ontology-versions'
 
 /** A Competency Question as use_case/format.py `to_dict` sends it: unset fields are omitted. */
 export interface CompetencyQuestion {
@@ -37,3 +38,52 @@ export const listUseCaseVersionsQuery = (kg: string) => ({
   queryFn: () => api<UseCaseVersion[]>(kgUseCaseVersionsPath(kg)),
 })
 export const useUseCaseVersions = (kg: string) => useQuery(listUseCaseVersionsQuery(kg))
+
+/** What saving an edited Use Case did. */
+export interface SavedUseCase {
+  /** The Use Case Version holding the saved content: new, or an existing one with the same content. */
+  version: UseCaseVersion
+  /** False when the content was already registered: the server dedupes by content hash. */
+  created: boolean
+  /** Why structural answerability could not be judged for the new version, if it could not. */
+  evaluationError?: unknown
+}
+
+/**
+ * Register a complete, edited Use Case as a new Use Case Version (needs `edit`). The
+ * server re-validates it and returns the existing version for unchanged content.
+ *
+ * A new version is then judged for structural answerability against the latest
+ * Ontology Version (`POST .../evaluate`), so the page can show the result straight away.
+ */
+export function useSaveUseCase(kg: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (useCase: UseCase): Promise<SavedUseCase> => {
+      const before = await queryClient.fetchQuery(listUseCaseVersionsQuery(kg))
+      const latest = before.at(-1)?.number ?? 0
+      const version = await api<UseCaseVersion>(kgUseCaseVersionsPath(kg), 'POST', {
+        use_case: useCase,
+      })
+      const created = version.number > latest
+      if (!created) return { version, created }
+      try {
+        const ontology = (await queryClient.fetchQuery(ontologyVersionsQuery(kg))).at(-1)
+        if (ontology) {
+          await api(`${kgPath(kg)}/ontology-versions/${ontology.number}/evaluate`, 'POST', {
+            use_case_version: version.number,
+          })
+        }
+      } catch (evaluationError) {
+        return { version, created, evaluationError }
+      }
+      return { version, created }
+    },
+    onSettled: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['use-case-versions', kg] }),
+        queryClient.invalidateQueries({ queryKey: ['ontology-versions', kg] }),
+      ])
+    },
+  })
+}
