@@ -1,0 +1,119 @@
+# Using the web UI
+
+The web UI shows every Knowledge Graph you can read: its Ontology Versions, Construction Runs, Use Case, Observations and Promotions. It is also where you make the governance edits that don't belong in code: promoting an Ontology Version, editing a Knowledge Graph's description and changing its Competency Questions.
+
+Open it with `stetiq ui` (local mode, see [Getting started](./01-getting-started.md#open-the-web-ui)) or at `/ui` on a stetiq server, where you sign in with an API Token (see [Server and API Tokens](./05-server-and-api-tokens.md)). The words used here are explained on the [Concepts](./02-concepts.md) page.
+
+## Finding your way around
+
+The sidebar always has three entries:
+
+- **Knowledge Graphs**: the list of Knowledge Graphs. Inside a Knowledge Graph it becomes a back link, and the sidebar lists that Knowledge Graph's sections below it.
+- **Help**: this guide.
+- **Settings**: the theme (light, dark or system) and your access. In local mode, Access says every Knowledge Graph is editable and names the user your changes are recorded as. On a server, it shows who you are signed in as, your grants (*read* or *edit* per Knowledge Graph, `*` meaning all of them) and a **Sign out** button.
+
+Breadcrumbs at the top of each page lead back up, e.g. from v3 of *support* to *Ontology Versions*, *support* and *Knowledge Graphs*. Pages, searches, filters, chosen columns and compare views live in the URL, so you can share what you are looking at by copying the address.
+
+## What needs edit access
+
+Some controls change a Knowledge Graph, and they need the *edit* permission on it:
+
+| Action | Where |
+| --- | --- |
+| **Edit description** | The header of every Knowledge Graph section |
+| **Promote** | An Ontology Version's page |
+| **Add Competency Question** | The Use Case section |
+| Edit and remove a Competency Question | The row of each Competency Question in the Use Case section |
+
+Without *edit*, these controls stay visible but disabled, with a *Needs edit access* tooltip. Everything else in the UI is read-only. In local mode every Knowledge Graph is editable. The server checks every change too, so a disabled button is a convenience, not the protection.
+
+## The Knowledge Graphs list
+
+The landing page lists every Knowledge Graph you can read, with:
+
+- **Contract Alias version**: the Ontology Version its Contract Alias points to.
+- **Latest version**: its newest Ontology Version.
+- **Last run**: the status of its newest Construction Run (Running, Finished or Failed), or *No runs*.
+- **Last modified**: when it last changed.
+
+Click a column header to sort, and type in **Search by name** to filter. Click a name to open the Knowledge Graph. If there are none yet, the page shows how to create one from the Python SDK (see [Python SDK](./03-python-sdk.md)).
+
+## Inside a Knowledge Graph
+
+A Knowledge Graph opens on its Ontology Versions. Every section starts with the same header: the Knowledge Graph's name, its description (written in markdown), its Evolution Mode (*strict* or *evolving*) and its Contract Alias with the version it points to, e.g. `production → v3`.
+
+**Edit description** (needs edit access) opens a markdown editor with a **Write** and a **Preview** tab. Saving shows the new description to everyone who can read the Knowledge Graph.
+
+### Ontology Versions
+
+The section lists every Ontology Version, newest first, with its origin, when it was created and the Aliases pointing to it. The Contract Alias's chip is highlighted with a star, and an Ontology Version no Alias has pointed to yet is marked **Candidate**.
+
+- **Columns** adds a column per Evaluator metric.
+- **Table** / **Chart** switches to one chart per Evaluator metric across versions, with a search box to find a metric.
+
+**Comparing two versions.** Tick two rows and click **Compare** to see the Ontology Diff from the older to the newer version. The Diff gives an overall classification, a count per classification, and every change labelled *breaking*, *deprecating* or *additive*, most severe first.
+
+**An Ontology Version's page.** Click a version number to open it. It shows the version's Aliases and three tabs:
+
+- **Overview**: its number, origin, content hash (with a copy button), when it was created and, for a version produced by a Construction Run, a link to that run. Next to these, its Evaluator results (Evaluator, metric, value and the Use Case Version it was judged against) and its latest Gate result: *Passed*, *Failed* (naming the Gates that failed) or *None*.
+- **Ontology**: its Concepts in three tables: **Classes** (in hierarchy order, with superclass and constraints), **Relations** (with their patterns) and **Attributes** (with type and whether they are required). Deprecated Concepts are marked. **Search Concepts** filters all three.
+- **Changes**: the Ontology Diff from the previous version. v1 has nothing to compare with.
+
+**Promoting a version.** **Promote** on a version's page (needs edit access) moves an Alias to that version:
+
+1. Pick an existing Alias, or choose **New Alias** and type a name to create one.
+2. Check what changes: the dialog shows the Ontology Diff from the version the Alias points to now, and this version's latest Gate result. Gates never block a Promotion; the result is recorded with it.
+3. If you picked the Contract Alias, confirm **Switch Construction Runs and Drift to v*N***: new Construction Runs will declare this version, and Drift will be measured against it.
+4. Click **Promote to *alias***.
+
+The Promotion is recorded with you as the actor and shows up under [Promotions](#promotions).
+
+### Construction Runs
+
+The section lists every Construction Run, newest first, with its status, start time, duration, Declared Ontology, Conformance score and the Candidate it produced, if any.
+
+- **Status** filters by All, Running, Finished or Failed, and **Started** by All time or the last 24 hours, 7 days or 30 days.
+- **Columns** adds a column per param or metric the runs logged.
+- **Table** / **Chart** switches to one chart per run metric, plus Conformance, over the runs' start times. The filters apply to the charts too.
+
+If there are no runs yet, the page shows how to start one from the Python SDK.
+
+**Comparing runs.** Tick two or more runs (the header checkbox selects them all) and click **Compare** to see them side by side: status, start time, Declared Ontology, Candidate and Conformance, then their params, metrics and Evaluator results. Turn on **Show diff only** to hide the rows where every run has the same value.
+
+**A Construction Run's page.** Click a run id to open it. The header shows the full id (with a copy button), its status, when it started and how long it took. If it failed, a banner says why as far as stetiq knows: it observed Concepts its Declared Ontology does not have while the Evolution Mode is *strict*, or it failed before its Graph Source was observed. Three tabs follow:
+
+- **Overview**: its Declared Ontology, Candidate, start and end time and duration; the Observation it ended with (when, which Graph Source, and how many classes, relations and patterns it saw); and its params and metrics.
+- **Conformance**: the Conformance score, then the Concepts **Declared but not observed**, those **Observed but not declared**, and any other mismatches (patterns, undeclared value types, required attributes not always set).
+- **Evaluations**: every run Evaluator's metrics and, when the Use Case's Competency Questions were executed against the graph, each one's result (*Passed*, *Failed* or *Error*), which check judged it and any error type. Only the verdict is kept, never the rows the query returned.
+
+### Use Case and Competency Questions
+
+The section shows the latest Use Case Version: its description and its Competency Questions, each with its id, question, Cypher query, expected answer and Concept mapping. Below it:
+
+- **Structural answerability**: how many of those Competency Questions the latest Ontology Version can answer, and for each one whether it is *Answerable*, *Unanswerable* (with the Concepts it is missing) or *Unmapped*.
+- **Use Case Versions**: every Use Case Version with when it was created and how many Competency Questions it has.
+
+**Editing Competency Questions** (needs edit access). **Add Competency Question** opens a form with an **Id**, a **Question**, and optionally a **Cypher query**, an **Expected answer** (any JSON value the query's rows must match) and a **Concept mapping** (one Concept reference per line, e.g. `Customer`, `Ticket.opened_at` or `(Customer)-[OPENED]->(Ticket)`). Each row also has an edit button, which opens the same form (the id is locked: to change it, remove the question and add a new one), and a remove button.
+
+Every save registers a new Use Case Version, so earlier results stay tied to the version they were judged against. After saving, the page says which Use Case Version you got. If the content is the same as the latest or an earlier version, no new version is created and the page says which one already has it.
+
+**Comparing two Use Case Versions.** Tick two rows in **Use Case Versions** and click **Compare** to see what changed: the description, and the Competency Questions **Added**, **Changed** (field by field, before and after) and **Removed**. Competency Questions are matched by id.
+
+If no Use Case has been registered yet, add a Competency Question here or register one from the [Python SDK](./03-python-sdk.md).
+
+### Observations
+
+The section lists every Observation of the Graph Source, newest first, with its Graph Source scope and the Construction Run it ended, or *None (on demand)* for an Observation taken between runs. Each one is marked **Drift** or **No Drift**.
+
+An Observation with Drift lists what diverged from the Ontology Version of the Contract Alias: the Contract Alias and its version, the Drift thresholds, and each finding with its kind, Concept and detail.
+
+This section is read-only: an Observation needs your graph database credentials, which never leave your own process. Take one with `stetiq observe` (see [CLI](./04-cli.md)) or by ending a Construction Run.
+
+### Promotions
+
+The section is the Promotion audit, newest first: which Alias moved, from which version to which, who moved it, when, and the version's latest Gate result at that moment (*Passed*, *Failed* or *None*). Promote an Ontology Version from [its page](#ontology-versions) to add a row.
+
+## Next steps
+
+- [Python SDK](./03-python-sdk.md) to record Construction Runs and register Use Cases from code.
+- [`stetiq.yaml`](./06-stetiq-yaml.md) to define Gates and Drift thresholds in your repository.

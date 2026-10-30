@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import { defineConfig, searchForWorkspaceRoot } from 'vite'
 
 // The Python package's version, shown in the sidebar. The build ships inside that
 // same package, so pyproject.toml is the single source of truth.
@@ -26,6 +26,8 @@ export default defineConfig({
   server: {
     // `npm run dev` proxies the API to a running `stetiq ui` (default port 5000).
     proxy: { '/api': 'http://127.0.0.1:5000' },
+    // The user guide lives outside frontend/, in docs/guide (ADR 0004).
+    fs: { allow: [searchForWorkspaceRoot(process.cwd()), '../docs/guide'] },
   },
   test: {
     // Vitest covers pure logic only; pages are tested in the browser by Playwright.

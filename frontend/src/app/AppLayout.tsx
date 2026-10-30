@@ -19,7 +19,12 @@ function sidebarWasOpen(): boolean {
   return !document.cookie.split('; ').includes('sidebar_state=false')
 }
 
-/** The sidebar plus the rounded main card holding the breadcrumbs and the page. */
+/**
+ * The sidebar plus the rounded main card holding the breadcrumbs and the page.
+ *
+ * It must not ask for session data (`/api/v1`): Help renders in it signed out, and in
+ * server mode any such request sends a signed-out reader to sign-in.
+ */
 export function AppLayout() {
   return (
     <SidebarProvider defaultOpen={sidebarWasOpen()}>
