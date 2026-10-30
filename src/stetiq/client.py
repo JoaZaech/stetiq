@@ -18,6 +18,7 @@ from stetiq.evaluation.framework import (
     check_evaluator,
 )
 from stetiq.evaluation.answerability import ANSWERABILITY_EVALUATOR
+from stetiq.evaluation.llm_mapping import question_mapper_from_env
 from stetiq.evaluation.structural import BUILT_IN_EVALUATORS
 from stetiq.graph_source import GraphSource, GraphSourceScope, graph_source_from_env
 from stetiq.ontology import Ontology, parse_yaml
@@ -83,13 +84,14 @@ def service_for_uri(tracking_uri: str, *, token: str | None = None) -> TrackingS
 
     - `http://` / `https://`: remote mode, talking to a stetiq server with API `token`
     - `sqlite:///<path>`, `postgresql[+psycopg]://...`: local mode, in-process over that
-      database (tokenless: `token` is ignored)
+      database (tokenless: `token` is ignored); structural answerability maps questions
+      with the mapper $STETIQ_QUESTION_MAPPER names (in remote mode the server's applies)
     """
     scheme = tracking_uri.split(":", 1)[0].lower()
     if scheme in ("http", "https"):
         return RemoteTrackingService(tracking_uri, token=resolve_token(token))
     if scheme == "sqlite" or scheme.startswith("postgresql"):
-        return LocalTrackingService(SqlStore(tracking_uri))
+        return LocalTrackingService(SqlStore(tracking_uri), question_mapper=question_mapper_from_env())
     raise ValueError(
         f"Unsupported tracking URI {tracking_uri!r} "
         "(expected http(s)://<server>, sqlite:///<path> or postgresql://...)"

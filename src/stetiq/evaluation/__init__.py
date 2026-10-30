@@ -16,6 +16,7 @@ from stetiq.evaluation.framework import (
     SubjectKind,
 )
 from stetiq.evaluation.alignment import GoldOntologyAlignment
+from stetiq.evaluation.llm_mapping import LlmMappingError, LlmQuestionMapper
 
 __all__ = [
     "ANSWERABILITY_EVALUATOR",
@@ -27,6 +28,8 @@ __all__ = [
     "Evaluation",
     "Evaluator",
     "GoldOntologyAlignment",
+    "LlmMappingError",
+    "LlmQuestionMapper",
     "OntologyVersionEvaluator",
     "ReadOnlyGraphSource",
     "SubjectKind",

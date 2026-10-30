@@ -27,6 +27,7 @@ from stetiq.evaluation import (
     Detail,
     Evaluation,
     GoldOntologyAlignment,
+    LlmQuestionMapper,
     OntologyVersionEvaluator,
 )
 from stetiq.graph_source import GraphSource, GraphSourceScope, InMemoryGraphSource
@@ -74,6 +75,7 @@ __all__ = [
     "MismatchKind",
     "ConstructionRun",
     "GoldOntologyAlignment",
+    "LlmQuestionMapper",
     "GraphSource",
     "GraphSourceNotBoundError",
     "GraphSourceScope",

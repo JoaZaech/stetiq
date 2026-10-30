@@ -53,13 +53,27 @@ def server(
     ] = None,
     host: Annotated[str, typer.Option(help="Interface to bind")] = "127.0.0.1",
     port: Annotated[int, typer.Option(help="Port to listen on")] = 5000,
+    question_mapper: Annotated[
+        str | None,
+        typer.Option(
+            "--question-mapper",
+            envvar="STETIQ_QUESTION_MAPPER",
+            help="Maps Competency Questions without a query onto the Ontology: "
+            "'anthropic' (Claude; needs stetiq[llm]), 'module:attr', or 'none' (default)",
+        ),
+    ] = None,
 ) -> None:
     """Run the self-hosted stetiq server; point clients at it with --tracking-uri http://HOST:PORT."""
     import uvicorn
 
+    from stetiq.evaluation.llm_mapping import question_mapper_from_spec
     from stetiq.server import create_app
 
-    uvicorn.run(create_app(database_url), host=host, port=port)
+    try:
+        mapper = question_mapper_from_spec(question_mapper)
+    except ValueError as e:
+        raise typer.BadParameter(str(e), param_hint="--question-mapper") from None
+    uvicorn.run(create_app(database_url, question_mapper=mapper), host=host, port=port)
 
 
 @kg_app.command("create")
