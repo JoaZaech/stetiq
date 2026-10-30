@@ -13,7 +13,7 @@ import type { DetailProperty, MapDetails } from './ontology-map-focus'
 
 /**
  * The Map's details on demand for the selected class or link: description, superclass,
- * properties and constraints. Properties appear only here, never on the canvas.
+ * attributes and constraints. Attributes appear only here, never on the canvas.
  * `children` are further sections below the details, such as a comparison's change detail.
  */
 export function MapDetailsPanel({
@@ -74,9 +74,21 @@ export function MapDetailsPanel({
 }
 
 function Properties({ properties }: { properties: DetailProperty[] }) {
-  if (properties.length === 0) return <p className="text-xs text-muted-foreground">No properties.</p>
   return (
-    <Table aria-label="Properties">
+    <section className="space-y-1">
+      <h4 className="text-xs font-semibold">Attributes</h4>
+      {properties.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No attributes.</p>
+      ) : (
+        <PropertyTable properties={properties} />
+      )}
+    </section>
+  )
+}
+
+function PropertyTable({ properties }: { properties: DetailProperty[] }) {
+  return (
+    <Table aria-label="Attributes">
       <TableHeader>
         <TableRow>
           <TableHead>Name</TableHead>

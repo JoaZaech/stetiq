@@ -22,7 +22,7 @@ test('the Changes tab opens on the two versions superimposed on a Map', async ({
   await expect.poll(() => change('Queue')).toEqual(['added', 'additive'])
   // Removed: still drawn, as a ghost where it used to be.
   await expect.poll(() => change('Product')).toEqual(['removed', 'breaking'])
-  // A required property added to Ticket is a breaking change to it.
+  // A required attribute added to Ticket is a breaking change to it.
   await expect.poll(() => change('Ticket')).toEqual(['modified', 'breaking'])
   await expect.poll(() => change('Customer')).toEqual(['unchanged', null])
 
@@ -50,10 +50,11 @@ test("selecting a changed class shows the Diff's change detail", async ({ page }
   const changes = details.getByRole('list', { name: 'Changes' })
   await expect(changes).toContainText('breaking')
   await expect(changes).toContainText('required property Ticket.priority added')
-  // The details are the current version's: the new property is listed.
-  await expect(details.getByRole('table', { name: 'Properties' })).toContainText('priority')
+  // The details are the current version's: the new attribute is listed.
+  await expect(details.getByRole('table', { name: 'Attributes' })).toContainText('priority')
 
   await map.getByRole('group', { name: 'Customer', exact: true }).click()
+  await expect(details).toContainText('No attributes.')
   await expect(details).toContainText('No changes.')
 })
 
