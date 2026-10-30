@@ -19,7 +19,7 @@ import {
   type Node,
   type NodeProps,
 } from '@xyflow/react'
-import { CLASSIFICATIONS, type Classification } from '@/api/ontology-diff'
+import { CLASSIFICATIONS } from '@/api/ontology-diff'
 import type { Ontology } from '@/api/ontology-versions'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { ClassificationBadge } from '@/components/OntologyDiff'
@@ -47,6 +47,7 @@ import { LABEL_FONT_SIZE, labelShown, linkShape, READABLE_ZOOM, straightPath, ty
 import { shortestPaths } from './ontology-map-paths'
 import { searchOntology } from './ontology-map-search'
 import { levelOf } from './ontology-map-summary'
+import { SEVERITY, severityStroke } from './severity-style'
 
 /**
  * How an item is drawn against the selection and the search: `selected` is the selection
@@ -87,31 +88,6 @@ const SUBCLASS_ARROWHEAD = 'ontology-map-subclass-arrowhead'
 
 /** Fit-to-view never zooms out so far that link labels can no longer be read. */
 const FIT_VIEW_OPTIONS = { minZoom: READABLE_ZOOM }
-
-/** Severity's channel: the Diff colours, as Tailwind classes for each part of a mark, and as a stroke. */
-const SEVERITY: Record<'border' | 'fill' | 'ring' | 'text', Record<Classification, string>> = {
-  border: {
-    additive: 'border-diff-additive',
-    deprecating: 'border-diff-deprecating',
-    breaking: 'border-diff-breaking',
-  },
-  fill: {
-    additive: 'bg-diff-additive/15',
-    deprecating: 'bg-diff-deprecating/15',
-    breaking: 'bg-diff-breaking/15',
-  },
-  ring: {
-    additive: 'ring-diff-additive',
-    deprecating: 'ring-diff-deprecating',
-    breaking: 'ring-diff-breaking',
-  },
-  text: {
-    additive: 'text-diff-additive',
-    deprecating: 'text-diff-deprecating',
-    breaking: 'text-diff-breaking',
-  },
-}
-const severityStroke = (severity: Classification | null) => severity && `var(--diff-${severity})`
 
 /** The dash of a removed link: a ghost of where it used to be. */
 const REMOVED_DASH = '6 4'

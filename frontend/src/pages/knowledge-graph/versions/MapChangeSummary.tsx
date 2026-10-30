@@ -14,17 +14,13 @@ import {
   type ChangeStatement,
   type ConceptChanges,
 } from './ontology-map-summary'
+import { SEVERITY } from './severity-style'
 
 /**
  * Each level's count in the headline, in its own colour: the Diff colours for severity,
  * and none for documentation-only, which the Diff colours are not for.
  */
-const LEVEL_TEXT: Record<ChangeLevel, string> = {
-  'documentation-only': 'text-muted-foreground',
-  additive: 'text-diff-additive',
-  deprecating: 'text-diff-deprecating',
-  breaking: 'text-diff-breaking',
-}
+const LEVEL_TEXT: Record<ChangeLevel, string> = { 'documentation-only': 'text-muted-foreground', ...SEVERITY.text }
 
 /** A change's level as a badge: a severity's in its Diff colour, documentation-only's neutral. */
 export function ChangeLevelBadge({ level }: { level: ChangeLevel }) {
