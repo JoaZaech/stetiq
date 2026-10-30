@@ -1,4 +1,5 @@
 import { Link } from 'react-router'
+import { kgListUrl } from '@/app/knowledge-graph-sections'
 import { PageHeader } from '@/components/PageHeader'
 
 interface NotFoundPageProps {
@@ -16,7 +17,7 @@ export function NotFoundPage({
       <PageHeader title={title} />
       <p className="text-sm">
         {message}{' '}
-        <Link to="/kg" className="text-primary underline-offset-4 hover:underline">
+        <Link to={kgListUrl} className="text-primary underline-offset-4 hover:underline">
           Back to Knowledge Graphs
         </Link>
       </p>

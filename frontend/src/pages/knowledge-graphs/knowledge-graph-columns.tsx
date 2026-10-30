@@ -1,5 +1,6 @@
 import { Link } from 'react-router'
 import type { KnowledgeGraphSummary } from '@/api/knowledge-graphs'
+import { kgUrl } from '@/app/knowledge-graph-sections'
 import { RunStatusLabel } from '@/components/RunStatusLabel'
 import { createDataTableColumnHelper } from '@/lib/data-table'
 import { formatDateTime } from '@/lib/format'
@@ -13,10 +14,7 @@ export const knowledgeGraphColumns = column.columns([
     header: 'Name',
     filterFn: 'includesString',
     cell: ({ getValue }) => (
-      <Link
-        to={`/kg/${encodeURIComponent(getValue())}`}
-        className="font-medium text-primary hover:underline"
-      >
+      <Link to={kgUrl(getValue())} className="font-medium text-primary hover:underline">
         {getValue()}
       </Link>
     ),

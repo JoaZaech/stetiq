@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/sidebar'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { readStored, writeStored } from '@/lib/local-storage'
-import { KNOWLEDGE_GRAPH_SECTIONS, kgUrl, type KnowledgeGraphSection } from './knowledge-graph-sections'
+import { KNOWLEDGE_GRAPH_SECTIONS, kgListUrl, kgUrl, type KnowledgeGraphSection } from './knowledge-graph-sections'
 import { KnowledgeGraphSwitcher } from './KnowledgeGraphSwitcher'
 
 /** The Knowledge Graph last opened in this browser: outside one, the sections lead into it. */
@@ -39,8 +39,8 @@ export function AppSidebar() {
   const atHome = useMatch('/') !== null
   const atSettings = useMatch('/settings') !== null
   const atHelp = useMatch('/help/*') !== null
-  const current = useMatch('/kg/:name/*')?.params.name
-  const openSection = useMatch('/kg/:name/:section/*')?.params.section
+  const current = useMatch(`${kgListUrl}/:name/*`)?.params.name
+  const openSection = useMatch(`${kgListUrl}/:name/:section/*`)?.params.section
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const knowledgeGraphs = useQuery({ ...knowledgeGraphsQuery, enabled: !atHelp || switcherOpen })
 

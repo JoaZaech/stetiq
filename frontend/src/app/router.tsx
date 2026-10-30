@@ -9,6 +9,7 @@ import type { RouteHandle } from './breadcrumbs'
 import {
   DEFAULT_SECTION,
   KNOWLEDGE_GRAPH_SECTIONS,
+  kgListUrl,
   type KnowledgeGraphSectionPath,
 } from './knowledge-graph-sections'
 
@@ -167,7 +168,7 @@ export const routes: RouteObject[] = [
           {
             // The list, and every Knowledge Graph below it: "Knowledge Graphs" comes first
             // in their breadcrumbs and links to the list.
-            path: 'kg',
+            path: kgListUrl.slice(1), // relative to the app root
             handle: crumb(() => 'Knowledge Graphs'),
             children: [{ index: true, element: <KnowledgeGraphsPage /> }, knowledgeGraphRoute],
           },

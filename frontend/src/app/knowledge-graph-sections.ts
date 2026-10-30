@@ -23,9 +23,12 @@ export function knowledgeGraphSection(path: KnowledgeGraphSectionPath): Knowledg
 /** The section a Knowledge Graph opens on. */
 export const DEFAULT_SECTION: KnowledgeGraphSectionPath = 'versions'
 
+/** App path (under `/ui`) of the Knowledge Graph list; every Knowledge Graph page sits below it. */
+export const kgListUrl = '/kg'
+
 /** App path (under `/ui`) of a Knowledge Graph page, e.g. `kgUrl('support', 'versions', 3)`. */
 export function kgUrl(name: string, section?: KnowledgeGraphSectionPath, ...rest: (string | number)[]) {
-  return ['/kg', name, ...(section ? [section] : []), ...rest]
+  return [kgListUrl, name, ...(section ? [section] : []), ...rest]
     .map((part, i) => (i === 0 ? part : encodeURIComponent(String(part))))
     .join('/')
 }
@@ -37,9 +40,10 @@ export function kgUrl(name: string, section?: KnowledgeGraphSectionPath, ...rest
  * `target`'s default section when no section is open.
  */
 export function switchKnowledgeGraphUrl(location: string, target: string): string {
-  const [, root, , current] = location.split('?')[0].split('/')
-  const section = KNOWLEDGE_GRAPH_SECTIONS.find((s) => root === 'kg' && s.path === current)
-  return kgUrl(target, section?.path ?? DEFAULT_SECTION)
+  const [, root, , section] = location.split('?')[0].split('/')
+  if (`/${root}` !== kgListUrl) return kgUrl(target, DEFAULT_SECTION)
+  const openSection = KNOWLEDGE_GRAPH_SECTIONS.find((s) => s.path === section)
+  return kgUrl(target, openSection?.path ?? DEFAULT_SECTION)
 }
 
 /** Sections with a compare page at `<section>/compare`. */

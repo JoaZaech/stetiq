@@ -1,5 +1,6 @@
 import { useId, useMemo } from 'react'
 import { Link } from 'react-router'
+import { kgListUrl } from '@/app/knowledge-graph-sections'
 import { type KnowledgeGraphSummary, useKnowledgeGraphs } from '@/api/knowledge-graphs'
 import { DataTable } from '@/components/DataTable'
 import { ErrorAlert } from '@/components/ErrorAlert'
@@ -27,7 +28,7 @@ export function RecentKnowledgeGraphs() {
         <h2 id={headingId} className="text-base font-semibold">
           Recent Knowledge Graphs
         </h2>
-        <Link to="/kg" className="text-sm text-primary underline-offset-4 hover:underline">
+        <Link to={kgListUrl} className="text-sm text-primary underline-offset-4 hover:underline">
           View all
         </Link>
       </div>

@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar'
-import { switchKnowledgeGraphUrl } from './knowledge-graph-sections'
+import { kgListUrl, switchKnowledgeGraphUrl } from './knowledge-graph-sections'
 
 const NONE_SELECTED = 'Select a Knowledge Graph'
 const ALL_KNOWLEDGE_GRAPHS = 'All Knowledge Graphs'
@@ -81,7 +81,7 @@ export function KnowledgeGraphSwitcher({ current, knowledgeGraphs, open, onOpenC
               )}
               <CommandSeparator alwaysRender />
               <CommandGroup forceMount>
-                <CommandItem value={ALL_KNOWLEDGE_GRAPHS} forceMount onSelect={() => go('/kg')}>
+                <CommandItem value={ALL_KNOWLEDGE_GRAPHS} forceMount onSelect={() => go(kgListUrl)}>
                   <List />
                   {ALL_KNOWLEDGE_GRAPHS}
                 </CommandItem>
