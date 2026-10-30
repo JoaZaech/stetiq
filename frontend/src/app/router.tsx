@@ -10,6 +10,8 @@ import { OverviewTab } from '@/pages/knowledge-graph/versions/OverviewTab'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { SettingsPage } from '@/pages/settings/SettingsPage'
 import { SignInPage } from '@/pages/sign-in/SignInPage'
+import { UseCaseComparePage } from '@/pages/knowledge-graph/use-case/UseCaseComparePage'
+import { UseCasePage } from '@/pages/knowledge-graph/use-case/UseCasePage'
 import { AppLayout } from './AppLayout'
 import type { RouteHandle } from './breadcrumbs'
 import {
@@ -47,7 +49,10 @@ const knowledgeGraphSectionRoutes: Record<
     ],
   },
   runs: {},
-  'use-case': {},
+  'use-case': {
+    page: <UseCasePage />,
+    children: [{ path: 'compare', element: <UseCaseComparePage />, handle: crumb(() => 'Compare') }],
+  },
   observations: {},
   promotions: {},
 }
