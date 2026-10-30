@@ -25,9 +25,10 @@ const elk = new ELK()
  * Each pair stays far enough apart for the widest label between them to sit clear of
  * both classes, even side by side.
  *
- * Classes are laid out as uniform nodes, then spread apart by one factor until no node
- * of its size (`sizes`, by class label, else `NODE_SIZE`) overlaps another. Sizes only
- * spread the Map, so every class keeps its place relative to the others.
+ * Classes are laid out as uniform nodes, turned to lie wide (a stress layout has no
+ * orientation of its own, and the Map is wider than tall), then spread apart by one factor until no
+ * node of its size (`sizes`, by class label, else `NODE_SIZE`) overlaps another. Sizes
+ * only spread the Map, so every class keeps its place relative to the others.
  */
 export async function layoutOntologyMap(
   map: OntologyMap,
@@ -65,11 +66,14 @@ export async function layoutOntologyMap(
       }
     }),
   })
-  const nodes = (graph.children ?? []).map((n) => ({
+  const laidOut = (graph.children ?? []).map((n) => ({
     label: n.id,
     centre: { x: (n.x ?? 0) + NODE_SIZE.width / 2, y: (n.y ?? 0) + NODE_SIZE.height / 2 },
-    size: sizes[n.id] ?? NODE_SIZE,
   }))
+  const looped = new Set(map.links.filter((l) => l.source === l.target).map((l) => l.source))
+  const linked = [...pairs.keys()].map((key) => JSON.parse(key) as [string, string])
+  const turned = landscape(laidOut, looped, linked)
+  const nodes = turned.map(({ label, centre }) => ({ label, centre, size: sizes[label] ?? NODE_SIZE }))
   const spread = spreadApart(nodes)
   return Object.fromEntries(
     nodes.map(({ label, centre, size }) => [
@@ -77,6 +81,46 @@ export async function layoutOntologyMap(
       { x: centre.x * spread - size.width / 2, y: centre.y * spread - size.height / 2 },
     ]),
   )
+}
+
+/** The four quarter turns about the origin: none, a quarter, a half and three quarters. */
+const QUARTER_TURNS: ((p: Point) => Point)[] = [
+  (p) => p,
+  ({ x, y }) => ({ x: -y, y: x }),
+  ({ x, y }) => ({ x: -x, y: -y }),
+  ({ x, y }) => ({ x: y, y: -x }),
+]
+
+/**
+ * `nodes` given the quarter turn that leaves the fewest links out of a `looped` class's
+ * right end, where its self-loops are drawn, and of those, one that lays them out wide,
+ * as the Map is. A stress layout has no orientation of its own; only quarter turns,
+ * so classes the layout lines up across or down stay lined up.
+ */
+function landscape<T extends { label: string; centre: Point }>(
+  nodes: T[],
+  looped: ReadonlySet<string>,
+  linked: [string, string][],
+): T[] {
+  const extent = (turned: T[], axis: 'x' | 'y') =>
+    Math.max(...turned.map((n) => n.centre[axis])) - Math.min(...turned.map((n) => n.centre[axis]))
+  const inLoopsWay = (turned: T[]) => {
+    const at = new Map(turned.map((n) => [n.label, n.centre]))
+    const rightOf = (a: string, b: string) => {
+      const [p, q] = [at.get(a)!, at.get(b)!]
+      // A link to `b` leaves `a` through its right end, where the loops are.
+      return looped.has(a) && (q.x - p.x) * NODE_SIZE.height > Math.abs(q.y - p.y) * NODE_SIZE.width
+    }
+    return linked.filter(([a, b]) => rightOf(a, b) || rightOf(b, a)).length
+  }
+  const scored = QUARTER_TURNS.map((turn) => {
+    const turned = nodes.map((n) => ({ ...n, centre: turn(n.centre) }))
+    return { turned, inLoopsWay: inLoopsWay(turned), tall: extent(turned, 'y') > extent(turned, 'x') }
+  })
+  // The first of the best, so the same layout always turns the same way.
+  const better = (a: (typeof scored)[number], b: (typeof scored)[number]) =>
+    a.inLoopsWay !== b.inLoopsWay ? a.inLoopsWay < b.inLoopsWay : !a.tall && b.tall
+  return scored.reduce((best, s) => (better(s, best) ? s : best)).turned
 }
 
 /**

@@ -93,6 +93,36 @@ describe('layoutOntologyMap', () => {
     expect(order(larger, 'y')).toEqual(order(plain, 'y'))
   })
 
+  it.each([
+    ['a chain of classes', CHAIN],
+    ['a class hierarchy', HIERARCHY],
+  ])('lays out %s wider than tall, as the Map is', async (_, ontology) => {
+    const positions = Object.values(await layoutOntologyMap(ontologyMap(ontology)))
+    const extent = (axis: 'x' | 'y') =>
+      Math.max(...positions.map((p) => p[axis])) - Math.min(...positions.map((p) => p[axis]))
+
+    expect(extent('x')).toBeGreaterThan(extent('y'))
+  })
+
+  it.each([
+    ['ONTOLOGY', ONTOLOGY, 'Ticket'],
+    ['LONG_LABELS', LONG_LABELS, 'Ticket'],
+  ])('keeps links off the right end of a class with a self-loop, where the loop goes, in %s', async (_, ontology, looped) => {
+    const map = ontologyMap(ontology)
+    const positions = await layoutOntologyMap(map)
+    const linked = new Set(
+      map.links.flatMap((l) => (l.source === looped ? [l.target] : l.target === looped ? [l.source] : [])),
+    )
+    linked.delete(looped)
+    const right = [...linked].filter((label) => {
+      // The link to it leaves through the right end of the looped class's node.
+      const [dx, dy] = [positions[label].x - positions[looped].x, positions[label].y - positions[looped].y]
+      return dx * NODE_SIZE.height > Math.abs(dy) * NODE_SIZE.width
+    })
+
+    expect(right).toEqual([])
+  })
+
   it('lays out an Ontology of 100 classes in under 0.4 s', async () => {
     const map = ontologyMap(generatedOntology(100))
     // The fastest of three, so a moment of load on a shared machine does not count.
@@ -106,6 +136,24 @@ describe('layoutOntologyMap', () => {
     expect(Math.min(...times)).toBeLessThan(400)
   })
 })
+
+/** Classes in a line: Agent and Customer under Party, Customer to Ticket, Ticket to Product. */
+const CHAIN: Ontology = {
+  node_types: [
+    { label: 'Agent', parent: 'Party' },
+    { label: 'Customer', parent: 'Party' },
+    { label: 'LegacyTicket', parent: 'Ticket' },
+    { label: 'Party' },
+    { label: 'Product' },
+    { label: 'Ticket' },
+  ],
+  relationship_types: [{ label: 'ABOUT' }, { label: 'FILED' }, { label: 'OPENED' }],
+  patterns: [
+    ['Customer', 'FILED', 'LegacyTicket'],
+    ['Customer', 'OPENED', 'Ticket'],
+    ['Ticket', 'ABOUT', 'Product'],
+  ],
+}
 
 /** Long relation names, parallel links and a self-loop, around Ticket. */
 const LONG_LABELS: Ontology = {
