@@ -5,8 +5,13 @@
 import { CLASSIFICATIONS, type Classification, type OntologyChange, type OwnerKind } from '@/api/ontology-diff'
 import { codePointOrder } from '@/lib/compare'
 import { attributeReference, CONCEPT_NOUN } from './concepts'
-import { changesOfConcept, isDocumentationOnly, type OntologyComparison } from './ontology-map-comparison'
-import type { MapSelection } from './ontology-map-focus'
+import {
+  changesOfConcept,
+  isDocumentationOnly,
+  linkChanged,
+  type OntologyComparison,
+} from './ontology-map-comparison'
+import { type MapSelection, relationSelection } from './ontology-map-focus'
 
 /**
  * How much a change weighs in a comparison: documentation-only when only a description
@@ -53,7 +58,7 @@ export interface ConceptChanges {
   statements: ChangeStatement[]
   /**
    * Where it is on the Map: a class itself, and a relation as its first changed Pattern
-   * link (relations are not nodes). Null for a relation without Patterns.
+   * link (`relationSelection`: relations are not nodes). Null for a relation without Patterns.
    */
   selection: MapSelection | null
 }
@@ -125,13 +130,11 @@ export function summarizeChanges(comparison: OntologyComparison): ChangeSummary 
   }
 }
 
-/** Where the class or relation `label` is on the comparison's Map. */
-function selectionOf(comparison: OntologyComparison, kind: OwnerKind, label: string): MapSelection | null {
-  if (kind === 'node_type') return { kind: 'class', label }
-  const links = comparison.map.links.filter((l) => l.relation === label)
-  const link = links.find((l) => comparison.changes.links[l.id]?.kind !== 'unchanged') ?? links[0]
-  return link ? { kind: 'link', id: link.id } : null
-}
+/** Where the class or relation `label` is on the comparison's Map: a relation at its first changed link. */
+const selectionOf = (comparison: OntologyComparison, kind: OwnerKind, label: string): MapSelection | null =>
+  kind === 'node_type'
+    ? { kind: 'class', label }
+    : relationSelection(comparison.map.links, label, (l) => linkChanged(comparison, l))
 
 /**
  * The summary's entry for what is selected on the Map: a class's own, or a link's

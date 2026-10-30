@@ -4,7 +4,7 @@
  */
 import type { Ontology, OntologyProperty } from '@/api/ontology-versions'
 import { type ClassOrRelation, constraintsOf, superclassChain } from './concepts'
-import { ontologyMap, type OntologyMap } from './ontology-map'
+import { ontologyMap, type OntologyMap, type PatternLink } from './ontology-map'
 import { shortestPaths } from './ontology-map-paths'
 import { searchOntology } from './ontology-map-search'
 
@@ -32,6 +32,21 @@ export type MapSelection =
   | { kind: 'class'; label: string }
   | { kind: 'link'; id: string }
   | { kind: 'path'; from: string; to: string }
+
+/**
+ * Where relation `label` is on the Map, which draws a relation as its Pattern links: the
+ * first of its `links` that `prefer` picks, else its first. Null when `links` has none of
+ * its links.
+ */
+export function relationSelection(
+  links: readonly PatternLink[],
+  label: string,
+  prefer: (link: PatternLink) => boolean,
+): MapSelection | null {
+  const own = links.filter((l) => l.relation === label)
+  const link = own.find(prefer) ?? own[0]
+  return link ? { kind: 'link', id: link.id } : null
+}
 
 /** The classes and links a selection keeps in focus; the rest of the Map fades. */
 export interface MapFocus {

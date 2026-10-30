@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { Ontology } from '@/api/ontology-versions'
 import { ontologyMap } from './ontology-map'
-import { detailsOf, focusOf, neighboursOf, searchMap } from './ontology-map-focus'
-import { ONTOLOGY, PARTIES } from './ontology-map.fixtures'
+import { detailsOf, focusOf, neighboursOf, relationSelection, searchMap } from './ontology-map-focus'
+import { HIERARCHY, ONTOLOGY, PARTIES } from './ontology-map.fixtures'
 
 describe('neighboursOf', () => {
   it('finds the classes a class links to and the classes that link to it', () => {
@@ -150,5 +150,31 @@ describe('searchMap', () => {
 
   it('matches nothing in particular for an empty search', () => {
     expect(searchMap(PARTIES, '  ')).toBeNull()
+  })
+})
+
+describe('relationSelection', () => {
+  // REPORTED has two links: to Incident, then to LegacyTicket.
+  const { links } = ontologyMap(HIERARCHY)
+
+  it('stands a relation for its first link the preference picks', () => {
+    const toLegacy = (l: { target: string }) => l.target === 'LegacyTicket'
+
+    expect(relationSelection(links, 'REPORTED', toLegacy)).toEqual({
+      kind: 'link',
+      id: '(Customer)-[REPORTED]->(LegacyTicket)',
+    })
+  })
+
+  it('falls back to its first link when the preference picks none', () => {
+    expect(relationSelection(links, 'REPORTED', () => false)).toEqual({
+      kind: 'link',
+      id: '(Customer)-[REPORTED]->(Incident)',
+    })
+  })
+
+  it('stands for nothing when none of the links is the relation’s', () => {
+    expect(relationSelection(links, 'UNKNOWN', () => true)).toBeNull()
+    expect(relationSelection([], 'REPORTED', () => true)).toBeNull()
   })
 })

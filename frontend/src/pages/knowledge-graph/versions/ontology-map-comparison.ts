@@ -328,6 +328,10 @@ export function changesOf(comparison: OntologyComparison, selection: MapSelectio
   return []
 }
 
+/** Whether a comparison's link changed in any way, documentation-only included. */
+export const linkChanged = (comparison: OntologyComparison, link: PatternLink) =>
+  comparison.changes.links[link.id]?.kind !== 'unchanged'
+
 /** The items of `items` that `besides` has none of, by `key`. */
 function onlyIn<T>(items: T[], besides: T[], key: (item: T) => string): T[] {
   const keys = new Set(besides.map(key))

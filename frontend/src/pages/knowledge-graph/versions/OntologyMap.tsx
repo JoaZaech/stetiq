@@ -36,13 +36,14 @@ import { MapSearchResults } from './MapSearchResults'
 import { filterOntologyMap, ontologyMap, type LinkRoute, type MapFilters } from './ontology-map'
 import {
   changesOf,
+  linkChanged,
   type AttributeChange,
   type MapChange,
   type MapChangeKind,
   type OntologyComparison,
 } from './ontology-map-comparison'
 import { centreOf, locatedSelection } from './ontology-map-centre'
-import { detailsOf, focusOf, searchMap, type MapSelection } from './ontology-map-focus'
+import { detailsOf, focusOf, relationSelection, searchMap, type MapSelection } from './ontology-map-focus'
 import { layoutOntologyMap, type Point } from './ontology-map-layout'
 import { labelShown, linkShape, READABLE_ZOOM, straightPath, type Box } from './ontology-map-links'
 import {
@@ -220,14 +221,17 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
     () => (filters.hideSubclassLinks ? filterOntologyMap(map, { ...filters, hideSubclassLinks: false }) : shown),
     [map, filters, shown],
   )
-  /** What selecting `concept` selects on the Map: a class, or a relation's first Pattern link; null when none is shown. */
+  /**
+   * What selecting `concept` selects on the Map: a class, or a relation as one of its
+   * shown links, in a comparison its first changed one as the change summary has it;
+   * null when none is shown.
+   */
   const selectionFor = useCallback(
-    (concept: ConceptSelection | null): MapSelection | null => {
-      if (concept?.kind !== 'relation') return concept
-      const link = shown.links.find((l) => l.relation === concept.label)
-      return link ? { kind: 'link', id: link.id } : null
-    },
-    [shown],
+    (concept: ConceptSelection | null): MapSelection | null =>
+      concept?.kind === 'relation'
+        ? relationSelection(shown.links, concept.label, (l) => comparison !== undefined && linkChanged(comparison, l))
+        : concept,
+    [shown, comparison],
   )
   const selection = useMemo(() => selectionFor(selected), [selectionFor, selected])
   const selectedFocus = useMemo(() => focusOf(reachable, selection), [reachable, selection])
