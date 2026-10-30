@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { ClassificationBadge } from '@/components/OntologyDiff'
 import { Badge } from '@/components/ui/badge'
+import { formatCount } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { OntologyComparison } from './ontology-map-comparison'
 import type { MapSelection } from './ontology-map-focus'
@@ -130,7 +131,7 @@ function DocumentationOnly({
         className="flex w-full items-center gap-1 rounded-md p-2 text-left text-muted-foreground hover:bg-muted"
       >
         <Chevron aria-hidden className="size-4 shrink-0" />
-        {count} documentation-only {count === 1 ? 'change' : 'changes'}
+        {formatCount(count, 'documentation-only change')}
       </button>
       <ul id={id} hidden={!open} aria-label="Documentation-only changes" className="space-y-1">
         {concepts.map((c) => (

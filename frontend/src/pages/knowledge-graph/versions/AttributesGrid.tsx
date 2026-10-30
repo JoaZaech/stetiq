@@ -10,6 +10,7 @@ import {
   useDataTable,
 } from '@/lib/data-table'
 import { type DataTableParamsOptions, useDataTableParams } from '@/lib/data-table-params'
+import { formatCount } from '@/lib/format'
 import type { AttributeGridRow } from './attribute-rows'
 import { attributeGroupId } from './table-links'
 import { ConceptLink, ShowOnMap } from './TableLinks'
@@ -115,8 +116,6 @@ const GROUP_BY = [
   { value: 'none', label: 'None' },
 ] as const
 
-const count = (n: number) => `${n} ${n === 1 ? 'attribute' : 'attributes'}`
-
 /**
  * A group's header: the owner (a link) with its kind and superclass (a link), or the type,
  * and how many attributes it holds.
@@ -135,7 +134,7 @@ function groupHeader(row: Row<DataTableFeatures, AttributeGridRow>) {
               subclass of <ConceptLink concept={{ kind: 'class', label: first.ownerParent }} />
             </>,
           ]),
-      count(leaves.length),
+      formatCount(leaves.length, 'attribute'),
     ]
     return parts.map((part, i) => (
       <Fragment key={i}>
@@ -144,7 +143,7 @@ function groupHeader(row: Row<DataTableFeatures, AttributeGridRow>) {
       </Fragment>
     ))
   }
-  return `${String(row.groupingValue)} · ${count(leaves.length)}`
+  return `${String(row.groupingValue)} · ${formatCount(leaves.length, 'attribute')}`
 }
 
 /** A request to scroll to `owner`'s group; `seq` tells a repeated request from the last. */

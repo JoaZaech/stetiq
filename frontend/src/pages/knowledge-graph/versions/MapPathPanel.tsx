@@ -1,3 +1,4 @@
+import { formatCount } from '@/lib/format'
 import { MapSidePanel } from './MapSidePanel'
 import type { MapPath } from './ontology-map-paths'
 
@@ -29,7 +30,7 @@ export function MapPathPanel({
       ) : (
         <>
           <p className="text-muted-foreground">
-            {paths.length === 1 ? '1 path' : `${paths.length} paths`} of {steps === 1 ? '1 step' : `${steps} steps`},
+            {formatCount(paths.length, 'path')} of {formatCount(steps, 'step')},
             relations taken either way round.
           </p>
           <ol className="space-y-3">

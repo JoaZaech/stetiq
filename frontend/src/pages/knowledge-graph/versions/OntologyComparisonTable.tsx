@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { createDataTableColumnHelper, filterColumn, useDataTable } from '@/lib/data-table'
 import { type DataTableParamsOptions, useDataTableParams } from '@/lib/data-table-params'
+import { formatCount } from '@/lib/format'
 import { type ComparisonRow, comparisonRows } from './comparison-rows'
 import { useConceptSelection, useShowOnMap } from './concept-selection'
 import { ChangeLevelBadge } from './MapChangeSummary'
@@ -53,8 +54,6 @@ const CHANGES_GRID: DataTableParamsOptions = {
   key: 'changes',
   filters: { concept: 'text', conceptKind: 'values', change: 'values', level: 'values', detail: 'text' },
 }
-
-const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`
 
 /**
  * Loads and shows the comparison from version `base` to `target` as a grid of its
@@ -153,7 +152,7 @@ function ComparisonGrid({ comparison, base, target }: { comparison: OntologyComp
             <div className="flex items-center gap-3">
               {documentationOnly > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  {!showDocumentation && `${plural(documentationOnly, 'documentation-only change')} hidden`}
+                  {!showDocumentation && `${formatCount(documentationOnly, 'documentation-only change')} hidden`}
                   <Button
                     variant="link"
                     size="sm"

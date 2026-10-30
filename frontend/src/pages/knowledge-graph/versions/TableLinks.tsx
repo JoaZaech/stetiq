@@ -2,6 +2,7 @@ import type { MouseEvent, ReactNode } from 'react'
 import { LocateFixed } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { Button } from '@/components/ui/button'
+import { formatCount } from '@/lib/format'
 import { formatSelection, SELECT_PARAM } from './concept-selection'
 import { attributeGroupId, type TableConcept, useTableLinks } from './table-links'
 
@@ -49,7 +50,7 @@ export function AttributeCountLink({
   return (
     <a
       href={`#${attributeGroupId(owner)}`}
-      aria-label={`${count} ${count === 1 ? 'attribute' : 'attributes'}`}
+      aria-label={formatCount(count, 'attribute')}
       className={LINK}
       onClick={(e) => {
         if (!plainClick(e)) return
