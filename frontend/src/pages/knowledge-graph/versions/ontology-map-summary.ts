@@ -3,6 +3,7 @@
  * and each changed Concept's changes in words.
  */
 import { CLASSIFICATIONS, type Classification, type OntologyChange, type OwnerKind } from '@/api/ontology-diff'
+import { codePointOrder } from '@/lib/compare'
 import { attributeReference, CONCEPT_NOUN } from './concepts'
 import { changesOfConcept, isDocumentationOnly, type OntologyComparison } from './ontology-map-comparison'
 import type { MapSelection } from './ontology-map-focus'
@@ -22,8 +23,9 @@ export const CHANGE_LEVELS: readonly ChangeLevel[] = ['documentation-only', ...C
 export const levelOf = (comparison: OntologyComparison, change: OntologyChange): ChangeLevel =>
   isDocumentationOnly(comparison, change) ? 'documentation-only' : change.classification
 
-/** How weighty `level` is: the higher, the weightier. */
-const weight = (level: ChangeLevel) => CHANGE_LEVELS.indexOf(level)
+/** Orders levels from the least to the most weighty: a sort comparator. */
+export const compareLevels = (a: ChangeLevel, b: ChangeLevel): number =>
+  CHANGE_LEVELS.indexOf(a) - CHANGE_LEVELS.indexOf(b)
 
 /** How many of the Diff's changes are at one level. */
 export interface LevelCount {
@@ -92,7 +94,7 @@ function statementOf(kind: OwnerKind, label: string, change: OntologyChange, lev
 }
 
 /** The weightier first. */
-const byWeight = <T extends { level: ChangeLevel }>(a: T, b: T) => weight(b.level) - weight(a.level)
+const byWeight = <T extends { level: ChangeLevel }>(a: T, b: T) => compareLevels(b.level, a.level)
 
 /** The summary of the comparison's Ontology Diff. */
 export function summarizeChanges(comparison: OntologyComparison): ChangeSummary {
@@ -115,7 +117,7 @@ export function summarizeChanges(comparison: OntologyComparison): ChangeSummary 
       .filter((s) => s.length > 0)
       .map((s) => ({ kind, label, level: s[0].level, statements: s, selection }))
   })
-  const byLabel = (a: ConceptChanges, b: ConceptChanges) => compare(a.label, b.label) || compare(a.kind, b.kind)
+  const byLabel = (a: ConceptChanges, b: ConceptChanges) => codePointOrder(a.label, b.label) || codePointOrder(a.kind, b.kind)
   return {
     counts,
     concepts: grouped.filter((c) => c.level !== 'documentation-only').sort((a, b) => byWeight(a, b) || byLabel(a, b)),
@@ -150,5 +152,3 @@ export function summaryConceptOf(
   const of = (c: ConceptChanges) => c.kind === kind && c.label === label
   return summary.concepts.find(of) ?? summary.documentationOnly.find(of) ?? null
 }
-
-const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)

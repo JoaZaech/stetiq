@@ -5,7 +5,7 @@
 import type { OntologyChange } from '@/api/ontology-diff'
 import { attributeReference, type ClassOrRelation, CONCEPT_NOUN, type ConceptNoun } from './concepts'
 import { changesOfConcept, type OntologyComparison } from './ontology-map-comparison'
-import { CHANGE_LEVELS, type ChangeLevel, levelOf } from './ontology-map-summary'
+import { type ChangeLevel, compareLevels, levelOf } from './ontology-map-summary'
 
 /** One Diff change, as a row of the comparison's Table. */
 export interface ComparisonRow {
@@ -46,5 +46,5 @@ export function comparisonRows(comparison: OntologyComparison): ComparisonRow[] 
       owner: ownerOf(comparison, change),
     }),
   )
-  return rows.sort((a, b) => CHANGE_LEVELS.indexOf(b.level) - CHANGE_LEVELS.indexOf(a.level))
+  return rows.sort((a, b) => compareLevels(b.level, a.level))
 }

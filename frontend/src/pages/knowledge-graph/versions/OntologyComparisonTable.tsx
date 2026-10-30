@@ -14,7 +14,7 @@ import { type ComparisonRow, comparisonRows } from './comparison-rows'
 import { useConceptSelection, useShowOnMap } from './concept-selection'
 import { ChangeLevelBadge } from './MapChangeSummary'
 import type { OntologyComparison } from './ontology-map-comparison'
-import { CHANGE_LEVELS, summarizeChanges } from './ontology-map-summary'
+import { compareLevels, summarizeChanges } from './ontology-map-summary'
 import type { TableLinks } from './table-links'
 import { TableLinksContext } from './table-links'
 import { ShowOnMap } from './TableLinks'
@@ -37,7 +37,7 @@ const columns = column.columns([
     header: 'Severity',
     ...filterColumn('values'),
     // The weightiest first when sorted descending, as the rows come.
-    sortFn: (a, b) => CHANGE_LEVELS.indexOf(a.original.level) - CHANGE_LEVELS.indexOf(b.original.level),
+    sortFn: (a, b) => compareLevels(a.original.level, b.original.level),
     sortDescFirst: true,
     cell: ({ getValue }) => <ChangeLevelBadge level={getValue()} />,
   }),
