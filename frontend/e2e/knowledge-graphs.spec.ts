@@ -50,7 +50,8 @@ test.describe('with Knowledge Graphs', () => {
 
     await page.getByRole('table').getByRole('link', { name: 'support' }).click()
 
-    await expect(page).toHaveURL('/ui/kg/support')
+    // A Knowledge Graph opens on its first section.
+    await expect(page).toHaveURL('/ui/kg/support/versions')
   })
 })
 

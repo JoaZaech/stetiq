@@ -3,6 +3,8 @@ import { createBrowserRouter, Navigate, type RouteObject } from 'react-router'
 import { KnowledgeGraphLayout } from '@/pages/knowledge-graph/KnowledgeGraphLayout'
 import { KnowledgeGraphSectionPage } from '@/pages/knowledge-graph/KnowledgeGraphSectionPage'
 import { KnowledgeGraphsPage } from '@/pages/knowledge-graphs/KnowledgeGraphsPage'
+import { ChangesTab } from '@/pages/knowledge-graph/versions/ChangesTab'
+import { OntologyDiffPage } from '@/pages/knowledge-graph/versions/OntologyDiffPage'
 import { ObservationsPage } from '@/pages/knowledge-graph/observations/ObservationsPage'
 import { OntologyTab } from '@/pages/knowledge-graph/versions/OntologyTab'
 import { OntologyVersionPage } from '@/pages/knowledge-graph/versions/OntologyVersionPage'
@@ -37,6 +39,8 @@ const knowledgeGraphSectionRoutes: Record<
   versions: {
     page: <OntologyVersionsPage />,
     children: [
+      // ?base=&target=: two rows selected in the version table.
+      { path: 'compare', element: <OntologyDiffPage />, handle: crumb(() => 'Compare') },
       {
         path: ':number',
         element: <OntologyVersionPage />,
@@ -45,6 +49,7 @@ const knowledgeGraphSectionRoutes: Record<
         children: [
           { index: true, element: <OverviewTab /> },
           { path: 'ontology', element: <OntologyTab /> },
+          { path: 'changes', element: <ChangesTab /> },
         ],
       },
     ],

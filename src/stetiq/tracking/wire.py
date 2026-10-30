@@ -19,6 +19,7 @@ from stetiq.evaluation.framework import Detail, Evaluation
 from stetiq.gates import outcome_from_dict, outcome_to_dict
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import from_dict, to_dict
+from stetiq.ontology.diff import OntologyDiff
 from stetiq.tracking.entities import (
     Alias,
     ConstructionRun,
@@ -96,6 +97,23 @@ def ontology_version_from_json(d: dict[str, Any]) -> OntologyVersion:
         created_at=datetime.fromisoformat(d["created_at"]),
         ontology=from_dict(d["ontology"]),
     )
+
+
+def ontology_diff_to_json(d: OntologyDiff) -> dict[str, Any]:
+    """`classification` is the most severe change's, or None when nothing changed."""
+    return {
+        "classification": d.classification and str(d.classification),
+        "changes": [
+            {
+                "concept": c.concept,
+                "concept_kind": c.concept_kind,
+                "kind": str(c.kind),
+                "classification": str(c.classification),
+                "detail": c.detail,
+            }
+            for c in d.changes
+        ],
+    }
 
 
 def _detail_to_json(d: Detail) -> dict[str, Any]:
