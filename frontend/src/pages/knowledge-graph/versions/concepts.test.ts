@@ -39,8 +39,8 @@ describe('conceptTables', () => {
     expect(classes.find((c) => c.label === 'Person')?.constraints).toEqual([])
   })
 
-  it('lists relations with their patterns, and attributes with their owner', () => {
-    const { relations, attributes } = conceptTables(ONTOLOGY)
+  it('lists relations with their patterns', () => {
+    const { relations } = conceptTables(ONTOLOGY)
 
     expect(relations).toEqual([
       {
@@ -53,11 +53,6 @@ describe('conceptTables', () => {
         ],
         attributes: 1,
       },
-    ])
-    expect(attributes.map((a) => [a.owner, a.name, a.type, a.required])).toEqual([
-      ['Person', 'name', 'STRING', true],
-      ['Ticket', 'opened_at', 'DATE', false],
-      ['OPENED', 'via', 'STRING', false],
     ])
   })
 

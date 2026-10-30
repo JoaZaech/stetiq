@@ -62,19 +62,10 @@ export interface RelationRow {
   attributes: number
 }
 
-export interface AttributeRow {
-  /** The class or relation that declares it. */
-  owner: string
-  name: string
-  type: string
-  description?: string
-  required: boolean
-}
-
+/** The Table's classes and relations; its attributes are `attributeRows`. */
 export interface ConceptTables {
   classes: ClassRow[]
   relations: RelationRow[]
-  attributes: AttributeRow[]
 }
 
 /** A Pattern: which class (source) may link to which (target) through a relation. */
@@ -113,7 +104,7 @@ export function superclassChain(ontology: Ontology, label: string): OntologyConc
 const byConnection = (a: Connection, b: Connection) =>
   codePointOrder(a.relation, b.relation) || codePointOrder(a.other, b.other)
 
-/** An Ontology's Concepts as three tables: classes in hierarchy order, relations, attributes. */
+/** An Ontology's classes, in hierarchy order, and relations, as the Table lists them. */
 export function conceptTables(ontology: Ontology): ConceptTables {
   const labels = new Set(ontology.node_types.map((n) => n.label))
   const children = new Map<string | undefined, typeof ontology.node_types>()
@@ -168,15 +159,5 @@ export function conceptTables(ontology: Ontology): ConceptTables {
     attributes: (rel.properties ?? []).length,
   }))
 
-  const attributes = [...ontology.node_types, ...ontology.relationship_types].flatMap((owner) =>
-    (owner.properties ?? []).map((p) => ({
-      owner: owner.label,
-      name: p.name,
-      type: p.type,
-      description: p.description,
-      required: p.required ?? false,
-    })),
-  )
-
-  return { classes, relations, attributes }
+  return { classes, relations }
 }
