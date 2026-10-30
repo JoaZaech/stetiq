@@ -231,6 +231,34 @@ def test_runs_can_be_compared_side_by_side(client, support_kg):
     assert comparison.metrics == {"chunks": (100.0, 90.0), "cost_usd": (None, 1.5)}
 
 
+def test_run_comparison_includes_conformance_and_evaluator_results(client, support_kg):
+    class Triples(stetiq.ConstructionRunEvaluator):
+        name = "triples"
+
+        def evaluate(self, run):
+            return stetiq.Evaluation(metrics={"count": float(run.run.params["chunks"]) * 3})
+
+    client.register_evaluator(Triples())
+    with client.start_run(support_kg, ontology_version=1) as a:
+        a.log_params({"chunks": 10})
+    with client.start_run(support_kg, ontology_version=1) as b:
+        b.log_params({"chunks": 20})
+    c = client.start_run(support_kg, ontology_version=1)
+    c.fail()  # no Observation: no Conformance, no Evaluator results
+
+    comparison = client.compare_runs([a.id, b.id, c.id])
+
+    a_conformance = client.get_run(a.id).conformance
+    assert a_conformance is not None
+    assert comparison.conformance == (a_conformance, client.get_run(b.id).conformance, None)
+    assert comparison.evaluations["triples.count"] == (30.0, 60.0, None)
+    assert comparison.evaluations["conformance.score"] == (
+        a_conformance.score,
+        a_conformance.score,
+        None,
+    )
+
+
 def test_runs_persist_across_clients(client_factory, support_ontology):
     first = client_factory()
     first.create_knowledge_graph("support", ontology=support_ontology)

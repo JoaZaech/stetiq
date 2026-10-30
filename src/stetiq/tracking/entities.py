@@ -83,11 +83,18 @@ class Observation:
 @dataclass(frozen=True)
 class RunComparison:
     """Runs side by side: `params[key][i]` / `metrics[key][i]` belong to `runs[i]`
-    (None where that run did not log the key)."""
+    (None where that run did not log the key).
+
+    `conformance[i]` is `runs[i]`'s Conformance (None without an Observation).
+    `evaluations["<evaluator>.<metric>"][i]` is the metric of `runs[i]`'s latest
+    run-level Evaluator result; an Evaluator run with parameters is keyed
+    `"<evaluator>[k=v,...].<metric>"`."""
 
     runs: tuple[ConstructionRun, ...]
     params: dict[str, tuple[str | None, ...]]
     metrics: dict[str, tuple[float | None, ...]]
+    conformance: tuple[Conformance | None, ...] = ()
+    evaluations: dict[str, tuple[float | None, ...]] = field(default_factory=dict)
 
     @property
     def ontology_versions(self) -> tuple[int, ...]:

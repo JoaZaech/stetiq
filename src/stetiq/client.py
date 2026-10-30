@@ -6,7 +6,7 @@ import getpass
 import os
 import subprocess
 import tempfile
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 from stetiq.entry_point import EntryPoint, EntryPointError, placeholder_values
@@ -112,6 +112,12 @@ def _to_ontology(ontology: OntologyInput) -> Ontology:
     if isinstance(ontology, os.PathLike):
         return parse_yaml(Path(ontology).read_text(encoding="utf-8"))
     return parse_yaml(ontology)
+
+def _evaluation_key(evaluator: str, parameters: Mapping[str, object]) -> str:
+    if not parameters:
+        return evaluator
+    return evaluator + "[" + ",".join(f"{k}={parameters[k]}" for k in sorted(parameters)) + "]"
+
 
 # A Use Case given to the SDK: Use Case YAML text, a path to a YAML file, a `UseCase`,
 # or just its Competency Questions.
@@ -617,14 +623,26 @@ class Client:
             )
 
     def compare_runs(self, run_ids: list[str]) -> RunComparison:
-        """Runs side by side: their params, metrics and consumed Ontology Versions."""
+        """Runs side by side: their params, metrics, consumed Ontology Versions,
+        Conformance and run-level Evaluator results."""
         runs = tuple(self.get_run(i) for i in run_ids)
         param_keys = sorted({k for r in runs for k in r.params})
         metric_keys = sorted({k for r in runs for k in r.metrics})
+        evaluated = [
+            {
+                f"{_evaluation_key(e.evaluator, e.parameters)}.{metric}": value
+                for e in self.get_run_evaluation_results(r.id)
+                for metric, value in e.metrics.items()
+            }
+            for r in runs
+        ]
+        evaluation_keys = sorted({k for values in evaluated for k in values})
         return RunComparison(
             runs=runs,
             params={k: tuple(r.params.get(k) for r in runs) for k in param_keys},
             metrics={k: tuple(r.metrics.get(k) for r in runs) for k in metric_keys},
+            conformance=tuple(r.conformance for r in runs),
+            evaluations={k: tuple(v.get(k) for v in evaluated) for k in evaluation_keys},
         )
 
     # --- Observations ---------------------------------------------------------------
