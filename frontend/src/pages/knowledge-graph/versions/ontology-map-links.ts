@@ -62,7 +62,11 @@ export function linkShape(link: Pick<PatternLink, 'relation' | 'route'>, from: P
     : lineShape(center(from), center(to), link.route.bend, size)
 }
 
-export const center = (topLeft: Point): Point => ({
+/** A straight line between two nodes, from boundary to boundary, given each node's top-left corner. */
+export const straightPath = (from: Point, to: Point): string =>
+  lineShape(center(from), center(to), 0, { width: 0, height: 0 }).path
+
+const center = (topLeft: Point): Point => ({
   x: topLeft.x + NODE_SIZE.width / 2,
   y: topLeft.y + NODE_SIZE.height / 2,
 })

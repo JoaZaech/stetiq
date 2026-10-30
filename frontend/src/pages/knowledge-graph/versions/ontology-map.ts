@@ -6,7 +6,8 @@
  *
  * Its siblings build on it: `ontology-map-comparison` (two versions superimposed),
  * `ontology-map-focus` (selection, details and search), `ontology-map-paths` (shortest
- * paths) and `ontology-map-layout` (where each class goes).
+ * paths), `ontology-map-layout` (where each class goes) and `ontology-map-links` (how a
+ * link and its label are drawn, and when the label shows).
  */
 import type { Ontology } from '@/api/ontology-versions'
 import { patternId } from './concepts'

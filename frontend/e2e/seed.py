@@ -480,6 +480,20 @@ def ontology_map_path(client: stetiq.Client) -> dict[str, Any]:
     return {}
 
 
+def ontology_map_large(client: stetiq.Client) -> dict[str, Any]:
+    """Knowledge Graph `support` with v1 = 60 classes in a ring, each related to the next:
+    an Ontology too big for the Map's viewport at a readable zoom."""
+    labels = [f"Class{i:02}" for i in range(60)]
+    ontology = {
+        "node_types": labels,
+        "relationship_types": ["NEXT"],
+        "patterns": [[a, "NEXT", b] for a, b in zip(labels, labels[1:] + labels[:1], strict=True)],
+    }
+    # JSON is YAML.
+    client.create_knowledge_graph("support", ontology=json.dumps(ontology))
+    return {}
+
+
 SCENARIOS: dict[str, Scenario] = {
     "construction_runs": construction_runs,
     "construction_runs_reader": construction_runs_reader,
@@ -499,6 +513,7 @@ SCENARIOS: dict[str, Scenario] = {
     "ontology_map_details": ontology_map_details,
     "ontology_map_patterns": ontology_map_patterns,
     "ontology_map_path": ontology_map_path,
+    "ontology_map_large": ontology_map_large,
 }
 
 
