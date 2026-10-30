@@ -15,7 +15,10 @@ test.describe('on support v3', () => {
     await page.goto('/ui/kg/support/versions/3/ontology?view=table')
 
     const jumpBar = page.getByRole('navigation', { name: 'Ontology sections' })
-    await expect(jumpBar).toHaveText(/Classes\s*4\s*·\s*Relations\s*1\s*·\s*Attributes\s*3/)
+    // Attributes counts the grid's rows, inherited ones included, and says so as the grid does.
+    await expect(jumpBar).toHaveText(/Classes\s*4\s*·\s*Relations\s*1\s*·\s*Attributes\s*5/)
+    await expect(jumpBar.getByRole('button', { name: /Attributes/ })).toHaveAttribute('title', '5 attributes')
+    await expect(page.getByText('5 attributes', { exact: true })).toBeVisible()
     await expect(page.getByText(/^Classes are the kinds of things the Knowledge Graph stores/)).toBeVisible()
     await expect(page.getByText(/^Relations say how classes connect/)).toBeVisible()
     await expect(page.getByText(/^Attributes are the fields stored on a class or relation/)).toBeVisible()

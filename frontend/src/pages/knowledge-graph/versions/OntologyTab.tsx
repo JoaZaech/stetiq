@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { createDataTableColumnHelper, filterColumn, useDataTable } from '@/lib/data-table'
 import { type DataTableParamsOptions, useDataTableParams } from '@/lib/data-table-params'
+import { formatCount } from '@/lib/format'
 import { useViewParam } from '@/lib/view-param'
 import { attributeRows } from './attribute-rows'
 import { AttributesGrid, type GroupRequest } from './AttributesGrid'
@@ -70,22 +71,28 @@ export function OntologyTab() {
 
 type SectionId = 'classes' | 'relations' | 'attributes'
 
-/** What each section means in the Ontology, in glossary words. */
-const SECTIONS: readonly { id: SectionId; title: string; purpose: string }[] = [
+/**
+ * What each section means in the Ontology, in glossary words, and what one of its rows
+ * is, as its grid counts them.
+ */
+const SECTIONS: readonly { id: SectionId; title: string; row: [string, string]; purpose: string }[] = [
   {
     id: 'classes',
     title: 'Classes',
+    row: ['class', 'classes'],
     purpose:
       'Classes are the kinds of things the Knowledge Graph stores; an indented class is a subclass and inherits its superclass’s attributes and relations.',
   },
   {
     id: 'relations',
     title: 'Relations',
+    row: ['relation', 'relations'],
     purpose: 'Relations say how classes connect; each Pattern says which class may link to which through the relation.',
   },
   {
     id: 'attributes',
     title: 'Attributes',
+    row: ['attribute', 'attributes'],
     purpose: 'Attributes are the fields stored on a class or relation.',
   },
 ]
@@ -153,6 +160,12 @@ function OntologyTables({ ontology }: { ontology: Ontology }) {
     },
     [setSelection, showOnMap],
   )
+  // Each section's rows: the attributes inherited by each subclass included.
+  const rows: Record<SectionId, number> = {
+    classes: all.classes.length,
+    relations: all.relations.length,
+    attributes: attributes.length,
+  }
   const body: Record<SectionId, ReactNode> = {
     classes: <ClassesGrid classes={all.classes} selected={highlighted.classes} />,
     relations: <RelationsGrid relations={all.relations} selected={highlighted.relations} />,
@@ -173,8 +186,14 @@ function OntologyTables({ ontology }: { ontology: Ontology }) {
                   ·
                 </span>
               )}
-              <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => jump(s.id)}>
-                {s.title} <span className="text-muted-foreground tabular-nums">{all[s.id].length}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2"
+                title={formatCount(rows[s.id], ...s.row)}
+                onClick={() => jump(s.id)}
+              >
+                {s.title} <span className="text-muted-foreground tabular-nums">{rows[s.id]}</span>
               </Button>
             </span>
           ))}
