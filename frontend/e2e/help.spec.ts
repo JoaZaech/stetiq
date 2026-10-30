@@ -18,6 +18,17 @@ test('/ui/help opens the first guide page, with breadcrumbs and a table of conte
   await expect(contents.nth(1)).not.toHaveAttribute('aria-current', 'page')
 })
 
+test('the table of contents lists Using the web UI, which opens its page', async ({ page }) => {
+  await page.goto('/ui/help/getting-started')
+  const contents = page.getByRole('navigation', { name: 'Guide' })
+
+  await contents.getByRole('link', { name: 'Using the web UI' }).click()
+
+  await expect(page).toHaveURL('/ui/help/using-the-web-ui')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Using the web UI')
+  await expect(page.getByRole('heading', { name: 'What needs edit access' })).toBeVisible()
+})
+
 test('the sidebar Help entry opens Help and is highlighted there', async ({ page }) => {
   await page.goto('/ui/')
   const help = page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Help' })
