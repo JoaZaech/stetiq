@@ -12,14 +12,9 @@ const shape = (map: Locator, label: string) =>
 const linkPath = (map: Locator, pattern: string) =>
   map.getByRole('group', { name: pattern, exact: true }).locator('path.react-flow__edge-path')
 
-test('the Changes tab shows the two versions superimposed on a Map', async ({ page }) => {
+test('the Changes tab opens on the two versions superimposed on a Map', async ({ page }) => {
   await page.goto('/ui/kg/support/versions/2/changes')
-  await expect(page.getByRole('radio', { name: 'Table' })).toBeChecked()
-  await expect(page.getByRole('region', { name: 'Ontology Diff' })).toBeVisible()
-
-  await page.getByRole('radio', { name: 'Map' }).click()
-
-  await expect(page).toHaveURL('/ui/kg/support/versions/2/changes?view=map')
+  await expect(page.getByRole('radio', { name: 'Map' })).toBeChecked()
   await expect(page.getByText('Changes from v1')).toBeVisible()
   const map = ontologyMap(page)
   const change = (label: string) =>
@@ -36,13 +31,17 @@ test('the Changes tab shows the two versions superimposed on a Map', async ({ pa
   expect(await dashed(linkPath(map, '(Ticket)-[IN_QUEUE]->(Queue)'))).toBe(false)
   expect(await dashed(linkPath(map, '(Customer)-[OPENED]->(Ticket)'))).toBe(false)
 
-  // The URL alone reopens the Map.
+  // The Table is the Diff's own list, at `?view=table`; the URL alone reopens it.
+  await page.getByRole('radio', { name: 'Table' }).click()
+  await expect(page).toHaveURL('/ui/kg/support/versions/2/changes?view=table')
+  await expect(page.getByRole('region', { name: 'Ontology Diff' })).toBeVisible()
   await page.reload()
-  await expect(ontologyMap(page)).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Ontology Diff' })).toBeVisible()
+  await expect(ontologyMap(page)).toHaveCount(0)
 })
 
 test("selecting a changed class shows the Diff's change detail", async ({ page }) => {
-  await page.goto('/ui/kg/support/versions/2/changes?view=map')
+  await page.goto('/ui/kg/support/versions/2/changes')
   const map = ontologyMap(page)
 
   await map.getByRole('group', { name: 'Ticket', exact: true }).click()
@@ -60,7 +59,7 @@ test("selecting a changed class shows the Diff's change detail", async ({ page }
 
 test('severity is drawn in the Diff colours, legible in both themes', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' })
-  await page.goto('/ui/kg/support/versions/2/changes?view=map')
+  await page.goto('/ui/kg/support/versions/2/changes')
   const map = ontologyMap(page)
   const product = shape(map, 'Product')
   await expect(product).toBeVisible()
@@ -93,8 +92,8 @@ test('severity is drawn in the Diff colours, legible in both themes', async ({ p
   await expectLegible()
 })
 
-test('v1 still has nothing to compare, even asked for the Map', async ({ page }) => {
-  await page.goto('/ui/kg/support/versions/1/changes?view=map')
+test('v1 still has nothing to compare, even on the Map', async ({ page }) => {
+  await page.goto('/ui/kg/support/versions/1/changes')
 
   await expect(
     page.getByText('v1 is the first Ontology Version: there is nothing to compare it with.'),

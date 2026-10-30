@@ -2,7 +2,7 @@ import { expect, test } from './fixtures'
 
 test.use({ seed: 'support_breaking_change' })
 
-test('selecting two versions and clicking Compare shows the classified Ontology Diff at a shareable URL', async ({
+test('selecting two versions and clicking Compare shows the classified Ontology Diff, as a Table, at a shareable URL', async ({
   page,
 }) => {
   await page.goto('/ui/kg/support/versions')
@@ -15,6 +15,10 @@ test('selecting two versions and clicking Compare shows the classified Ontology 
   await compare.click()
 
   await expect(page).toHaveURL('/ui/kg/support/versions/compare?id=2&id=4')
+  // The Compare page opens on the Map; the Diff's own list is the Table.
+  await expect(page.getByRole('radio', { name: 'Map' })).toBeChecked()
+  await page.getByRole('radio', { name: 'Table' }).click()
+  await expect(page).toHaveURL('/ui/kg/support/versions/compare?id=2&id=4&view=table')
   const expectDiff = async () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Compare v2 → v4')
     await expect(page.getByRole('navigation', { name: 'breadcrumb' })).toHaveText(
@@ -38,7 +42,7 @@ test('selecting two versions and clicking Compare shows the classified Ontology 
 })
 
 test('comparing a version with itself shows no changes', async ({ page }) => {
-  await page.goto('/ui/kg/support/versions/compare?id=3&id=3')
+  await page.goto('/ui/kg/support/versions/compare?id=3&id=3&view=table')
 
   await expect(page.getByRole('region', { name: 'Ontology Diff' })).toContainText(
     'No changes between v3 and v3.',
@@ -58,6 +62,8 @@ test('the Changes tab shows the Ontology Diff against the previous version', asy
   await expect(page).toHaveURL('/ui/kg/support/versions/4/changes')
   await expect(page.getByRole('link', { name: 'Changes' })).toHaveAttribute('aria-current', 'page')
   await expect(page.getByText('Changes from v3')).toBeVisible()
+  await page.getByRole('radio', { name: 'Table' }).click()
+  await expect(page).toHaveURL('/ui/kg/support/versions/4/changes?view=table')
   const diff = page.getByRole('region', { name: 'Ontology Diff' })
   await expect(diff.getByText('Overall: breaking')).toBeVisible()
   await expect(diff.getByRole('row', { name: /Ticket\.priority/ })).toHaveText(/breaking.*removed/)

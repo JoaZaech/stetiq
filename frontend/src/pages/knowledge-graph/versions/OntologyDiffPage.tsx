@@ -15,8 +15,8 @@ import { OntologyComparisonMap } from './OntologyComparisonMap'
 
 /**
  * `/kg/:name/versions/compare?id=<base>&id=<target>`: the Ontology Diff between two versions,
- * reached by selecting two rows of the version table, as a list or, at `&view=map`, as both
- * versions superimposed on a Map. The URL alone reproduces it.
+ * reached by selecting two rows of the version table, as both versions superimposed on a
+ * Map or, at `&view=table`, as a list. The URL alone reproduces it.
  */
 export function OntologyDiffPage() {
   const name = useKnowledgeGraphName()

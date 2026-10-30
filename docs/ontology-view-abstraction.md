@@ -69,7 +69,7 @@ Core pairings: Ontology Version ↔ Ontology Version, and Candidate ↔ Contract
 
 - **Base idiom**: node-link only. An adjacency matrix is the recorded escape hatch for the scaling weakness, not built now.
 - **Comparison**: superimposed on the union network over one stable layout — unchanged items muted, changed items emphasized, removed items as dashed ghosts in their old position. Not juxtaposed.
-- **Placement**: a Table / Map toggle (the `ViewModeToggle` pattern) in the version page's Ontology tab, Map the default, the same `?q=` search driving both. The Changes tab and the Ontology Diff Compare page get the same toggle. The tables stay as the precise lookup view.
+- **Placement**: a Table / Map toggle (the `ViewModeToggle` pattern) in the version page's Ontology tab, Map the default, the same `?q=` search driving both. The Changes tab and the Ontology Diff Compare page get the same toggle, also Map the default, with the Diff's list at `?view=table`. The tables stay as the precise lookup view.
 - **Name**: "Map" — a UI label, not a domain term; avoids "graph" next to "Knowledge Graph".
 - **Interactions (v1, nothing else)**:
   - Select a node or link → highlight its neighbours, fade the rest, open a details panel (description, properties, constraints, Observed statistics when present). Properties appear only here.

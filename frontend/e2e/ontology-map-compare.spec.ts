@@ -19,12 +19,7 @@ test('the Compare page superimposes two non-adjacent versions on a Map', async (
   await page.getByRole('button', { name: 'Compare' }).click()
 
   await expect(page).toHaveURL('/ui/kg/support/versions/compare?id=1&id=3')
-  await expect(page.getByRole('radio', { name: 'Table' })).toBeChecked()
-  await expect(page.getByRole('region', { name: 'Ontology Diff' })).toBeVisible()
-
-  await page.getByRole('radio', { name: 'Map' }).click()
-
-  await expect(page).toHaveURL('/ui/kg/support/versions/compare?id=1&id=3&view=map')
+  await expect(page.getByRole('radio', { name: 'Map' })).toBeChecked()
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Compare v1 → v3')
   const expectMap = async () => {
     const map = ontologyMap(page)
@@ -41,18 +36,20 @@ test('the Compare page superimposes two non-adjacent versions on a Map', async (
   await page.reload()
   await expectMap()
 
-  // Back to the Table keeps the chosen versions.
+  // The Table keeps the chosen versions, at `?view=table`; back to the Map drops it.
   await page.getByRole('radio', { name: 'Table' }).click()
-  await expect(page).toHaveURL('/ui/kg/support/versions/compare?id=1&id=3')
+  await expect(page).toHaveURL('/ui/kg/support/versions/compare?id=1&id=3&view=table')
   await expect(page.getByRole('region', { name: 'Ontology Diff' })).toBeVisible()
+  await page.getByRole('radio', { name: 'Map' }).click()
+  await expect(page).toHaveURL('/ui/kg/support/versions/compare?id=1&id=3')
 })
 
 test('picking other versions updates the Map', async ({ page }) => {
-  await page.goto('/ui/kg/support/versions/compare?id=1&id=3&view=map')
+  await page.goto('/ui/kg/support/versions/compare?id=1&id=3')
   const map = ontologyMap(page)
   await expect.poll(() => change(map, 'Queue')).toEqual(['added', 'additive'])
 
-  await page.goto('/ui/kg/support/versions/compare?id=2&id=3&view=map')
+  await page.goto('/ui/kg/support/versions/compare?id=2&id=3')
 
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Compare v2 → v3')
   // Against v2, Queue was already there: v3 only deprecates it. Product was gone already.

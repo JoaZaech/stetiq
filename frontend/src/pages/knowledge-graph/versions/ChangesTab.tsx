@@ -5,8 +5,8 @@ import { OntologyComparisonMap } from './OntologyComparisonMap'
 import { useOntologyVersionTab } from './version-context'
 
 /**
- * The version page's Changes tab, against the previous version: the Ontology Diff as a
- * list (`?view=` absent), or both versions superimposed on a Map (`?view=map`).
+ * The version page's Changes tab, against the previous version: both versions superimposed
+ * on a Map (`?view=` absent), or the Ontology Diff as a list (`?view=table`).
  */
 export function ChangesTab() {
   const version = useOntologyVersionTab()
