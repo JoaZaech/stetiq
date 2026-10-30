@@ -97,3 +97,7 @@ _Avoid_: Policy, check, threshold
 **Drift**:
 A divergence, found by an Observation, between a Graph Source's Observed Schema and the Contract Alias's Ontology Version; it raises an alert, never a new Ontology Version.
 _Avoid_: Schema change, deviation
+
+**API Token**:
+A secret that authenticates one user to a stetiq server and grants *read* or *edit* permission per Knowledge Graph; the audit log records its user as the actor. Local mode has none.
+_Avoid_: API key, password, session

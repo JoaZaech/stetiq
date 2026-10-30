@@ -31,16 +31,22 @@ from stetiq.tracking.service import ObservationInput
 class RemoteTrackingService:
     """`base_url` is the server root, e.g. `http://localhost:5000`.
 
+    `token` is the API token, sent as `Authorization: Bearer <token>`; the server requires one.
     `http` lets tests inject a client (e.g. FastAPI's `TestClient`, an `httpx.Client`).
     """
 
-    def __init__(self, base_url: str, *, http: httpx.Client | None = None) -> None:
+    def __init__(
+        self, base_url: str, *, token: str | None = None, http: httpx.Client | None = None
+    ) -> None:
         self._base = base_url.rstrip("/") + wire.API_PREFIX
         self._http = http or httpx.Client(timeout=30.0)
+        self._headers = {"Authorization": f"Bearer {token}"} if token else {}
 
     def _call(self, method: str, path: str, json: Any = None) -> Any:
         try:
-            response = self._http.request(method, self._base + path, json=json)
+            response = self._http.request(
+                method, self._base + path, json=json, headers=self._headers
+            )
         except httpx.HTTPError as e:
             raise StetiqError(f"Cannot reach stetiq server at {self._base}: {e}") from None
         if response.is_success:

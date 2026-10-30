@@ -41,11 +41,12 @@ from stetiq.tracking.entities import EvolutionMode
 TRACKING_URI_ENV = "STETIQ_TRACKING_URI"
 DEFAULT_TRACKING_URI = "sqlite:///.stetiq/stetiq.db"
 ACTOR_ENV = "STETIQ_ACTOR"
+TOKEN_ENV = "STETIQ_TOKEN"
 
 
 def resolve_actor(actor: str | None = None) -> str:
-    """Who the audit log records for Alias moves: `actor`, else $STETIQ_ACTOR, else the OS user.
-    (Until API-token auth exists the server trusts what the SDK sends.)"""
+    """Who the audit log records for Alias moves in local mode: `actor`, else $STETIQ_ACTOR,
+    else the OS user. (In server mode the server records the API token's user instead.)"""
     if actor or os.environ.get(ACTOR_ENV):
         return actor or os.environ[ACTOR_ENV]
     try:
@@ -62,15 +63,21 @@ def resolve_tracking_uri(tracking_uri: str | None = None) -> str:
     return tracking_uri or os.environ.get(TRACKING_URI_ENV) or DEFAULT_TRACKING_URI
 
 
-def service_for_uri(tracking_uri: str) -> TrackingService:
+def resolve_token(token: str | None = None) -> str | None:
+    """The API token for server mode: `token`, else $STETIQ_TOKEN (local mode needs none)."""
+    return token or os.environ.get(TOKEN_ENV) or None
+
+
+def service_for_uri(tracking_uri: str, *, token: str | None = None) -> TrackingService:
     """Pick the mode from the tracking URI.
 
-    - `http://` / `https://`: remote mode, talking to a stetiq server
-    - `sqlite:///<path>`, `postgresql[+psycopg]://...`: local mode, in-process over that database
+    - `http://` / `https://`: remote mode, talking to a stetiq server with API `token`
+    - `sqlite:///<path>`, `postgresql[+psycopg]://...`: local mode, in-process over that
+      database (tokenless: `token` is ignored)
     """
     scheme = tracking_uri.split(":", 1)[0].lower()
     if scheme in ("http", "https"):
-        return RemoteTrackingService(tracking_uri)
+        return RemoteTrackingService(tracking_uri, token=resolve_token(token))
     if scheme == "sqlite" or scheme.startswith("postgresql"):
         return LocalTrackingService(SqlStore(tracking_uri))
     raise ValueError(
@@ -97,14 +104,18 @@ class Client:
         service: TrackingService | None = None,
         graph_source: GraphSource | None = None,
         actor: str | None = None,
+        token: str | None = None,
     ) -> None:
         """`graph_source` is the adapter (e.g. Neo4j, with its credentials) used to observe
         the bound Graph Source scope when a Construction Run ends. It runs in this
         process: the stetiq server never connects to the graph database. Without it, a
         Neo4j adapter is built on first use from `$STETIQ_GRAPH_SOURCE_URI` (plus
-        `$STETIQ_GRAPH_SOURCE_USER` / `$STETIQ_GRAPH_SOURCE_PASSWORD`)."""
+        `$STETIQ_GRAPH_SOURCE_USER` / `$STETIQ_GRAPH_SOURCE_PASSWORD`).
+
+        `token` (else $STETIQ_TOKEN) is the API token server mode requires; local mode
+        ignores it. In server mode the audit log records the token's user, not `actor`."""
         self.tracking_uri = resolve_tracking_uri(tracking_uri)
-        self._service = service or service_for_uri(self.tracking_uri)
+        self._service = service or service_for_uri(self.tracking_uri, token=token)
         self._graph_source = graph_source
         self.actor = resolve_actor(actor)
         # Custom Evaluators run in this process (the user's code), in every mode;
