@@ -16,6 +16,10 @@ export const KNOWLEDGE_GRAPH_SECTIONS = [
 export type KnowledgeGraphSection = (typeof KNOWLEDGE_GRAPH_SECTIONS)[number]
 export type KnowledgeGraphSectionPath = KnowledgeGraphSection['path']
 
+export function knowledgeGraphSection(path: KnowledgeGraphSectionPath): KnowledgeGraphSection {
+  return KNOWLEDGE_GRAPH_SECTIONS.find((s) => s.path === path)!
+}
+
 /** The section a Knowledge Graph opens on. */
 export const DEFAULT_SECTION: KnowledgeGraphSectionPath = 'versions'
 

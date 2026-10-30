@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate, type RouteObject } from 'react-router'
 import { KnowledgeGraphLayout } from '@/pages/knowledge-graph/KnowledgeGraphLayout'
 import { KnowledgeGraphSectionPage } from '@/pages/knowledge-graph/KnowledgeGraphSectionPage'
 import { KnowledgeGraphsPage } from '@/pages/knowledge-graphs/KnowledgeGraphsPage'
+import { OntologyVersionsPage } from '@/pages/knowledge-graph/versions/OntologyVersionsPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { SettingsPage } from '@/pages/settings/SettingsPage'
 import { AppLayout } from './AppLayout'
@@ -26,7 +27,7 @@ const knowledgeGraphSectionRoutes: Record<
   KnowledgeGraphSectionPath,
   { page?: ReactNode; children?: RouteObject[] }
 > = {
-  versions: {},
+  versions: { page: <OntologyVersionsPage /> },
   runs: {},
   'use-case': {},
   observations: {},
