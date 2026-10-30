@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import uuid
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Protocol
 
@@ -100,7 +101,8 @@ class TrackingService(Protocol):
     def get_knowledge_graph(self, name: str) -> KnowledgeGraph: ...
 
     def list_knowledge_graphs(self) -> list[KnowledgeGraph]:
-        """By name. In server mode, only those the API token can read."""
+        """By name, with their summary fields. In server mode, only those the API token
+        can read."""
         ...
 
     def register_ontology(self, knowledge_graph: str, ontology: Ontology) -> OntologyVersion:
@@ -262,7 +264,32 @@ class LocalTrackingService:
         return kg
 
     def list_knowledge_graphs(self) -> list[KnowledgeGraph]:
-        return self._store.list_knowledge_graphs()
+        """All Knowledge Graphs by name, each with its summary fields filled in."""
+        with self._store.transaction():
+            return [self._summarise(kg) for kg in self._store.list_knowledge_graphs()]
+
+    def _summarise(self, kg: KnowledgeGraph) -> KnowledgeGraph:
+        name = kg.name
+        versions = self._store.list_ontology_versions(name)
+        runs = self._store.list_runs(name)
+        contract = self._store.get_alias(
+            name, self._store.get_contract_alias(name) or DEFAULT_CONTRACT_ALIAS
+        )
+        changes = [
+            kg.created_at,
+            *(v.created_at for v in versions),
+            *(t for r in runs for t in (r.started_at, r.ended_at) if t is not None),
+            *(p.promoted_at for p in self._store.list_promotions(name)),
+            *(u.created_at for u in self._store.list_use_case_versions(name)),
+            *(o.observed_at for o in self._store.list_observations(name)),
+        ]
+        return replace(
+            kg,
+            contract_version=None if contract is None else contract.version,
+            latest_version=versions[-1].number if versions else None,
+            last_run_status=runs[-1].status if runs else None,
+            last_modified_at=max(changes),
+        )
 
     def register_ontology(self, knowledge_graph: str, ontology: Ontology) -> OntologyVersion:
         with self._store.transaction():

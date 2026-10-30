@@ -45,12 +45,33 @@ ERROR_STATUS: dict[type[errors.StetiqError], int] = {
 }
 
 
+def _dt(value: str | None) -> datetime | None:
+    return None if value is None else datetime.fromisoformat(value)
+
+
 def knowledge_graph_to_json(kg: KnowledgeGraph) -> dict[str, Any]:
-    return {"name": kg.name, "created_at": kg.created_at.isoformat()}
+    return {
+        "name": kg.name,
+        "created_at": kg.created_at.isoformat(),
+        "contract_version": kg.contract_version,
+        "latest_version": kg.latest_version,
+        "last_run_status": kg.last_run_status,
+        "last_modified_at": (
+            None if kg.last_modified_at is None else kg.last_modified_at.isoformat()
+        ),
+    }
 
 
 def knowledge_graph_from_json(d: dict[str, Any]) -> KnowledgeGraph:
-    return KnowledgeGraph(name=d["name"], created_at=datetime.fromisoformat(d["created_at"]))
+    # The summary fields are optional: older servers do not send them.
+    return KnowledgeGraph(
+        name=d["name"],
+        created_at=datetime.fromisoformat(d["created_at"]),
+        contract_version=d.get("contract_version"),
+        latest_version=d.get("latest_version"),
+        last_run_status=d.get("last_run_status"),
+        last_modified_at=_dt(d.get("last_modified_at")),
+    )
 
 
 def ontology_version_to_json(v: OntologyVersion) -> dict[str, Any]:
@@ -155,10 +176,6 @@ ERROR_STATUS[errors.RunNotActiveError] = 409
 
 
 ERROR_STATUS[errors.InvalidEvolutionModeError] = 422
-
-
-def _dt(value: str | None) -> datetime | None:
-    return None if value is None else datetime.fromisoformat(value)
 
 
 def run_to_json(run: ConstructionRun) -> dict[str, Any]:

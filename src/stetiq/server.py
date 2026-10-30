@@ -11,10 +11,21 @@ from pathlib import Path
 from typing import Any, cast
 
 from fastapi import APIRouter, Body, Depends, FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
-from stetiq.auth import ALL_KNOWLEDGE_GRAPHS, ApiToken, Permission, TokenRegistry, bearer_token
+from stetiq.auth import (
+    ALL_KNOWLEDGE_GRAPHS,
+    CSRF_COOKIE,
+    CSRF_HEADER,
+    TOKEN_COOKIE,
+    ApiToken,
+    Permission,
+    TokenRegistry,
+    bearer_token,
+    check_csrf,
+    new_csrf_token,
+)
 from stetiq.errors import NotFoundError, PermissionDeniedError, StetiqError
 from stetiq.evaluation.answerability import CompetencyQuestionMapper
 from stetiq.evaluation.framework import SubjectKind
@@ -29,6 +40,8 @@ DATABASE_URL_ENV = "STETIQ_DATABASE_URL"
 DEFAULT_DATABASE_URL = "sqlite:///.stetiq/server.db"
 CREATE_KG_PATH = wire.API_PREFIX + "/knowledge-graphs"
 WHOAMI_PATH = wire.API_PREFIX + "/whoami"
+SIGN_IN_PATH = "/auth/sign-in"
+SIGN_OUT_PATH = "/auth/sign-out"
 
 
 class RecordedEvaluation(BaseModel):
@@ -78,7 +91,15 @@ def create_app(
     def authenticate(request: Request) -> ApiToken:
         if registry is None:  # local mode: whoever runs `stetiq ui` owns the database
             return local_token
-        return registry.authenticate(bearer_token(request.headers.get("authorization")))
+        bearer = bearer_token(request.headers.get("authorization"))
+        if bearer is not None:
+            return registry.authenticate(bearer)
+        # The web UI's sign-in cookie. A browser sends it along with requests that other
+        # sites trigger, so a write must also prove it comes from a page of ours.
+        token = registry.authenticate(request.cookies.get(TOKEN_COOKIE))
+        if request.method not in ("GET", "HEAD"):
+            check_csrf(request.cookies.get(CSRF_COOKIE), request.headers.get(CSRF_HEADER))
+        return token
 
     def _target_knowledge_graph(token: ApiToken, path_params: dict[str, str]) -> str | None:
         """Which Knowledge Graph a request acts on, from its path parameters.
@@ -131,13 +152,41 @@ def create_app(
 
     api = APIRouter(prefix=wire.API_PREFIX, dependencies=[Depends(authorize)])
 
+    def describe(token: ApiToken) -> dict[str, Any]:
+        mode = "local" if registry is None else "server"
+        return {"mode": mode, "user": token.user, "grants": dict(token.grants)}
+
     @api.get("/whoami")
     def whoami(request: Request) -> dict[str, Any]:
         """Who the request acts as: the token's user and grants, or the local actor
         with edit on every Knowledge Graph under `stetiq ui`."""
-        token: ApiToken = request.state.token
-        mode = "local" if registry is None else "server"
-        return {"mode": mode, "user": token.user, "grants": dict(token.grants)}
+        return describe(request.state.token)
+
+    # --- Web UI sign-in (ADR 0002: an existing token is pasted, never issued) ----------
+
+    @app.post(SIGN_IN_PATH)
+    def sign_in(
+        request: Request, response: Response, token: str = Body(embed=True)
+    ) -> dict[str, Any]:
+        """Check a pasted API Token and keep it in an HttpOnly cookie for the web UI."""
+        if registry is None:
+            raise StetiqError("stetiq ui runs without tokens: there is nothing to sign in to")
+        signed_in = registry.authenticate(token)
+        secure = request.url.scheme == "https"
+        response.set_cookie(
+            TOKEN_COOKIE, token, httponly=True, samesite="strict", path="/", secure=secure
+        )
+        # Not HttpOnly: the app echoes it in the CSRF header (double-submit).
+        response.set_cookie(
+            CSRF_COOKIE, new_csrf_token(), samesite="strict", path="/", secure=secure
+        )
+        return describe(signed_in)
+
+    @app.post(SIGN_OUT_PATH, status_code=204)
+    def sign_out(response: Response) -> None:
+        """Make the browser forget the signed-in token (the token itself stays valid)."""
+        for cookie in (TOKEN_COOKIE, CSRF_COOKIE):
+            response.delete_cookie(cookie, path="/", samesite="strict")
 
     @api.post("/knowledge-graphs", status_code=201)
     def create_knowledge_graph(

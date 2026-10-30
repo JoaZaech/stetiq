@@ -6,6 +6,8 @@ Each scenario is a function below that takes a local-mode `stetiq.Client` and re
 a JSON-serialisable dict (ids, version numbers, tokens...). It is printed on stdout
 and handed to the test as `stetiq.seeded`. Add a scenario per data set a test needs,
 and pick it in the spec with `test.use({ seed: 'name' })`.
+
+For a `mode: 'server'` test, issue API Tokens with `issue_token` and return them.
 """
 
 from __future__ import annotations
@@ -17,14 +19,49 @@ from datetime import date
 from typing import Any
 
 import stetiq
+from stetiq.auth import TokenRegistry
 from stetiq.graph_source import GraphSourceScope
 
 Scenario = Callable[[stetiq.Client], dict[str, Any]]
 
 
+def issue_token(client: stetiq.Client, user: str, grants: dict[str, str]) -> dict[str, str]:
+    """An API Token on the seeded database: `{"id", "value"}` (revoke it by `id`)."""
+    token, value = TokenRegistry(client.tracking_uri).issue(user, grants)
+    return {"id": token.id, "value": value}
+
+
 def empty(client: stetiq.Client) -> dict[str, Any]:
     """No Knowledge Graphs at all."""
     return {}
+
+
+ONTOLOGY = """
+node_types: [Customer, Ticket]
+relationship_types: [OPENED]
+patterns: [[Customer, OPENED, Ticket]]
+"""
+
+
+def knowledge_graphs(client: stetiq.Client) -> dict[str, Any]:
+    """Two Knowledge Graphs: `support` (v2 registered, Contract Alias still on v1, a
+    finished run) and `billing` (v1 only, a failed run)."""
+    scope = GraphSourceScope(database="neo4j")
+    client.create_knowledge_graph("support", ontology=ONTOLOGY)
+    client.register_ontology("support", ONTOLOGY.replace("Ticket]", "Ticket, Agent]", 1))
+    client.bind_graph_source("support", scope)
+    client.start_run("support", ontology_version=1).end()
+    client.create_knowledge_graph("billing", ontology=ONTOLOGY)
+    client.bind_graph_source("billing", scope)
+    client.start_run("billing", ontology_version=1).fail()
+    return {}
+
+
+def signed_in_users(client: stetiq.Client) -> dict[str, Any]:
+    """`support` and `billing`, and a token for ada: edit on `support`, read on `billing`."""
+    for kg in ("support", "billing"):
+        client.create_knowledge_graph(kg, ontology="node_types:\n  - label: Customer\n")
+    return {"ada": issue_token(client, "ada", {"support": "edit", "billing": "read"})}
 
 
 SUPPORT_V1 = """
@@ -86,7 +123,12 @@ def support_lineage(_client: stetiq.Client) -> dict[str, Any]:
     return {"run_id": ended.id, "candidate_version": ended.candidate_version}
 
 
-SCENARIOS: dict[str, Scenario] = {"empty": empty, "support_lineage": support_lineage}
+SCENARIOS: dict[str, Scenario] = {
+    "empty": empty,
+    "knowledge_graphs": knowledge_graphs,
+    "signed_in_users": signed_in_users,
+    "support_lineage": support_lineage,
+}
 
 
 def main(scenario: str, tracking_uri: str) -> None:
