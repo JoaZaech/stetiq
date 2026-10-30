@@ -1,5 +1,4 @@
-import { X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { MapSidePanel } from './MapSidePanel'
 import type { MapPath } from './ontology-map-paths'
 
 /**
@@ -21,19 +20,7 @@ export function MapPathPanel({
   const steps = paths[0]?.steps.length ?? 0
 
   return (
-    <aside aria-label="Path" className="w-80 shrink-0 space-y-4 overflow-y-auto border-l bg-background p-4 text-sm">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="text-xs text-muted-foreground">Shortest path</div>
-          <h3 className="font-semibold break-words">
-            {from} to {to}
-          </h3>
-        </div>
-        <Button variant="ghost" size="icon-sm" aria-label="Close path" onClick={onClose}>
-          <X aria-hidden />
-        </Button>
-      </div>
-
+    <MapSidePanel label="Path" kind="Shortest path" title={`${from} to ${to}`} onClose={onClose}>
       {paths.length === 0 ? (
         <p className="text-muted-foreground">
           No path connects {from} and {to}: no Pattern relates them, directly or through other classes, nor
@@ -62,6 +49,6 @@ export function MapPathPanel({
           </ol>
         </>
       )}
-    </aside>
+    </MapSidePanel>
   )
 }

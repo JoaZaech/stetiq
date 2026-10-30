@@ -1,7 +1,5 @@
 import type { ReactNode } from 'react'
-import { X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import {
   Table,
   TableBody,
@@ -10,6 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { MapSidePanel } from './MapSidePanel'
 import type { DetailProperty, MapDetails } from './ontology-map-focus'
 
 /**
@@ -26,30 +25,27 @@ export function MapDetailsPanel({
   onClose: () => void
   children?: ReactNode
 }) {
-  const title = details.kind === 'class' ? details.label : details.relation
-
   return (
-    <aside aria-label="Details" className="w-80 shrink-0 space-y-4 overflow-y-auto border-l bg-background p-4 text-sm">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="text-xs text-muted-foreground">{details.kind === 'class' ? 'Class' : 'Relation'}</div>
-          <h3 className="truncate font-semibold">
-            {title}
-            {details.deprecated && (
-              <Badge variant="outline" className="ml-2">
-                deprecated
-              </Badge>
-            )}
-          </h3>
-          {details.kind === 'link' && (
-            <div className="mt-1 font-mono text-xs break-all text-muted-foreground">{details.id}</div>
+    <MapSidePanel
+      label="Details"
+      kind={details.kind === 'class' ? 'Class' : 'Relation'}
+      title={
+        <>
+          {details.kind === 'class' ? details.label : details.relation}
+          {details.deprecated && (
+            <Badge variant="outline" className="ml-2">
+              deprecated
+            </Badge>
           )}
-        </div>
-        <Button variant="ghost" size="icon-sm" aria-label="Close details" onClick={onClose}>
-          <X aria-hidden />
-        </Button>
-      </div>
-
+        </>
+      }
+      subtitle={
+        details.kind === 'link' && (
+          <div className="mt-1 font-mono text-xs break-all text-muted-foreground">{details.id}</div>
+        )
+      }
+      onClose={onClose}
+    >
       {details.description && <p className="text-muted-foreground">{details.description}</p>}
 
       {details.kind === 'class' && (
@@ -73,7 +69,7 @@ export function MapDetailsPanel({
       )}
 
       {children}
-    </aside>
+    </MapSidePanel>
   )
 }
 
