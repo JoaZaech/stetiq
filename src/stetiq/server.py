@@ -9,25 +9,66 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from fastapi import APIRouter, Body, FastAPI, Request
+from fastapi import APIRouter, Body, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from stetiq.errors import StetiqError
+from stetiq.evaluation.answerability import CompetencyQuestionMapper
+from stetiq.auth import Permission, TokenRegistry
+from stetiq.errors import PermissionDeniedError, StetiqError
 from stetiq.gates import outcome_from_dict
 from stetiq.ontology import parse_dict
+from stetiq.use_case import parse_use_case_dict
 from stetiq.tracking import LocalTrackingService, SqlStore, TrackingService, wire
 
 DATABASE_URL_ENV = "STETIQ_DATABASE_URL"
 DEFAULT_DATABASE_URL = "sqlite:///.stetiq/server.db"
+CREATE_KG_PATH = wire.API_PREFIX + "/knowledge-graphs"
 
 
 def create_app(
-    database_url: str | None = None, *, service: TrackingService | None = None
+    database_url: str | None = None,
+    *,
+    service: TrackingService | None = None,
+    tokens: TokenRegistry | None = None,
+    question_mapper: CompetencyQuestionMapper | None = None,
 ) -> FastAPI:
-    """Build the app over `service`, or over a `SqlStore` at `database_url`."""
-    if service is None:
-        service = LocalTrackingService(SqlStore(database_url or DEFAULT_DATABASE_URL))
-    tracking = service
+    """Build the app over `service`, or over a `SqlStore` at `database_url`.
+
+    Every API request needs an API token from `tokens` (default: the registry in the
+    same database). GET needs `read` on the targeted Knowledge Graph, anything else `edit`.
+
+    `question_mapper` is the model structural answerability maps unmapped Competency
+    Questions with (ticket #12); it only applies when `service` is not given.
+    """
+    if service is None or tokens is None:
+        store = SqlStore(database_url or DEFAULT_DATABASE_URL)
+        service = service or LocalTrackingService(store, question_mapper=question_mapper)
+        tokens = tokens or TokenRegistry(store)
+    tracking, registry = service, tokens
+
+    def _target_knowledge_graph(path_params: dict[str, str]) -> str | None:
+        """Which Knowledge Graph a request acts on, from its path parameters."""
+        if "name" in path_params:
+            return path_params["name"]
+        if "run_id" in path_params:
+            return tracking.get_run(path_params["run_id"]).knowledge_graph
+        if "observation_id" in path_params:
+            return tracking.get_observation(path_params["observation_id"]).knowledge_graph
+        return None
+
+    def authorize(request: Request) -> None:
+        header = request.headers.get("authorization", "")
+        scheme, _, value = header.partition(" ")
+        token = registry.authenticate(value.strip() if scheme.lower() == "bearer" else None)
+        request.state.token = token
+        needed: Permission = "read" if request.method in ("GET", "HEAD") else "edit"
+        kg = _target_knowledge_graph(request.path_params)
+        if kg is not None:
+            token.require(kg, needed)
+        elif not (request.method == "POST" and request.url.path == CREATE_KG_PATH):
+            # Fail closed: a route whose Knowledge Graph we cannot tell is not reachable.
+            raise PermissionDeniedError(f"Cannot authorize {request.method} {request.url.path}")
+        # POST /knowledge-graphs names its Knowledge Graph in the body: checked in the route.
 
     app = FastAPI(title="stetiq")
 
@@ -42,12 +83,15 @@ def create_app(
     def health() -> dict[str, bool]:
         return {"ok": True}
 
-    api = APIRouter(prefix=wire.API_PREFIX)
+    api = APIRouter(prefix=wire.API_PREFIX, dependencies=[Depends(authorize)])
 
     @api.post("/knowledge-graphs", status_code=201)
     def create_knowledge_graph(
-        name: str = Body(), declared_ontology: dict[str, Any] | None = Body(None)
+        request: Request,
+        name: str = Body(),
+        declared_ontology: dict[str, Any] | None = Body(None),
     ) -> dict[str, Any]:
+        request.state.token.require(name, "edit")
         declared = None if declared_ontology is None else parse_dict(declared_ontology)
         return wire.knowledge_graph_to_json(tracking.create_knowledge_graph(name, declared))
 
@@ -137,6 +181,26 @@ def create_app(
     def list_observations(name: str) -> list[dict[str, Any]]:
         return [wire.observation_to_json(o) for o in tracking.list_observations(name)]
 
+    @api.post("/knowledge-graphs/{name}/observations", status_code=201)
+    def record_observation(
+        name: str,
+        scope: dict[str, Any] = Body(),
+        observed_schema: dict[str, Any] = Body(),
+        drift_thresholds: dict[str, Any] | None = Body(None),
+    ) -> dict[str, Any]:
+        observation = (
+            wire.graph_source_scope_from_json(scope),
+            wire.observed_schema_from_json(observed_schema),
+        )
+        thresholds = wire.drift_thresholds_from_json(drift_thresholds)
+        return wire.observation_outcome_to_json(
+            tracking.record_observation(name, observation, thresholds)
+        )
+
+    @api.get("/knowledge-graphs/{name}/drift-events")
+    def list_drift_events(name: str) -> list[dict[str, Any]]:
+        return [wire.drift_event_to_json(e) for e in tracking.list_drift_events(name)]
+
     @api.get("/observations/{observation_id}")
     def get_observation(observation_id: str) -> dict[str, Any]:
         return wire.observation_to_json(tracking.get_observation(observation_id))
@@ -145,9 +209,12 @@ def create_app(
 
     @api.put("/knowledge-graphs/{name}/aliases/{alias}")
     def set_alias(
-        name: str, alias: str, version: int = Body(), actor: str = Body()
+        request: Request, name: str, alias: str, version: int = Body(), actor: str = Body()
     ) -> dict[str, Any]:
-        return wire.alias_to_json(tracking.set_alias(name, alias, version, actor))
+        # The audit log records the token's user; the actor the SDK sends is ignored.
+        del actor
+        user = request.state.token.user
+        return wire.alias_to_json(tracking.set_alias(name, alias, version, user))
 
     @api.get("/knowledge-graphs/{name}/aliases/{alias}")
     def get_alias(name: str, alias: str) -> dict[str, Any]:
@@ -194,9 +261,26 @@ def create_app(
         return wire.evaluation_result_to_json(result)
 
     @api.post(version_path + "/evaluate")
-    def evaluate_version(name: str, number: int) -> list[dict[str, Any]]:
-        results = tracking.evaluate_ontology_version(name, number)
+    def evaluate_version(
+        name: str, number: int, use_case_version: int | None = Body(None, embed=True)
+    ) -> list[dict[str, Any]]:
+        results = tracking.evaluate_ontology_version(name, number, use_case_version)
         return [wire.evaluation_result_to_json(r) for r in results]
+
+    # --- Use Cases ------------------------------------------------------------------
+
+    @api.post("/knowledge-graphs/{name}/use-case-versions")
+    def register_use_case(name: str, use_case: dict[str, Any] = Body(embed=True)) -> dict[str, Any]:
+        version = tracking.register_use_case(name, parse_use_case_dict(use_case))
+        return wire.use_case_version_to_json(version)
+
+    @api.get("/knowledge-graphs/{name}/use-case-versions")
+    def list_use_case_versions(name: str) -> list[dict[str, Any]]:
+        return [wire.use_case_version_to_json(v) for v in tracking.list_use_case_versions(name)]
+
+    @api.get("/knowledge-graphs/{name}/use-case-versions/{number}")
+    def get_use_case_version(name: str, number: int) -> dict[str, Any]:
+        return wire.use_case_version_to_json(tracking.get_use_case_version(name, number))
 
     # --- Gates (ticket #14) ----------------------------------------------------------
 

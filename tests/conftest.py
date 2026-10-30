@@ -15,6 +15,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 import stetiq
+from stetiq.auth import TokenRegistry
+from stetiq.client import resolve_actor
 from stetiq.graph_source import InMemoryGraphSource
 from stetiq.server import create_app
 from stetiq.tracking import RemoteTrackingService
@@ -53,19 +55,26 @@ def client_factory(tracking_mode, tmp_path, graph_source):
     """
     if tracking_mode == "local":
         uri = f"sqlite:///{tmp_path / 'stetiq.db'}"
-        yield lambda **kw: stetiq.Client(uri, graph_source=graph_source, **kw)
+        yield lambda **kw: stetiq.Client(uri, **{"graph_source": graph_source, **kw})
     elif tracking_mode == "postgres":
         uri = _postgres_url()
-        yield lambda **kw: stetiq.Client(uri, graph_source=graph_source, **kw)
+        yield lambda **kw: stetiq.Client(uri, **{"graph_source": graph_source, **kw})
     else:
-        app = create_app(database_url=f"sqlite:///{tmp_path / 'server.db'}")
-        with TestClient(app) as http:
-            yield lambda **kw: stetiq.Client(
+        database_url = f"sqlite:///{tmp_path / 'server.db'}"
+        tokens = TokenRegistry(database_url)
+
+        def remote_client(**kw):
+            # Server mode takes the actor from the API token, so each client gets a
+            # token for the user it would resolve itself, with edit on every KG.
+            _, token = tokens.issue(resolve_actor(kw.get("actor")), {"*": "edit"})
+            return stetiq.Client(
                 str(http.base_url),
-                service=RemoteTrackingService(str(http.base_url), http=http),
-                graph_source=graph_source,
-                **kw,
+                service=RemoteTrackingService(str(http.base_url), http=http, token=token),
+                **{"graph_source": graph_source, **kw},
             )
+
+        with TestClient(create_app(database_url=database_url)) as http:
+            yield remote_client
 
 
 @pytest.fixture

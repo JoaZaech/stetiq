@@ -1,14 +1,19 @@
 """stetiq: versioning, evaluation and governance of knowledge-graph ontologies."""
 
 from stetiq.client import ActiveRun, Client
+from stetiq.entry_point import EntryPoint, EntryPointError, InvalidEntryPointError
 from stetiq.conformance import Conformance, Mismatch, MismatchKind
+from stetiq.drift import DriftFinding, DriftKind, DriftThresholds
 from stetiq.errors import (
+    AuthenticationError,
+    PermissionDeniedError,
     EvaluatorError,
     GateConfigError,
     GraphSourceNotBoundError,
     GraphSourceUnavailableError,
     GraphSourceWriteRejectedError,
     InvalidAliasNameError,
+    InvalidDriftConfigError,
     InvalidEvolutionModeError,
     KnowledgeGraphAlreadyExistsError,
     MissingDeclaredOntologyError,
@@ -16,6 +21,7 @@ from stetiq.errors import (
     OntologyValidationError,
     RunNotActiveError,
     StetiqError,
+    UseCaseValidationError,
 )
 from stetiq.evaluation import (
     ConstructionRunEvaluator,
@@ -29,6 +35,8 @@ from stetiq.graph_source import GraphSource, GraphSourceScope, InMemoryGraphSour
 from stetiq.ontology.diff import Change, ChangeKind, Classification, OntologyDiff
 from stetiq.tracking import (
     Alias,
+    DriftEvent,
+    ObservationOutcome,
     ConstructionRun,
     EvaluationResult,
     GateResult,
@@ -37,10 +45,20 @@ from stetiq.tracking import (
     OntologyVersion,
     Promotion,
     RunComparison,
+    UseCaseVersion,
 )
+from stetiq.use_case import CompetencyQuestion, UseCase
 
 __all__ = [
+    "AuthenticationError",
+    "PermissionDeniedError",
     "Alias",
+    "DriftEvent",
+    "DriftFinding",
+    "DriftKind",
+    "DriftThresholds",
+    "InvalidDriftConfigError",
+    "ObservationOutcome",
     "InvalidAliasNameError",
     "Promotion",
     "ActiveRun",
@@ -82,4 +100,11 @@ __all__ = [
     "RunComparison",
     "RunNotActiveError",
     "StetiqError",
+    "EntryPoint",
+    "EntryPointError",
+    "InvalidEntryPointError",
+    "CompetencyQuestion",
+    "UseCase",
+    "UseCaseValidationError",
+    "UseCaseVersion",
 ]

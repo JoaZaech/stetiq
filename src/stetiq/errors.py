@@ -38,12 +38,28 @@ class RunNotActiveError(StetiqError):
     """The Construction Run has already ended (finished or failed)."""
 
 
+class UseCaseValidationError(StetiqError):
+    """A Use Case or Competency Question is malformed; the message names the element."""
+
+
 class InvalidAliasNameError(StetiqError):
     """An Alias name is empty or contains characters other than letters, digits, `_`, `-`, `.`."""
 
 
 class GraphSourceWriteRejectedError(StetiqError):
     """A query sent to a Graph Source was not read-only; adapters never issue writes."""
+
+
+class InvalidDriftConfigError(StetiqError, ValueError):
+    """The `drift:` section of the repo config (Drift thresholds) is malformed."""
+
+
+class AuthenticationError(StetiqError):
+    """Server mode: the request carried no API token, or one that is unknown or revoked."""
+
+
+class PermissionDeniedError(StetiqError):
+    """Server mode: the API token lacks the permission this Knowledge Graph operation needs."""
 
 
 class GateConfigError(StetiqError, ValueError):

@@ -22,7 +22,12 @@ from stetiq.tracking.entities import (
     KnowledgeGraph,
     Observation,
     OntologyVersion,
+    UseCaseVersion,
 )
+from stetiq import use_case as use_case_format
+from stetiq.tracking.entities import Alias, Promotion
+from stetiq.drift import DriftFinding, DriftThresholds
+from stetiq.tracking.entities import DriftEvent, ObservationOutcome
 from stetiq.tracking.entities import Alias, GateResult, Promotion
 from stetiq.gates import outcome_from_dict, outcome_to_dict
 
@@ -69,11 +74,16 @@ def ontology_version_from_json(d: dict[str, Any]) -> OntologyVersion:
 
 
 def _detail_to_json(d: Detail) -> dict[str, Any]:
-    return {"item": d.item, "message": d.message, "metric": d.metric}
+    out: dict[str, Any] = {"item": d.item, "message": d.message, "metric": d.metric}
+    if d.data is not None:
+        out["data"] = dict(d.data)
+    return out
 
 
 def _detail_from_json(d: dict[str, Any]) -> Detail:
-    return Detail(item=d["item"], message=d.get("message", ""), metric=d.get("metric"))
+    return Detail(
+        item=d["item"], message=d.get("message", ""), metric=d.get("metric"), data=d.get("data")
+    )
 
 
 def evaluation_to_json(e: Evaluation) -> dict[str, Any]:
@@ -97,6 +107,7 @@ def evaluation_result_to_json(r: EvaluationResult) -> dict[str, Any]:
         "details": [_detail_to_json(d) for d in r.details],
         "created_at": r.created_at.isoformat(),
         "parameters": dict(r.parameters),
+        "use_case_version": r.use_case_version,
     }
 
 
@@ -110,6 +121,7 @@ def evaluation_result_from_json(d: dict[str, Any]) -> EvaluationResult:
         details=tuple(_detail_from_json(x) for x in d["details"]),
         created_at=datetime.fromisoformat(d["created_at"]),
         parameters=dict(d.get("parameters", {})),
+        use_case_version=d.get("use_case_version"),
     )
 
 
@@ -209,6 +221,31 @@ def observation_from_json(d: dict[str, Any]) -> Observation:
     )
 
 
+# --- Use Cases (ticket #10) --------------------------------------------------------------
+
+ERROR_STATUS[errors.UseCaseValidationError] = 422
+
+
+def use_case_version_to_json(v: UseCaseVersion) -> dict[str, Any]:
+    return {
+        "knowledge_graph": v.knowledge_graph,
+        "number": v.number,
+        "content_hash": v.content_hash,
+        "created_at": v.created_at.isoformat(),
+        "use_case": use_case_format.to_dict(v.use_case),
+    }
+
+
+def use_case_version_from_json(d: dict[str, Any]) -> UseCaseVersion:
+    return UseCaseVersion(
+        knowledge_graph=d["knowledge_graph"],
+        number=d["number"],
+        content_hash=d["content_hash"],
+        created_at=datetime.fromisoformat(d["created_at"]),
+        use_case=use_case_format.from_dict(d["use_case"]),
+    )
+
+
 # --- Aliases and Promotion (ticket #9) ---------------------------------------------------
 
 ERROR_STATUS[errors.InvalidAliasNameError] = 422
@@ -254,6 +291,68 @@ def promotion_from_json(d: dict[str, Any]) -> Promotion:
         promoted_at=datetime.fromisoformat(d["promoted_at"]),
         gate_result=d["gate_result"],
     )
+
+
+# --- Drift (ticket #16) ------------------------------------------------------------------
+
+ERROR_STATUS[errors.InvalidDriftConfigError] = 422
+
+
+def drift_thresholds_to_json(t: DriftThresholds) -> dict[str, Any]:
+    return t.to_dict()
+
+
+def drift_thresholds_from_json(d: dict[str, Any] | None) -> DriftThresholds:
+    return DriftThresholds() if d is None else DriftThresholds.from_dict(d)
+
+
+def drift_event_to_json(e: DriftEvent) -> dict[str, Any]:
+    return {
+        "id": e.id,
+        "knowledge_graph": e.knowledge_graph,
+        "observation_id": e.observation_id,
+        "previous_observation_id": e.previous_observation_id,
+        "contract_alias": e.contract_alias,
+        "ontology_version": e.ontology_version,
+        "detected_at": e.detected_at.isoformat(),
+        "findings": [f.to_dict() for f in e.findings],
+        "thresholds": e.thresholds.to_dict(),
+    }
+
+
+def drift_event_from_json(d: dict[str, Any]) -> DriftEvent:
+    return DriftEvent(
+        id=d["id"],
+        knowledge_graph=d["knowledge_graph"],
+        observation_id=d["observation_id"],
+        previous_observation_id=d["previous_observation_id"],
+        contract_alias=d["contract_alias"],
+        ontology_version=d["ontology_version"],
+        detected_at=datetime.fromisoformat(d["detected_at"]),
+        findings=tuple(DriftFinding.from_dict(f) for f in d["findings"]),
+        thresholds=drift_thresholds_from_json(d.get("thresholds")),
+    )
+
+
+def observation_outcome_to_json(o: ObservationOutcome) -> dict[str, Any]:
+    return {
+        "observation": observation_to_json(o.observation),
+        "drift_event": None if o.drift is None else drift_event_to_json(o.drift),
+    }
+
+
+def observation_outcome_from_json(d: dict[str, Any]) -> ObservationOutcome:
+    drift = d.get("drift_event")
+    return ObservationOutcome(
+        observation=observation_from_json(d["observation"]),
+        drift=None if drift is None else drift_event_from_json(drift),
+    )
+
+
+# --- API-token authentication (ticket #17) -----------------------------------------------
+
+ERROR_STATUS[errors.AuthenticationError] = 401
+ERROR_STATUS[errors.PermissionDeniedError] = 403
 
 
 # --- Gates (ticket #14) ------------------------------------------------------------------

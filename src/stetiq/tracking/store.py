@@ -13,6 +13,7 @@ from stetiq.conformance import Conformance
 from stetiq.graph_source import GraphSourceScope
 from stetiq.tracking.entities import (
     Alias,
+    DriftEvent,
     Promotion,
     ConstructionRun,
     EvaluationResult,
@@ -22,6 +23,7 @@ from stetiq.tracking.entities import (
     Observation,
     OntologyVersion,
     RunStatus,
+    UseCaseVersion,
 )
 
 
@@ -82,6 +84,12 @@ class Store(Protocol):
     def list_observations(self, knowledge_graph: str) -> list[Observation]:
         """Ordered by observation time ascending."""
 
+    def add_drift_event(self, event: DriftEvent) -> None:
+        """Insert-only."""
+
+    def list_drift_events(self, knowledge_graph: str) -> list[DriftEvent]:
+        """Ordered oldest first."""
+
     def set_alias(self, alias: Alias) -> None:
         """Create the Alias or move it (upsert on knowledge graph + name)."""
 
@@ -108,6 +116,18 @@ class Store(Protocol):
         self, knowledge_graph: str, subject_kind: str, subject_id: str
     ) -> list[EvaluationResult]:
         """Every stored result for the subject, oldest first."""
+
+    def add_use_case_version(self, version: UseCaseVersion) -> None:
+        """Insert-only: Use Case versions are immutable."""
+
+    def get_use_case_version(self, knowledge_graph: str, number: int) -> UseCaseVersion | None: ...
+
+    def find_use_case_version_by_hash(
+        self, knowledge_graph: str, content_hash: str
+    ) -> UseCaseVersion | None: ...
+
+    def list_use_case_versions(self, knowledge_graph: str) -> list[UseCaseVersion]:
+        """Ordered by version number ascending."""
 
     def add_gate_result(self, result: GateResult) -> None:
         """Append a Gate evaluation (insert-only)."""

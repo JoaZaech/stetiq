@@ -19,6 +19,7 @@ from datetime import UTC, datetime
 from typing import Protocol
 
 from stetiq.conformance import assess_conformance, candidate_ontology
+from stetiq.drift import DriftThresholds, assess_drift
 from stetiq.errors import (
     EvaluatorError,
     GraphSourceNotBoundError,
@@ -26,6 +27,11 @@ from stetiq.errors import (
     MissingDeclaredOntologyError,
     NotFoundError,
     RunNotActiveError,
+)
+from stetiq.evaluation.answerability import (
+    ANSWERABILITY_EVALUATOR,
+    CompetencyQuestionMapper,
+    StructuralAnswerability,
 )
 from stetiq.evaluation.framework import (
     Evaluation,
@@ -43,19 +49,24 @@ from stetiq.tracking.entities import (
     DEFAULT_EVOLUTION_MODE,
     Alias,
     ConstructionRun,
+    DriftEvent,
     EvaluationResult,
     EvolutionMode,
     GateResult,
     GateSubjectKind,
     KnowledgeGraph,
     Observation,
+    ObservationOutcome,
     OntologyVersion,
     Origin,
+    UseCaseVersion,
     Promotion,
     RunStatus,
     validate_alias_name,
 )
 from stetiq.tracking.store import Store
+from stetiq import use_case as use_case_format
+from stetiq.use_case import UseCase
 
 # What the SDK observed at the end of a run: the scope it read and the Observed Schema.
 # The Observation itself happens SDK-side (the Graph Source adapter and its credentials
@@ -107,6 +118,18 @@ class TrackingService(Protocol):
 
     def list_observations(self, knowledge_graph: str) -> list[Observation]: ...
 
+    def record_observation(
+        self,
+        knowledge_graph: str,
+        observation: ObservationInput,
+        thresholds: DriftThresholds | None = None,
+    ) -> ObservationOutcome:
+        """Store an on-demand Observation (no run) and check it for Drift against the
+        Contract Alias's version and the previous Observation. Never creates a version."""
+        ...
+
+    def list_drift_events(self, knowledge_graph: str) -> list[DriftEvent]: ...
+
     def set_alias(
         self, knowledge_graph: str, name: str, version: int, actor: str
     ) -> Alias: ...
@@ -122,9 +145,12 @@ class TrackingService(Protocol):
     def get_contract_alias(self, knowledge_graph: str) -> str: ...
 
     def evaluate_ontology_version(
-        self, knowledge_graph: str, number: int
+        self, knowledge_graph: str, number: int, use_case_version: int | None = None
     ) -> list[EvaluationResult]:
-        """(Re-)run the built-in Evaluators on an Ontology Version and store the results."""
+        """(Re-)run the built-in Evaluators on an Ontology Version and store the results.
+
+        Structural answerability is judged against `use_case_version` (default: the
+        latest Use Case version; skipped when the Knowledge Graph has no Use Case)."""
         ...
 
     def record_evaluation(
@@ -149,6 +175,15 @@ class TrackingService(Protocol):
         Evaluator name then parameters."""
         ...
 
+    def register_use_case(self, knowledge_graph: str, use_case: UseCase) -> UseCaseVersion:
+        """Store a new Use Case version (identical content returns the existing one).
+        Never creates an Ontology Version."""
+        ...
+
+    def list_use_case_versions(self, knowledge_graph: str) -> list[UseCaseVersion]: ...
+
+    def get_use_case_version(self, knowledge_graph: str, number: int) -> UseCaseVersion: ...
+
     def record_gate_result(
         self,
         knowledge_graph: str,
@@ -167,8 +202,13 @@ class TrackingService(Protocol):
 
 
 class LocalTrackingService:
-    def __init__(self, store: Store) -> None:
+    def __init__(
+        self, store: Store, *, question_mapper: CompetencyQuestionMapper | None = None
+    ) -> None:
+        """`question_mapper` is the model interface structural answerability uses for
+        Competency Questions with neither a Concept mapping nor a query (ticket #12)."""
         self._store = store
+        self._question_mapper = question_mapper
 
     def create_knowledge_graph(
         self, name: str, declared_ontology: Ontology | None
@@ -216,7 +256,31 @@ class LocalTrackingService:
         )
         self._store.add_ontology_version(version)
         self._run_built_ins(version)
+        self._run_answerability(version)
         return version
+
+    def _run_answerability(
+        self, version: OntologyVersion, use_case_version: int | None = None
+    ) -> list[EvaluationResult]:
+        """Structural answerability against a Use Case version (default: the latest)."""
+        if use_case_version is None:
+            versions = self._store.list_use_case_versions(version.knowledge_graph)
+            if not versions:
+                return []
+            use_case = versions[-1]
+        else:
+            use_case = self.get_use_case_version(version.knowledge_graph, use_case_version)
+        evaluator = StructuralAnswerability(use_case.use_case, self._question_mapper)
+        return [
+            self._store_result(
+                version.knowledge_graph,
+                "ontology_version",
+                str(version.number),
+                evaluator.name,
+                check_evaluation(evaluator.name, evaluator.evaluate(version)),
+                use_case_version=use_case.number,
+            )
+        ]
 
     def _run_built_ins(self, version: OntologyVersion) -> list[EvaluationResult]:
         return [
@@ -238,6 +302,8 @@ class LocalTrackingService:
         evaluator: str,
         evaluation: Evaluation,
         parameters: Mapping[str, ParameterValue] | None = None,
+        *,
+        use_case_version: int | None = None,
     ) -> EvaluationResult:
         result = EvaluationResult(
             knowledge_graph=knowledge_graph,
@@ -248,6 +314,7 @@ class LocalTrackingService:
             details=tuple(evaluation.details),
             created_at=_now(),
             parameters=dict(parameters or {}),
+            use_case_version=use_case_version,
         )
         self._store.add_evaluation_result(result)
         return result
@@ -266,10 +333,13 @@ class LocalTrackingService:
             raise EvaluatorError(f"Unsupported evaluation subject kind {subject_kind!r}")
 
     def evaluate_ontology_version(
-        self, knowledge_graph: str, number: int
+        self, knowledge_graph: str, number: int, use_case_version: int | None = None
     ) -> list[EvaluationResult]:
         with self._store.transaction():
-            return self._run_built_ins(self.get_ontology_version(knowledge_graph, number))
+            version = self.get_ontology_version(knowledge_graph, number)
+            return self._run_built_ins(version) + self._run_answerability(
+                version, use_case_version
+            )
 
     def record_evaluation(
         self,
@@ -280,7 +350,7 @@ class LocalTrackingService:
         evaluation: Evaluation,
         parameters: Mapping[str, ParameterValue] | None = None,
     ) -> EvaluationResult:
-        if evaluator in {e.name for e in BUILT_IN_EVALUATORS}:
+        if evaluator in {e.name for e in BUILT_IN_EVALUATORS} | {ANSWERABILITY_EVALUATOR}:
             raise EvaluatorError(f"{evaluator!r} is a built-in Evaluator; its results are computed by stetiq")
         evaluation = check_evaluation(evaluator, evaluation)
         parameters = check_parameters(evaluator, parameters or {})
@@ -432,6 +502,90 @@ class LocalTrackingService:
     def list_observations(self, knowledge_graph: str) -> list[Observation]:
         self.get_knowledge_graph(knowledge_graph)
         return self._store.list_observations(knowledge_graph)
+
+    # --- Use Cases ------------------------------------------------------------------
+
+    def register_use_case(self, knowledge_graph: str, use_case: UseCase) -> UseCaseVersion:
+        use_case = use_case_format.canonicalize(use_case_format.check_use_case(use_case))
+        digest = use_case_format.content_hash(use_case)
+        with self._store.transaction():
+            self.get_knowledge_graph(knowledge_graph)
+            existing = self._store.find_use_case_version_by_hash(knowledge_graph, digest)
+            if existing is not None:
+                return existing
+            versions = self._store.list_use_case_versions(knowledge_graph)
+            version = UseCaseVersion(
+                knowledge_graph=knowledge_graph,
+                number=(versions[-1].number + 1) if versions else 1,
+                content_hash=digest,
+                created_at=_now(),
+                use_case=use_case,
+            )
+            self._store.add_use_case_version(version)
+            return version
+
+    def list_use_case_versions(self, knowledge_graph: str) -> list[UseCaseVersion]:
+        self.get_knowledge_graph(knowledge_graph)
+        return self._store.list_use_case_versions(knowledge_graph)
+
+    def get_use_case_version(self, knowledge_graph: str, number: int) -> UseCaseVersion:
+        self.get_knowledge_graph(knowledge_graph)
+        version = self._store.get_use_case_version(knowledge_graph, number)
+        if version is None:
+            raise NotFoundError(
+                f"Knowledge Graph {knowledge_graph!r} has no Use Case version {number}"
+            )
+        return version
+
+    # --- On-demand Observation and Drift --------------------------------------------
+
+    def record_observation(
+        self,
+        knowledge_graph: str,
+        observation: ObservationInput,
+        thresholds: DriftThresholds | None = None,
+    ) -> ObservationOutcome:
+        scope, schema = observation
+        thresholds = thresholds or DriftThresholds()
+        with self._store.transaction():
+            self.get_knowledge_graph(knowledge_graph)
+            history = self._store.list_observations(knowledge_graph)
+            previous = history[-1] if history else None
+            obs = Observation(
+                id=uuid.uuid4().hex,
+                knowledge_graph=knowledge_graph,
+                scope=scope,
+                observed_at=_now(),
+                schema=schema,
+                run_id=None,
+            )
+            self._store.add_observation(obs)
+            contract_alias = self.get_contract_alias(knowledge_graph)
+            contract = self.get_ontology_version(
+                knowledge_graph, self.get_alias(knowledge_graph, contract_alias).version
+            )
+            findings = assess_drift(
+                contract.ontology, schema, None if previous is None else previous.schema, thresholds
+            )
+            if not findings:
+                return ObservationOutcome(observation=obs)
+            event = DriftEvent(
+                id=uuid.uuid4().hex,
+                knowledge_graph=knowledge_graph,
+                observation_id=obs.id,
+                previous_observation_id=None if previous is None else previous.id,
+                contract_alias=contract_alias,
+                ontology_version=contract.number,
+                detected_at=obs.observed_at,
+                findings=findings,
+                thresholds=thresholds,
+            )
+            self._store.add_drift_event(event)
+            return ObservationOutcome(observation=obs, drift=event)
+
+    def list_drift_events(self, knowledge_graph: str) -> list[DriftEvent]:
+        self.get_knowledge_graph(knowledge_graph)
+        return self._store.list_drift_events(knowledge_graph)
 
     # --- Aliases and Promotion ------------------------------------------------------
 

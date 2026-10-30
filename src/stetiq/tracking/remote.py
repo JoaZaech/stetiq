@@ -27,23 +27,34 @@ from stetiq.tracking.entities import (
     Observation,
     OntologyVersion,
     Origin,
+    UseCaseVersion,
 )
+from stetiq import use_case as use_case_format
+from stetiq.use_case import UseCase
+from stetiq.drift import DriftThresholds
+from stetiq.tracking.entities import DriftEvent, ObservationOutcome
 from stetiq.tracking.service import ObservationInput
 
 
 class RemoteTrackingService:
     """`base_url` is the server root, e.g. `http://localhost:5000`.
 
+    `token` is the API token, sent as `Authorization: Bearer <token>`; the server requires one.
     `http` lets tests inject a client (e.g. FastAPI's `TestClient`, an `httpx.Client`).
     """
 
-    def __init__(self, base_url: str, *, http: httpx.Client | None = None) -> None:
+    def __init__(
+        self, base_url: str, *, token: str | None = None, http: httpx.Client | None = None
+    ) -> None:
         self._base = base_url.rstrip("/") + wire.API_PREFIX
         self._http = http or httpx.Client(timeout=30.0)
+        self._headers = {"Authorization": f"Bearer {token}"} if token else {}
 
     def _call(self, method: str, path: str, json: Any = None) -> Any:
         try:
-            response = self._http.request(method, self._base + path, json=json)
+            response = self._http.request(
+                method, self._base + path, json=json, headers=self._headers
+            )
         except httpx.HTTPError as e:
             raise StetiqError(f"Cannot reach stetiq server at {self._base}: {e}") from None
         if response.is_success:
@@ -146,6 +157,25 @@ class RemoteTrackingService:
         data = self._call("GET", self._kg_path(knowledge_graph) + "/observations")
         return [wire.observation_from_json(o) for o in data]
 
+    def record_observation(
+        self,
+        knowledge_graph: str,
+        observation: ObservationInput,
+        thresholds: DriftThresholds | None = None,
+    ) -> ObservationOutcome:
+        scope, schema = observation
+        body = {
+            "scope": wire.graph_source_scope_to_json(scope),
+            "observed_schema": wire.observed_schema_to_json(schema),
+            "drift_thresholds": wire.drift_thresholds_to_json(thresholds or DriftThresholds()),
+        }
+        data = self._call("POST", self._kg_path(knowledge_graph) + "/observations", body)
+        return wire.observation_outcome_from_json(data)
+
+    def list_drift_events(self, knowledge_graph: str) -> list[DriftEvent]:
+        data = self._call("GET", self._kg_path(knowledge_graph) + "/drift-events")
+        return [wire.drift_event_from_json(e) for e in data]
+
     # --- Aliases and Promotion ----------------------------------------------------------
 
     def _alias_path(self, knowledge_graph: str, name: str) -> str:
@@ -179,10 +209,14 @@ class RemoteTrackingService:
         raise EvaluatorError(f"Unsupported evaluation subject kind {subject_kind!r}")
 
     def evaluate_ontology_version(
-        self, knowledge_graph: str, number: int
+        self, knowledge_graph: str, number: int, use_case_version: int | None = None
     ) -> list[EvaluationResult]:
         path = self._subject_path(knowledge_graph, "ontology_version", str(number))
-        return [wire.evaluation_result_from_json(r) for r in self._call("POST", path + "/evaluate")]
+        body = {"use_case_version": use_case_version}
+        return [
+            wire.evaluation_result_from_json(r)
+            for r in self._call("POST", path + "/evaluate", body)
+        ]
 
     def record_evaluation(
         self,
@@ -206,6 +240,21 @@ class RemoteTrackingService:
     ) -> list[EvaluationResult]:
         path = self._subject_path(knowledge_graph, subject_kind, subject_id) + "/evaluations"
         return [wire.evaluation_result_from_json(r) for r in self._call("GET", path)]
+
+    # --- Use Cases ------------------------------------------------------------------
+
+    def register_use_case(self, knowledge_graph: str, use_case: UseCase) -> UseCaseVersion:
+        body = {"use_case": use_case_format.to_dict(use_case_format.check_use_case(use_case))}
+        data = self._call("POST", self._kg_path(knowledge_graph) + "/use-case-versions", body)
+        return wire.use_case_version_from_json(data)
+
+    def list_use_case_versions(self, knowledge_graph: str) -> list[UseCaseVersion]:
+        data = self._call("GET", self._kg_path(knowledge_graph) + "/use-case-versions")
+        return [wire.use_case_version_from_json(v) for v in data]
+
+    def get_use_case_version(self, knowledge_graph: str, number: int) -> UseCaseVersion:
+        data = self._call("GET", f"{self._kg_path(knowledge_graph)}/use-case-versions/{number}")
+        return wire.use_case_version_from_json(data)
 
     # --- Gates --------------------------------------------------------------------------
 
