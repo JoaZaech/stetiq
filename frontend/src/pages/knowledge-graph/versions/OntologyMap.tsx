@@ -431,6 +431,8 @@ function PatternEdgeView({ id, source, target, data, markerEnd }: EdgeProps<Patt
         path={path}
         markerEnd={markerEnd}
         interactionWidth={16}
+        data-change={change}
+        data-severity={data.change?.severity ?? undefined}
         style={{
           stroke,
           strokeWidth: emphasized ? 2 : undefined,

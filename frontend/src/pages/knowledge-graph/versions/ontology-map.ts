@@ -149,7 +149,11 @@ export function changesOfConcept(
   )
 }
 
-/** The Pattern an endpoint change names, as its link id (`Pattern.__str__`); null for any other change. */
+/**
+ * The Pattern an endpoint change names, as its link id (`Pattern.__str__`); null for any
+ * other change. The wording is `_diff_patterns`' in `ontology/diff.py`, which the Diff
+ * carries only as text; e2e/ontology-map-changes.spec.ts fails if it changes.
+ */
 const endpointPattern = (change: OntologyChange) =>
   /^endpoint pattern (.*) (?:added|removed)$/.exec(change.detail)?.[1] ?? null
 

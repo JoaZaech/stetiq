@@ -100,3 +100,19 @@ test('v1 still has nothing to compare, even on the Map', async ({ page }) => {
   ).toBeVisible()
   await expect(ontologyMap(page)).toHaveCount(0)
 })
+
+test.describe('with a Pattern added beside another of its relation', () => {
+  test.use({ seed: 'ontology_map_patterns' })
+
+  // The Map reads which Pattern an endpoint change names from the Diff's wording
+  // (ontology/diff.py `_diff_patterns`): this fails if the server words it differently.
+  test("the Diff's endpoint change marks only the Pattern it names", async ({ page }) => {
+    await page.goto('/ui/kg/support/versions/2/changes')
+    const map = ontologyMap(page)
+    const change = (pattern: string) =>
+      linkPath(map, pattern).evaluate((el: SVGElement) => [el.dataset.change, el.dataset.severity ?? null])
+
+    await expect.poll(() => change('(Agent)-[OPENED]->(Ticket)')).toEqual(['added', 'additive'])
+    await expect.poll(() => change('(Customer)-[OPENED]->(Ticket)')).toEqual(['unchanged', null])
+  })
+})

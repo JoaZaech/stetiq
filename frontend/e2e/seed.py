@@ -401,6 +401,27 @@ def ontology_map(client: stetiq.Client) -> dict[str, Any]:
     return {}
 
 
+# Two Patterns of one relation: v2 adds (Agent)-[OPENED]->(Ticket) beside v1's
+# (Customer)-[OPENED]->(Ticket), so the Diff records an endpoint change against OPENED.
+MAP_PATTERNS_V1 = """
+node_types: [Agent, Customer, Ticket]
+relationship_types: [OPENED]
+patterns: [[Customer, OPENED, Ticket]]
+"""
+
+MAP_PATTERNS_V2 = MAP_PATTERNS_V1.replace(
+    "patterns: [[Customer, OPENED, Ticket]]",
+    "patterns: [[Agent, OPENED, Ticket], [Customer, OPENED, Ticket]]",
+)
+
+
+def ontology_map_patterns(client: stetiq.Client) -> dict[str, Any]:
+    """Knowledge Graph `support` with v1 = `MAP_PATTERNS_V1` and v2 = `MAP_PATTERNS_V2`."""
+    client.create_knowledge_graph("support", ontology=MAP_PATTERNS_V1)
+    client.register_ontology("support", MAP_PATTERNS_V2)
+    return {}
+
+
 # For selecting on the Ontology Map: a superclass, properties, a constraint, a described relation.
 MAP_DETAILS_ONTOLOGY = """
 node_types:
@@ -476,6 +497,7 @@ SCENARIOS: dict[str, Scenario] = {
     "compared_runs": compared_runs,
     "ontology_map": ontology_map,
     "ontology_map_details": ontology_map_details,
+    "ontology_map_patterns": ontology_map_patterns,
     "ontology_map_path": ontology_map_path,
 }
 
