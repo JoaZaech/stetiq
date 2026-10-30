@@ -23,16 +23,15 @@ test('the sidebar leads to Knowledge Graphs and Settings, with breadcrumbs and a
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Knowledge Graphs')
 })
 
-test('the sidebar shows the stetiq logo and package version, and links to the docs', async ({
+test('the sidebar shows the stetiq logo and package version, and links to Help', async ({
   page,
 }) => {
   await page.goto('/ui/')
 
   await expect(page.getByRole('img', { name: 'stetiq' }).first()).toBeVisible()
   await expect(page.getByText(/^v\d+\.\d+\.\d+/)).toBeVisible()
-  const docs = page.getByRole('link', { name: /Docs/ })
-  await expect(docs).toHaveAttribute('href', /github\.com\/JoaZaech\/stetiq/)
-  await expect(docs).toHaveAttribute('target', '_blank')
+  const help = page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Help' })
+  await expect(help).toHaveAttribute('href', '/ui/help')
 })
 
 test('the logo is also the favicon', async ({ page, request }) => {

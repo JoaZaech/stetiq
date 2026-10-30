@@ -1,4 +1,4 @@
-import { ArrowLeft, BookOpen, ExternalLink, Network, Settings } from 'lucide-react'
+import { ArrowLeft, BookOpen, Network, Settings } from 'lucide-react'
 import { Link, NavLink, useMatch } from 'react-router'
 import { Logo } from '@/components/Logo'
 import {
@@ -15,8 +15,6 @@ import {
 } from '@/components/ui/sidebar'
 import { KNOWLEDGE_GRAPH_SECTIONS, kgUrl } from './knowledge-graph-sections'
 
-const DOCS_URL = 'https://github.com/JoaZaech/stetiq#readme'
-
 /**
  * The left sidebar. Inside a Knowledge Graph (`/kg/:name/*`) the Knowledge Graphs entry
  * becomes a back control and the graph's sections appear under its name; the sections
@@ -24,6 +22,7 @@ const DOCS_URL = 'https://github.com/JoaZaech/stetiq#readme'
  */
 export function AppSidebar() {
   const atSettings = useMatch('/settings') !== null
+  const atHelp = useMatch('/help/*') !== null
   const atLanding = useMatch('/') !== null
   const knowledgeGraph = useMatch('/kg/:name/*')?.params.name
 
@@ -74,12 +73,11 @@ export function AppSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild tooltip="Docs">
-                    <a href={DOCS_URL} target="_blank" rel="noreferrer">
+                  <SidebarMenuButton asChild isActive={atHelp} tooltip="Help">
+                    <Link to="/help">
                       <BookOpen />
-                      <span>Docs</span>
-                      <ExternalLink className="ml-auto size-3! text-muted-foreground" aria-hidden />
-                    </a>
+                      <span>Help</span>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>

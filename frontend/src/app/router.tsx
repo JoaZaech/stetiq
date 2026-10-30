@@ -97,6 +97,32 @@ const knowledgeGraphSectionRoutes: Record<
   promotions: { page: <PromotionsPage /> },
 }
 
+/**
+ * The user guide (`docs/guide/`, ADR 0004). Loaded with the route rather than with
+ * `lazyPage`, so the guide's text and page titles (for the breadcrumb) stay out of the
+ * main bundle.
+ */
+const helpRoute: RouteObject = {
+  path: 'help',
+  handle: crumb(() => 'Help'),
+  children: [
+    {
+      index: true,
+      lazy: async () => ({ Component: (await import('@/pages/help/HelpPage')).HelpIndex }),
+    },
+    {
+      path: ':page',
+      lazy: async () => {
+        const [{ HelpPage }, { helpPageHandle }] = await Promise.all([
+          import('@/pages/help/HelpPage'),
+          import('@/pages/help/help-route'),
+        ])
+        return { Component: HelpPage, handle: helpPageHandle }
+      },
+    },
+  ],
+}
+
 const knowledgeGraphRoute: RouteObject = {
   path: 'kg/:name',
   element: <KnowledgeGraphLayout />,
@@ -135,6 +161,7 @@ export const routes: RouteObject[] = [
         children: [{ index: true, element: <KnowledgeGraphsPage /> }, knowledgeGraphRoute],
       },
       { path: 'settings', element: <SettingsPage />, handle: crumb(() => 'Settings') },
+      helpRoute,
       { path: '*', element: <NotFoundPage /> },
     ],
   },

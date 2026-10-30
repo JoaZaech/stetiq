@@ -1,0 +1,88 @@
+/*
+ * Code highlighting for the user guide (rehype-highlight's `hljs-*` classes), after
+ * highlight.js's GitHub and GitHub Dark themes. Colours only: the block itself takes the
+ * app's muted background, so it follows the light/dark theme.
+ */
+:root {
+  --hljs-keyword: #cf222e;
+  --hljs-title: #8250df;
+  --hljs-constant: #0550ae;
+  --hljs-string: #0a3069;
+  --hljs-builtin: #953800;
+  --hljs-comment: #6e7781;
+  --hljs-tag: #116329;
+}
+
+.dark {
+  --hljs-keyword: #ff7b72;
+  --hljs-title: #d2a8ff;
+  --hljs-constant: #79c0ff;
+  --hljs-string: #a5d6ff;
+  --hljs-builtin: #ffa657;
+  --hljs-comment: #8b949e;
+  --hljs-tag: #7ee787;
+}
+
+.hljs-doctag,
+.hljs-keyword,
+.hljs-template-tag,
+.hljs-template-variable,
+.hljs-type,
+.hljs-variable.language_ {
+  color: var(--hljs-keyword);
+}
+
+.hljs-title,
+.hljs-title.class_,
+.hljs-title.function_ {
+  color: var(--hljs-title);
+}
+
+.hljs-attr,
+.hljs-attribute,
+.hljs-literal,
+.hljs-meta,
+.hljs-number,
+.hljs-operator,
+.hljs-variable,
+.hljs-selector-attr,
+.hljs-selector-class,
+.hljs-selector-id,
+.hljs-section {
+  color: var(--hljs-constant);
+}
+
+.hljs-regexp,
+.hljs-string,
+.hljs-meta .hljs-string {
+  color: var(--hljs-string);
+}
+
+.hljs-built_in,
+.hljs-symbol {
+  color: var(--hljs-builtin);
+}
+
+.hljs-comment,
+.hljs-code,
+.hljs-formula {
+  color: var(--hljs-comment);
+  font-style: italic;
+}
+
+.hljs-name,
+.hljs-quote,
+.hljs-selector-tag,
+.hljs-selector-pseudo,
+.hljs-bullet {
+  color: var(--hljs-tag);
+}
+
+.hljs-section,
+.hljs-strong {
+  font-weight: bold;
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
