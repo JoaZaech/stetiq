@@ -29,51 +29,55 @@ const VIEW_OPTIONS: readonly ViewOption<OntologyView>[] = [
 
 /**
  * The version page's Ontology tab: a Map of the Ontology by default (`?view=` absent), or
- * its Concepts as tables (`?view=table`) grouped as classes, relations and attributes.
+ * its Concepts as tables (`?view=table`) grouped as classes, relations and attributes. The
+ * Concept search (`?q=`) drives both: it filters the tables and highlights on the Map.
  */
 export function OntologyTab() {
   const version = useOntologyVersionTab()
   const [view, setView] = useViewParam(VIEWS)
+  const [params, setParams] = useSearchParams()
+  const query = params.get('q') ?? ''
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-4">
+        <div className="relative w-full max-w-sm">
+          <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+          <Input
+            type="search"
+            aria-label="Search Concepts"
+            placeholder="Search Concepts"
+            className="pl-8"
+            value={query}
+            onChange={(e) =>
+              setParams(
+                (p) => {
+                  if (e.target.value) p.set('q', e.target.value)
+                  else p.delete('q')
+                  return p
+                },
+                { replace: true },
+              )
+            }
+          />
+        </div>
         <ViewToggle options={VIEW_OPTIONS} mode={view} onChange={setView} />
       </div>
-      {view === 'map' ? <OntologyMap ontology={version.ontology} /> : <OntologyTables ontology={version.ontology} />}
+      {view === 'map' ? (
+        <OntologyMap ontology={version.ontology} query={query} />
+      ) : (
+        <OntologyTables ontology={version.ontology} query={query} />
+      )}
     </div>
   )
 }
 
-function OntologyTables({ ontology }: { ontology: Ontology }) {
-  const [params, setParams] = useSearchParams()
-  const query = params.get('q') ?? ''
+function OntologyTables({ ontology, query }: { ontology: Ontology; query: string }) {
   const all = useMemo(() => conceptTables(ontology), [ontology])
   const { classes, relations, attributes } = searchConcepts(all, query)
 
   return (
     <div className="space-y-8">
-      <div className="relative max-w-sm">
-        <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-        <Input
-          type="search"
-          aria-label="Search Concepts"
-          placeholder="Search Concepts"
-          className="pl-8"
-          value={query}
-          onChange={(e) =>
-            setParams(
-              (p) => {
-                if (e.target.value) p.set('q', e.target.value)
-                else p.delete('q')
-                return p
-              },
-              { replace: true },
-            )
-          }
-        />
-      </div>
-
       <Group title="Classes" count={classes.length} query={query}>
         <Table aria-label="Classes">
           <TableHeader>

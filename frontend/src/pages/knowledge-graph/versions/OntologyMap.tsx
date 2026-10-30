@@ -1,5 +1,5 @@
 import '@xyflow/react/dist/style.css'
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   BaseEdge,
@@ -18,16 +18,33 @@ import {
 import type { Ontology } from '@/api/ontology-versions'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
+import { MapDetailsPanel } from './MapDetailsPanel'
 import {
+  detailsOf,
+  focusOf,
   layoutOntologyMap,
   NODE_SIZE,
   ontologyMap,
+  searchMap,
   type LinkRoute,
+  type MapSelection,
   type Point,
 } from './ontology-map'
 
-type ClassNode = Node<{ label: string }, 'class'>
-type PatternEdge = Edge<{ relation: string; route: LinkRoute }, 'pattern'>
+/**
+ * How an item is drawn against the selection and the search: `selected` is the selection
+ * itself, `match` a search match, and `faded` is out of the selection's focus or, with no
+ * selection, not a match of an active search.
+ */
+type Emphasis = {
+  selected: boolean
+  match: boolean
+  faded: boolean
+}
+
+type ClassNode = Node<{ label: string } & Emphasis, 'class'>
+type PatternEdge = Edge<{ relation: string; route: LinkRoute } & Emphasis, 'pattern'>
 
 const NODE_TYPES = { class: ClassNodeView }
 const EDGE_TYPES = { pattern: PatternEdgeView }
@@ -38,9 +55,24 @@ const BEND_SPACING = 48
 const LOOP_REACH = 48
 const LOOP_STEP = 24
 
-/** An Ontology as a node-link Map: classes as nodes, Patterns as links named by relation. */
-export function OntologyMap({ ontology }: { ontology: Ontology }) {
+/**
+ * An Ontology as a node-link Map: classes as nodes, Patterns as links named by relation.
+ * Selecting a class or link focuses its neighbourhood and opens its details; `query`, the
+ * Concept search, highlights its matches.
+ */
+export function OntologyMap({ ontology, query = '' }: { ontology: Ontology; query?: string }) {
   const map = useMemo(() => ontologyMap(ontology), [ontology])
+  const [selection, setSelection] = useState<MapSelection | null>(null)
+  const focus = useMemo(() => focusOf(map, selection), [map, selection])
+  const matches = useMemo(() => searchMap(ontology, query), [ontology, query])
+  const details = useMemo(() => detailsOf(ontology, selection), [ontology, selection])
+
+  useEffect(() => {
+    if (!selection) return
+    const clear = (e: KeyboardEvent) => e.key === 'Escape' && setSelection(null)
+    document.addEventListener('keydown', clear)
+    return () => document.removeEventListener('keydown', clear)
+  }, [selection])
   const layout = useQuery({
     queryKey: ['ontology-map-layout', map],
     queryFn: () => layoutOntologyMap(map),
@@ -50,11 +82,22 @@ export function OntologyMap({ ontology }: { ontology: Ontology }) {
   const elements = useMemo(() => {
     if (!layout.data) return null
     const positions = layout.data
+    const emphasis = (kind: 'class' | 'link', key: string): Emphasis => {
+      const focused = kind === 'class' ? focus?.classes : focus?.links
+      const matched = kind === 'class' ? matches?.classes : matches?.links
+      return {
+        selected:
+          (kind === 'class' && selection?.kind === 'class' && selection.label === key) ||
+          (kind === 'link' && selection?.kind === 'link' && selection.id === key),
+        match: matched?.has(key) ?? false,
+        faded: focused ? !focused.has(key) : matched ? !matched.has(key) : false,
+      }
+    }
     const nodes: ClassNode[] = map.nodes.map((n) => ({
       id: n.label,
       type: 'class',
       position: positions[n.label],
-      data: { label: n.label },
+      data: { label: n.label, ...emphasis('class', n.label) },
       ariaLabel: n.label,
       ...NODE_SIZE,
     }))
@@ -63,37 +106,56 @@ export function OntologyMap({ ontology }: { ontology: Ontology }) {
       type: 'pattern',
       source: l.source,
       target: l.target,
-      data: { relation: l.relation, route: l.route },
+      data: { relation: l.relation, route: l.route, ...emphasis('link', l.id) },
       ariaLabel: l.id,
       markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--muted-foreground)' },
     }))
     return { nodes, edges }
-  }, [layout.data, map])
+  }, [layout.data, map, focus, matches, selection])
 
   if (layout.error) return <ErrorAlert error={layout.error} title="The Map could not be laid out" />
   if (!elements) return <Skeleton className="h-[32rem] w-full" />
   return (
-    <div className="h-[32rem] overflow-hidden rounded-md border">
+    <div className="flex h-[32rem] overflow-hidden rounded-md border">
       <ReactFlow
         aria-label="Ontology Map"
+        className="min-w-0 flex-1"
         nodes={elements.nodes}
         edges={elements.edges}
         nodeTypes={NODE_TYPES}
         edgeTypes={EDGE_TYPES}
         nodesDraggable={false}
         nodesConnectable={false}
+        // The Map keeps its own selection (focus and details), not React Flow's.
+        elementsSelectable={false}
+        onNodeClick={(_, node) => setSelection({ kind: 'class', label: node.id })}
+        onEdgeClick={(_, edge) => setSelection({ kind: 'link', id: edge.id })}
+        onPaneClick={() => setSelection(null)}
         minZoom={0.2}
         fitView
       >
         <Controls showInteractive={false} />
       </ReactFlow>
+      {details && <MapDetailsPanel details={details} onClose={() => setSelection(null)} />}
     </div>
   )
 }
 
 function ClassNodeView({ data }: NodeProps<ClassNode>) {
   return (
-    <div className="flex size-full items-center justify-center rounded-md border bg-card px-2 text-sm font-medium text-card-foreground shadow-xs">
+    <div
+      data-class
+      data-selected={data.selected || undefined}
+      data-match={data.match || undefined}
+      data-faded={data.faded || undefined}
+      className={cn(
+        'flex size-full cursor-pointer items-center justify-center rounded-md border bg-card px-2 text-sm font-medium text-card-foreground shadow-xs transition-opacity',
+        // Search matches get a ring in the primary colour: diff-* hues are reserved for severity.
+        data.match && 'ring-2 ring-primary ring-offset-2 ring-offset-background',
+        data.selected && 'border-2 border-foreground',
+        data.faded && 'opacity-30',
+      )}
+    >
       <span className="truncate">{data.label}</span>
       {/* React Flow attaches links to handles; links are drawn centre to centre, so these stay hidden. */}
       <Handle type="target" position={Position.Top} isConnectable={false} className="invisible" />
@@ -113,13 +175,30 @@ function PatternEdgeView({ id, source, target, data, markerEnd }: EdgeProps<Patt
   // A link's label is centred on it; a loop's sits just outside the arc.
   const anchor = labelAlign === 'start' ? 'translate(0, -50%)' : 'translate(-50%, -50%)'
 
+  const stroke = data.selected ? 'var(--foreground)' : data.match ? 'var(--primary)' : undefined
+
   return (
     <>
-      <BaseEdge id={id} path={path} markerEnd={markerEnd} />
+      <BaseEdge
+        id={id}
+        path={path}
+        markerEnd={markerEnd}
+        interactionWidth={16}
+        style={{
+          stroke,
+          strokeWidth: data.selected || data.match ? 2 : undefined,
+          opacity: data.faded ? 0.2 : undefined,
+          cursor: 'pointer',
+        }}
+      />
       <EdgeLabelRenderer>
         {/* Relation names are text only: hue is reserved for severity. */}
         <div
-          className="nodrag nopan pointer-events-none absolute rounded-sm bg-background/90 px-1 font-mono text-[10px] text-muted-foreground"
+          className={cn(
+            'nodrag nopan pointer-events-none absolute rounded-sm bg-background/90 px-1 font-mono text-[10px] text-muted-foreground',
+            (data.selected || data.match) && 'font-semibold text-foreground',
+            data.faded && 'opacity-30',
+          )}
           style={{ transform: `translate(${label.x}px, ${label.y}px) ${anchor}` }}
         >
           {data.relation}

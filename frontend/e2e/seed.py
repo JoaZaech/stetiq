@@ -345,6 +345,37 @@ def ontology_map(client: stetiq.Client) -> dict[str, Any]:
     return {}
 
 
+# For selecting on the Ontology Map: a superclass, properties, a constraint, a described relation.
+MAP_DETAILS_ONTOLOGY = """
+node_types:
+  - label: Party
+    properties: [{name: name, type: STRING, required: true}]
+  - label: Customer
+    parent: Party
+    description: Someone who opens tickets
+    properties: [{name: email, type: STRING}]
+  - {label: Product}
+  - label: Ticket
+    properties: [{name: opened_at, type: DATE}]
+relationship_types:
+  - label: OPENED
+    description: The customer opened the ticket
+    properties: [{name: channel, type: STRING}]
+  - {label: ABOUT}
+patterns:
+  - [Customer, OPENED, Ticket]
+  - [Ticket, ABOUT, Product]
+constraints:
+  - {type: UNIQUENESS, node_type: Customer, property_name: email}
+"""
+
+
+def ontology_map_details(client: stetiq.Client) -> dict[str, Any]:
+    """Knowledge Graph `support` with v1 = `MAP_DETAILS_ONTOLOGY`."""
+    client.create_knowledge_graph("support", ontology=MAP_DETAILS_ONTOLOGY)
+    return {}
+
+
 SCENARIOS: dict[str, Scenario] = {
     "construction_runs": construction_runs,
     "construction_runs_reader": construction_runs_reader,
@@ -361,6 +392,7 @@ SCENARIOS: dict[str, Scenario] = {
     "observed_support": observed_support,
     "compared_runs": compared_runs,
     "ontology_map": ontology_map,
+    "ontology_map_details": ontology_map_details,
 }
 
 
