@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar'
+import { KNOWLEDGE_GRAPHS_LOAD_ERROR } from '@/pages/knowledge-graphs/KnowledgeGraphsLoaded'
 import { kgListUrl, switchKnowledgeGraphUrl } from './knowledge-graph-sections'
 
 const NONE_SELECTED = 'Select a Knowledge Graph'
@@ -62,7 +63,7 @@ export function KnowledgeGraphSwitcher({ current, knowledgeGraphs, open, onOpenC
             <CommandList label="Knowledge Graphs">
               {knowledgeGraphs.data === undefined ? (
                 <p className="px-2 py-3 text-center text-sm text-muted-foreground">
-                  {knowledgeGraphs.isError ? 'Could not load the Knowledge Graphs' : 'Loading Knowledge Graphs…'}
+                  {knowledgeGraphs.isError ? KNOWLEDGE_GRAPHS_LOAD_ERROR : 'Loading Knowledge Graphs…'}
                 </p>
               ) : (
                 <CommandGroup>

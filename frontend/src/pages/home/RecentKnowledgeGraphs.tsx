@@ -1,13 +1,12 @@
 import { useId, useMemo } from 'react'
 import { Link } from 'react-router'
 import { kgListUrl } from '@/app/knowledge-graph-sections'
-import { type KnowledgeGraphSummary, useKnowledgeGraphs } from '@/api/knowledge-graphs'
+import type { KnowledgeGraphSummary } from '@/api/knowledge-graphs'
 import { DataTable } from '@/components/DataTable'
-import { ErrorAlert } from '@/components/ErrorAlert'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useDataTable } from '@/lib/data-table'
 import { knowledgeGraphColumns } from '@/pages/knowledge-graphs/knowledge-graph-columns'
-import { NoKnowledgeGraphs } from '@/pages/knowledge-graphs/NoKnowledgeGraphs'
+import { KnowledgeGraphsLoaded } from '@/pages/knowledge-graphs/KnowledgeGraphsLoaded'
 
 const RECENT_COUNT = 5
 
@@ -19,7 +18,6 @@ function mostRecent(knowledgeGraphs: readonly KnowledgeGraphSummary[], count: nu
 
 /** Home's Recent Knowledge Graphs block, from the same list the `/kg` page shows. */
 export function RecentKnowledgeGraphs() {
-  const knowledgeGraphs = useKnowledgeGraphs()
   const headingId = useId()
 
   return (
@@ -32,15 +30,9 @@ export function RecentKnowledgeGraphs() {
           View all
         </Link>
       </div>
-      {knowledgeGraphs.isPending ? (
-        <Skeleton className="h-40 w-full" />
-      ) : knowledgeGraphs.isError ? (
-        <ErrorAlert error={knowledgeGraphs.error} title="Could not load the Knowledge Graphs" />
-      ) : knowledgeGraphs.data.length === 0 ? (
-        <NoKnowledgeGraphs headingLevel={3} />
-      ) : (
-        <RecentTable data={knowledgeGraphs.data} />
-      )}
+      <KnowledgeGraphsLoaded pending={<Skeleton className="h-40 w-full" />} headingLevel={3}>
+        {(data) => <RecentTable data={data} />}
+      </KnowledgeGraphsLoaded>
     </section>
   )
 }
