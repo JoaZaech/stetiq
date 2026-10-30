@@ -7,6 +7,7 @@ import {
   type OwnerKind,
 } from '@/api/ontology-diff'
 import type { Ontology } from '@/api/ontology-versions'
+import { codePointOrder } from '@/lib/compare'
 import { attributeReference, constraintsOn } from './concepts'
 import { ontologyMap, type OntologyMap, type PatternLink } from './ontology-map'
 import type { MapSelection } from './ontology-map-focus'
@@ -300,7 +301,7 @@ function attributeChanges(changes: OntologyChange[]): AttributeChange[] {
     byName.set(name, [...(byName.get(name) ?? []), c])
   }
   return [...byName]
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .sort(([a], [b]) => codePointOrder(a, b))
     .map(([name, cs]) => {
       // Added or removed is one change; any other is a modification, one change per detail.
       const kind = cs.length === 1 && (cs[0].kind === 'added' || cs[0].kind === 'removed') ? cs[0].kind : 'modified'

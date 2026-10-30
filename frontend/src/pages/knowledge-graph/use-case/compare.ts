@@ -1,4 +1,5 @@
 import type { CompetencyQuestion, UseCase } from '@/api/use-cases'
+import { codePointOrder } from '@/lib/compare'
 
 /** The fields of a Competency Question that can change; its `id` is what matches it. */
 export const COMPETENCY_QUESTION_FIELDS = ['question', 'query', 'expected_answer', 'concepts'] as const
@@ -68,7 +69,7 @@ export function compareUseCases(from: UseCase, to: UseCase): UseCaseComparison {
 }
 
 function byId(questions: CompetencyQuestion[]): Map<string, CompetencyQuestion> {
-  const sorted = [...questions].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  const sorted = [...questions].sort((a, b) => codePointOrder(a.id, b.id))
   return new Map(sorted.map((q) => [q.id, q]))
 }
 
@@ -80,7 +81,7 @@ function fieldValue(question: CompetencyQuestion, field: CompetencyQuestionField
 function canonical(value: unknown): string {
   return JSON.stringify(value, (_key, v: unknown) =>
     v && typeof v === 'object' && !Array.isArray(v)
-      ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => codePointOrder(a, b)))
       : v,
   ) ?? 'undefined'
 }
