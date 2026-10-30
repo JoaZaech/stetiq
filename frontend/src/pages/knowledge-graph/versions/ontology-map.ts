@@ -132,8 +132,14 @@ export function neighboursOf(map: OntologyMap, label: string): Neighbourhood {
   return { classes: [...classes].sort(), links: links.map((l) => l.id).sort() }
 }
 
-/** What is selected on the Map: one class, by label, or one Pattern link, by id. */
-export type MapSelection = { kind: 'class'; label: string } | { kind: 'link'; id: string }
+/**
+ * What is selected on the Map: one class, by label, one Pattern link, by id, or two
+ * classes, to find the shortest paths between them.
+ */
+export type MapSelection =
+  | { kind: 'class'; label: string }
+  | { kind: 'link'; id: string }
+  | { kind: 'path'; from: string; to: string }
 
 /** The classes and links a selection keeps in focus; the rest of the Map fades. */
 export interface MapFocus {
@@ -143,7 +149,8 @@ export interface MapFocus {
 
 /**
  * What stays in focus for a selection: a class with its neighbours and the links to them,
- * or a link with the two classes it joins. Null when nothing (that still exists) is
+ * a link with the two classes it joins, or two classes with every shortest path between
+ * them (just the two when there is none). Null when nothing (that still exists) is
  * selected, so nothing fades.
  */
 export function focusOf(map: OntologyMap, selection: MapSelection | null): MapFocus | null {
@@ -156,6 +163,16 @@ export function focusOf(map: OntologyMap, selection: MapSelection | null): MapFo
     const link = map.links.find((l) => l.id === selection.id)
     if (!link) return null
     return { classes: new Set([link.source, link.target]), links: new Set([link.id]) }
+  }
+  if (selection?.kind === 'path') {
+    const { from, to } = selection
+    if (!map.nodes.some((n) => n.label === from) || !map.nodes.some((n) => n.label === to)) return null
+    const paths = shortestPaths(map, from, to)
+    const steps = paths.flatMap((p) => p.steps)
+    return {
+      classes: new Set([from, to, ...paths.flatMap((p) => p.classes), ...steps.flatMap((s) => s.ancestors)]),
+      links: new Set(steps.flatMap((s) => s.links)),
+    }
   }
   return null
 }

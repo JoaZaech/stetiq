@@ -389,6 +389,26 @@ describe('shortestPaths', () => {
     ])
   })
 
+  it('keeps a path between two selected classes in focus, with the ancestors an inherited step climbs', () => {
+    const map = ontologyMap({
+      ...PARTIES,
+      node_types: [...PARTIES.node_types, { label: 'Product' }],
+      relationship_types: [...PARTIES.relationship_types, { label: 'ABOUT' }],
+      patterns: [...PARTIES.patterns, ['Ticket', 'ABOUT', 'Product']],
+    })
+
+    expect(focusOf(map, { kind: 'path', from: 'VipCustomer', to: 'Product' })).toEqual({
+      classes: new Set(['VipCustomer', 'Customer', 'Ticket', 'Product']),
+      links: new Set(['(Customer)-[OPENED]->(Ticket)', '(Ticket)-[ABOUT]->(Product)']),
+    })
+    // With no path, only the two classes stay in focus.
+    expect(focusOf(map, { kind: 'path', from: 'Party', to: 'Product' })).toEqual({
+      classes: new Set(['Party', 'Product']),
+      links: new Set(),
+    })
+    expect(focusOf(map, { kind: 'path', from: 'Party', to: 'Agent' })).toBeNull()
+  })
+
   it('finds no path between classes nothing connects, nor to a class the Map does not have', () => {
     const map = ontologyMap({ ...ONTOLOGY, node_types: [...ONTOLOGY.node_types, { label: 'Agent' }] })
 
