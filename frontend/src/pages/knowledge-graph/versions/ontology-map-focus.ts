@@ -2,8 +2,8 @@
  * What the Map brings forward: a selection's focus and details, and the Concept search's
  * matches.
  */
-import type { Ontology, OntologyConcept, OntologyProperty } from '@/api/ontology-versions'
-import { constraintsOf } from './concepts'
+import type { Ontology, OntologyProperty } from '@/api/ontology-versions'
+import { constraintsOf, superclassChain } from './concepts'
 import { ontologyMap, type OntologyMap } from './ontology-map'
 import { shortestPaths } from './ontology-map-paths'
 import { searchOntology, type SearchResult } from './ontology-map-search'
@@ -116,24 +116,18 @@ const detailProperty = (p: OntologyProperty, inheritedFrom?: string): DetailProp
 
 /**
  * The details of a selected class or link, or null when nothing (that the Ontology has)
- * is selected. A class's inherited properties come from its superclass chain, which stops
- * at a superclass the Ontology does not declare and never revisits a class.
+ * is selected. A class's inherited properties come from its `superclassChain`.
  */
 export function detailsOf(ontology: Ontology, selection: MapSelection | null): MapDetails | null {
   if (selection?.kind === 'class') {
-    const classes = new Map(ontology.node_types.map((n) => [n.label, n]))
-    const node = classes.get(selection.label)
+    const [node, ...ancestors] = superclassChain(ontology, selection.label)
     if (!node) return null
     const properties: DetailProperty[] = []
-    const seen = new Set<string>()
-    let c: OntologyConcept | undefined = node
-    while (c && !seen.has(c.label)) {
-      seen.add(c.label)
+    for (const c of [node, ...ancestors]) {
       for (const p of c.properties ?? []) {
         if (properties.some((q) => q.name === p.name)) continue
         properties.push(detailProperty(p, c === node ? undefined : c.label))
       }
-      c = c.parent === undefined ? undefined : classes.get(c.parent)
     }
     return {
       kind: 'class',

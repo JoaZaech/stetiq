@@ -1,4 +1,4 @@
-import type { Ontology } from '@/api/ontology-versions'
+import type { Ontology, OntologyConcept } from '@/api/ontology-versions'
 
 /** A class Concept, placed in the hierarchy: `depth` 0 has no (known) superclass. */
 export interface ClassRow {
@@ -52,6 +52,22 @@ export const patternId = ([source, relation, target]: Ontology['patterns'][numbe
 export const constraintsOf = (ontology: Ontology, label: string) =>
   (ontology.constraints ?? []).filter((c) => c.node_type === label).map((c) => `${c.type} (${c.property_name})`)
 
+/**
+ * Class `label` and its ancestors, nearest first: the chain its attributes are inherited
+ * along. It stops at a superclass the Ontology does not declare and never revisits a
+ * class; empty when the Ontology has no class `label`.
+ */
+export function superclassChain(ontology: Ontology, label: string): OntologyConcept[] {
+  const classes = new Map(ontology.node_types.map((n) => [n.label, n]))
+  const chain: OntologyConcept[] = []
+  let c = classes.get(label)
+  while (c && !chain.includes(c)) {
+    chain.push(c)
+    c = c.parent === undefined ? undefined : classes.get(c.parent)
+  }
+  return chain
+}
+
 /** An Ontology's Concepts as three tables: classes in hierarchy order, relations, attributes. */
 export function conceptTables(ontology: Ontology): ConceptTables {
   const labels = new Set(ontology.node_types.map((n) => n.label))
@@ -61,20 +77,13 @@ export function conceptTables(ontology: Ontology): ConceptTables {
     children.set(parent, [...(children.get(parent) ?? []), node])
   }
 
-  const byLabel = new Map(ontology.node_types.map((n) => [n.label, n]))
-  // The attribute names a class inherits: its ancestors', nearest first, stopping at an
-  // undeclared superclass and never revisiting a class.
-  const inheritedNames = (node: (typeof ontology.node_types)[number]) => {
+  // The attribute names a class inherits: its ancestors' that it does not redeclare.
+  const inheritedNames = (node: OntologyConcept) => {
     const own = new Set((node.properties ?? []).map((p) => p.name))
-    const inherited = new Set<string>()
-    const seen = new Set([node.label])
-    let c = node.parent === undefined ? undefined : byLabel.get(node.parent)
-    while (c && !seen.has(c.label)) {
-      seen.add(c.label)
-      for (const p of c.properties ?? []) if (!own.has(p.name)) inherited.add(p.name)
-      c = c.parent === undefined ? undefined : byLabel.get(c.parent)
-    }
-    return inherited
+    const inherited = superclassChain(ontology, node.label)
+      .slice(1)
+      .flatMap((c) => (c.properties ?? []).map((p) => p.name))
+    return new Set(inherited.filter((name) => !own.has(name)))
   }
 
   const classes: ClassRow[] = []
