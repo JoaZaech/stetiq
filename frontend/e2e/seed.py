@@ -145,6 +145,17 @@ competency_questions:
 """
 
 
+def _runs_client(client: stetiq.Client) -> stetiq.Client:
+    """A Client on `client`'s database over the Graph Source of `construction_runs`."""
+    graph = stetiq.InMemoryGraphSource()
+    ada = graph.add_node(["Customer"], {"name": "Ada"})
+    ticket = graph.add_node(["Ticket"], {"opened_at": date(2026, 1, 1), "priority": 2})
+    graph.add_relationship(ada, "OPENED", ticket)
+    graph.add_relationship(ticket, "ESCALATED", ada)
+    graph.add_query_result("MATCH (c:Customer) RETURN c.name AS name", [{"name": "Ada"}])
+    return stetiq.Client(client.tracking_uri, graph_source=graph)
+
+
 def construction_runs(_client: stetiq.Client) -> dict[str, Any]:
     """Construction Runs of two Knowledge Graphs over the same Graph Source, which holds a
     `Ticket.priority` and an `ESCALATED` relationship no Ontology declares:
@@ -158,15 +169,8 @@ def construction_runs(_client: stetiq.Client) -> dict[str, Any]:
 
     The canned query rows hold instance data ("Ada") that the UI must never show.
     """
-    graph = stetiq.InMemoryGraphSource()
-    client = stetiq.Client(_client.tracking_uri, graph_source=graph)
+    client = _runs_client(_client)
     scope = GraphSourceScope(database="neo4j")
-    ada = graph.add_node(["Customer"], {"name": "Ada"})
-    ticket = graph.add_node(["Ticket"], {"opened_at": date(2026, 1, 1), "priority": 2})
-    graph.add_relationship(ada, "OPENED", ticket)
-    graph.add_relationship(ticket, "ESCALATED", ada)
-    graph.add_query_result("MATCH (c:Customer) RETURN c.name AS name", [{"name": "Ada"}])
-
     client.create_knowledge_graph("support", ontology=SUPPORT_V1)
     client.register_use_case("support", RUNS_USE_CASE)
     client.bind_graph_source("support", scope)
@@ -190,6 +194,17 @@ def construction_runs_reader(client: stetiq.Client) -> dict[str, Any]:
     """`construction_runs`, plus a token for grace that can read `support` only."""
     seeded = construction_runs(client)
     return {**seeded, "grace": issue_token(client, "grace", {"support": "read"})}
+
+
+def compared_runs(client: stetiq.Client) -> dict[str, Any]:
+    """`construction_runs`, plus `rerun`: a second finished `support` run over the same
+    graph with the same extractor and recall as `finished`, but another temperature
+    and precision."""
+    seeded = construction_runs(client)
+    with _runs_client(client).start_run("support", ontology_version=1) as run:
+        run.log_params({"extractor": "llm", "temperature": 0.5})
+        run.log_metrics({"precision": 0.85, "recall": 0.8})
+    return {**seeded, "rerun": run.id}
 
 
 # v4 (from v2): deprecates Agent, drops Ticket.opened_at and adds an ASSIGNED relation,
@@ -316,6 +331,7 @@ SCENARIOS: dict[str, Scenario] = {
     "described_support": described_support,
     "support_use_case_versions": support_use_case_versions,
     "observed_support": observed_support,
+    "compared_runs": compared_runs,
 }
 
 

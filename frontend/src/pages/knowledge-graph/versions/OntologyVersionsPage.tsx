@@ -11,7 +11,7 @@ import { useOntologyVersions, type OntologyVersion } from '@/api/ontology-versio
 import { knowledgeGraphSection, kgUrl } from '@/app/knowledge-graph-sections'
 import { DataTable } from '@/components/DataTable'
 import { ErrorAlert } from '@/components/ErrorAlert'
-import { MetricColumnsPicker } from '@/components/MetricColumnsPicker'
+import { ColumnPicker } from '@/components/ColumnPicker'
 import { ViewModeToggle } from '@/components/ViewModeToggle'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -19,7 +19,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { createDataTableColumnHelper, useDataTable } from '@/lib/data-table'
 import { formatDateTime, formatMetric } from '@/lib/format'
 import { metricSeries } from '@/lib/metric-charts'
-import { useChartSearch, useMetricColumns, useViewMode } from '@/lib/metric-view-params'
+import { metricColumnId, useChartSearch, useShownColumns, useViewMode } from '@/lib/metric-view-params'
 import { KnowledgeGraphSectionPage } from '../KnowledgeGraphSectionPage'
 import { useKnowledgeGraphName } from '../params'
 import { AliasChips, CandidateBadge } from './AliasChips'
@@ -89,7 +89,7 @@ const columns = column.columns([
 /** A column for one Evaluator metric; a version without it shows a dash and sorts last. */
 function metricColumn(metric: string) {
   return column.accessor((row) => row.metrics[metric], {
-    id: metric,
+    id: metricColumnId(metric),
     header: metric,
     sortFn: 'basic',
     sortUndefined: 'last',
@@ -118,16 +118,20 @@ export function OntologyVersionsPage() {
   const contractAlias = useContractAlias(name)
   const metrics = useVersionMetrics(name, versions.data)
   const [mode, setMode] = useViewMode()
-  const [metricColumns, setMetricColumns] = useMetricColumns()
+  const [shownColumns, setShownColumn] = useShownColumns()
 
   const actions = (
     <>
       {mode === 'table' && (
-        <MetricColumnsPicker
-          heading="Evaluator metrics"
-          metrics={metrics.names}
-          selected={metricColumns}
-          onChange={setMetricColumns}
+        <ColumnPicker
+          groups={[
+            {
+              label: 'Evaluator metrics',
+              columns: metrics.names.map((m) => ({ id: metricColumnId(m), label: m })),
+            },
+          ]}
+          visible={shownColumns}
+          onToggle={setShownColumn}
         />
       )}
       <ViewModeToggle mode={mode} onChange={setMode} />
@@ -152,7 +156,7 @@ export function OntologyVersionsPage() {
         promotions={promotions.data}
         contractAlias={contractAlias.data}
         metrics={metrics}
-        metricColumns={metricColumns}
+        shownColumns={shownColumns}
       />
     )
   }
@@ -170,7 +174,7 @@ function VersionTable({
   promotions,
   contractAlias,
   metrics,
-  metricColumns,
+  shownColumns,
 }: {
   name: string
   versions: OntologyVersion[]
@@ -178,7 +182,7 @@ function VersionTable({
   promotions: Promotion[]
   contractAlias: string | undefined
   metrics: VersionMetrics
-  metricColumns: string[]
+  shownColumns: ReadonlySet<string>
 }) {
   // Rows stay referentially stable between renders, as `useDataTable` needs.
   const data = useMemo(() => {
@@ -203,8 +207,8 @@ function VersionTable({
     [metrics],
   )
   const columnVisibility = useMemo(
-    () => Object.fromEntries(metrics.names.map((m) => [m, metricColumns.includes(m)])),
-    [metrics, metricColumns],
+    () => Object.fromEntries(metrics.names.map((m) => [metricColumnId(m), shownColumns.has(metricColumnId(m))])),
+    [metrics, shownColumns],
   )
   const table = useDataTable({
     data,

@@ -4,6 +4,7 @@ import { KnowledgeGraphLayout } from '@/pages/knowledge-graph/KnowledgeGraphLayo
 import { KnowledgeGraphSectionPage } from '@/pages/knowledge-graph/KnowledgeGraphSectionPage'
 import { ConstructionRunPage } from '@/pages/knowledge-graph/runs/ConstructionRunPage'
 import { ConstructionRunsPage } from '@/pages/knowledge-graph/runs/ConstructionRunsPage'
+import { RunComparePage } from '@/pages/knowledge-graph/runs/RunComparePage'
 import { RunConformanceTab } from '@/pages/knowledge-graph/runs/RunConformanceTab'
 import { RunEvaluationsTab } from '@/pages/knowledge-graph/runs/RunEvaluationsTab'
 import { RunOverviewTab } from '@/pages/knowledge-graph/runs/RunOverviewTab'
@@ -63,6 +64,8 @@ const knowledgeGraphSectionRoutes: Record<
   runs: {
     page: <ConstructionRunsPage />,
     children: [
+      // ?run=&run=…: the runs selected in the run table.
+      { path: 'compare', element: <RunComparePage />, handle: crumb(() => 'Compare') },
       {
         path: ':runId',
         element: <ConstructionRunPage />,

@@ -1,15 +1,29 @@
-import { useMemo, useState } from 'react'
+import { lazy, type ReactNode, Suspense, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router'
 import { type ConstructionRun, useRuns } from '@/api/runs'
-import { knowledgeGraphSection } from '@/app/knowledge-graph-sections'
+import { kgUrl, knowledgeGraphSection } from '@/app/knowledge-graph-sections'
 import { ColumnPicker } from '@/components/ColumnPicker'
 import { DataTable } from '@/components/DataTable'
 import { ErrorAlert } from '@/components/ErrorAlert'
+import { ViewModeToggle } from '@/components/ViewModeToggle'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { formatDateTime } from '@/lib/format'
+import { metricSeries } from '@/lib/metric-charts'
+import {
+  metricColumnId,
+  paramColumnId,
+  useChartSearch,
+  useShownColumns,
+  useViewMode,
+  type ViewMode,
+} from '@/lib/metric-view-params'
 import { KnowledgeGraphSectionPage } from '../KnowledgeGraphSectionPage'
 import { useKnowledgeGraphName } from '../params'
-import { useRunListParams } from './run-list-params'
-import { metricColumnId, paramColumnId, useRunTable } from './run-table'
+import { runChartPoints } from './compare'
+import { useRunFilters } from './run-list-params'
+import { useRunTable } from './run-table'
 import {
   filterRuns,
   RUN_STATUS_FILTERS,
@@ -28,76 +42,143 @@ const STATUS_LABELS: Record<RunStatusFilter, string> = {
   failed: 'Failed',
 }
 
-/** `/kg/:name/runs`: the Knowledge Graph's Construction Runs, newest first. */
+/**
+ * `/kg/:name/runs`: the Knowledge Graph's Construction Runs, newest first, as a table
+ * (select runs to compare them) or as one chart per run metric and Conformance.
+ */
 export function ConstructionRunsPage() {
+  const [mode, setMode] = useViewMode()
   return (
-    <KnowledgeGraphSectionPage section={SECTION}>
-      <RunList />
+    <KnowledgeGraphSectionPage section={SECTION} actions={<ViewModeToggle mode={mode} onChange={setMode} />}>
+      <RunList mode={mode} />
     </KnowledgeGraphSectionPage>
   )
 }
 
-function RunList() {
+function RunList({ mode }: { mode: ViewMode }) {
   const name = useKnowledgeGraphName()
   const runs = useRuns(name)
   if (runs.isError) return <ErrorAlert error={runs.error} />
   if (runs.isPending) return <Skeleton className="h-32 w-full" />
   if (runs.data.length === 0) return <EmptyState name={name} />
-  return <RunTable runs={runs.data} />
+  return <FilteredRuns runs={runs.data} mode={mode} />
 }
 
-function RunTable({ runs }: { runs: ConstructionRun[] }) {
-  const { filters, setFilter, columns, setColumn } = useRunListParams()
+/** The status and time-range filters, over both the table and the charts. */
+function FilteredRuns({ runs, mode }: { runs: ConstructionRun[]; mode: ViewMode }) {
+  const { filters, setFilter } = useRunFilters()
   // Durations of running runs and the time range are measured from when the list loaded.
   const [now] = useState(() => Date.now())
   const filtered = useMemo(() => filterRuns(runs, filters, now), [runs, filters, now])
+
+  const filterControls = (
+    <>
+      <ToggleGroup
+        type="single"
+        variant="outline"
+        size="sm"
+        aria-label="Status"
+        value={filters.status}
+        onValueChange={(value) => value && setFilter('status', value as RunStatusFilter)}
+      >
+        {RUN_STATUS_FILTERS.map((status) => (
+          <ToggleGroupItem key={status} value={status}>
+            {STATUS_LABELS[status]}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+      <ToggleGroup
+        type="single"
+        variant="outline"
+        size="sm"
+        aria-label="Started"
+        value={filters.range}
+        onValueChange={(value) => value && setFilter('range', value as RunTimeRange)}
+      >
+        {RUN_TIME_RANGES.map((range) => (
+          <ToggleGroupItem key={range.value} value={range.value}>
+            {range.label}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+    </>
+  )
+
+  if (mode === 'chart') {
+    return (
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-3">{filterControls}</div>
+        <RunCharts runs={filtered} />
+      </div>
+    )
+  }
+  return <RunTable runs={runs} filtered={filtered} now={now} filterControls={filterControls} />
+}
+
+function RunTable({
+  runs,
+  filtered,
+  now,
+  filterControls,
+}: {
+  runs: ConstructionRun[]
+  filtered: ConstructionRun[]
+  now: number
+  filterControls: ReactNode
+}) {
+  const name = useKnowledgeGraphName()
+  const [shownColumns, setShownColumn] = useShownColumns()
+  // Every key over all runs, so a filter never drops a column.
   const keys = useMemo(() => runKeys(runs), [runs])
-  const table = useRunTable({ runs: filtered, ...keys, visible: columns, now })
+  const table = useRunTable({ runs: filtered, ...keys, visible: shownColumns, now })
+  const navigate = useNavigate()
+  const selected = table.getSelectedRowModel().rows.map((row) => row.original.run)
+  const compare = () => {
+    const oldestFirst = [...selected].sort((a, b) => Date.parse(a.started_at) - Date.parse(b.started_at))
+    const query = new URLSearchParams(oldestFirst.map((run) => ['run', run.id]))
+    navigate(`${kgUrl(name, 'runs', 'compare')}?${query}`)
+  }
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          size="sm"
-          aria-label="Status"
-          value={filters.status}
-          onValueChange={(value) => value && setFilter('status', value as RunStatusFilter)}
-        >
-          {RUN_STATUS_FILTERS.map((status) => (
-            <ToggleGroupItem key={status} value={status}>
-              {STATUS_LABELS[status]}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          size="sm"
-          aria-label="Started"
-          value={filters.range}
-          onValueChange={(value) => value && setFilter('range', value as RunTimeRange)}
-        >
-          {RUN_TIME_RANGES.map((range) => (
-            <ToggleGroupItem key={range.value} value={range.value}>
-              {range.label}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
+        <Button size="sm" variant="outline" disabled={selected.length < 2} onClick={compare}>
+          Compare
+        </Button>
+        {filterControls}
         <div className="ml-auto">
           <ColumnPicker
             groups={[
               { label: 'Params', columns: keys.params.map((k) => ({ id: paramColumnId(k), label: k })) },
               { label: 'Metrics', columns: keys.metrics.map((k) => ({ id: metricColumnId(k), label: k })) },
             ]}
-            visible={columns}
-            onToggle={setColumn}
+            visible={shownColumns}
+            onToggle={setShownColumn}
           />
         </div>
       </div>
       <DataTable table={table} label="Construction Runs" empty="No Construction Run matches these filters." />
     </div>
+  )
+}
+
+// Recharts is large: load the chart grid only when the chart view is opened.
+const MetricChartGrid = lazy(() => import('@/components/MetricChartGrid'))
+
+const RUN_X_AXIS = {
+  label: 'Started',
+  format: (x: number) => formatDateTime(new Date(x).toISOString()),
+  scale: 'time',
+} as const
+
+/** One chart per run metric, plus Conformance, over the runs' start times. */
+function RunCharts({ runs }: { runs: ConstructionRun[] }) {
+  const [search, setSearch] = useChartSearch()
+  const series = useMemo(() => metricSeries(runChartPoints(runs)), [runs])
+  return (
+    <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+      <MetricChartGrid series={series} xAxis={RUN_X_AXIS} search={search} onSearchChange={setSearch} />
+    </Suspense>
   )
 }
 
