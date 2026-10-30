@@ -175,6 +175,10 @@ class Client:
     def get_knowledge_graph(self, name: str) -> KnowledgeGraph:
         return self._service.get_knowledge_graph(name)
 
+    def list_knowledge_graphs(self) -> list[KnowledgeGraph]:
+        """All Knowledge Graphs by name (in server mode: those the API token can read)."""
+        return self._service.list_knowledge_graphs()
+
     def register_ontology(self, knowledge_graph: str, ontology: OntologyInput) -> OntologyVersion:
         """Register an Ontology by hand; identical content returns the existing version."""
         version = self._service.register_ontology(knowledge_graph, _to_ontology(ontology))

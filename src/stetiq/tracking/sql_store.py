@@ -404,6 +404,15 @@ class SqlStore:
             return None
         return KnowledgeGraph(name=row["name"], created_at=datetime.fromisoformat(row["created_at"]))
 
+    def list_knowledge_graphs(self) -> list[KnowledgeGraph]:
+        query = select(knowledge_graphs).order_by(knowledge_graphs.c.name)
+        with self._connection() as conn:
+            rows = conn.execute(query).mappings().all()
+        return [
+            KnowledgeGraph(name=r["name"], created_at=datetime.fromisoformat(r["created_at"]))
+            for r in rows
+        ]
+
     def add_ontology_version(self, version: OntologyVersion) -> None:
         with self._connection() as conn:
             conn.execute(

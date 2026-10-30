@@ -19,6 +19,7 @@ from stetiq.gates import outcome_from_dict
 from stetiq.ontology import parse_dict
 from stetiq.use_case import parse_use_case_dict
 from stetiq.tracking import LocalTrackingService, SqlStore, TrackingService, wire
+from stetiq.web import ui_router
 
 DATABASE_URL_ENV = "STETIQ_DATABASE_URL"
 DEFAULT_DATABASE_URL = "sqlite:///.stetiq/server.db"
@@ -65,10 +66,13 @@ def create_app(
         kg = _target_knowledge_graph(request.path_params)
         if kg is not None:
             token.require(kg, needed)
-        elif not (request.method == "POST" and request.url.path == CREATE_KG_PATH):
+        elif not (
+            request.method in ("POST", "GET") and request.url.path == CREATE_KG_PATH
+        ):
             # Fail closed: a route whose Knowledge Graph we cannot tell is not reachable.
             raise PermissionDeniedError(f"Cannot authorize {request.method} {request.url.path}")
         # POST /knowledge-graphs names its Knowledge Graph in the body: checked in the route.
+        # GET /knowledge-graphs lists only the Knowledge Graphs the token can read.
 
     app = FastAPI(title="stetiq")
 
@@ -94,6 +98,15 @@ def create_app(
         request.state.token.require(name, "edit")
         declared = None if declared_ontology is None else parse_dict(declared_ontology)
         return wire.knowledge_graph_to_json(tracking.create_knowledge_graph(name, declared))
+
+    @api.get("/knowledge-graphs")
+    def list_knowledge_graphs(request: Request) -> list[dict[str, Any]]:
+        token = request.state.token
+        return [
+            wire.knowledge_graph_to_json(kg)
+            for kg in tracking.list_knowledge_graphs()
+            if token.allows(kg.name, "read")
+        ]
 
     @api.get("/knowledge-graphs/{name}")
     def get_knowledge_graph(name: str) -> dict[str, Any]:
@@ -344,4 +357,5 @@ def create_app(
         return [wire.gate_result_to_json(r) for r in tracking.list_gate_results(name)]
 
     app.include_router(api)
+    app.include_router(ui_router(tracking, registry))  # read-only web UI (ticket #18)
     return app

@@ -33,6 +33,9 @@ class Store(Protocol):
 
     def get_knowledge_graph(self, name: str) -> KnowledgeGraph | None: ...
 
+    def list_knowledge_graphs(self) -> list[KnowledgeGraph]:
+        """All Knowledge Graphs, by name."""
+
     def add_ontology_version(self, version: OntologyVersion) -> None:
         """Insert-only: Ontology Versions are immutable, there is no update."""
 

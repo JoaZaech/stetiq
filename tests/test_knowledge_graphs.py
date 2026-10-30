@@ -38,6 +38,14 @@ def test_knowledge_graph_with_malformed_ontology_is_not_created(client):
         client.get_knowledge_graph("customer-support-kg")
 
 
+def test_knowledge_graphs_are_listed_by_name(client, support_ontology):
+    assert client.list_knowledge_graphs() == []
+    client.create_knowledge_graph("support", ontology=support_ontology)
+    client.create_knowledge_graph("billing", ontology=support_ontology)
+
+    assert [kg.name for kg in client.list_knowledge_graphs()] == ["billing", "support"]
+
+
 def test_knowledge_graphs_persist_across_clients(client_factory, support_ontology):
     client_factory().create_knowledge_graph("customer-support-kg", ontology=support_ontology)
 
