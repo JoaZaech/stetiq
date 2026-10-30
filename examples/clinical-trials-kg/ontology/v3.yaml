@@ -1,0 +1,110 @@
+# Trial registry Knowledge Graph, Ontology Version 3.
+#
+# Compared with v2, aligned with the data standards team's reference (ontology/gold.yaml):
+# - adds Site.country, Visit.window_days and Trial.status, which the June export carries
+# - drops the uniqueness constraint on the optional Investigator.orcid (an inconsistency
+#   the constraint_consistency Evaluator flagged; dropping a constraint is additive)
+# Still additive from v1, so the Ontology Diff Gate accepts it.
+node_types:
+  - label: Trial
+    description: One registered clinical trial
+    properties:
+      - {name: registry_id, type: STRING, required: true, description: "The registry number, e.g. TR-2024-011"}
+      - {name: title, type: STRING, description: Public title}
+      - {name: phase, type: STRING, description: "I, II, III or IV"}
+      - {name: status, type: STRING, description: "recruiting, active or completed"}
+  - label: Site
+    description: A hospital or practice where a trial recruits
+    properties:
+      - {name: site_id, type: STRING, required: true}
+      - {name: city, type: STRING}
+      - {name: country, type: STRING, description: ISO 3166-1 alpha-2 code}
+  - label: Investigator
+    description: The clinician responsible for a site, by staff id
+    properties:
+      - {name: staff_id, type: STRING, required: true}
+      - {name: specialty, type: STRING}
+      - {name: orcid, type: STRING, description: "ORCID iD, when the investigator has one"}
+  - label: Participant
+    description: A pseudonymous trial participant (no name, no date of birth, no contact details)
+    properties:
+      - {name: pseudonym, type: STRING, required: true, description: "The registry pseudonym, e.g. P-10037"}
+      - {name: age_band, type: STRING, description: "Ten-year age band, e.g. 60-69"}
+      - {name: enrolled_on, type: DATE}
+  - label: Intervention
+    description: What a trial tests; Drug, Device and Procedure are its subtypes
+    properties:
+      - {name: code, type: STRING, required: true}
+      - {name: name, type: STRING, required: true}
+  - label: Drug
+    description: A medicinal product
+    parent: Intervention
+  - label: Device
+    description: A medical device
+    parent: Intervention
+  - label: Procedure
+    description: A clinical procedure or care pathway
+    parent: Intervention
+  - label: Condition
+    description: The condition a trial studies, by ICD-10-like code
+    properties:
+      - {name: code, type: STRING, required: true}
+      - {name: term, type: STRING}
+  - label: AdverseEvent
+    description: An adverse event reported during a trial
+    properties:
+      - {name: ae_id, type: STRING, required: true}
+      - {name: severity, type: STRING, description: "mild, moderate or severe"}
+      - {name: serious, type: BOOLEAN, description: Serious under the protocol's definition}
+      - {name: onset, type: DATE}
+  - label: Visit
+    description: A scheduled participant visit
+    properties:
+      - {name: visit_id, type: STRING, required: true}
+      - {name: number, type: INTEGER, description: Visit number within the schedule}
+      - {name: scheduled, type: DATE}
+      - {name: window_days, type: INTEGER, description: Days either side of the scheduled date the visit may happen}
+      - {name: deviation, type: STRING, description: "The protocol deviation recorded at this visit, if any"}
+  - label: Arm
+    description: A treatment arm of a trial, e.g. TR-2024-011/A
+    properties:
+      - {name: code, type: STRING, required: true}
+      - {name: kind, type: STRING, description: experimental or control}
+relationship_types:
+  - label: CONDUCTED_AT
+    description: The sites a trial recruits at
+  - label: LED_BY
+    description: The investigator responsible for a site
+  - label: ENROLLED_AT
+    description: The site a participant was enrolled at
+  - label: CONSENTED_TO
+    description: The trial a participant gave informed consent to
+  - label: TESTS
+    description: The interventions a trial tests
+  - label: STUDIES
+    description: The condition a trial studies
+  - label: REPORTED_IN
+    description: The trial an adverse event was reported in
+  - label: ATTENDED
+    description: The visits of a participant
+  - label: ASSIGNED_TO
+    description: The arm a participant was randomised to
+  - label: EXPERIENCED
+    description: The adverse events a participant experienced
+patterns:
+  - [Trial, CONDUCTED_AT, Site]
+  - [Site, LED_BY, Investigator]
+  - [Participant, ENROLLED_AT, Site]
+  - [Participant, CONSENTED_TO, Trial]
+  - [Trial, TESTS, Intervention]
+  - [Trial, TESTS, Drug]
+  - [Trial, TESTS, Device]
+  - [Trial, TESTS, Procedure]
+  - [Trial, STUDIES, Condition]
+  - [AdverseEvent, REPORTED_IN, Trial]
+  - [Participant, ATTENDED, Visit]
+  - [Participant, ASSIGNED_TO, Arm]
+  - [Participant, EXPERIENCED, AdverseEvent]
+constraints:
+  - {type: UNIQUENESS, node_type: Trial, property_name: registry_id}
+  - {type: UNIQUENESS, node_type: Participant, property_name: pseudonym}

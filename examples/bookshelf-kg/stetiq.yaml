@@ -1,0 +1,27 @@
+# Repo config for the town library Knowledge Graph (see docs/guide/06-stetiq-yaml.md).
+# There is no Construction Entry Point: demo.py builds the Knowledge Graph in-process
+# with client.start_run.
+knowledge_graph: town-library
+
+gates:
+  - name: no-breaking-changes        # the Ontology Diff from the Contract Alias's version
+    check: ontology_diff
+    max_classification: deprecating  # deprecating Genre passes; removing it does not
+  - name: graph-conforms             # the latest Construction Run standing for the version
+    check: conformance
+    min_score: 1.0
+  - name: consistent-constraints
+    check: metric
+    evaluator: constraint_consistency
+    metric: inconsistencies
+    max: 0
+  - name: questions-answerable
+    check: metric
+    evaluator: structural_answerability
+    metric: answerable_ratio
+    min: 0.8
+  - name: shallow-hierarchy          # Person -> Author is as deep as the library wants to go
+    check: metric
+    evaluator: hierarchy
+    metric: max_depth
+    max: 2

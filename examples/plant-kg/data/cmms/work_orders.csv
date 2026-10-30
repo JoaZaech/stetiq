@@ -1,0 +1,9 @@
+work_order_id,machine_id,kind,opened_at,technician,downtime_minutes,title
+WO-2031,CNC-04,breakdown,2026-01-14,Priya Natarajan,42,Spindle vibration on CNC-04
+WO-2032,Press-02,breakdown,2026-01-27,Marcus Webb,95,Hydraulic pressure loss on Press-02
+WO-2033,Weld-03,preventive,2026-02-09,Tomasz Nowak,25,Torch service on Weld-03
+WO-2034,Paint-01,breakdown,2026-02-18,Lena Okafor,58,Paint defects on Paint-01
+WO-2035,Conveyor-07,breakdown,2026-03-03,Aisha Rahman,18,Belt slip on Conveyor-07
+WO-2036,CNC-04,preventive,2026-03-12,Diego Álvarez,37,Tool changer alignment on CNC-04
+WO-2037,Packer-05,breakdown,2026-03-25,Priya Natarajan,120,Film jam on Packer-05
+WO-2038,Lathe-02,breakdown,2026-04-02,Tomasz Nowak,15,Chuck pressure fault on Lathe-02

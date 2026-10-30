@@ -1,0 +1,2 @@
+agency_id,agency_name,agency_url,agency_timezone
+LHT,Lindenhaven Transit,https://www.lindenhaven-transit.example,Europe/Berlin

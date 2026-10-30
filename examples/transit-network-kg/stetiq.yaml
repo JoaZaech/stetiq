@@ -1,0 +1,38 @@
+# Repo config for the city-transit Knowledge Graph (see docs/guide/06-stetiq-yaml.md).
+knowledge_graph: city-transit
+
+# The Construction Entry Point `stetiq run` starts, from this folder.
+# transit_pipeline.py reads TRANSIT_FEED_DIR (which GTFS feed to load) and
+# TRANSIT_GRAPH_FILE (where the file-backed graph database lives) from the environment,
+# the way a real pipeline reads its database credentials: they are not stetiq placeholders.
+entry_point:
+  command: python transit_pipeline.py --ontology {ontology} --scope {graph_source}
+
+drift:
+  max_count_drop: 0.2
+
+gates:
+  - name: no-breaking-changes
+    check: ontology_diff
+    max_classification: additive
+  - name: graph-conforms
+    check: conformance
+    min_score: 1.0
+  - name: names-follow-conventions   # transit_evaluators.NamingConventions, recorded from the SDK side
+    check: metric
+    evaluator: naming_conventions
+    metric: violations
+    max: 0
+  - name: questions-answerable
+    check: metric
+    evaluator: structural_answerability
+    metric: answerable_ratio
+    min: 0.8
+  - name: no-isolated-node-types
+    check: metric
+    evaluator: isolated_node_types
+    metric: isolated_node_types
+    max: 0
+  - name: no-type-collapses
+    check: count_drop
+    max_drop: 0.2

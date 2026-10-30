@@ -1,0 +1,41 @@
+# Repo config for the retail-orders Knowledge Graph (see docs/guide/06-stetiq-yaml.md).
+# No entry_point: this example drives its Construction Runs from demo.py with
+# client.start_run; a real installation would put `python retail_pipeline.py ...` here.
+knowledge_graph: retail-orders
+
+# Statistical Drift thresholds for the weekly `stetiq observe` (Act 4): a node or
+# relationship type losing more than 25 % or growing by more than 150 % is Drift.
+drift:
+  max_count_drop: 0.25
+  max_count_increase: 1.5
+
+gates:
+  - name: no-breaking-changes
+    check: ontology_diff
+    max_classification: additive
+  - name: graph-conforms
+    check: conformance
+    min_score: 0.98
+  - name: no-type-collapses
+    check: count_drop
+    max_drop: 0.3
+  - name: properties-filled
+    check: metric
+    evaluator: observed_schema
+    metric: mean_fill_rate
+    min: 0.9
+  - name: shallow-hierarchy
+    check: metric
+    evaluator: hierarchy
+    metric: max_depth
+    max: 3
+  - name: no-duplicate-structures
+    check: metric
+    evaluator: redundancy
+    metric: duplicate_structure_concepts
+    max: 2
+  - name: questions-answerable
+    check: metric
+    evaluator: structural_answerability
+    metric: answerable_ratio
+    min: 0.75

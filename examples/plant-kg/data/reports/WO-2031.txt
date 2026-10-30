@@ -1,0 +1,9 @@
+WO-2031 / CNC-04 / 14 Jan 2026 / Priya Natarajan (badge T-118)
+
+Got paged at 09:10 for heavy vibration on CNC-04 while it was roughing brackets. Stopped the machine and pulled the spindle cover. The work involved the spindle bearing and the coolant pump: the bearing was running hot and rough, and the coolant pump had been cavitating for a while, which starved the bearing of coolant.
+
+Root cause was a worn spindle bearing that had passed its service interval. A replacement spindle bearing was ordered from SKF and Marcus fitted it in the afternoon. Machine back in production at 09:52, bracket batch re-measured and released.
+
+Follow-ups:
+- [ ] Add vibration monitoring to CNC-04 (owner: Priya Natarajan)
+- [x] Replace the spindle bearing (owner: Marcus Webb)

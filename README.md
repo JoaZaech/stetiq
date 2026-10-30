@@ -2,6 +2,25 @@
 
 stetiq versions, evaluates and governs the Ontology of a Knowledge Graph. **To use it, read the [user guide](docs/guide/)**, starting with [Getting started](docs/guide/01-getting-started.md). The web UI shows the same guide under **Help**.
 
+## Examples
+
+[`examples/`](examples/) holds complete, local-only walkthroughs. Each is one team's Knowledge Graph built from that team's own data, taken through stetiq's workflow, with a test in `tests/test_example_*.py` that runs the story offline and pins its outcomes. Run one with `cd examples/<name> && uv run python demo.py`, then `uv run stetiq ui` from that folder.
+
+| Example | Domain and size | What it shows |
+| --- | --- | --- |
+| [`plant-kg`](examples/plant-kg/) | Factory maintenance, ~70 nodes from CMMS exports and free-text reports (read by Claude or a regex script) | The whole loop: Ontology Versions, Competency Questions, Construction Runs, Candidates, custom Evaluators, gold alignment, Gates, Promotion, Drift, strict Evolution Mode |
+| [`bookshelf-kg`](examples/bookshelf-kg/) | A town library's catalogue, ~30 nodes, in-memory Graph Source | The smallest story: content-hash dedupe, diffing two files, a class hierarchy, deprecation with `replaced_by` (a deprecating Diff) vs removal (a breaking one), Promotion and rollback |
+| [`clinical-trials-kg`](examples/clinical-trials-kg/) | A hospital's trial registry, ~550 pseudonymous nodes | A regulated domain in strict Evolution Mode from day one, a gold reference Knowledge Graph gated on recall, two exports of the same registry, a PII-free Evaluator |
+| [`citation-graph-kg`](examples/citation-graph-kg/) | A university's research output, ~200 nodes, through an in-process stetiq server | Server mode with API Tokens: three principals, read-only denial, uniform 404s, the actor taken from the token, and a Use Case that gains questions over three versions |
+| [`retail-orders-kg`](examples/retail-orders-kg/) | An online retailer's orders, ~13,000 to 38,000 generated nodes, label-scoped in-memory Graph Source | The operations side: six Construction Runs compared, eight weekly Observations over a season with statistical, structural and count-drop Drift, and why graph size does not change what stetiq stores |
+| [`transit-network-kg`](examples/transit-network-kg/) | A city's public transport from GTFS feeds, ~550 nodes | The CLI-only workflow a CI job scripts: every act through `stetiq` commands and their exit codes (gate 0/3/1, observe 0/3/1, run 1 on a strict failure), a naming-convention Evaluator, a broken config |
+
+To browse every example in one web UI, `uv run python examples/run_all.py` runs each walkthrough into a single shared tracking database, `.stetiq/examples.db`, then:
+
+```bash
+uv run stetiq ui --tracking-uri sqlite:///.stetiq/examples.db --port 5055
+```
+
 ## How we work with agents
 
 This repo uses [Matt Pocock's skills](https://github.com/mattpocock/skills) for Claude Code. Their settings live in `docs/agents/`. Issues go in GitHub Issues, and the triage labels are `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human` and `wontfix`.

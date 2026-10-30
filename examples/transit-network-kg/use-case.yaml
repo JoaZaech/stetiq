@@ -1,0 +1,50 @@
+# What the timetable team needs the city-transit Knowledge Graph to answer.
+#
+# A question with a `query` is executed against the graph at the end of every
+# Construction Run (competency_question_execution). Every question is also judged
+# structurally against each Ontology Version (structural_answerability). The Cypher
+# below is what we would run on Neo4j; the example's file-backed Graph Source answers
+# these same queries (transit_graph.QUERIES).
+description: "City transit: which stops a line serves, where passengers change, how many trips run per service day, which stops are step-free."
+competency_questions:
+  - id: stops-on-route
+    question: Which stops does tram 1 serve?
+    query: >-
+      MATCH (r:Route {short_name: '1'})-[:HAS_TRIP]->(:Trip)-[:HAS_STOP_TIME]->(:StopTime)-[:AT_STOP]->(s:Stop)
+      RETURN DISTINCT s.name AS stop ORDER BY stop
+  - id: transfers-at-stop
+    question: Which routes can passengers change between at Market Square?
+    # Two hops out from the stop and two hops back up to the other routes' trips.
+    query: >-
+      MATCH (s:Stop {name: 'Market Square'})<-[:AT_STOP]-(:StopTime)<-[:HAS_STOP_TIME]-(:Trip)<-[:HAS_TRIP]-(r:Route)
+      RETURN DISTINCT r.short_name AS route ORDER BY route
+  - id: trips-per-service
+    question: How many trips run on each service calendar (weekday, weekend, night)?
+    query: >-
+      MATCH (t:Trip)-[:RUNS_ON]->(c:Service)
+      RETURN c.id AS service, count(t) AS trips ORDER BY service
+    # The June 2026 timetable. A feed that changes the trip count fails this question
+    # until the timetable team updates the expectation.
+    expected_answer:
+      - {service: NIGHT, trips: 2}
+      - {service: WKD, trips: 27}
+      - {service: WKE, trips: 18}
+  - id: accessible-stops
+    question: How many stops are step-free, and how many are not?
+    # Needs Stop.wheelchair_boarding, which the first Declared Ontology does not have.
+    query: >-
+      MATCH (s:Stop) WHERE s.wheelchair_boarding IS NOT NULL
+      RETURN s.wheelchair_boarding AS wheelchair_boarding, count(s) AS stops ORDER BY wheelchair_boarding
+  - id: depot-of-route
+    question: Which depot does each route run from?
+    # No query, so nothing is executed; the explicit Concept mapping lets stetiq judge it structurally.
+    concepts: [Route.short_name, "(Route)-[OPERATED_FROM]->(Depot)", Depot.name]
+  - id: stops-per-zone
+    question: How many stops lie in each fare zone?
+    query: >-
+      MATCH (s:Stop)-[:IN_ZONE]->(z:FareZone)
+      RETURN z.name AS zone, count(s) AS stops ORDER BY zone
+  - id: average-dwell-time
+    question: What is the average dwell time per stop?
+    # Neither a query nor a Concept mapping yet: stetiq reports it as unmapped until a
+    # question mapper (STETIQ_QUESTION_MAPPER) or a human maps it.

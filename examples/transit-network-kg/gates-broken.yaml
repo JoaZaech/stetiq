@@ -1,0 +1,12 @@
+# A broken variant of stetiq.yaml: the conformance Gate's key is misspelt (min_scor).
+# `stetiq gate --config gates-broken.yaml` exits 1 with the error, not 3: a config
+# error is not a failed Gate, and CI must be able to tell the two apart.
+knowledge_graph: city-transit
+
+gates:
+  - name: no-breaking-changes
+    check: ontology_diff
+    max_classification: additive
+  - name: graph-conforms
+    check: conformance
+    min_scor: 1.0

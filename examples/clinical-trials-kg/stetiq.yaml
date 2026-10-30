@@ -1,0 +1,54 @@
+# Repo config for the trial registry Knowledge Graph (see docs/guide/06-stetiq-yaml.md).
+knowledge_graph: trial-registry
+
+# The Construction Entry Point `stetiq run` (and the demo) starts. trials_pipeline.py
+# reads TRIALS_EXPORT, TRIALS_GRAPH_FILE and TRIALS_BIOMARKERS from the environment,
+# the way a real loader reads its database credentials.
+entry_point:
+  command: python trials_pipeline.py --ontology {ontology} --scope {graph_source}
+
+drift:
+  max_count_drop: 0.2
+  max_count_increase: 1.0
+
+# A regulated registry: every Gate below has to pass before the cdm-bot moves production.
+gates:
+  - name: no-breaking-changes
+    check: ontology_diff
+    max_classification: additive
+  - name: graph-conforms
+    check: conformance
+    min_score: 1.0
+  - name: gold-aligned             # the built-in gold_alignment Evaluator, against trial-registry-gold v1
+    check: metric
+    evaluator: gold_alignment
+    metric: recall
+    min: 0.85
+    parameters:
+      reference_knowledge_graph: trial-registry-gold
+      reference_version: 1
+  - name: pii-free                 # trials_evaluators.PiiFree, a custom Ontology Version Evaluator
+    check: metric
+    evaluator: pii_free
+    metric: pii_properties
+    max: 0
+  - name: consent-covered          # trials_evaluators.ConsentCoverage, a custom Construction Run Evaluator
+    check: metric
+    evaluator: consent_coverage
+    metric: coverage
+    min: 1.0
+  - name: questions-answerable
+    check: metric
+    evaluator: structural_answerability
+    metric: answerable_ratio
+    min: 0.85
+  - name: no-orphans
+    check: metric
+    evaluator: orphan_concepts
+    metric: orphan_concepts
+    max: 0
+  - name: consistent-constraints
+    check: metric
+    evaluator: constraint_consistency
+    metric: inconsistencies
+    max: 0

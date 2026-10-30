@@ -1,0 +1,86 @@
+# The retailer's category tree: department -> category -> subcategory (depth 3).
+# Every node becomes a Category node in the graph; the six departments also carry the
+# Department label (the Ontology's Department node type, a child of Category).
+departments:
+  - code: ELEC
+    name: Electronics
+    categories:
+      - code: AUDIO
+        name: Audio
+        subcategories:
+          - {code: HEADPH, name: Headphones}
+          - {code: SPEAK, name: Speakers}
+          - {code: EARBUD, name: Earbuds}
+      - code: COMP
+        name: Computing
+        subcategories:
+          - {code: LAPTOP, name: Laptops}
+          - {code: MONIT, name: Monitors}
+          - {code: KEYB, name: Keyboards & Mice}
+  - code: HOME
+    name: Home & Kitchen
+    categories:
+      - code: COOK
+        name: Cookware
+        subcategories:
+          - {code: PANS, name: Pans & Pots}
+          - {code: KNIVES, name: Knives}
+          - {code: BAKE, name: Bakeware}
+      - code: SMALLAPP
+        name: Small Appliances
+        subcategories:
+          - {code: COFFEE, name: Coffee Makers}
+          - {code: BLEND, name: Blenders}
+  - code: SPORT
+    name: Sports & Outdoors
+    categories:
+      - code: FIT
+        name: Fitness
+        subcategories:
+          - {code: YOGA, name: Yoga}
+          - {code: WEIGHTS, name: Weights}
+      - code: CAMP
+        name: Camping
+        subcategories:
+          - {code: TENTS, name: Tents}
+          - {code: SLEEP, name: Sleeping Bags & Mats}
+          - {code: LAMPS, name: Lanterns & Headlamps}
+  - code: FASH
+    name: Fashion
+    categories:
+      - code: MENS
+        name: Menswear
+        subcategories:
+          - {code: MSHOES, name: Men's Shoes}
+          - {code: MJACK, name: Men's Jackets}
+      - code: WOMENS
+        name: Womenswear
+        subcategories:
+          - {code: WSHOES, name: Women's Shoes}
+          - {code: WDRESS, name: Dresses}
+  - code: BEAUTY
+    name: Beauty & Care
+    categories:
+      - code: SKIN
+        name: Skincare
+        subcategories:
+          - {code: MOIST, name: Moisturisers}
+          - {code: SERUM, name: Serums}
+      - code: HAIR
+        name: Haircare
+        subcategories:
+          - {code: SHAMP, name: Shampoo & Conditioner}
+          - {code: STYLE, name: Styling Tools}
+  - code: TOYS
+    name: Toys & Games
+    categories:
+      - code: BOARD
+        name: Board Games
+        subcategories:
+          - {code: STRAT, name: Strategy Games}
+          - {code: FAMILY, name: Family Games}
+      - code: BUILD
+        name: Building Sets
+        subcategories:
+          - {code: BRICKS, name: Brick Sets}
+          - {code: MODELS, name: Model Kits}

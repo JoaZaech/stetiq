@@ -1,0 +1,8 @@
+WO-2036 / CNC-04 / 12 Mar 2026 / Diego Álvarez
+
+Preventive job on CNC-04 after the operator reported the tool changer hesitating. The work involved the tool changer and the gripper. The gripper arm was out of alignment by about a millimetre, which matches the crash reported the week before. Lathe-02 feeds CNC-04, so the lathe buffered parts while we worked.
+
+Root cause was drift in the tool changer alignment after a crash the week before. A replacement gripper was ordered from Haas because the old one had a hairline crack.
+
+Follow-ups:
+- [x] Re-teach the tool changer positions on CNC-04 (owner: Diego Álvarez)

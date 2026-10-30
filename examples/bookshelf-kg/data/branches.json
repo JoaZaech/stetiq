@@ -1,0 +1,14 @@
+[
+  {
+    "code": "CEN",
+    "name": "Central Library",
+    "address": "1 Market Square",
+    "head_librarian": "Ines Ferreira"
+  },
+  {
+    "code": "RIV",
+    "name": "Riverside Branch",
+    "address": "48 Mill Lane",
+    "head_librarian": "Tomas Lindqvist"
+  }
+]

@@ -1,0 +1,75 @@
+# city-transit Knowledge Graph, first Declared Ontology.
+# Written by the platform team from the GTFS reference and the operator's depot register.
+node_types:
+  - label: Agency
+    description: The operator publishing the feed
+    properties:
+      - {name: id, type: STRING, required: true}
+      - {name: name, type: STRING, required: true}
+      - {name: url, type: STRING}
+      - {name: timezone, type: STRING}
+  - label: Route
+    description: A line as shown to passengers (tram 1, bus 11, ...)
+    properties:
+      - {name: id, type: STRING, required: true}
+      - {name: short_name, type: STRING, required: true}
+      - {name: long_name, type: STRING}
+      - {name: route_type, type: INTEGER, description: "GTFS route type: 0 tram, 3 bus"}
+  - label: Trip
+    description: One scheduled journey along a route
+    properties:
+      - {name: id, type: STRING, required: true}
+      - {name: headsign, type: STRING}
+      - {name: direction_id, type: INTEGER}
+  - label: Stop
+    description: A stop or a station (location_type 1)
+    properties:
+      - {name: id, type: STRING, required: true}
+      - {name: name, type: STRING, required: true}
+      - {name: lat, type: FLOAT}
+      - {name: lon, type: FLOAT}
+      - {name: location_type, type: INTEGER}
+  - label: StopTime
+    description: A trip calling at a stop
+    properties:
+      - {name: arrival_time, type: STRING}
+      - {name: departure_time, type: STRING}
+      - {name: stop_sequence, type: INTEGER, required: true}
+  - label: Service
+    description: A calendar entry saying on which weekdays trips run
+    properties:
+      - {name: id, type: STRING, required: true}
+      - {name: days, type: STRING, description: "Seven flags Monday to Sunday, e.g. 1111100"}
+      - {name: start_date, type: DATE}
+      - {name: end_date, type: DATE}
+  - label: Depot
+    description: Where the vehicles of a route are stabled (from the depot register, not GTFS)
+    properties:
+      - {name: id, type: STRING, required: true}
+      - {name: name, type: STRING, required: true}
+      - {name: address, type: STRING}
+  - label: FareZone
+    description: A tariff zone (from the fare system, not GTFS)
+    properties:
+      - {name: id, type: STRING, required: true}
+      - {name: name, type: STRING}
+relationship_types:
+  - label: OPERATES
+  - label: HAS_TRIP
+  - label: HAS_STOP_TIME
+  - label: AT_STOP
+  - label: RUNS_ON
+  - label: IN_ZONE
+  - label: OPERATED_FROM
+patterns:
+  - [Agency, OPERATES, Route]
+  - [Route, HAS_TRIP, Trip]
+  - [Trip, HAS_STOP_TIME, StopTime]
+  - [StopTime, AT_STOP, Stop]
+  - [Trip, RUNS_ON, Service]
+  - [Stop, IN_ZONE, FareZone]
+  - [Route, OPERATED_FROM, Depot]
+constraints:
+  - {type: UNIQUENESS, node_type: Route, property_name: id}
+  - {type: UNIQUENESS, node_type: Trip, property_name: id}
+  - {type: UNIQUENESS, node_type: Stop, property_name: id}

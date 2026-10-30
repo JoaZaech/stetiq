@@ -1,0 +1,13 @@
+code,kind,registry_id
+TR-2024-011/A,experimental,TR-2024-011
+TR-2024-011/B,control,TR-2024-011
+TR-2024-017/A,experimental,TR-2024-017
+TR-2024-017/B,control,TR-2024-017
+TR-2024-023/A,experimental,TR-2024-023
+TR-2024-023/B,control,TR-2024-023
+TR-2025-004/A,experimental,TR-2025-004
+TR-2025-004/B,control,TR-2025-004
+TR-2025-009/A,experimental,TR-2025-009
+TR-2025-009/B,control,TR-2025-009
+TR-2025-012/A,experimental,TR-2025-012
+TR-2025-012/B,control,TR-2025-012

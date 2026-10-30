@@ -1,0 +1,52 @@
+# scholar-kg, revised by the research office after the first Construction Run.
+#
+# Compared with v1.yaml:
+# - adopts Author.orcid, which Candidate v2 proposed from the ORCID sync, with a description
+# - adopts Grant.funder, the other property the Candidate found
+# - adds CO_AUTHORED between authors, which the research office's new Competency Question
+#   about ORCID-verified co-authors needs (the loader derives it only when declared)
+node_types:
+  - label: Paper
+    description: A peer-reviewed research output from the publication database
+    properties:
+      - {name: doi, type: STRING, required: true, description: "The paper's DOI, e.g. 10.5555/scholar.2019.021"}
+      - {name: title, type: STRING, required: true}
+      - {name: year, type: INTEGER, description: Publication year}
+      - {name: abstract, type: STRING}
+  - label: Author
+    description: A person who authored at least one paper
+    properties:
+      - {name: name, type: STRING, required: true, description: "Name as spelled in the publication database"}
+      - {name: department, type: STRING, description: "Home department, when the person is university staff"}
+      - {name: orcid, type: STRING, description: "ORCID iD from the ORCID sync, when the person has one"}
+  - label: Venue
+    description: A journal or conference a paper appeared in
+    properties:
+      - {name: name, type: STRING, required: true}
+      - {name: kind, type: STRING, description: Journal or Conference}
+  - label: Grant
+    description: A funded project papers acknowledge
+    properties:
+      - {name: id, type: STRING, required: true, description: "The grant number, e.g. G-2019-078"}
+      - {name: title, type: STRING}
+      - {name: funder, type: STRING, description: The funding body}
+relationship_types:
+  - label: AUTHORED
+    description: The author wrote the paper
+  - label: PUBLISHED_IN
+    description: The venue the paper appeared in
+  - label: FUNDED_BY
+    description: The grant the paper acknowledges
+  - label: CITES
+    description: The citing paper references the cited paper
+  - label: CO_AUTHORED
+    description: The two authors share at least one paper (one edge per pair)
+patterns:
+  - [Author, AUTHORED, Paper]
+  - [Paper, PUBLISHED_IN, Venue]
+  - [Paper, FUNDED_BY, Grant]
+  - [Paper, CITES, Paper]
+  - [Author, CO_AUTHORED, Author]
+constraints:
+  - {type: UNIQUENESS, node_type: Paper, property_name: doi}
+  - {type: UNIQUENESS, node_type: Grant, property_name: id}

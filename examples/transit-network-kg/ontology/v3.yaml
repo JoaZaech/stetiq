@@ -1,0 +1,94 @@
+# city-transit Knowledge Graph, revised by a human after the first Construction Runs.
+#
+# Compared with v1.yaml:
+# - adopts what the Candidate (v2) discovered in the feed, under proper names:
+#   the vendor's camelCase columns `wheelchairBoarding` and `bikesAllowed` become
+#   Stop.wheelchair_boarding and Trip.bikes_allowed (snake_case, like every other property)
+# - declares PARENT_STATION, the relationship from a platform stop to its station
+# - documents every relationship type
+# Everything is additive compared with v1, so the ontology_diff Gate lets it through.
+node_types:
+  - label: Agency
+    description: The operator publishing the feed
+    properties:
+      - {name: id, type: STRING, required: true}
+      - {name: name, type: STRING, required: true}
+      - {name: url, type: STRING}
+      - {name: timezone, type: STRING}
+  - label: Route
+    description: A line as shown to passengers (tram 1, bus 11, ...)
+    properties:
+      - {name: id, type: STRING, required: true}
+      - {name: short_name, type: STRING, required: true}
+      - {name: long_name, type: STRING}
+      - {name: route_type, type: INTEGER, description: "GTFS route type: 0 tram, 3 bus"}
+  - label: Trip
+    description: One scheduled journey along a route
+    properties:
+      - {name: id, type: STRING, required: true}
+      - {name: headsign, type: STRING}
+      - {name: direction_id, type: INTEGER}
+      - {name: bikes_allowed, type: INTEGER, description: "GTFS bikes_allowed: 0 unknown, 1 yes, 2 no"}
+  - label: Stop
+    description: A stop or a station (location_type 1)
+    properties:
+      - {name: id, type: STRING, required: true}
+      - {name: name, type: STRING, required: true}
+      - {name: lat, type: FLOAT}
+      - {name: lon, type: FLOAT}
+      - {name: location_type, type: INTEGER}
+      - {name: wheelchair_boarding, type: INTEGER, description: "GTFS wheelchair_boarding: 0 unknown, 1 step-free, 2 not accessible"}
+  - label: StopTime
+    description: A trip calling at a stop
+    properties:
+      - {name: arrival_time, type: STRING}
+      - {name: departure_time, type: STRING}
+      - {name: stop_sequence, type: INTEGER, required: true}
+  - label: Service
+    description: A calendar entry saying on which weekdays trips run
+    properties:
+      - {name: id, type: STRING, required: true}
+      - {name: days, type: STRING, description: "Seven flags Monday to Sunday, e.g. 1111100"}
+      - {name: start_date, type: DATE}
+      - {name: end_date, type: DATE}
+  - label: Depot
+    description: Where the vehicles of a route are stabled (from the depot register, not GTFS)
+    properties:
+      - {name: id, type: STRING, required: true}
+      - {name: name, type: STRING, required: true}
+      - {name: address, type: STRING}
+  - label: FareZone
+    description: A tariff zone (from the fare system, not GTFS)
+    properties:
+      - {name: id, type: STRING, required: true}
+      - {name: name, type: STRING}
+relationship_types:
+  - label: OPERATES
+    description: The agency running a route
+  - label: HAS_TRIP
+    description: The scheduled trips of a route
+  - label: HAS_STOP_TIME
+    description: The calls of a trip, in stop_sequence order
+  - label: AT_STOP
+    description: The stop a call is made at
+  - label: RUNS_ON
+    description: The service calendar a trip runs on
+  - label: IN_ZONE
+    description: The fare zone a stop belongs to
+  - label: OPERATED_FROM
+    description: The depot a route's vehicles start from
+  - label: PARENT_STATION
+    description: The station a platform stop belongs to (GTFS parent_station)
+patterns:
+  - [Agency, OPERATES, Route]
+  - [Route, HAS_TRIP, Trip]
+  - [Trip, HAS_STOP_TIME, StopTime]
+  - [StopTime, AT_STOP, Stop]
+  - [Trip, RUNS_ON, Service]
+  - [Stop, IN_ZONE, FareZone]
+  - [Route, OPERATED_FROM, Depot]
+  - [Stop, PARENT_STATION, Stop]
+constraints:
+  - {type: UNIQUENESS, node_type: Route, property_name: id}
+  - {type: UNIQUENESS, node_type: Trip, property_name: id}
+  - {type: UNIQUENESS, node_type: Stop, property_name: id}

@@ -1,0 +1,8 @@
+WO-2035 / Conveyor-07 / 3 Mar 2026 / Aisha Rahman
+
+Conveyor-07 belt slipping under full pallets from 08:30. Conveyor-07 feeds Packer-05, so the packer starved after a few minutes. The work involved the conveyor belt and the drive motor. Motor current was normal, belt tension was not.
+
+Root cause was a loose tensioner after the previous belt change. Re-tensioned, ran a loaded test, fine. 18 minutes lost.
+
+Follow-ups:
+- [ ] Add belt tension to the weekly inspection of Conveyor-07 (owner: Aisha Rahman)

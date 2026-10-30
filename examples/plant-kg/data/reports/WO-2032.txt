@@ -1,0 +1,9 @@
+WO-2032 / Press-02 / 27 Jan 2026 / Marcus Webb (badge T-204)
+
+Press-02 lost hydraulic pressure at 03:41 during the night shift and stopped mid-stroke. Line 1 was down until 05:16, because Press-02 feeds Weld-03 and the welding cell ran out of blanks within ten minutes. The work involved the hydraulic pump, the ram seal and the hydraulic hose: the pump was fine, the seal was wet but intact, and the hose fitting on the return line was cracked.
+
+Root cause was a cracked hydraulic hose fitting that leaked under full load. A replacement hydraulic hose was ordered from Parker; we ran on the spare from the store until it arrived.
+
+Follow-ups:
+- [x] Replace the hydraulic hose (owner: Lena Okafor)
+- [ ] Add a hydraulic pressure trend alarm on Press-02 (owner: Lena Okafor)

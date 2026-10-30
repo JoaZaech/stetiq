@@ -1,0 +1,70 @@
+# The reference ("gold") Ontology the plant's data architecture team maintains.
+# Registered as its own Knowledge Graph (plant-gold) and used as the reference
+# for the gold_alignment Evaluator. It holds a few Concepts the maintenance
+# graph does not populate yet (commissioning dates, closing dates, shifts).
+node_types:
+  - label: Machine
+    description: A production machine from the asset register
+    properties:
+      - {name: name, type: STRING, required: true}
+      - {name: model, type: STRING}
+      - {name: description, type: STRING}
+      - {name: commissioned, type: DATE}
+  - label: Line
+    description: A production line the machines sit on
+    properties:
+      - {name: name, type: STRING, required: true}
+  - label: Component
+    description: A part of a machine that a work order touched
+    properties:
+      - {name: name, type: STRING, required: true}
+  - label: Technician
+    description: A maintenance technician
+    properties:
+      - {name: name, type: STRING, required: true}
+      - {name: badge, type: STRING}
+      - {name: shift, type: STRING}
+  - label: WorkOrder
+    description: One maintenance job from the CMMS, breakdown or preventive
+    properties:
+      - {name: id, type: STRING, required: true}
+      - {name: title, type: STRING}
+      - {name: kind, type: STRING}
+      - {name: opened_at, type: DATE}
+      - {name: closed_at, type: DATE}
+      - {name: downtime_minutes, type: INTEGER}
+  - label: FollowUp
+    description: A follow-up task a technician recorded in the report
+    properties:
+      - {name: description, type: STRING, required: true}
+      - {name: status, type: STRING, required: true}
+  - label: Fault
+    description: The root cause a technician identified for a work order
+    properties:
+      - {name: description, type: STRING, required: true}
+  - label: Supplier
+    description: A vendor replacement parts are ordered from
+    properties:
+      - {name: name, type: STRING, required: true}
+relationship_types:
+  - label: PERFORMED_ON
+  - label: PART_OF
+  - label: INVOLVED
+  - label: ASSIGNED_TO
+  - label: FEEDS
+  - label: HAS_FOLLOW_UP
+  - label: SUPPLIED_BY
+  - label: CAUSED_BY
+patterns:
+  - [WorkOrder, PERFORMED_ON, Machine]
+  - [Machine, PART_OF, Line]
+  - [WorkOrder, INVOLVED, Component]
+  - [WorkOrder, ASSIGNED_TO, Technician]
+  - [Machine, FEEDS, Machine]
+  - [WorkOrder, HAS_FOLLOW_UP, FollowUp]
+  - [FollowUp, ASSIGNED_TO, Technician]
+  - [Component, SUPPLIED_BY, Supplier]
+  - [WorkOrder, CAUSED_BY, Fault]
+constraints:
+  - {type: UNIQUENESS, node_type: WorkOrder, property_name: id}
+  - {type: UNIQUENESS, node_type: Machine, property_name: name}

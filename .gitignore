@@ -9,3 +9,7 @@ dist/
 
 # Built web UI (frontend/ -> npm run build); shipped in the wheel, not committed.
 src/stetiq/_frontend/
+
+# Generated state of the examples (their tracking databases are under .stetiq/, ignored
+# above). The examples themselves, with their data, are committed: the tests use them.
+examples/*/.graphdb/
