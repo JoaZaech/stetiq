@@ -12,12 +12,12 @@ import { helpUrl } from '@/pages/help/guide-index'
 const STEPS = [
   {
     title: 'Declare an Ontology',
-    description: 'Create a Knowledge Graph from a Declared Ontology and version it.',
+    description: 'Create a Knowledge Graph from an Ontology; each change becomes a new Ontology Version.',
     to: `${helpUrl('concepts')}#knowledge-graphs-and-ontology-versions`,
   },
   {
     title: 'Construction Runs',
-    description: 'Track each build of the graph and check it conforms to its Ontology Version.',
+    description: 'Record each execution of your extraction workflow and check its Conformance to the Declared Ontology.',
     to: `${helpUrl('concepts')}#construction-runs-and-conformance`,
   },
   {
@@ -27,12 +27,12 @@ const STEPS = [
   },
   {
     title: 'Observations & Drift',
-    description: 'Observe the live graph and catch Drift from its Ontology Version.',
+    description: "Observe the Graph Source and catch Drift from the Contract Alias's Ontology Version.",
     to: `${helpUrl('concepts')}#observation-and-drift`,
   },
   {
     title: 'Promotions & Aliases',
-    description: 'Move Aliases such as production to a new Ontology Version, behind Gates.',
+    description: 'Move an Alias such as production to another Ontology Version; the audit records whether its Gates passed.',
     to: `${helpUrl('concepts')}#aliases-and-promotion`,
   },
 ]
