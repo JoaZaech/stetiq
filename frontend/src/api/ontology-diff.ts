@@ -22,8 +22,12 @@ export interface OntologyDiff {
 }
 
 /** `GET …/ontology-diff?base=&target=`: what changed from version `base` to `target`. */
+export const ontologyDiffQueryKeys = {
+  one: (kg: string, base: number, target: number) => ['ontology-diff', kg, base, target] as const,
+}
+
 export const ontologyDiffQuery = (kg: string, base: number, target: number) => ({
-  queryKey: ['ontology-diff', kg, base, target],
+  queryKey: ontologyDiffQueryKeys.one(kg, base, target),
   queryFn: () => api<OntologyDiff>(`${kgPath(kg)}/ontology-diff?base=${base}&target=${target}`),
 })
 export const useOntologyDiff = (kg: string, base: number, target: number) =>

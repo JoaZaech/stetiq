@@ -29,3 +29,19 @@ export function kgUrl(name: string, section?: KnowledgeGraphSectionPath, ...rest
     .map((part, i) => (i === 0 ? part : encodeURIComponent(String(part))))
     .join('/')
 }
+
+/** Sections with a compare page at `<section>/compare`. */
+export type ComparableSection = Extract<KnowledgeGraphSectionPath, 'versions' | 'runs' | 'use-case'>
+
+/** The search param naming the compared items on every compare page: repeated, oldest first. */
+export const COMPARE_PARAM = 'id'
+
+/**
+ * App path of a section's compare page, e.g. `kgCompareUrl('support', 'versions', [2, 4])`
+ * is `/kg/support/versions/compare?id=2&id=4`. Pass `ids` oldest first: a two-way
+ * compare reads the first as what changed from.
+ */
+export function kgCompareUrl(name: string, section: ComparableSection, ids: readonly (string | number)[]) {
+  const query = new URLSearchParams(ids.map((id) => [COMPARE_PARAM, String(id)]))
+  return `${kgUrl(name, section, 'compare')}?${query}`
+}

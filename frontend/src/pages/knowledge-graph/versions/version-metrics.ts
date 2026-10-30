@@ -1,6 +1,5 @@
 import { useMemo } from 'react'
-import { useQueries } from '@tanstack/react-query'
-import { type OntologyVersion, versionEvaluationsQuery } from '@/api/ontology-versions'
+import { type EvaluationResult, useAllVersionEvaluations } from '@/api/ontology-versions'
 import { metricNames } from '@/lib/metric-charts'
 import { evaluatorMetrics } from './evaluator-metrics'
 
@@ -14,30 +13,31 @@ export interface VersionMetrics {
   error: Error | null
 }
 
+/** Each version's latest Evaluator results, grouped by version number. */
+function resultsByVersion(results: readonly EvaluationResult[]): Map<number, EvaluationResult[]> {
+  const byVersion = new Map<number, EvaluationResult[]>()
+  for (const result of results) {
+    const number = Number(result.subject_id)
+    byVersion.set(number, [...(byVersion.get(number) ?? []), result])
+  }
+  return byVersion
+}
+
 /**
- * Loads each version's Evaluator results (one request per version; the API has no
- * Knowledge Graph-wide evaluation listing) and keys them per version. Waits for
- * `versions` to load.
+ * Loads the latest Evaluator results of every version in one request (the Knowledge
+ * Graph-wide evaluations route) and keys their metrics per version.
  */
-export function useVersionMetrics(kg: string, versions: readonly OntologyVersion[] | undefined): VersionMetrics {
-  const results = useQueries({
-    queries: (versions ?? []).map((v) => versionEvaluationsQuery(kg, v.number)),
-    combine: (queries) => ({
-      data: queries.map((q) => q.data),
-      isPending: queries.some((q) => q.isPending),
-      error: queries.find((q) => q.error)?.error ?? null,
-    }),
-  })
-  const { data, isPending, error } = results
+export function useVersionMetrics(kg: string): VersionMetrics {
+  const { data, isPending, error } = useAllVersionEvaluations(kg)
   return useMemo(() => {
     const byVersion = new Map(
-      (versions ?? []).map((v, i) => [v.number, evaluatorMetrics(data[i] ?? [])] as const),
+      [...resultsByVersion(data ?? [])].map(([number, results]) => [number, evaluatorMetrics(results)] as const),
     )
     return {
       byVersion,
       names: metricNames([...byVersion.values()].map((metrics) => ({ metrics }))),
-      isPending: versions === undefined || isPending,
+      isPending,
       error,
     }
-  }, [versions, data, isPending, error])
+  }, [data, isPending, error])
 }

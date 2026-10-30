@@ -1,11 +1,10 @@
 import { useMemo, useState } from 'react'
-import { GitCompare } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import type { RowSelectionState } from '@tanstack/react-table'
 import type { UseCaseVersion } from '@/api/use-cases'
-import { kgUrl } from '@/app/knowledge-graph-sections'
+import { kgCompareUrl } from '@/app/knowledge-graph-sections'
+import { CompareToolbar } from '@/components/CompareToolbar'
 import { DataTable } from '@/components/DataTable'
-import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { createDataTableColumnHelper, useDataTable } from '@/lib/data-table'
 import { formatDateTime } from '@/lib/format'
@@ -75,20 +74,13 @@ export function UseCaseVersionsTable({ name, versions }: { name: string; version
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-muted-foreground">Select two versions to compare them.</p>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={selected.length !== 2}
-          onClick={() =>
-            navigate(`${kgUrl(name, 'use-case', 'compare')}?from=${selected[0]}&to=${selected[1]}`)
-          }
-        >
-          <GitCompare aria-hidden />
-          Compare
-        </Button>
-      </div>
+      <CompareToolbar
+        selected={selected.length}
+        needs="two"
+        noun="versions"
+        readyHint="What changed from the older to the newer Use Case Version"
+        onCompare={() => navigate(kgCompareUrl(name, 'use-case', selected))}
+      />
       <DataTable table={table} label="Use Case Versions" empty="No Use Case Versions yet." />
     </div>
   )

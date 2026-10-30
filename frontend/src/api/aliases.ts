@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, kgPath } from './client'
+import { knowledgeGraphsQueryKeys } from './knowledge-graphs'
 
 /** wire.alias_to_json */
 export interface Alias {
@@ -20,21 +21,28 @@ export interface Promotion {
   gate_result: 'passed' | 'failed' | null
 }
 
+/** Query keys of a Knowledge Graph's Aliases and their audit log. */
+export const aliasQueryKeys = {
+  aliases: (kg: string) => ['aliases', kg] as const,
+  contractAlias: (kg: string) => ['contract-alias', kg] as const,
+  promotions: (kg: string) => ['promotions', kg] as const,
+}
+
 export const aliasesQuery = (kg: string) => ({
-  queryKey: ['aliases', kg],
+  queryKey: aliasQueryKeys.aliases(kg),
   queryFn: () => api<Alias[]>(kgPath(kg) + '/aliases'),
 })
 export const useAliases = (kg: string) => useQuery(aliasesQuery(kg))
 
 /** The name of the Contract Alias (default `production`). */
 export const contractAliasQuery = (kg: string) => ({
-  queryKey: ['contract-alias', kg],
+  queryKey: aliasQueryKeys.contractAlias(kg),
   queryFn: async () => (await api<{ alias: string }>(kgPath(kg) + '/contract-alias')).alias,
 })
 export const useContractAlias = (kg: string) => useQuery(contractAliasQuery(kg))
 
 export const promotionsQuery = (kg: string) => ({
-  queryKey: ['promotions', kg],
+  queryKey: aliasQueryKeys.promotions(kg),
   queryFn: () => api<Promotion[]>(kgPath(kg) + '/promotions'),
 })
 export const usePromotions = (kg: string) => useQuery(promotionsQuery(kg))
@@ -51,7 +59,7 @@ export function usePromote(kg: string) {
       api<Alias>(`${kgPath(kg)}/aliases/${encodeURIComponent(alias)}`, 'PUT', { version }),
     onSuccess: () =>
       Promise.all(
-        [['aliases', kg], ['promotions', kg], ['knowledge-graphs']].map((queryKey) =>
+        [aliasQueryKeys.aliases(kg), aliasQueryKeys.promotions(kg), knowledgeGraphsQueryKeys.all()].map((queryKey) =>
           queryClient.invalidateQueries({ queryKey }),
         ),
       ),

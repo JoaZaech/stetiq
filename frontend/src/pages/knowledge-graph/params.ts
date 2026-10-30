@@ -1,4 +1,11 @@
-import { useParams } from 'react-router'
+import { useParams, useSearchParams } from 'react-router'
+import { COMPARE_PARAM } from '@/app/knowledge-graph-sections'
+
+/** The ids a compare page shows, oldest first (`?id=…&id=…`, see `kgCompareUrl`). */
+export function useComparedIds(): string[] {
+  const [params] = useSearchParams()
+  return params.getAll(COMPARE_PARAM)
+}
 
 /** The `:name` of the Knowledge Graph route every page under `/kg/:name` sits in. */
 export function useKnowledgeGraphName(): string {

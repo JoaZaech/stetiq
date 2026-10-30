@@ -14,7 +14,7 @@ import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatDateTime, formatMetric } from '@/lib/format'
 import { NotFoundPage } from '@/pages/NotFoundPage'
-import { useKnowledgeGraphName } from '../params'
+import { useComparedIds, useKnowledgeGraphName } from '../params'
 import { type ComparedValue, type ComparisonRow, compareRuns, differs } from './compare'
 import { shortRunId } from './runs'
 
@@ -22,7 +22,7 @@ const linkClass = 'text-primary underline-offset-4 hover:underline'
 const none = <span className="text-muted-foreground">—</span>
 
 /**
- * `/kg/:name/runs/compare?run=<id>&run=<id>…`: the runs side by side (their status,
+ * `/kg/:name/runs/compare?id=<run id>&id=<run id>…`: the runs side by side (their status,
  * Declared Ontology, Candidate, Conformance, params, metrics and Evaluator results),
  * composed from the run and run evaluation routes as `Client.compare_runs` does.
  * `&diff=only` ("Show diff only") hides the rows whose values are identical.
@@ -30,7 +30,7 @@ const none = <span className="text-muted-foreground">—</span>
 export function RunComparePage() {
   const name = useKnowledgeGraphName()
   const [searchParams, setSearchParams] = useSearchParams()
-  const ids = searchParams.getAll('run')
+  const ids = useComparedIds()
   const diffOnly = searchParams.get('diff') === 'only'
   const setDiffOnly = useCallback(
     (on: boolean) =>

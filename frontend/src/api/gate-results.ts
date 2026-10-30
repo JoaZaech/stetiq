@@ -12,8 +12,12 @@ export interface GateResult {
   evaluated_at: string
 }
 
+export const gateResultQueryKeys = {
+  all: (kg: string) => ['gate-results', kg] as const,
+}
+
 export const gateResultsQuery = (kg: string) => ({
-  queryKey: ['gate-results', kg],
+  queryKey: gateResultQueryKeys.all(kg),
   queryFn: () => api<GateResult[]>(kgPath(kg) + '/gate-results'),
 })
 export const useGateResults = (kg: string) => useQuery(gateResultsQuery(kg))

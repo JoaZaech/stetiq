@@ -1,6 +1,6 @@
 import { Search } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router'
-import { type KnowledgeGraph, useKnowledgeGraphs } from '@/api/knowledge-graphs'
+import { type KnowledgeGraphSummary, useKnowledgeGraphs } from '@/api/knowledge-graphs'
 import { DataTable } from '@/components/DataTable'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { PageHeader } from '@/components/PageHeader'
@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { createDataTableColumnHelper, useDataTable } from '@/lib/data-table'
 import { formatDateTime } from '@/lib/format'
 
-const column = createDataTableColumnHelper<KnowledgeGraph>()
+const column = createDataTableColumnHelper<KnowledgeGraphSummary>()
 const version = (n: number | null | undefined) => (n == null ? '—' : `v${n}`)
 
 const columns = column.columns([
@@ -77,7 +77,7 @@ export function KnowledgeGraphsPage() {
   )
 }
 
-function KnowledgeGraphTable({ data }: { data: KnowledgeGraph[] }) {
+function KnowledgeGraphTable({ data }: { data: KnowledgeGraphSummary[] }) {
   // The search lives in the URL (?q=), so a filtered list can be shared.
   const [searchParams, setSearchParams] = useSearchParams()
   const search = searchParams.get('q') ?? ''

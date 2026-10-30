@@ -14,8 +14,12 @@ export interface WhoAmI {
   grants: Record<string, Permission>
 }
 
+export const whoAmIQueryKeys = {
+  all: () => ['whoami'] as const,
+}
+
 export const whoAmIQuery = {
-  queryKey: ['whoami'],
+  queryKey: whoAmIQueryKeys.all(),
   queryFn: () => api<WhoAmI>('/whoami'),
   staleTime: Infinity,
 } as const

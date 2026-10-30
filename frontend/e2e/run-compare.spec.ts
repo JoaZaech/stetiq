@@ -18,7 +18,7 @@ test('selected runs compare side by side, from a URL that can be shared', async 
   await compare.click()
 
   // Oldest run first.
-  await expect(page).toHaveURL(`/ui/kg/support/runs/compare?run=${String(finished)}&run=${String(rerun)}`)
+  await expect(page).toHaveURL(`/ui/kg/support/runs/compare?id=${String(finished)}&id=${String(rerun)}`)
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Compare 2 Construction Runs')
   await expect(page.getByRole('navigation', { name: 'breadcrumb' })).toHaveText(
     /Knowledge Graphs.*support.*Construction Runs.*Compare/,
@@ -49,12 +49,12 @@ test('selected runs compare side by side, from a URL that can be shared', async 
 
 test('"Show diff only" hides the rows whose values are identical', async ({ page, stetiq }) => {
   const { finished, rerun, aborted } = stetiq.seeded
-  await page.goto(`/ui/kg/support/runs/compare?run=${String(finished)}&run=${String(rerun)}&run=${String(aborted)}`)
+  await page.goto(`/ui/kg/support/runs/compare?id=${String(finished)}&id=${String(rerun)}&id=${String(aborted)}`)
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Compare 3 Construction Runs')
   const params = page.getByRole('table', { name: 'Params' })
   await expect(params).toContainText(/extractor\s*llm\s*llm\s*rules/)
 
-  await page.goto(`/ui/kg/support/runs/compare?run=${String(finished)}&run=${String(rerun)}`)
+  await page.goto(`/ui/kg/support/runs/compare?id=${String(finished)}&id=${String(rerun)}`)
   const overview = page.getByRole('table', { name: 'Runs' })
   const metrics = page.getByRole('table', { name: 'Metrics' })
   await page.getByRole('switch', { name: 'Show diff only' }).click()
@@ -77,9 +77,9 @@ test('"Show diff only" hides the rows whose values are identical', async ({ page
 
 test('comparing runs of another Knowledge Graph, or unknown runs, is not found', async ({ page, stetiq }) => {
   const { finished, strict_failed } = stetiq.seeded
-  await page.goto(`/ui/kg/support/runs/compare?run=${String(finished)}&run=${String(strict_failed)}`)
+  await page.goto(`/ui/kg/support/runs/compare?id=${String(finished)}&id=${String(strict_failed)}`)
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Construction Run not found')
-  await page.goto(`/ui/kg/support/runs/compare?run=${String(finished)}&run=0123456789abcdef`)
+  await page.goto(`/ui/kg/support/runs/compare?id=${String(finished)}&id=0123456789abcdef`)
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Construction Run not found')
 })
 

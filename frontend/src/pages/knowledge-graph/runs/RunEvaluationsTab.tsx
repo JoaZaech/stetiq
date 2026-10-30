@@ -1,7 +1,7 @@
-import { CircleCheck, CircleX, TriangleAlert } from 'lucide-react'
 import type { EvaluationResult } from '@/api/ontology-versions'
 import { useRunEvaluations } from '@/api/runs'
 import { ErrorAlert } from '@/components/ErrorAlert'
+import { StatusLabel, type StatusTone } from '@/components/StatusLabel'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
@@ -41,11 +41,11 @@ function executedQuestions(result: EvaluationResult): ExecutedQuestion[] {
   })
 }
 
-const STATUS = {
-  passed: { label: 'Passed', Icon: CircleCheck, className: 'text-emerald-600 dark:text-emerald-500' },
-  failed: { label: 'Failed', Icon: CircleX, className: 'text-destructive' },
-  error: { label: 'Error', Icon: TriangleAlert, className: 'text-destructive' },
-} as const
+const STATUS: Record<ExecutedQuestion['status'], { label: string; tone: StatusTone }> = {
+  passed: { label: 'Passed', tone: 'success' },
+  failed: { label: 'Failed', tone: 'failure' },
+  error: { label: 'Error', tone: 'error' },
+}
 
 const CHECK = { non_empty: 'non-empty result', expected_answer: 'expected answer' } as const
 
@@ -93,15 +93,11 @@ function ExecutedQuestions({ result }: { result: EvaluationResult }) {
           </TableHeader>
           <TableBody>
             {questions.map((q) => {
-              const { label, Icon, className } = STATUS[q.status] ?? STATUS.error
               return (
                 <TableRow key={q.id}>
                   <TableCell className="font-mono text-xs">{q.id}</TableCell>
                   <TableCell>
-                    <span className="inline-flex items-center gap-1.5">
-                      <Icon aria-hidden className={`size-4 ${className}`} />
-                      {label}
-                    </span>
+                    <StatusLabel {...(STATUS[q.status] ?? STATUS.error)} />
                   </TableCell>
                   <TableCell>{CHECK[q.check] ?? q.check}</TableCell>
                   <TableCell className="font-mono text-xs">

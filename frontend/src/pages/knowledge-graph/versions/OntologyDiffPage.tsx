@@ -1,4 +1,4 @@
-import { Link, useSearchParams } from 'react-router'
+import { Link } from 'react-router'
 import { isNotFound } from '@/api/client'
 import { useOntologyDiff } from '@/api/ontology-diff'
 import { kgUrl } from '@/app/knowledge-graph-sections'
@@ -7,28 +7,24 @@ import { OntologyDiffView } from '@/components/OntologyDiff'
 import { PageHeader } from '@/components/PageHeader'
 import { Skeleton } from '@/components/ui/skeleton'
 import { NotFoundPage } from '@/pages/NotFoundPage'
-import { useKnowledgeGraphName } from '../params'
-
-const versionNumber = (raw: string | null) =>
-  raw !== null && /^\d+$/.test(raw) ? Number(raw) : NaN
+import { parseVersionNumber } from '@/lib/version-number'
+import { useComparedIds, useKnowledgeGraphName } from '../params'
 
 /**
- * `/kg/:name/versions/compare?base=&target=`: the Ontology Diff between two versions,
+ * `/kg/:name/versions/compare?id=<base>&id=<target>`: the Ontology Diff between two versions,
  * reached by selecting two rows of the version table. The URL alone reproduces it.
  */
 export function OntologyDiffPage() {
   const name = useKnowledgeGraphName()
-  const [params] = useSearchParams()
-  const base = versionNumber(params.get('base'))
-  const target = versionNumber(params.get('target'))
-  const valid = Number.isInteger(base) && Number.isInteger(target)
-  const diff = useOntologyDiff(name, base, target)
+  const ids = useComparedIds()
+  const [base, target] = ids.length === 2 ? ids.map(parseVersionNumber) : []
+  const diff = useOntologyDiff(name, base ?? NaN, target ?? NaN)
 
-  if (!valid || (diff.isError && isNotFound(diff.error))) {
+  if (base === undefined || target === undefined || (diff.isError && isNotFound(diff.error))) {
     return (
       <NotFoundPage
         title="Ontology Version not found"
-        message={`Knowledge Graph “${name}” has no Ontology Versions ${params.get('base') ?? '?'} and ${params.get('target') ?? '?'} to compare.`}
+        message={`Knowledge Graph “${name}” has no Ontology Versions ${ids[0] ?? '?'} and ${ids[1] ?? '?'} to compare.`}
       />
     )
   }

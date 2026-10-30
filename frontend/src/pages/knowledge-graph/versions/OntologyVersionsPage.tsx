@@ -1,19 +1,13 @@
 import { lazy, Suspense, useMemo, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
-import {
-  type Alias,
-  type Promotion,
-  useAliases,
-  useContractAlias,
-  usePromotions,
-} from '@/api/aliases'
-import { useOntologyVersions, type OntologyVersion } from '@/api/ontology-versions'
-import { knowledgeGraphSection, kgUrl } from '@/app/knowledge-graph-sections'
+import { type Alias, useAliases, useContractAlias } from '@/api/aliases'
+import { useOntologyVersions, type ListedOntologyVersion } from '@/api/ontology-versions'
+import { kgCompareUrl, knowledgeGraphSection, kgUrl } from '@/app/knowledge-graph-sections'
+import { CompareToolbar } from '@/components/CompareToolbar'
 import { DataTable } from '@/components/DataTable'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { ColumnPicker } from '@/components/ColumnPicker'
 import { ViewModeToggle } from '@/components/ViewModeToggle'
-import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
 import { createDataTableColumnHelper, useDataTable } from '@/lib/data-table'
@@ -23,7 +17,7 @@ import { metricColumnId, useChartSearch, useShownColumns, useViewMode } from '@/
 import { KnowledgeGraphSectionPage } from '../KnowledgeGraphSectionPage'
 import { useKnowledgeGraphName } from '../params'
 import { AliasChips, CandidateBadge } from './AliasChips'
-import { aliasesByVersion, candidateVersions } from './lineage'
+import { aliasesByVersion } from './lineage'
 import { type VersionMetrics, useVersionMetrics } from './version-metrics'
 
 const SECTION = knowledgeGraphSection('versions')
@@ -32,7 +26,7 @@ const SECTION = knowledgeGraphSection('versions')
 interface VersionRow {
   knowledgeGraph: string
   number: number
-  origin: OntologyVersion['origin']
+  origin: ListedOntologyVersion['origin']
   createdAt: string
   aliases: string[]
   contractAlias: string | undefined
@@ -114,9 +108,8 @@ export function OntologyVersionsPage() {
   const name = useKnowledgeGraphName()
   const versions = useOntologyVersions(name)
   const aliases = useAliases(name)
-  const promotions = usePromotions(name)
   const contractAlias = useContractAlias(name)
-  const metrics = useVersionMetrics(name, versions.data)
+  const metrics = useVersionMetrics(name)
   const [mode, setMode] = useViewMode()
   const [shownColumns, setShownColumn] = useShownColumns()
 
@@ -139,9 +132,9 @@ export function OntologyVersionsPage() {
   )
 
   let content: ReactNode
-  if (versions.isError || aliases.isError || promotions.isError || metrics.error) {
-    content = <ErrorAlert error={versions.error ?? aliases.error ?? promotions.error ?? metrics.error} />
-  } else if (versions.isPending || aliases.isPending || promotions.isPending || metrics.isPending) {
+  if (versions.isError || aliases.isError || metrics.error) {
+    content = <ErrorAlert error={versions.error ?? aliases.error ?? metrics.error} />
+  } else if (versions.isPending || aliases.isPending || metrics.isPending) {
     content = <Skeleton className="h-32 w-full" />
   } else if (versions.data.length === 0) {
     content = <p className="text-sm text-muted-foreground">No Ontology Versions yet.</p>
@@ -153,7 +146,6 @@ export function OntologyVersionsPage() {
         name={name}
         versions={versions.data}
         aliases={aliases.data}
-        promotions={promotions.data}
         contractAlias={contractAlias.data}
         metrics={metrics}
         shownColumns={shownColumns}
@@ -171,15 +163,13 @@ function VersionTable({
   name,
   versions,
   aliases,
-  promotions,
   contractAlias,
   metrics,
   shownColumns,
 }: {
   name: string
-  versions: OntologyVersion[]
+  versions: ListedOntologyVersion[]
   aliases: Alias[]
-  promotions: Promotion[]
   contractAlias: string | undefined
   metrics: VersionMetrics
   shownColumns: ReadonlySet<string>
@@ -187,7 +177,6 @@ function VersionTable({
   // Rows stay referentially stable between renders, as `useDataTable` needs.
   const data = useMemo(() => {
     const aliased = aliasesByVersion(aliases)
-    const candidates = candidateVersions(versions, promotions)
     return versions.map(
       (v): VersionRow => ({
         knowledgeGraph: name,
@@ -196,11 +185,11 @@ function VersionTable({
         createdAt: v.created_at,
         aliases: aliased.get(v.number) ?? [],
         contractAlias,
-        candidate: candidates.has(v.number),
+        candidate: v.candidate ?? false,
         metrics: metrics.byVersion.get(v.number) ?? NO_METRICS,
       }),
     )
-  }, [name, versions, aliases, promotions, contractAlias, metrics])
+  }, [name, versions, aliases, contractAlias, metrics])
   // Every metric has a column, in name order; only the chosen ones are visible.
   const allColumns = useMemo(
     () => column.columns([...columns, ...metrics.names.map(metricColumn)]),
@@ -219,22 +208,16 @@ function VersionTable({
   })
   const navigate = useNavigate()
   const selected = table.getSelectedRowModel().rows.map((row) => row.original.number)
-  const compare = () => {
-    const [base, target] = [...selected].sort((a, b) => a - b)
-    navigate(`${kgUrl(name, 'versions', 'compare')}?base=${base}&target=${target}`)
-  }
+  const compare = () => navigate(kgCompareUrl(name, 'versions', [...selected].sort((a, b) => a - b)))
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-3">
-        <Button size="sm" variant="outline" disabled={selected.length !== 2} onClick={compare}>
-          Compare
-        </Button>
-        <span className="text-xs text-muted-foreground">
-          {selected.length === 2
-            ? 'Ontology Diff from the older to the newer version'
-            : 'Select two versions to compare'}
-        </span>
-      </div>
+      <CompareToolbar
+        selected={selected.length}
+        needs="two"
+        noun="versions"
+        readyHint="Ontology Diff from the older to the newer version"
+        onCompare={compare}
+      />
       <DataTable table={table} label="Ontology Versions" empty="No Ontology Versions yet." />
     </div>
   )
@@ -243,7 +226,7 @@ function VersionTable({
 // Recharts is large: load the chart grid only when the chart view is opened.
 const MetricChartGrid = lazy(() => import('@/components/MetricChartGrid'))
 
-function VersionCharts({ versions, metrics }: { versions: OntologyVersion[]; metrics: VersionMetrics }) {
+function VersionCharts({ versions, metrics }: { versions: ListedOntologyVersion[]; metrics: VersionMetrics }) {
   const [search, setSearch] = useChartSearch()
   const series = useMemo(
     () =>

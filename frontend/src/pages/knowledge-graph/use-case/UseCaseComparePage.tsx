@@ -1,5 +1,4 @@
 import { useId, type ReactNode } from 'react'
-import { useSearchParams } from 'react-router'
 import { useUseCaseVersions, type CompetencyQuestion, type UseCaseVersion } from '@/api/use-cases'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { PageHeader } from '@/components/PageHeader'
@@ -13,17 +12,17 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { NotFoundPage } from '@/pages/NotFoundPage'
-import { useKnowledgeGraphName } from '../params'
+import { parseVersionNumber } from '@/lib/version-number'
+import { useComparedIds, useKnowledgeGraphName } from '../params'
 import { compareUseCases, FIELD_LABELS, type ChangedQuestion } from './compare'
 import { ConceptMapping, ExpectedAnswer, FieldValue, Query } from './fields'
 
-/** `/kg/:name/use-case/compare?from=N&to=M`: what changed between two Use Case Versions. */
+/** `/kg/:name/use-case/compare?id=N&id=M`: what changed from Use Case Version N to M. */
 export function UseCaseComparePage() {
   const name = useKnowledgeGraphName()
-  const [params] = useSearchParams()
+  const ids = useComparedIds()
   const versions = useUseCaseVersions(name)
-  const fromParam = params.get('from') ?? ''
-  const toParam = params.get('to') ?? ''
+  const [fromParam = '', toParam = ''] = ids.length === 2 ? ids : []
 
   if (versions.isError) return <ErrorAlert error={versions.error} />
   if (versions.isPending) return <Skeleton className="h-32 w-full" />
@@ -50,7 +49,8 @@ export function UseCaseComparePage() {
 }
 
 function findVersion(versions: UseCaseVersion[], raw: string): UseCaseVersion | undefined {
-  return /^\d+$/.test(raw) ? versions.find((v) => v.number === Number(raw)) : undefined
+  const number = parseVersionNumber(raw)
+  return versions.find((v) => v.number === number)
 }
 
 function Comparison({ from, to }: { from: UseCaseVersion; to: UseCaseVersion }) {

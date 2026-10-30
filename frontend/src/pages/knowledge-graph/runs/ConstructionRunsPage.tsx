@@ -1,12 +1,13 @@
 import { lazy, type ReactNode, Suspense, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { type ConstructionRun, useRuns } from '@/api/runs'
-import { kgUrl, knowledgeGraphSection } from '@/app/knowledge-graph-sections'
+import { kgCompareUrl, knowledgeGraphSection } from '@/app/knowledge-graph-sections'
 import { ColumnPicker } from '@/components/ColumnPicker'
+import { CompareToolbar } from '@/components/CompareToolbar'
 import { DataTable } from '@/components/DataTable'
 import { ErrorAlert } from '@/components/ErrorAlert'
+import { RUN_STATUSES } from '@/components/run-status'
 import { ViewModeToggle } from '@/components/ViewModeToggle'
-import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { formatDateTime } from '@/lib/format'
@@ -35,12 +36,8 @@ import {
 
 const SECTION = knowledgeGraphSection('runs')
 
-const STATUS_LABELS: Record<RunStatusFilter, string> = {
-  all: 'All',
-  running: 'Running',
-  finished: 'Finished',
-  failed: 'Failed',
-}
+const statusFilterLabel = (status: RunStatusFilter) =>
+  status === 'all' ? 'All' : RUN_STATUSES[status].label
 
 /**
  * `/kg/:name/runs`: the Knowledge Graph's Construction Runs, newest first, as a table
@@ -83,7 +80,7 @@ function FilteredRuns({ runs, mode }: { runs: ConstructionRun[]; mode: ViewMode 
       >
         {RUN_STATUS_FILTERS.map((status) => (
           <ToggleGroupItem key={status} value={status}>
-            {STATUS_LABELS[status]}
+            {statusFilterLabel(status)}
           </ToggleGroupItem>
         ))}
       </ToggleGroup>
@@ -135,16 +132,18 @@ function RunTable({
   const selected = table.getSelectedRowModel().rows.map((row) => row.original.run)
   const compare = () => {
     const oldestFirst = [...selected].sort((a, b) => Date.parse(a.started_at) - Date.parse(b.started_at))
-    const query = new URLSearchParams(oldestFirst.map((run) => ['run', run.id]))
-    navigate(`${kgUrl(name, 'runs', 'compare')}?${query}`)
+    navigate(kgCompareUrl(name, 'runs', oldestFirst.map((run) => run.id)))
   }
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-3">
-        <Button size="sm" variant="outline" disabled={selected.length < 2} onClick={compare}>
-          Compare
-        </Button>
+      <CompareToolbar
+        selected={selected.length}
+        needs="many"
+        noun="runs"
+        readyHint="The selected runs side by side"
+        onCompare={compare}
+      >
         {filterControls}
         <div className="ml-auto">
           <ColumnPicker
@@ -156,7 +155,7 @@ function RunTable({
             onToggle={setShownColumn}
           />
         </div>
-      </div>
+      </CompareToolbar>
       <DataTable table={table} label="Construction Runs" empty="No Construction Run matches these filters." />
     </div>
   )

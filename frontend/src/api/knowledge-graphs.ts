@@ -1,16 +1,14 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from './client'
 
-/** A Construction Run's status (entities.RunStatus). */
-export type RunStatus = 'running' | 'finished' | 'failed'
+import type { KnowledgeGraph } from './knowledge-graph'
+import type { RunStatus } from './runs'
 
 /**
- * A Knowledge Graph (wire.knowledge_graph_to_json). The summary fields are filled in
- * only by the list; they are null elsewhere, and absent from older servers.
+ * A listed Knowledge Graph with a summary of its state
+ * (wire.knowledge_graph_summary_to_json). Older servers leave the summary fields out.
  */
-export interface KnowledgeGraph {
-  name: string
-  created_at: string
+export interface KnowledgeGraphSummary extends KnowledgeGraph {
   /** The Ontology Version the Contract Alias points to. */
   contract_version?: number | null
   /** The newest Ontology Version. */
@@ -21,10 +19,15 @@ export interface KnowledgeGraph {
   last_modified_at?: string | null
 }
 
+/** Query keys of the Knowledge Graph list: invalidate after a write that changes a summary. */
+export const knowledgeGraphsQueryKeys = {
+  all: () => ['knowledge-graphs'] as const,
+}
+
 /** GET /knowledge-graphs: those the user can read, by name, with their summaries. */
 export const knowledgeGraphsQuery = {
-  queryKey: ['knowledge-graphs'],
-  queryFn: () => api<KnowledgeGraph[]>('/knowledge-graphs'),
+  queryKey: knowledgeGraphsQueryKeys.all(),
+  queryFn: () => api<KnowledgeGraphSummary[]>('/knowledge-graphs'),
 } as const
 
 export function useKnowledgeGraphs() {

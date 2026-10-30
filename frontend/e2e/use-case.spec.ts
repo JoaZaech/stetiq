@@ -38,7 +38,7 @@ test.describe('with three Use Case Versions', () => {
     await versions.getByRole('checkbox', { name: 'Select v3' }).check()
     await compare.click()
 
-    await expect(page).toHaveURL('/ui/kg/support/use-case/compare?from=2&to=3')
+    await expect(page).toHaveURL('/ui/kg/support/use-case/compare?id=2&id=3')
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Compare v2 → v3')
     await expect(page.getByRole('navigation', { name: 'breadcrumb' })).toHaveText(
       /Knowledge Graphs.*support.*Use Case.*Compare/,
@@ -63,7 +63,7 @@ test.describe('with three Use Case Versions', () => {
   })
 
   test('comparing a version with itself shows no changes', async ({ page }) => {
-    await page.goto('/ui/kg/support/use-case/compare?from=1&to=1')
+    await page.goto('/ui/kg/support/use-case/compare?id=1&id=1')
 
     await expect(page.getByText('These Use Case Versions ask the same Competency Questions.')).toBeVisible()
   })

@@ -57,24 +57,51 @@ export interface EvaluationResult {
   use_case_version: number | null
 }
 
+/** An item of the version list, which also says whether the version is a Candidate. */
+export interface ListedOntologyVersion extends OntologyVersion {
+  /** No Alias has pointed to it yet, as the server decides. Absent from older servers. */
+  candidate?: boolean
+}
+
 const versionsPath = (kg: string) => kgPath(kg) + '/ontology-versions'
+
+/**
+ * Query keys of Ontology Versions and their Evaluator results. Every key about a
+ * Knowledge Graph's versions starts with `all(kg)`, so invalidating it refreshes them all.
+ */
+export const ontologyVersionQueryKeys = {
+  all: (kg: string) => ['ontology-versions', kg] as const,
+  one: (kg: string, number: number) => ['ontology-versions', kg, number] as const,
+  evaluations: (kg: string, number: number) => ['ontology-versions', kg, number, 'evaluations'] as const,
+  allEvaluations: (kg: string) => ['ontology-versions', kg, 'evaluations'] as const,
+}
 
 /** Oldest first, as the server returns them. */
 export const ontologyVersionsQuery = (kg: string) => ({
-  queryKey: ['ontology-versions', kg],
-  queryFn: () => api<OntologyVersion[]>(versionsPath(kg)),
+  queryKey: ontologyVersionQueryKeys.all(kg),
+  queryFn: () => api<ListedOntologyVersion[]>(versionsPath(kg)),
 })
 export const useOntologyVersions = (kg: string) => useQuery(ontologyVersionsQuery(kg))
 
+/**
+ * `GET …/evaluations?subject_kind=ontology_version`: the latest results of every version
+ * in one request (`subject_id` is the version number).
+ */
+export const allVersionEvaluationsQuery = (kg: string) => ({
+  queryKey: ontologyVersionQueryKeys.allEvaluations(kg),
+  queryFn: () => api<EvaluationResult[]>(kgPath(kg) + '/evaluations?subject_kind=ontology_version'),
+})
+export const useAllVersionEvaluations = (kg: string) => useQuery(allVersionEvaluationsQuery(kg))
+
 export const ontologyVersionQuery = (kg: string, number: number) => ({
-  queryKey: ['ontology-versions', kg, number],
+  queryKey: ontologyVersionQueryKeys.one(kg, number),
   queryFn: () => api<OntologyVersion>(`${versionsPath(kg)}/${number}`),
 })
 export const useOntologyVersion = (kg: string, number: number) =>
   useQuery({ ...ontologyVersionQuery(kg, number), enabled: Number.isInteger(number) })
 
 export const versionEvaluationsQuery = (kg: string, number: number) => ({
-  queryKey: ['ontology-versions', kg, number, 'evaluations'],
+  queryKey: ontologyVersionQueryKeys.evaluations(kg, number),
   queryFn: () => api<EvaluationResult[]>(`${versionsPath(kg)}/${number}/evaluations`),
 })
 export const useVersionEvaluations = (kg: string, number: number) =>

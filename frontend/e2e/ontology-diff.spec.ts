@@ -14,7 +14,7 @@ test('selecting two versions and clicking Compare shows the classified Ontology 
   await page.getByRole('checkbox', { name: 'Select v2' }).check()
   await compare.click()
 
-  await expect(page).toHaveURL('/ui/kg/support/versions/compare?base=2&target=4')
+  await expect(page).toHaveURL('/ui/kg/support/versions/compare?id=2&id=4')
   const expectDiff = async () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Compare v2 → v4')
     await expect(page.getByRole('navigation', { name: 'breadcrumb' })).toHaveText(
@@ -38,7 +38,7 @@ test('selecting two versions and clicking Compare shows the classified Ontology 
 })
 
 test('comparing a version with itself shows no changes', async ({ page }) => {
-  await page.goto('/ui/kg/support/versions/compare?base=3&target=3')
+  await page.goto('/ui/kg/support/versions/compare?id=3&id=3')
 
   await expect(page.getByRole('region', { name: 'Ontology Diff' })).toContainText(
     'No changes between v3 and v3.',
@@ -46,7 +46,7 @@ test('comparing a version with itself shows no changes', async ({ page }) => {
 })
 
 test('comparing an unknown version says so', async ({ page }) => {
-  await page.goto('/ui/kg/support/versions/compare?base=2&target=9')
+  await page.goto('/ui/kg/support/versions/compare?id=2&id=9')
 
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Ontology Version not found')
 })

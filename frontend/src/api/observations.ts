@@ -58,29 +58,43 @@ export interface DriftEvent {
   thresholds: DriftThresholds
 }
 
+/** Query keys of Observations and Drift events. */
+export const observationQueryKeys = {
+  all: (kg: string) => ['observations', kg] as const,
+  one: (id: string | null) => ['observation', id] as const,
+  driftEvents: (kg: string) => ['drift-events', kg] as const,
+}
+
 /** The Knowledge Graph's Observations, oldest first. */
 export const observationsQuery = (kg: string) => ({
-  queryKey: ['observations', kg],
+  queryKey: observationQueryKeys.all(kg),
   queryFn: () => api<Observation[]>(kgPath(kg) + '/observations'),
 })
 export const useObservations = (kg: string) => useQuery(observationsQuery(kg))
 
 /** The Knowledge Graph's Drift events, oldest first. */
 export const driftEventsQuery = (kg: string) => ({
-  queryKey: ['drift-events', kg],
+  queryKey: observationQueryKeys.driftEvents(kg),
   queryFn: () => api<DriftEvent[]>(kgPath(kg) + '/drift-events'),
 })
 export const useDriftEvents = (kg: string) => useQuery(driftEventsQuery(kg))
 
-/** wire.observation_to_json in full; the run page reads only the Observed Schema's sizes. */
-export interface ObservationWithSchema extends Observation {
-  schema: { node_types: unknown[]; relationship_types: unknown[]; patterns: unknown[] }
+/** The Observed Schema (graph_source.ObservedSchema); the run page reads only its sizes. */
+export interface ObservedSchema {
+  node_types: unknown[]
+  relationship_types: unknown[]
+  patterns: unknown[]
+}
+
+/** wire.observation_to_json in full: with its Observed Schema (the wire key is `schema`). */
+export interface ObservationWithObservedSchema extends Observation {
+  schema: ObservedSchema
 }
 
 /** One Observation, e.g. the one a Construction Run ended with; idle while `id` is null. */
 export const useObservation = (id: string | null) =>
   useQuery({
-    queryKey: ['observation', id],
-    queryFn: () => api<ObservationWithSchema>(`/observations/${encodeURIComponent(id ?? '')}`),
+    queryKey: observationQueryKeys.one(id),
+    queryFn: () => api<ObservationWithObservedSchema>(`/observations/${encodeURIComponent(id ?? '')}`),
     enabled: id !== null,
   })

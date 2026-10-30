@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, kgPath } from './client'
+import { knowledgeGraphsQueryKeys } from './knowledge-graphs'
 
 /** One Knowledge Graph (wire.knowledge_graph_to_json). */
 export interface KnowledgeGraph {
@@ -11,8 +12,14 @@ export interface KnowledgeGraph {
 
 export type EvolutionMode = 'strict' | 'evolving'
 
+/** Query keys about one Knowledge Graph itself. */
+export const knowledgeGraphQueryKeys = {
+  one: (name: string) => ['knowledge-graph', name] as const,
+  evolutionMode: (name: string) => ['evolution-mode', name] as const,
+}
+
 export const knowledgeGraphQuery = (name: string) => ({
-  queryKey: ['knowledge-graph', name],
+  queryKey: knowledgeGraphQueryKeys.one(name),
   queryFn: () => api<KnowledgeGraph>(kgPath(name)),
 })
 
@@ -25,14 +32,14 @@ export function useSetKnowledgeGraphDescription(name: string) {
     mutationFn: (description: string) =>
       api<KnowledgeGraph>(kgPath(name) + '/description', 'PUT', { description }),
     onSuccess: (kg) => {
-      queryClient.setQueryData(knowledgeGraphQuery(name).queryKey, kg)
-      void queryClient.invalidateQueries({ queryKey: ['knowledge-graphs'] })
+      queryClient.setQueryData(knowledgeGraphQueryKeys.one(name), kg)
+      void queryClient.invalidateQueries({ queryKey: knowledgeGraphsQueryKeys.all() })
     },
   })
 }
 
 export const evolutionModeQuery = (name: string) => ({
-  queryKey: ['evolution-mode', name],
+  queryKey: knowledgeGraphQueryKeys.evolutionMode(name),
   queryFn: async () => (await api<{ mode: EvolutionMode }>(kgPath(name) + '/evolution-mode')).mode,
 })
 
