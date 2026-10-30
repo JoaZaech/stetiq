@@ -391,3 +391,43 @@ def test_a_run_failed_by_strict_evolution_mode_is_still_evaluated(
     assert run.status == "failed"
     conformance = result(client.get_run_evaluation_results(run.id), "conformance")
     assert conformance.metrics["undeclared"] == 1
+
+
+# --- Gates ------------------------------------------------------------------------------
+
+ALL_CQS_PASS = """
+gates:
+  - name: all-cqs-pass
+    check: metric
+    evaluator: competency_question_execution
+    metric: failed_questions
+    max: 0
+  - name: enough-tickets
+    check: metric
+    evaluator: observed_schema
+    metric: nodes
+    min: 3
+"""
+
+
+def test_a_metric_gate_can_reference_run_level_results(client, support_kg, graph_source):
+    seed_support_graph(graph_source)
+    graph_source.add_query_result(NO_AGENTS, [])
+    client.register_use_case(
+        support_kg, [stetiq.CompetencyQuestion("agents", "Which agents?", query=NO_AGENTS)]
+    )
+    run = run_once(client)
+
+    by_run = client.evaluate_gates(support_kg, ALL_CQS_PASS, run=run.id)
+    by_version = client.evaluate_gates(support_kg, ALL_CQS_PASS, version=1)
+
+    for gated in (by_run, by_version):
+        assert [o.gate.name for o in gated.failed] == ["all-cqs-pass"]
+        assert gated.failed[0].reasons == (
+            "competency_question_execution.failed_questions = 1 > max 0",
+            "agents: empty result",
+        )
+
+    graph_source.add_query_result(NO_AGENTS, [{"name": "Grace"}])
+    client.evaluate_run(run.id)
+    assert client.evaluate_gates(support_kg, ALL_CQS_PASS, run=run.id).passed

@@ -44,6 +44,9 @@ class GateInputs:
     evaluations: Sequence[EvaluationResult] = ()  # latest per Evaluator (and parameters)
     observed: ObservedSchema | None = None  # the subject's Observed Schema
     baseline: ObservedSchema | None = None  # the Observation before it
+    # Run-level results (ticket #13: conformance, observed_schema,
+    # competency_question_execution, custom run Evaluators) of the subject's run.
+    run_evaluations: Sequence[EvaluationResult] = ()
 
 
 @dataclass(frozen=True)
@@ -147,9 +150,12 @@ class ConformanceGate(Gate):
 
 @dataclass(frozen=True)
 class MetricGate(Gate):
-    """A metric of the version's latest result of `evaluator` must lie within
-    [`min`, `max`] (either bound optional, at least one given). `parameters` picks one
-    result when the Evaluator ran with several configurations (e.g. gold references)."""
+    """A metric of the latest result of `evaluator` must lie within [`min`, `max`]
+    (either bound optional, at least one given). `parameters` picks one result when the
+    Evaluator ran with several configurations (e.g. gold references).
+
+    The result is the version's, else (for an Evaluator with no version result) the
+    subject run's run-level result, e.g. `competency_question_execution`."""
 
     name: str
     evaluator: str
@@ -170,17 +176,20 @@ class MetricGate(Gate):
         return d
 
     def evaluate(self, inputs: GateInputs) -> GateOutcome:
-        results = [
-            r
-            for r in inputs.evaluations
-            if r.evaluator == self.evaluator
-            and (self.parameters is None or dict(r.parameters) == dict(self.parameters))
-        ]
+        def matching(candidates: Sequence[EvaluationResult]) -> list[EvaluationResult]:
+            return [
+                r
+                for r in candidates
+                if r.evaluator == self.evaluator
+                and (self.parameters is None or dict(r.parameters) == dict(self.parameters))
+            ]
+
+        results = matching(inputs.evaluations) or matching(inputs.run_evaluations)
         if not results:
             return self._outcome(
                 False,
                 f"No result of Evaluator {self.evaluator!r} for Ontology Version "
-                f"{inputs.ontology_version}" + (f" with parameters {dict(self.parameters)}" if self.parameters else ""),
+                f"{inputs.ontology_version} or its run" + (f" with parameters {dict(self.parameters)}" if self.parameters else ""),
             )
         if len(results) > 1:
             return self._outcome(

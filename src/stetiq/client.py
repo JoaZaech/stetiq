@@ -364,7 +364,9 @@ class Client:
         - its latest Evaluator results;
         - Conformance and Observed Schema of the run (for a version: the latest
           finished-or-strict-failed run standing for it), and the Observation before
-          that run's as statistics baseline.
+          that run's as statistics baseline;
+        - that run's run-level Evaluator results, for `metric` Gates naming an
+          Evaluator the version has no result of.
         """
         if version is not None and run is not None:
             raise ValueError("evaluate_gates takes version or run, not both")
@@ -413,6 +415,9 @@ class Client:
             evaluations=tuple(self.get_evaluation_results(knowledge_graph, number)),
             observed=observed,
             baseline=baseline,
+            run_evaluations=()
+            if run is None
+            else tuple(self.get_run_evaluation_results(run.id)),
         )
 
     def list_gate_results(self, knowledge_graph: str) -> list[GateResult]:
