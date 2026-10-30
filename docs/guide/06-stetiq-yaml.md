@@ -1,6 +1,6 @@
 # stetiq.yaml
 
-`stetiq.yaml` is the repo config: a YAML file you keep in your own repository, next to the code that builds your Knowledge Graph. It tells the CLI which Knowledge Graph the repository works on, how to start a Construction Run, when an Observation counts as Drift, and which Gates an Ontology Version must pass before you promote it.
+`stetiq.yaml` is the repo config: a YAML file you keep in your own repository, next to the code that builds your Knowledge Graph. It tells the CLI which Knowledge Graph the repository works on, how to start a Construction Run, when an Observation counts as Drift, and which Gates to check an Ontology Version against (in CI, with `stetiq gate`). Gates never block a Promotion, but the audit log records whether the version's latest Gate result passed.
 
 The CLI reads `./stetiq.yaml` by default. Every command that reads it takes `--config PATH` to use another file.
 

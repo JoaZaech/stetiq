@@ -114,7 +114,7 @@ stetiq alias log support
 
 - `alias set KG ALIAS VERSION` creates the Alias or moves it: a Promotion, or a rollback to an earlier version. In local mode the audit log records `--actor`, else `$STETIQ_ACTOR`, else your OS user; in remote mode it records the API Token's user.
 - `alias list` marks the Contract Alias with `*`. `alias contract` shows it, or designates another existing Alias.
-- `alias get` prints the version an Alias points to as stetiq YAML, for a pipeline that needs the current contract.
+- `alias get` prints the version an Alias points to as stetiq YAML, for a CI step that needs the current contract.
 - `alias log` is the Promotion audit log, with the Gate result each version had when it was promoted.
 
 ### Construction Runs

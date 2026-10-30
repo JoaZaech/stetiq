@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { Navigate, NavLink, useLocation, useParams } from 'react-router'
 import { cn } from '@/lib/utils'
 import { NotFoundPage } from '@/pages/NotFoundPage'
-import { GUIDE } from './guide'
+import { GUIDE, guidePage } from './guide'
 import { helpUrl } from './guide-index'
 import { GuideMarkdown } from './GuideMarkdown'
 
@@ -14,7 +14,7 @@ export function HelpIndex() {
 /** `/help/:page`: one page of the user guide, next to the guide's table of contents. */
 export function HelpPage() {
   const slug = useParams().page
-  const page = GUIDE.find((p) => p.slug === slug)
+  const page = guidePage(slug)
 
   useEffect(() => {
     if (page) document.title = `${page.title} · stetiq`

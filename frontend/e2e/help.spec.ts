@@ -136,12 +136,20 @@ test('Python SDK and CLI follow Concepts in the table of contents; the SDK diagr
 
 test('a diagram that does not parse shows its source and an error note', async ({ page }) => {
   // Break the Getting started diagram (bundled at build time) by unclosing a node label.
+  const marker = '[Install stetiq]'
+  let broken = false
   await page.route('**/ui/assets/*.js', async (route) => {
     const response = await route.fetch()
-    const body = (await response.text()).replace('[Install stetiq]', '[Install stetiq')
-    await route.fulfill({ response, body })
+    const text = await response.text()
+    if (text.includes(marker)) broken = true
+    await route.fulfill({ response, body: text.replace(marker, '[Install stetiq') })
   })
   await page.goto('/ui/help/getting-started')
+  await expect
+    .poll(() => broken, {
+      message: `no served chunk contains ${marker}: did the Getting started diagram's first node change?`,
+    })
+    .toBe(true)
 
   const diagram = page.getByRole('article').getByRole('figure')
   await expect(diagram.locator('pre code')).toContainText('install[Install stetiq -->')

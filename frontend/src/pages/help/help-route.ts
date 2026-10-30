@@ -1,7 +1,7 @@
 import type { RouteHandle } from '@/app/breadcrumbs'
-import { GUIDE } from './guide'
+import { guidePage } from './guide'
 
 /** `/help/:page`'s breadcrumb: the page's title (`Help › Getting started`). */
 export const helpPageHandle: RouteHandle = {
-  crumb: ({ page }) => GUIDE.find((p) => p.slug === page)?.title ?? 'Page not found',
+  crumb: ({ page }) => guidePage(page)?.title ?? 'Page not found',
 }

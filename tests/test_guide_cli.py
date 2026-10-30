@@ -4,25 +4,23 @@ Python examples are not run."""
 
 import re
 import shlex
-from pathlib import Path
 
 import pytest
 import typer.main
+from guide_pages import GUIDE, code_blocks
 from typer.testing import CliRunner
 
 from stetiq.cli import app
 
-GUIDE = Path(__file__).resolve().parent.parent / "docs" / "guide"
 SHELL_LANGUAGES = {"", "bash", "sh", "shell", "console", "zsh"}
 ENV_ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
-FENCE = re.compile(r"^```(\S*)[^\n]*\n(.*?)^```", re.MULTILINE | re.DOTALL)
 
 
 def guide_commands(markdown: str) -> list[list[str]]:
     """The argv (after `stetiq`) of every `stetiq …` command in the shell code blocks."""
     commands = []
-    for language, body in FENCE.findall(markdown):
-        if language.lower() not in SHELL_LANGUAGES:
+    for language, body in code_blocks(markdown):
+        if language not in SHELL_LANGUAGES:
             continue
         for line in body.replace("\\\n", " ").splitlines():
             line = line.strip().removeprefix("$ ")

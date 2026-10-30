@@ -1,4 +1,4 @@
-import { guidePages } from './guide-index'
+import { type GuidePage, guidePages } from './guide-index'
 
 /**
  * The user guide, bundled as raw Markdown at build time (ADR 0004). Add a page by adding a
@@ -11,3 +11,8 @@ export const GUIDE = guidePages(
     eager: true,
   }),
 )
+
+/** The guide page at `/help/<slug>`, or `undefined` when there is none. */
+export function guidePage(slug: string | undefined): GuidePage | undefined {
+  return GUIDE.find((page) => page.slug === slug)
+}

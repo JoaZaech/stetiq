@@ -6,6 +6,7 @@ This page takes you from installing stetiq to your first tracked Construction Ru
 
 ```mermaid
 flowchart LR
+  %% frontend/e2e/help.spec.ts breaks this diagram by finding the "Install stetiq" node label: keep it, or update the test.
   install[Install stetiq] --> ui[Open the web UI] --> kg[Create a Knowledge Graph] --> run[Track a Construction Run]
 ```
 
