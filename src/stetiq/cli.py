@@ -12,7 +12,8 @@ import yaml
 from stetiq.client import Client
 from stetiq.config import DEFAULT_CONFIG_PATH, load_config
 from stetiq.entry_point import EntryPoint
-from stetiq.errors import EvaluatorError, StetiqError
+from stetiq.errors import EvaluatorError, GateConfigError, StetiqError
+from stetiq.gates import parse_gates
 from stetiq.use_case import to_yaml as to_use_case_yaml
 
 app = typer.Typer(no_args_is_help=True, help="Version, evaluate and govern knowledge-graph ontologies.")
@@ -53,13 +54,27 @@ def server(
     ] = None,
     host: Annotated[str, typer.Option(help="Interface to bind")] = "127.0.0.1",
     port: Annotated[int, typer.Option(help="Port to listen on")] = 5000,
+    question_mapper: Annotated[
+        str | None,
+        typer.Option(
+            "--question-mapper",
+            envvar="STETIQ_QUESTION_MAPPER",
+            help="Maps Competency Questions without a query onto the Ontology: "
+            "'anthropic' (Claude; needs stetiq[llm]), 'module:attr', or 'none' (default)",
+        ),
+    ] = None,
 ) -> None:
     """Run the self-hosted stetiq server; point clients at it with --tracking-uri http://HOST:PORT."""
     import uvicorn
 
+    from stetiq.evaluation.llm_mapping import question_mapper_from_spec
     from stetiq.server import create_app
 
-    uvicorn.run(create_app(database_url), host=host, port=port)
+    try:
+        mapper = question_mapper_from_spec(question_mapper)
+    except ValueError as e:
+        raise typer.BadParameter(str(e), param_hint="--question-mapper") from None
+    uvicorn.run(create_app(database_url, question_mapper=mapper), host=host, port=port)
 
 
 @kg_app.command("create")
@@ -527,3 +542,54 @@ def drift_list(knowledge_graph: str, tracking_uri: TrackingUri = None) -> None:
             f"{e.detected_at.isoformat():<33} {contract:<16} {len(e.structural):<7} "
             f"{len(e.statistical):<6} {e.observation_id}"
         )
+
+
+# Like `stetiq observe`'s Drift code: a finding, distinct from 1 = error and 2 = usage error.
+GATE_FAILED_EXIT_CODE = 3
+
+
+@app.command("gate")
+def gate(
+    knowledge_graph: Annotated[
+        str | None, typer.Argument(help="Default: knowledge_graph from the config file")
+    ] = None,
+    version: Annotated[
+        int | None, typer.Option("--version", help="Ontology Version to gate (default: the latest)")
+    ] = None,
+    run: Annotated[str | None, typer.Option("--run", help="Construction Run id to gate")] = None,
+    config: Annotated[
+        Path, typer.Option("--config", help="Repo config file holding the Gates")
+    ] = Path(DEFAULT_CONFIG_PATH),
+    tracking_uri: TrackingUri = None,
+) -> None:
+    """Evaluate the config file's Gates for an Ontology Version or a run; record the result
+    on the server. Exit codes: 0 all Gates passed, 3 a Gate failed, 1 error (bad config...)."""
+    try:
+        if version is not None and run is not None:
+            raise GateConfigError("give --version or --run, not both")
+        try:
+            settings = load_config(config)
+        except (OSError, ValueError, yaml.YAMLError) as e:
+            raise GateConfigError(f"Cannot read config file {config}: {e}") from None
+        knowledge_graph = knowledge_graph or settings.get("knowledge_graph")
+        if not knowledge_graph:
+            raise GateConfigError(f"No Knowledge Graph given and none set in {config}")
+        gates = parse_gates(settings.get("gates"))
+        if not gates:
+            raise GateConfigError(f"{config} defines no Gates")
+        result = _client(tracking_uri).evaluate_gates(knowledge_graph, gates, version=version, run=run)
+    except StetiqError as e:
+        raise _fail(e) from None
+    for outcome in result.outcomes:
+        typer.echo(f"{'PASS' if outcome.passed else 'FAIL'}  {outcome.gate.name}")
+        if not outcome.passed:
+            for reason in outcome.reasons:
+                typer.echo(f"      - {reason}")
+    subject = f"run {run}" if run is not None else f"Ontology Version {result.ontology_version}"
+    if result.passed:
+        typer.echo(f"All {len(result.outcomes)} Gates passed for {knowledge_graph} {subject}")
+        return
+    typer.echo(
+        f"{len(result.failed)} of {len(result.outcomes)} Gates failed for {knowledge_graph} {subject}"
+    )
+    raise typer.Exit(code=GATE_FAILED_EXIT_CODE)

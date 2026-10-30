@@ -10,6 +10,7 @@ import httpx
 
 from stetiq.errors import EvaluatorError, StetiqError
 from stetiq.evaluation.framework import Evaluation, ParameterValue, SubjectKind
+from stetiq.gates import GateOutcome, outcome_to_dict
 from stetiq.graph_source import GraphSourceScope
 from stetiq.ontology import Ontology, to_dict
 from stetiq.tracking import wire
@@ -20,6 +21,8 @@ from stetiq.tracking.entities import (
     ConstructionRun,
     EvaluationResult,
     EvolutionMode,
+    GateResult,
+    GateSubjectKind,
     KnowledgeGraph,
     Observation,
     OntologyVersion,
@@ -255,3 +258,24 @@ class RemoteTrackingService:
     def get_use_case_version(self, knowledge_graph: str, number: int) -> UseCaseVersion:
         data = self._call("GET", f"{self._kg_path(knowledge_graph)}/use-case-versions/{number}")
         return wire.use_case_version_from_json(data)
+
+    # --- Gates --------------------------------------------------------------------------
+
+    def record_gate_result(
+        self,
+        knowledge_graph: str,
+        subject_kind: GateSubjectKind,
+        subject_id: str,
+        outcomes: tuple[GateOutcome, ...],
+    ) -> GateResult:
+        body = {
+            "subject_kind": subject_kind,
+            "subject_id": subject_id,
+            "outcomes": [outcome_to_dict(o) for o in outcomes],
+        }
+        data = self._call("POST", self._kg_path(knowledge_graph) + "/gate-results", body)
+        return wire.gate_result_from_json(data)
+
+    def list_gate_results(self, knowledge_graph: str) -> list[GateResult]:
+        data = self._call("GET", self._kg_path(knowledge_graph) + "/gate-results")
+        return [wire.gate_result_from_json(r) for r in data]

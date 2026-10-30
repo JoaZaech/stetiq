@@ -28,6 +28,8 @@ from stetiq import use_case as use_case_format
 from stetiq.tracking.entities import Alias, Promotion
 from stetiq.drift import DriftFinding, DriftThresholds
 from stetiq.tracking.entities import DriftEvent, ObservationOutcome
+from stetiq.tracking.entities import Alias, GateResult, Promotion
+from stetiq.gates import outcome_from_dict, outcome_to_dict
 
 API_PREFIX = "/api/v1"
 
@@ -351,3 +353,31 @@ def observation_outcome_from_json(d: dict[str, Any]) -> ObservationOutcome:
 
 ERROR_STATUS[errors.AuthenticationError] = 401
 ERROR_STATUS[errors.PermissionDeniedError] = 403
+
+
+# --- Gates (ticket #14) ------------------------------------------------------------------
+
+ERROR_STATUS[errors.GateConfigError] = 422
+
+
+def gate_result_to_json(r: GateResult) -> dict[str, Any]:
+    return {
+        "knowledge_graph": r.knowledge_graph,
+        "subject_kind": r.subject_kind,
+        "subject_id": r.subject_id,
+        "ontology_version": r.ontology_version,
+        "passed": r.passed,
+        "outcomes": [outcome_to_dict(o) for o in r.outcomes],
+        "evaluated_at": r.evaluated_at.isoformat(),
+    }
+
+
+def gate_result_from_json(d: dict[str, Any]) -> GateResult:
+    return GateResult(
+        knowledge_graph=d["knowledge_graph"],
+        subject_kind=d["subject_kind"],
+        subject_id=d["subject_id"],
+        ontology_version=d["ontology_version"],
+        outcomes=tuple(outcome_from_dict(o) for o in d["outcomes"]),
+        evaluated_at=datetime.fromisoformat(d["evaluated_at"]),
+    )

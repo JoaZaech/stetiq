@@ -41,6 +41,7 @@ from stetiq.evaluation.framework import (
     check_parameters,
 )
 from stetiq.evaluation.structural import BUILT_IN_EVALUATORS
+from stetiq.gates import GateOutcome
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import Ontology, content_hash, from_dict, to_dict
 from stetiq.tracking.entities import (
@@ -51,6 +52,8 @@ from stetiq.tracking.entities import (
     DriftEvent,
     EvaluationResult,
     EvolutionMode,
+    GateResult,
+    GateSubjectKind,
     KnowledgeGraph,
     Observation,
     ObservationOutcome,
@@ -183,6 +186,22 @@ class TrackingService(Protocol):
     def list_use_case_versions(self, knowledge_graph: str) -> list[UseCaseVersion]: ...
 
     def get_use_case_version(self, knowledge_graph: str, number: int) -> UseCaseVersion: ...
+
+    def record_gate_result(
+        self,
+        knowledge_graph: str,
+        subject_kind: GateSubjectKind,
+        subject_id: str,
+        outcomes: tuple[GateOutcome, ...],
+    ) -> GateResult:
+        """Record a Gate evaluation (computed by the SDK from the repo's Gates) together
+        with the Gate definitions it used. The service resolves which Ontology Version
+        the subject stands for."""
+        ...
+
+    def list_gate_results(self, knowledge_graph: str) -> list[GateResult]:
+        """Every recorded Gate evaluation, oldest first."""
+        ...
 
 
 class LocalTrackingService:
@@ -602,7 +621,7 @@ class LocalTrackingService:
                     to_version=version,
                     actor=actor,
                     promoted_at=moved,
-                    gate_result=None,  # Gates (#14) fill in the target's latest result
+                    gate_result=self._latest_gate_verdict(knowledge_graph, version),
                 )
             )
             return alias
@@ -630,6 +649,58 @@ class LocalTrackingService:
     def get_contract_alias(self, knowledge_graph: str) -> str:
         self.get_knowledge_graph(knowledge_graph)
         return self._store.get_contract_alias(knowledge_graph) or DEFAULT_CONTRACT_ALIAS
+
+    # --- Gates ----------------------------------------------------------------------
+
+    def record_gate_result(
+        self,
+        knowledge_graph: str,
+        subject_kind: GateSubjectKind,
+        subject_id: str,
+        outcomes: tuple[GateOutcome, ...],
+    ) -> GateResult:
+        with self._store.transaction():
+            result = GateResult(
+                knowledge_graph=knowledge_graph,
+                subject_kind=subject_kind,
+                subject_id=subject_id,
+                ontology_version=self._gate_subject_version(knowledge_graph, subject_kind, subject_id),
+                outcomes=tuple(outcomes),
+                evaluated_at=_now(),
+            )
+            self._store.add_gate_result(result)
+            return result
+
+    def list_gate_results(self, knowledge_graph: str) -> list[GateResult]:
+        self.get_knowledge_graph(knowledge_graph)
+        return self._store.list_gate_results(knowledge_graph)
+
+    def _gate_subject_version(
+        self, knowledge_graph: str, subject_kind: GateSubjectKind, subject_id: str
+    ) -> int:
+        """The Ontology Version a Gate subject stands for: the version itself; for a run
+        the Candidate it gave rise to, else the version it consumed."""
+        if subject_kind == "ontology_version":
+            if not subject_id.isdigit():
+                raise NotFoundError(
+                    f"Knowledge Graph {knowledge_graph!r} has no Ontology Version {subject_id!r}"
+                )
+            return self.get_ontology_version(knowledge_graph, int(subject_id)).number
+        if subject_kind == "construction_run":
+            run = self.get_run(subject_id)
+            if run.knowledge_graph != knowledge_graph:
+                raise NotFoundError(
+                    f"Knowledge Graph {knowledge_graph!r} has no Construction Run {subject_id!r}"
+                )
+            return run.candidate_version or run.ontology_version
+        raise NotFoundError(f"Unknown Gate subject kind {subject_kind!r}")
+
+    def _latest_gate_verdict(self, knowledge_graph: str, version: int) -> str | None:
+        """"passed"/"failed" for the version's latest Gate result; None if never gated."""
+        for result in reversed(self._store.list_gate_results(knowledge_graph)):
+            if result.ontology_version == version:
+                return "passed" if result.passed else "failed"
+        return None
 
 
 def _now() -> datetime:

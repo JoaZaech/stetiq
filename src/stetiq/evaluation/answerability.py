@@ -44,6 +44,9 @@ class CompetencyQuestionMapper(Protocol):
     (`Label`, `Owner.property`, `(Source)-[REL]->(Target)`), or an empty sequence
     if the question cannot be mapped. Only consulted for questions with neither a
     Concept mapping nor a query.
+
+    A mapper may also expose a `description` (e.g. `"anthropic:claude-opus-5-5"`); it
+    is stored with each question it mapped, as `data.mapper`.
     """
 
     def map_question(
@@ -135,7 +138,7 @@ class StructuralAnswerability(OntologyVersionEvaluator):
     `unmapped_questions`, `answerable_ratio`. One Detail per question (`item` = the
     question id, `metric` = the count it falls in) whose `data` is
     `{status, source, required, missing}` (Concept references as strings; plus
-    `error` when the mapper failed).
+    `mapper` when a described mapper produced the mapping, and `error` when it failed).
     """
 
     name = ANSWERABILITY_EVALUATOR
@@ -203,6 +206,8 @@ class StructuralAnswerability(OntologyVersionEvaluator):
             "required": [str(r) for r in required],
             "missing": missing,
         }
+        if source == "model" and getattr(self.mapper, "description", None):
+            data["mapper"] = str(self.mapper.description)
         if error:
             data["error"] = error
         return data
