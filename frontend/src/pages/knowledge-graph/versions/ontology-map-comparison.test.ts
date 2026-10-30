@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { OntologyDiff } from '@/api/ontology-diff'
+import type { OntologyChange, OntologyDiff } from '@/api/ontology-diff'
 import type { Ontology } from '@/api/ontology-versions'
-import { changesOf, compareOntologies } from './ontology-map-comparison'
+import { changesOf, compareOntologies, isDocumentationOnly } from './ontology-map-comparison'
 import { layoutOntologyMap } from './ontology-map-layout'
 
 // Canonical form, as the server sends it: Concepts sorted by label.
@@ -223,6 +223,96 @@ describe('compareOntologies: changed attributes', () => {
     expect(changes.attributes.Stop).toEqual([
       { name: 'name', kind: 'modified', severity: 'breaking', details: ['description changed', 'now required'] },
     ])
+  })
+})
+
+describe('documentation-only changes', () => {
+  // A transit network whose class Stop, attribute Trip.headsign and relation HAS_TRIP
+  // gain a description; SERVES gains one too, with a new Pattern beside it.
+  const base: Ontology = {
+    node_types: [{ label: 'Route' }, { label: 'Stop' }, { label: 'Trip', properties: [{ name: 'headsign', type: 'STRING' }] }],
+    relationship_types: [{ label: 'HAS_TRIP' }, { label: 'SERVES' }],
+    patterns: [
+      ['Route', 'HAS_TRIP', 'Trip'],
+      ['Trip', 'SERVES', 'Stop'],
+    ],
+  }
+  const target: Ontology = {
+    node_types: [
+      { label: 'Route' },
+      { label: 'Stop', description: 'Where riders board' },
+      { label: 'Trip', properties: [{ name: 'headsign', type: 'STRING', description: 'The sign on the vehicle' }] },
+    ],
+    relationship_types: [
+      { label: 'HAS_TRIP', description: 'The scheduled trips of a route' },
+      { label: 'SERVES', description: 'The stops a trip calls at' },
+    ],
+    patterns: [
+      ['Route', 'HAS_TRIP', 'Trip'],
+      ['Route', 'SERVES', 'Stop'],
+      ['Trip', 'SERVES', 'Stop'],
+    ],
+  }
+  const described = (concept: string, concept_kind: OntologyChange['concept_kind']): OntologyChange => ({
+    concept,
+    concept_kind,
+    kind: 'changed',
+    classification: 'additive',
+    detail: 'description changed',
+  })
+  // What the core's Ontology Diff reports from base to target.
+  const diff: OntologyDiff = {
+    classification: 'additive',
+    changes: [
+      described('Stop', 'node_type'),
+      described('Trip.headsign', 'property'),
+      described('HAS_TRIP', 'relationship_type'),
+      described('SERVES', 'relationship_type'),
+      { concept: 'SERVES', concept_kind: 'relationship_type', kind: 'changed', classification: 'additive', detail: 'endpoint pattern (Route)-[SERVES]->(Stop) added' },
+    ],
+  }
+
+  it("tells a change documentation-only when the two Ontologies differ only in its Concept's description", () => {
+    const only = diff.changes.map((c) => [c.concept, isDocumentationOnly({ base, target }, c)])
+
+    expect(only).toEqual([
+      ['Stop', true],
+      ['Trip.headsign', true],
+      ['HAS_TRIP', true],
+      // SERVES also gained a Pattern, so neither of its changes is documentation-only.
+      ['SERVES', false],
+      ['SERVES', false],
+    ])
+  })
+
+  it('tells an attribute change documentation-only only when the attribute differs in nothing but its description', () => {
+    const retyped: Ontology = {
+      ...target,
+      node_types: target.node_types.map((n) =>
+        n.label === 'Trip'
+          ? { ...n, properties: [{ name: 'headsign', type: 'INTEGER', description: 'The sign on the vehicle' }] }
+          : n,
+      ),
+    }
+
+    expect(isDocumentationOnly({ base, target: retyped }, described('Trip.headsign', 'property'))).toBe(false)
+  })
+
+  it('draws a Concept changed only in its description as documentation-only, with no severity', () => {
+    const { changes } = compareOntologies(base, target, diff)
+
+    expect(changes.classes.Stop).toEqual({ kind: 'documentation-only', severity: null })
+    expect(changes.links['(Route)-[HAS_TRIP]->(Trip)']).toEqual({ kind: 'documentation-only', severity: null })
+    // A class whose attributes changed only in their descriptions lists none of them.
+    expect(changes.classes.Trip).toEqual({ kind: 'documentation-only', severity: null })
+    expect(changes.attributes.Trip).toEqual([])
+  })
+
+  it("draws a Concept with a description change and a structural one in the structural change's severity", () => {
+    const { changes } = compareOntologies(base, target, diff)
+
+    expect(changes.links['(Trip)-[SERVES]->(Stop)']).toEqual({ kind: 'modified', severity: 'additive' })
+    expect(changes.links['(Route)-[SERVES]->(Stop)']).toEqual({ kind: 'added', severity: 'additive' })
   })
 })
 
