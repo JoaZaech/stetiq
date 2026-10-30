@@ -9,6 +9,7 @@
  * paths) and `ontology-map-layout` (where each class goes).
  */
 import type { Ontology } from '@/api/ontology-versions'
+import { patternId } from './concepts'
 
 export interface MapNode {
   /** The class label, also the node's key. */
@@ -58,7 +59,7 @@ export function ontologyMap(ontology: Ontology): OntologyMap {
     ontology.relationship_types.filter((r) => r.deprecated).map((r) => r.label),
   )
   const patterns = ontology.patterns.map(([source, relation, target]) => ({
-    id: `(${source})-[${relation}]->(${target})`,
+    id: patternId([source, relation, target]),
     source,
     relation,
     target,

@@ -3,7 +3,7 @@
  * matches.
  */
 import type { Ontology, OntologyConcept, OntologyProperty } from '@/api/ontology-versions'
-import { conceptTables, searchConcepts } from './concepts'
+import { conceptTables, constraintsOf, searchConcepts } from './concepts'
 import { ontologyMap, type OntologyMap } from './ontology-map'
 import { shortestPaths } from './ontology-map-paths'
 
@@ -141,9 +141,7 @@ export function detailsOf(ontology: Ontology, selection: MapSelection | null): M
       deprecated: node.deprecated ?? false,
       parent: node.parent,
       properties,
-      constraints: (ontology.constraints ?? [])
-        .filter((c) => c.node_type === node.label)
-        .map((c) => `${c.type} (${c.property_name})`),
+      constraints: constraintsOf(ontology, node.label),
     }
   }
   if (selection?.kind === 'link') {

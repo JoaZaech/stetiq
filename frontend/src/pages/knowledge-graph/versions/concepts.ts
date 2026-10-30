@@ -34,6 +34,14 @@ export interface ConceptTables {
   attributes: AttributeRow[]
 }
 
+/** A Pattern as `(Source)-[REL]->(Target)`, the syntax of `Pattern.__str__`. */
+export const patternId = ([source, relation, target]: Ontology['patterns'][number]) =>
+  `(${source})-[${relation}]->(${target})`
+
+/** The constraints declared on class `label`, each as e.g. `UNIQUENESS (name)`. */
+export const constraintsOf = (ontology: Ontology, label: string) =>
+  (ontology.constraints ?? []).filter((c) => c.node_type === label).map((c) => `${c.type} (${c.property_name})`)
+
 /** An Ontology's Concepts as three tables: classes in hierarchy order, relations, attributes. */
 export function conceptTables(ontology: Ontology): ConceptTables {
   const labels = new Set(ontology.node_types.map((n) => n.label))
@@ -53,9 +61,7 @@ export function conceptTables(ontology: Ontology): ConceptTables {
         deprecated: node.deprecated ?? false,
         parent: node.parent,
         depth,
-        constraints: (ontology.constraints ?? [])
-          .filter((c) => c.node_type === node.label)
-          .map((c) => `${c.type} (${c.property_name})`),
+        constraints: constraintsOf(ontology, node.label),
       })
       visit(node.label, depth + 1)
     }
@@ -68,7 +74,7 @@ export function conceptTables(ontology: Ontology): ConceptTables {
     deprecated: rel.deprecated ?? false,
     patterns: ontology.patterns
       .filter(([, relationship]) => relationship === rel.label)
-      .map(([source, relationship, target]) => `(${source})-[${relationship}]->(${target})`)
+      .map(patternId)
       .sort(),
   }))
 
