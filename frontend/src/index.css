@@ -17,6 +17,9 @@
     --color-sidebar-foreground: var(--sidebar-foreground);
     --color-sidebar: var(--sidebar);
     --color-chart-5: var(--chart-5);
+    --color-diff-additive: var(--diff-additive);
+    --color-diff-deprecating: var(--diff-deprecating);
+    --color-diff-breaking: var(--diff-breaking);
     --color-chart-4: var(--chart-4);
     --color-chart-3: var(--chart-3);
     --color-chart-2: var(--chart-2);
@@ -74,6 +77,10 @@
     --chart-4: oklch(0.371 0 0);
     --chart-5: oklch(0.269 0 0);
     --radius: 0.625rem;
+    /* Ontology Diff only (additive / deprecating / breaking); nothing else uses them. */
+    --diff-additive: oklch(0.527 0.154 150.069);
+    --diff-deprecating: oklch(0.555 0.163 48.998);
+    --diff-breaking: oklch(0.577 0.245 27.325);
     --sidebar: oklch(0.967 0.003 264.5);
     --sidebar-foreground: oklch(0.145 0 0);
     --sidebar-primary: oklch(0.546 0.215 262.9);
@@ -109,6 +116,9 @@
     --chart-3: oklch(0.439 0 0);
     --chart-4: oklch(0.371 0 0);
     --chart-5: oklch(0.269 0 0);
+    --diff-additive: oklch(0.792 0.209 151.711);
+    --diff-deprecating: oklch(0.828 0.189 84.429);
+    --diff-breaking: oklch(0.704 0.191 22.216);
     --sidebar: oklch(0.12 0 0);
     --sidebar-foreground: oklch(0.985 0 0);
     --sidebar-primary: oklch(0.623 0.188 259.8);

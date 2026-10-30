@@ -131,12 +131,35 @@ def support_lineage_reader(client: stetiq.Client) -> dict[str, Any]:
     return {**seeded, "grace": issue_token(client, "grace", {"support": "read"})}
 
 
+# v4 (from v2): deprecates Agent, drops Ticket.opened_at and adds an ASSIGNED relation,
+# so its Ontology Diff has a deprecating, a breaking and an additive change.
+SUPPORT_V4 = (
+    SUPPORT_V2.replace(
+        "{label: Agent, parent: Party}", "{label: Agent, parent: Party, deprecated: true}"
+    )
+    .replace("    properties: [{name: opened_at, type: DATE}]\n", "")
+    .replace("relationship_types: [OPENED]", "relationship_types: [OPENED, ASSIGNED]")
+    .replace(
+        "patterns: [[Customer, OPENED, Ticket]]",
+        "patterns: [[Customer, OPENED, Ticket], [Ticket, ASSIGNED, Agent]]",
+    )
+)
+
+
+def support_breaking_change(client: stetiq.Client) -> dict[str, Any]:
+    """`support_lineage`, plus v4: a deprecating, a breaking and an additive change from v2."""
+    seeded = support_lineage(client)
+    client.register_ontology("support", SUPPORT_V4)
+    return seeded
+
+
 SCENARIOS: dict[str, Scenario] = {
     "empty": empty,
     "knowledge_graphs": knowledge_graphs,
     "signed_in_users": signed_in_users,
     "support_lineage": support_lineage,
     "support_lineage_reader": support_lineage_reader,
+    "support_breaking_change": support_breaking_change,
 }
 
 
