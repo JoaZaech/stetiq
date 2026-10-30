@@ -6,8 +6,11 @@ import type { ClassOrRelation } from './concepts'
 export interface TableLinks {
   /** Selects `concept` and scrolls to its row, opening its section. */
   select: (concept: ClassOrRelation) => void
-  /** Scrolls to `owner`'s group of attributes, grouping by owner and opening it. */
-  openGroup: (owner: string) => void
+  /**
+   * Scrolls to `owner`'s group of attributes, grouping by owner and opening it; absent
+   * where there are no attribute groups, as in a comparison's grid.
+   */
+  openGroup?: (owner: string) => void
   /** Switches to the Map with `concept` selected. */
   showOnMap: (concept: ConceptSelection) => void
 }

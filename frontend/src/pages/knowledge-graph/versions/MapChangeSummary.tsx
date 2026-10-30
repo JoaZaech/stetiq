@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { type ComponentProps, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { ClassificationBadge } from '@/components/OntologyDiff'
 import { Badge } from '@/components/ui/badge'
@@ -13,13 +13,11 @@ import {
   type ChangeLevel,
   type ChangeStatement,
   type ConceptChanges,
+  type LevelCount,
 } from './ontology-map-summary'
 import { SEVERITY } from './severity-style'
 
-/**
- * Each level's count in the headline, in its own colour: the Diff colours for severity,
- * and none for documentation-only, which the Diff colours are not for.
- */
+/** Each level's colour: the Diff colours for severity, none for documentation-only. */
 const LEVEL_TEXT: Record<ChangeLevel, string> = { 'documentation-only': 'text-muted-foreground', ...SEVERITY.text }
 
 /** A change's level as a badge: a severity's in its Diff colour, documentation-only's neutral. */
@@ -50,7 +48,7 @@ export function MapChangeSummary({
   onSelect: (selection: MapSelection) => void
 }) {
   const summary = useMemo(() => summarizeChanges(comparison), [comparison])
-  const current = summaryConceptOf(comparison, summary, selection)
+  const link: MapLink = { current: summaryConceptOf(comparison, summary, selection), onPreview, onSelect }
   return (
     <aside aria-label="Change summary" className="w-72 shrink-0 space-y-3 overflow-y-auto border-r bg-background p-4 text-sm">
       <h3 className="font-semibold">Changes</h3>
@@ -58,26 +56,11 @@ export function MapChangeSummary({
         <p className="text-muted-foreground">No changes between the two versions.</p>
       ) : (
         <>
-          <p role="status" className="font-medium">
-            {summary.counts.map(({ level, count }, i) => (
-              <span key={level}>
-                {i > 0 && ' · '}
-                <span className={LEVEL_TEXT[level]}>
-                  {count} {level}
-                </span>
-              </span>
-            ))}
-          </p>
+          <LevelCounts role="status" className="font-medium" counts={summary.counts} />
           {summary.concepts.length > 0 && (
             <ul aria-label="Changed Concepts" className="space-y-1">
               {summary.concepts.map((c) => (
-                <SummaryEntry
-                  key={`${c.kind}:${c.label}`}
-                  concept={c}
-                  current={c === current}
-                  onPreview={onPreview}
-                  onSelect={onSelect}
-                />
+                <SummaryEntry key={`${c.kind}:${c.label}`} concept={c} link={link} />
               ))}
             </ul>
           )}
@@ -85,9 +68,7 @@ export function MapChangeSummary({
             <DocumentationOnly
               concepts={summary.documentationOnly}
               count={summary.counts.find((c) => c.level === 'documentation-only')?.count ?? 0}
-              current={current}
-              onPreview={onPreview}
-              onSelect={onSelect}
+              link={link}
             />
           )}
         </>
@@ -97,25 +78,42 @@ export function MapChangeSummary({
 }
 
 /**
- * The documentation-only changes, collapsed to one line that expands to their entries.
- * It opens by itself when the Map selects one of them.
+ * How the summary is linked with the Map: the entry of the Map's selection, and what
+ * pointing at an entry (`onPreview`) and clicking it (`onSelect`) do.
  */
-function DocumentationOnly({
-  concepts,
-  count,
-  current,
-  onPreview,
-  onSelect,
-}: {
-  concepts: ConceptChanges[]
-  count: number
+interface MapLink {
   current: ConceptChanges | null
   onPreview: (selection: MapSelection | null) => void
   onSelect: (selection: MapSelection) => void
-}) {
+}
+
+/**
+ * The headline: a count per level, the weightiest first, each in its own colour (the Diff
+ * colours for severity, none for documentation-only, which the Diff colours are not for).
+ */
+export function LevelCounts({ counts, ...props }: { counts: LevelCount[] } & ComponentProps<'p'>) {
+  return (
+    <p {...props}>
+      {counts.map(({ level, count }, i) => (
+        <span key={level}>
+          {i > 0 && ' · '}
+          <span className={LEVEL_TEXT[level]}>
+            {count} {level}
+          </span>
+        </span>
+      ))}
+    </p>
+  )
+}
+
+/**
+ * The documentation-only changes, collapsed to one line that expands to their entries.
+ * It opens by itself when the Map selects one of them.
+ */
+function DocumentationOnly({ concepts, count, link }: { concepts: ConceptChanges[]; count: number; link: MapLink }) {
   const id = useId()
   const [expanded, setExpanded] = useState(false)
-  const open = expanded || (current !== null && concepts.includes(current))
+  const open = expanded || (link.current !== null && concepts.includes(link.current))
   const Chevron = open ? ChevronDown : ChevronRight
   return (
     <div className="space-y-1">
@@ -131,30 +129,16 @@ function DocumentationOnly({
       </button>
       <ul id={id} hidden={!open} aria-label="Documentation-only changes" className="space-y-1">
         {concepts.map((c) => (
-          <SummaryEntry
-            key={`${c.kind}:${c.label}`}
-            concept={c}
-            current={c === current}
-            onPreview={onPreview}
-            onSelect={onSelect}
-          />
+          <SummaryEntry key={`${c.kind}:${c.label}`} concept={c} link={link} />
         ))}
       </ul>
     </div>
   )
 }
 
-function SummaryEntry({
-  concept,
-  current,
-  onPreview,
-  onSelect,
-}: {
-  concept: ConceptChanges
-  current: boolean
-  onPreview: (selection: MapSelection | null) => void
-  onSelect: (selection: MapSelection) => void
-}) {
+function SummaryEntry({ concept, link }: { concept: ConceptChanges; link: MapLink }) {
+  const { onPreview, onSelect } = link
+  const current = concept === link.current
   const ref = useRef<HTMLLIElement>(null)
   useEffect(() => {
     if (current) ref.current?.scrollIntoView({ block: 'nearest' })

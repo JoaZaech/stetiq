@@ -12,7 +12,7 @@ import { formatCount } from '@/lib/format'
 import { setOrDeleteParam } from '@/lib/search-params'
 import { type ComparisonRow, comparisonRows } from './comparison-rows'
 import { isSelectedRow, selectedRows, useConceptSelection, useShowOnMap } from './concept-selection'
-import { ChangeLevelBadge } from './MapChangeSummary'
+import { ChangeLevelBadge, LevelCounts } from './MapChangeSummary'
 import type { OntologyComparison } from './ontology-map-comparison'
 import { compareLevels, summarizeChanges } from './ontology-map-summary'
 import { selectedRowProps, type TableLinks, TableLinksContext } from './table-links'
@@ -104,8 +104,6 @@ function ComparisonGrid({ comparison, base, target }: { comparison: OntologyComp
   const links = useMemo(
     (): TableLinks => ({
       select: setSelection,
-      // The grid has no attribute groups to open.
-      openGroup: () => {},
       showOnMap,
     }),
     [setSelection, showOnMap],
@@ -125,7 +123,7 @@ function ComparisonGrid({ comparison, base, target }: { comparison: OntologyComp
             <p className="font-medium">
               Overall: <ClassificationBadge classification={diff.classification} />
             </p>
-            <p className="text-muted-foreground">{counts.map((c) => `${c.count} ${c.level}`).join(' · ')}</p>
+            <LevelCounts counts={counts} />
           </div>
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <SearchInput

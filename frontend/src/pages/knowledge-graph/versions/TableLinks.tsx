@@ -36,7 +36,10 @@ export function ConceptLink({ concept, children }: { concept: ClassOrRelation; c
   )
 }
 
-/** A class's or relation's attribute count, linking to its owner's group in the Attributes grid. */
+/**
+ * A class's or relation's attribute count, linking to its owner's group in the Attributes
+ * grid; plain where there is none to open.
+ */
 export function AttributeCountLink({
   owner,
   count,
@@ -47,7 +50,8 @@ export function AttributeCountLink({
   count: number
   children: ReactNode
 }) {
-  const links = useTableLinks()
+  const { openGroup } = useTableLinks()
+  if (!openGroup) return children
   return (
     <a
       href={`#${attributeGroupId(owner)}`}
@@ -56,7 +60,7 @@ export function AttributeCountLink({
       onClick={(e) => {
         if (!plainClick(e)) return
         e.preventDefault()
-        links.openGroup(owner)
+        openGroup(owner)
       }}
     >
       {children}
