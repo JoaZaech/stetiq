@@ -304,15 +304,25 @@ class Client:
         """The Ontology Diff from version `base` to version `target`, each change classified.
 
         `base` defaults to the Contract Alias's version and `target` to the latest
-        version, so a bare call answers "what would promoting the newest version change"."""
+        Candidate (else the latest version), so a bare call answers "what would
+        promoting the newest Candidate change"."""
         if base is None:
             base = self.get_contract_version(knowledge_graph).number
         if target is None:
-            target = self.list_ontology_versions(knowledge_graph)[-1].number
+            target = self.latest_candidate(knowledge_graph).number
         return diff_ontologies(
             self.get_ontology_version(knowledge_graph, base).ontology,
             self.get_ontology_version(knowledge_graph, target).ontology,
         )
+
+    def latest_candidate(self, knowledge_graph: str) -> OntologyVersion:
+        """The newest Ontology Version no Alias has pointed to yet; the latest version
+        when every version has been pointed to."""
+        versions = self.list_ontology_versions(knowledge_graph)
+        aliased = {p.to_version for p in self.list_promotions(knowledge_graph)}
+        candidates = [v for v in versions if v.number not in aliased]
+        return (candidates or versions)[-1]
+
 
     def diff_ontologies(self, base: OntologyInput, target: OntologyInput) -> OntologyDiff:
         """The Ontology Diff between two Ontologies that need not be registered (e.g. files in a repo)."""

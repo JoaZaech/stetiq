@@ -187,7 +187,9 @@ def ontology_evaluate(
 def ontology_diff(
     knowledge_graph: str,
     base: Annotated[int | None, typer.Argument(help="Default: the Contract Alias's version")] = None,
-    target: Annotated[int | None, typer.Argument(help="Default: the latest version")] = None,
+    target: Annotated[
+        int | None, typer.Argument(help="Default: the latest Candidate, else the latest version")
+    ] = None,
     tracking_uri: TrackingUri = None,
 ) -> None:
     """Show the Ontology Diff from version BASE to TARGET, each change additive, deprecating or breaking."""
@@ -196,7 +198,7 @@ def ontology_diff(
     except StetiqError as e:
         raise _fail(e) from None
     if not d.changes:
-        typer.echo(f"No changes between Ontology Versions {base or 'contract'} and {target or 'latest'}")
+        typer.echo(f"No changes between Ontology Versions {base or 'contract'} and {target or 'latest Candidate'}")
         return
     width = max(len(c.concept) for c in d.changes)
     for c in d.changes:

@@ -178,3 +178,28 @@ def test_adding_a_constraint_is_breaking_and_dropping_one_is_additive(client):
 
     assert summary(client.diff_ontologies(plain, unique)) == [("Customer.email", "changed", "breaking")]
     assert summary(client.diff_ontologies(unique, plain)) == [("Customer.email", "changed", "additive")]
+
+
+def _with_node_type(label: str) -> str:
+    return BASE.replace("  - Agent\n", f"  - Agent\n  - {label}\n")
+
+
+def test_a_bare_diff_compares_the_latest_candidate_with_the_contract(client):
+    client.create_knowledge_graph(KG, ontology=BASE)  # v1, production
+    client.register_ontology(KG, _with_node_type("Team"))  # v2, a Candidate
+    client.register_ontology(KG, _with_node_type("Shift"))  # v3
+    client.set_alias(KG, "staging", 3)  # v3 is no longer a Candidate
+
+    d = client.diff_ontology_versions(KG)
+
+    assert [(c.kind, c.concept) for c in d.changes] == [("added", "Team")]
+
+
+def test_a_bare_diff_without_candidates_compares_the_latest_version(client):
+    client.create_knowledge_graph(KG, ontology=BASE)
+    client.register_ontology(KG, _with_node_type("Team"))
+    client.set_alias(KG, "staging", 2)
+
+    d = client.diff_ontology_versions(KG)
+
+    assert [(c.kind, c.concept) for c in d.changes] == [("added", "Team")]
