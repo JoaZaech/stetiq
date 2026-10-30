@@ -30,6 +30,18 @@ export function kgUrl(name: string, section?: KnowledgeGraphSectionPath, ...rest
     .join('/')
 }
 
+/**
+ * Where the Knowledge Graph switcher goes when the user picks `target` while on
+ * `location` (an app path, query allowed): the same section of `target`, without any
+ * detail or compare page below it (their ids belong to the other Knowledge Graph), or
+ * `target`'s default section when no section is open.
+ */
+export function switchKnowledgeGraphUrl(location: string, target: string): string {
+  const [, root, , current] = location.split('?')[0].split('/')
+  const section = KNOWLEDGE_GRAPH_SECTIONS.find((s) => root === 'kg' && s.path === current)
+  return kgUrl(target, section?.path ?? DEFAULT_SECTION)
+}
+
 /** Sections with a compare page at `<section>/compare`. */
 export type ComparableSection = Extract<KnowledgeGraphSectionPath, 'versions' | 'runs' | 'use-case'>
 
