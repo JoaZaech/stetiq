@@ -127,16 +127,3 @@ export function conceptTables(ontology: Ontology): ConceptTables {
 
   return { classes, relations, attributes }
 }
-
-/** The Concepts whose name or description (or, for attributes, owner) contains `query`. */
-export function searchConcepts(tables: ConceptTables, query: string): ConceptTables {
-  const q = query.trim().toLowerCase()
-  if (q === '') return tables
-  const matches = (...texts: (string | undefined)[]) =>
-    texts.some((t) => t !== undefined && t.toLowerCase().includes(q))
-  return {
-    classes: tables.classes.filter((c) => matches(c.label, c.description)),
-    relations: tables.relations.filter((r) => matches(r.label, r.description)),
-    attributes: tables.attributes.filter((a) => matches(a.owner, a.name, a.description)),
-  }
-}

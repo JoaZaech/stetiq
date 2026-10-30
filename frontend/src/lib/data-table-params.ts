@@ -6,7 +6,9 @@
  * - `?<key>.sort=<column id>` (repeated, in order; `-<column id>` sorts descending);
  * - `?<key>.f.<column id>=<value>`: a column filter, repeated for a value list, `1` for a toggle;
  * - `?<key>.q=<text>`: the search, or a param several grids share (`search`, e.g. `q`);
- * - `?<key>.col=<column id>` (repeated): the optional columns shown (see `ColumnPicker`).
+ * - `?<key>.col=<column id>` (repeated): the optional columns shown (see `ColumnPicker`);
+ * - `?<key>.group=<column id>`: the column rows are grouped by, `none` for no grouping;
+ *   absent, the first of `grouping`.
  *
  * Use it with `useDataTable`:
  *
@@ -16,7 +18,13 @@
  */
 import { useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router'
-import type { ColumnFiltersState, SortingState, Updater, ColumnVisibilityState } from '@tanstack/react-table'
+import type {
+  ColumnFiltersState,
+  ColumnVisibilityState,
+  GroupingState,
+  SortingState,
+  Updater,
+} from '@tanstack/react-table'
 import type { ColumnFilterKind } from './data-table'
 
 export interface DataTableParamsOptions {
@@ -28,6 +36,8 @@ export interface DataTableParamsOptions {
   optional?: readonly string[]
   /** The search param, when grids share one search box (e.g. `q`); `<key>.q` by default. */
   search?: string
+  /** Column ids rows may be grouped by, the default first; no grouping when absent. */
+  grouping?: readonly string[]
 }
 
 /** The table state kept in the URL. */
@@ -36,11 +46,15 @@ export interface DataTableParamsState {
   columnFilters: ColumnFiltersState
   globalFilter: string
   columnVisibility: ColumnVisibilityState
+  /** The column rows are grouped by (at most one); only for a table with `grouping`. */
+  grouping?: GroupingState
 }
 
 const sortParam = (key: string) => `${key}.sort`
 const filterParam = (key: string, column: string) => `${key}.f.${column}`
 const columnParam = (key: string) => `${key}.col`
+const groupParam = (key: string) => `${key}.group`
+const NO_GROUPING = 'none'
 const searchParam = ({ key, search }: DataTableParamsOptions) => search ?? `${key}.q`
 
 /** The grid's state as `params` hold it; filters on columns without a header filter are ignored. */
@@ -64,7 +78,14 @@ export function readDataTableParams(params: URLSearchParams, options: DataTableP
     columnFilters,
     globalFilter: params.get(searchParam(options)) ?? '',
     columnVisibility: Object.fromEntries(optional.map((id) => [id, shown.has(id)])),
+    ...(options.grouping && { grouping: readGrouping(params.get(groupParam(key)), options.grouping) }),
   }
+}
+
+function readGrouping(param: string | null, groupable: readonly string[]): GroupingState {
+  if (param === NO_GROUPING) return []
+  const id = param !== null && groupable.includes(param) ? param : groupable[0]
+  return id === undefined ? [] : [id]
 }
 
 /** Writes the grid's state into `params`, replacing its own params and leaving others alone. */
@@ -90,6 +111,12 @@ export function writeDataTableParams(
 
   params.delete(columnParam(key))
   for (const id of optional) if (state.columnVisibility[id]) params.append(columnParam(key), id)
+
+  if (options.grouping && state.grouping) {
+    const [id = NO_GROUPING] = state.grouping
+    if (id === options.grouping[0]) params.delete(groupParam(key))
+    else params.set(groupParam(key), id)
+  }
 }
 
 const apply = <T,>(updater: Updater<T>, previous: T): T =>
@@ -128,6 +155,7 @@ export function useDataTableParams(options: DataTableParamsOptions) {
         update((s) => ({ globalFilter: apply(u, s.globalFilter) ?? '' })),
       onColumnVisibilityChange: (u: Updater<ColumnVisibilityState>) =>
         update((s) => ({ columnVisibility: apply(u, s.columnVisibility) })),
+      onGroupingChange: (u: Updater<GroupingState>) => update((s) => ({ grouping: apply(u, s.grouping ?? []) })),
     }),
     [state, update],
   )

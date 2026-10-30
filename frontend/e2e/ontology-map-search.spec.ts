@@ -44,7 +44,7 @@ test('the search lists name matches, then other matches with their reasons, and 
   // The Table keeps full-text filtering: Bin is there by its description and attribute.
   await page.getByRole('radio', { name: 'Table' }).click()
   await expect(page.getByRole('table', { name: 'Classes' }).getByRole('row')).toHaveText([/Class/, /^Bin/, /^Warehouse/])
-  await expect(page.getByRole('table', { name: 'Attributes' }).getByRole('row')).toHaveText([/Attribute/, /^Bin\s*warehouse/])
+  await expect(page.getByRole('table', { name: 'Attributes' }).getByRole('row')).toHaveText([/Attribute/, /^Bin · class/, /^warehouse/])
 })
 
 test('picking a result selects it and centres the Map on it, by mouse or keyboard', async ({ page }) => {

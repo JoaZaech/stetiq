@@ -8,18 +8,12 @@ import { ViewToggle } from '@/components/ViewToggle'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { createDataTableColumnHelper, filterColumn, useDataTable } from '@/lib/data-table'
 import { type DataTableParamsOptions, useDataTableParams } from '@/lib/data-table-params'
 import { useViewParam } from '@/lib/view-param'
-import { type ClassRow, type ConceptTables, type RelationRow, conceptTables, searchConcepts } from './concepts'
+import { attributeRows } from './attribute-rows'
+import { AttributesGrid } from './AttributesGrid'
+import { type ClassRow, type RelationRow, conceptTables } from './concepts'
 import { MAP_VIEW_OPTIONS, MAP_VIEWS } from './map-view'
 import { OntologyMap } from './OntologyMap'
 import { useOntologyVersionTab } from './version-context'
@@ -64,7 +58,7 @@ export function OntologyTab() {
       {view === 'map' ? (
         <OntologyMap ontology={version.ontology} query={query} />
       ) : (
-        <OntologyTables ontology={version.ontology} query={query} />
+        <OntologyTables ontology={version.ontology} />
       )}
     </div>
   )
@@ -92,9 +86,9 @@ const SECTIONS: readonly { id: SectionId; title: string; purpose: string }[] = [
   },
 ]
 
-function OntologyTables({ ontology, query }: { ontology: Ontology; query: string }) {
+function OntologyTables({ ontology }: { ontology: Ontology }) {
   const all = useMemo(() => conceptTables(ontology), [ontology])
-  const { attributes } = searchConcepts(all, query)
+  const attributes = useMemo(() => attributeRows(ontology), [ontology])
   const [collapsed, setCollapsed] = useState<ReadonlySet<SectionId>>(new Set())
   const sections = useRef(new Map<SectionId, HTMLElement>())
 
@@ -112,7 +106,7 @@ function OntologyTables({ ontology, query }: { ontology: Ontology; query: string
   const body: Record<SectionId, ReactNode> = {
     classes: <ClassesGrid classes={all.classes} />,
     relations: <RelationsGrid relations={all.relations} />,
-    attributes: <AttributesTable attributes={attributes} query={query} />,
+    attributes: <AttributesGrid attributes={attributes} />,
   }
 
   return (
@@ -414,42 +408,6 @@ function RelationsGrid({ relations }: { relations: RelationRow[] }) {
       </div>
       <DataTable table={table} label="Relations" empty="No relations match." />
     </>
-  )
-}
-
-function AttributesTable({ attributes, query }: { attributes: ConceptTables['attributes']; query: string }) {
-  if (attributes.length === 0) return <Empty title="attributes" query={query} />
-  return (
-    <Table aria-label="Attributes">
-      <TableHeader>
-        <TableRow>
-          <TableHead>Class or relation</TableHead>
-          <TableHead>Attribute</TableHead>
-          <TableHead>Type</TableHead>
-          <TableHead>Required</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {attributes.map((a) => (
-          <TableRow key={`${a.owner}.${a.name}`}>
-            <TableCell>{a.owner}</TableCell>
-            <TableCell>
-              <ConceptName label={a.name} description={a.description} />
-            </TableCell>
-            <TableCell className="font-mono text-xs">{a.type}</TableCell>
-            <TableCell>{a.required && 'Required'}</TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  )
-}
-
-function Empty({ title, query }: { title: string; query: string }) {
-  return (
-    <p className="text-sm text-muted-foreground">
-      {query.trim() ? `No ${title} match “${query.trim()}”.` : `This Ontology has no ${title}.`}
-    </p>
   )
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Ontology } from '@/api/ontology-versions'
-import { conceptTables, searchConcepts } from './concepts'
+import { conceptTables } from './concepts'
 
 // Canonical form, as the server sends it: Concepts sorted by label.
 const ONTOLOGY: Ontology = {
@@ -134,28 +134,5 @@ describe('conceptTables', () => {
       ['CITES', ['(Paper)-[CITES]->(Paper)'], 2, false],
       ['UNUSED', [], 0, true],
     ])
-  })
-})
-
-describe('searchConcepts', () => {
-  it('keeps Concepts whose name or description contains the query, ignoring case', () => {
-    const found = searchConcepts(conceptTables(ONTOLOGY), 'TICKETS')
-
-    expect(found.classes.map((c) => c.label)).toEqual(['Customer'])
-    expect(found.relations).toEqual([])
-    expect(found.attributes).toEqual([])
-  })
-
-  it('matches attributes by their owner too', () => {
-    const found = searchConcepts(conceptTables(ONTOLOGY), 'ticket')
-
-    expect(found.classes.map((c) => c.label)).toEqual(['Customer', 'Ticket'])
-    expect(found.attributes.map((a) => `${a.owner}.${a.name}`)).toEqual(['Ticket.opened_at'])
-  })
-
-  it('returns everything for a blank query', () => {
-    const tables = conceptTables(ONTOLOGY)
-
-    expect(searchConcepts(tables, '  ')).toBe(tables)
   })
 })

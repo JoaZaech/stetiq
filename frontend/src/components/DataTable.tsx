@@ -1,5 +1,5 @@
 import { type ComponentProps, useId, type ReactNode } from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown, Filter } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronRight, Filter } from 'lucide-react'
 import type { Column, Header, ReactTable, Row, RowData } from '@tanstack/react-table'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -26,15 +26,29 @@ interface DataTableProps<TData extends RowData> {
   label?: string
   /** Extra props for a row's `<tr>`, e.g. an `id` to scroll to it. */
   rowProps?: (row: Row<DataTableFeatures, TData>) => ComponentProps<'tr'>
+  /**
+   * What a group's header row shows when the table is grouped (its `grouping` state):
+   * e.g. the grouped value and how many rows it holds. The header spans the row and
+   * collapses or expands the group.
+   */
+  groupHeader?: (row: Row<DataTableFeatures, TData>) => ReactNode
 }
 
 /**
  * Renders any `useDataTable` table as a dense shadcn table: visible columns only,
  * sortable headers become buttons, a column with a header filter (`filterColumn`) gets
- * a filter button beside its name, and a message row shows when there is nothing to show.
+ * a filter button beside its name, a grouped table gets a collapsible header row per
+ * group, and a message row shows when there is nothing to show.
  */
-export function DataTable<TData extends RowData>({ table, empty, label, rowProps }: DataTableProps<TData>) {
+export function DataTable<TData extends RowData>({
+  table,
+  empty,
+  label,
+  rowProps,
+  groupHeader,
+}: DataTableProps<TData>) {
   const rows = table.getRowModel().rows
+  const columns = table.getVisibleLeafColumns().length
   return (
     <Table aria-label={label}>
       <TableHeader>
@@ -57,25 +71,61 @@ export function DataTable<TData extends RowData>({ table, empty, label, rowProps
         {rows.length === 0 ? (
           <TableRow>
             <TableCell
-              colSpan={table.getVisibleLeafColumns().length}
+              colSpan={columns}
               className="h-20 text-center text-muted-foreground"
             >
               {empty}
             </TableCell>
           </TableRow>
         ) : (
-          rows.map((row) => (
-            <TableRow key={row.id} data-state={row.getIsSelected() ? 'selected' : undefined} {...rowProps?.(row)}>
-              {row.getVisibleCells().map((cell) => (
-                <TableCell key={cell.id}>
-                  <table.FlexRender cell={cell} />
-                </TableCell>
-              ))}
-            </TableRow>
-          ))
+          rows.map((row) =>
+            row.getIsGrouped() ? (
+              <GroupHeaderRow key={row.id} row={row} columns={columns}>
+                {groupHeader?.(row) ?? String(row.groupingValue)}
+              </GroupHeaderRow>
+            ) : (
+              <TableRow key={row.id} data-state={row.getIsSelected() ? 'selected' : undefined} {...rowProps?.(row)}>
+                {row.getVisibleCells().map((cell) => (
+                  <TableCell key={cell.id}>
+                    <table.FlexRender cell={cell} />
+                  </TableCell>
+                ))}
+              </TableRow>
+            ),
+          )
         )}
       </TableBody>
     </Table>
+  )
+}
+
+/** A group's header row: a button spanning the row that collapses or expands the group. */
+function GroupHeaderRow<TData extends RowData>({
+  row,
+  columns,
+  children,
+}: {
+  row: Row<DataTableFeatures, TData>
+  columns: number
+  children: ReactNode
+}) {
+  const open = row.getIsExpanded()
+  const Chevron = open ? ChevronDown : ChevronRight
+  return (
+    <TableRow className="bg-muted/50 hover:bg-muted/50">
+      <TableCell colSpan={columns} className="py-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="-ml-2 h-7 px-2 font-normal"
+          aria-expanded={open}
+          onClick={row.getToggleExpandedHandler()}
+        >
+          <Chevron aria-hidden className="size-4" />
+          {children}
+        </Button>
+      </TableCell>
+    </TableRow>
   )
 }
 

@@ -80,3 +80,32 @@ describe('writeDataTableParams', () => {
     expect(params.toString()).toBe('')
   })
 })
+
+describe('grouping', () => {
+  const ATTRIBUTES: DataTableParamsOptions = { key: 'attributes', filters: {}, grouping: ['owner', 'type'] }
+
+  it('groups by the first groupable column unless the URL picks another or none', () => {
+    const grouping = (query: string) => readDataTableParams(new URLSearchParams(query), ATTRIBUTES).grouping
+
+    expect(grouping('')).toEqual(['owner'])
+    expect(grouping('attributes.group=type')).toEqual(['type'])
+    expect(grouping('attributes.group=none')).toEqual([])
+    expect(grouping('attributes.group=description')).toEqual(['owner'])
+  })
+
+  it('writes only a grouping other than the default', () => {
+    const write = (grouping: string[]) => {
+      const params = new URLSearchParams('attributes.group=type')
+      writeDataTableParams(params, ATTRIBUTES, { ...readDataTableParams(params, ATTRIBUTES), grouping })
+      return params.toString()
+    }
+
+    expect(write(['owner'])).toBe('')
+    expect(write(['type'])).toBe('attributes.group=type')
+    expect(write([])).toBe('attributes.group=none')
+  })
+
+  it('leaves grouping out of a table without groupable columns', () => {
+    expect(readDataTableParams(new URLSearchParams('classes.group=label'), CLASSES)).not.toHaveProperty('grouping')
+  })
+})

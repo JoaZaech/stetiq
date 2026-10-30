@@ -4,6 +4,7 @@ import { expect, test } from './fixtures'
 const classes = (page: Page) => page.getByRole('table', { name: 'Classes' })
 /** The Classes grid's rows by their first cell, the class name. */
 const classNames = (page: Page) => classes(page).getByRole('row').locator('td:first-child')
+const attributes = (page: Page) => page.getByRole('table', { name: 'Attributes' })
 
 test.describe('on support v3', () => {
   test.use({ seed: 'support_lineage' })
@@ -76,6 +77,76 @@ test.describe('on support v3', () => {
     await page.getByRole('button', { name: 'Clear filter' }).click()
     await page.keyboard.press('Escape')
     await expect(classNames(page)).toHaveText(['Ticket', 'Party', 'Agent', 'Customer'])
+  })
+
+  test('the Attributes grid groups by owner, with inherited attributes marked, and by type or not at all', async ({
+    page,
+  }) => {
+    await page.goto('/ui/kg/support/versions/3/ontology?view=table')
+    await expect(attributes(page).getByRole('row')).toHaveText([
+      /^Owner\s*Attribute\s*Type\s*Required\s*Unique\s*Description$/,
+      /^Party · class · 1 attribute$/,
+      // The owner is its group's header, not repeated on each row.
+      /^name\s*STRING\s*Required$/,
+      /^Agent · class · subclass of Party · 1 attribute$/,
+      /^name\s*from Party\s*STRING\s*Required$/,
+      /^Customer · class · subclass of Party · 1 attribute$/,
+      /^name\s*from Party\s*STRING\s*Required\s*Unique$/,
+      /^Ticket · class · 2 attributes$/,
+      /^opened_at\s*DATE$/,
+      /^priority\s*INTEGER$/,
+    ])
+    await expect(page.getByText('5 attributes', { exact: true })).toBeVisible()
+
+    // A group collapses to its header.
+    const ticket = attributes(page).getByRole('button', { name: /^Ticket · class/ })
+    await ticket.click()
+    await expect(ticket).toHaveAttribute('aria-expanded', 'false')
+    await expect(attributes(page).getByRole('row')).toHaveCount(8)
+    await ticket.click()
+
+    // Filters and search work within the groups.
+    await attributes(page).getByRole('button', { name: 'Filter Unique' }).click()
+    await page.getByRole('switch', { name: 'Only unique' }).click()
+    await page.keyboard.press('Escape')
+    await expect(attributes(page).getByRole('row')).toHaveText([/^Owner/, /^Customer · class/, /^name/])
+    await expect(page.getByText('1 of 5 attributes')).toBeVisible()
+    await attributes(page).getByRole('button', { name: 'Filter Unique (on)' }).click()
+    await page.getByRole('button', { name: 'Clear filter' }).click()
+    await page.keyboard.press('Escape')
+
+    const groupBy = page.getByRole('radiogroup', { name: 'Group attributes by' })
+    await groupBy.getByRole('radio', { name: 'Type' }).click()
+    await expect(page).toHaveURL(/attributes\.group=type/)
+    await expect(attributes(page).getByRole('row')).toHaveText([
+      /^Owner/,
+      /^STRING · 3 attributes$/,
+      /^Party\s*name\s*Required$/,
+      /^Agent\s*name\s*from Party\s*Required$/,
+      /^Customer\s*name\s*from Party\s*Required\s*Unique$/,
+      /^DATE · 1 attribute$/,
+      /^Ticket\s*opened_at$/,
+      /^INTEGER · 1 attribute$/,
+      /^Ticket\s*priority$/,
+    ])
+
+    await groupBy.getByRole('radio', { name: 'None' }).click()
+    await page.reload()
+    await expect(page.getByRole('radiogroup', { name: 'Group attributes by' }).getByRole('radio', { name: 'None' })).toBeChecked()
+    await expect(attributes(page).getByRole('row')).toHaveText([
+      /^Owner/,
+      /^Party\s*name\s*STRING/,
+      /^Agent\s*name\s*from Party\s*STRING/,
+      /^Customer\s*name\s*from Party\s*STRING/,
+      /^Ticket\s*opened_at\s*DATE/,
+      /^Ticket\s*priority\s*INTEGER/,
+    ])
+
+    // Inherited from and Owner kind are in the column picker.
+    await page.getByRole('region', { name: 'Attributes' }).getByRole('button', { name: 'Columns' }).click()
+    await page.getByRole('menuitemcheckbox', { name: 'Inherited from' }).click()
+    await page.keyboard.press('Escape')
+    await expect(attributes(page).getByRole('row').nth(2)).toHaveText(/^Agent\s*name\s*from Party\s*STRING\s*Required\s*Party/)
   })
 })
 
