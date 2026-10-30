@@ -1,14 +1,14 @@
 import { expect, test } from './fixtures'
 
-test('the sidebar leads to Knowledge Graphs and Settings, with breadcrumbs and a page title', async ({
+test('the app opens on Home; the sidebar leads to Settings and Knowledge Graphs, with breadcrumbs and a page title', async ({
   page,
 }) => {
   await page.goto('/ui/')
   const sidebar = page.getByRole('navigation', { name: 'Main' })
   const breadcrumbs = page.getByRole('navigation', { name: 'breadcrumb' })
 
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Knowledge Graphs')
-  await expect(breadcrumbs).toHaveText('Knowledge Graphs')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Welcome to stetiq')
+  await expect(breadcrumbs).toHaveText('Home')
 
   await sidebar.getByRole('link', { name: 'Settings' }).click()
 
@@ -19,8 +19,14 @@ test('the sidebar leads to Knowledge Graphs and Settings, with breadcrumbs and a
 
   await sidebar.getByRole('link', { name: 'Knowledge Graphs' }).click()
 
-  await expect(page).toHaveURL(/\/ui\/?$/)
+  await expect(page).toHaveURL('/ui/kg')
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Knowledge Graphs')
+  await expect(breadcrumbs).toHaveText('Knowledge Graphs')
+
+  await page.getByRole('link', { name: 'stetiq' }).first().click()
+
+  await expect(page).toHaveURL(/\/ui\/?$/)
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Welcome to stetiq')
 })
 
 test('the sidebar shows the stetiq logo and package version, and links to Help', async ({

@@ -6,9 +6,11 @@ Open it with `stetiq ui` (local mode, see [Getting started](./01-getting-started
 
 ## Finding your way around
 
+The web UI opens on **Home**: a *Getting Started* block whose cards open the guide pages for each step of the workflow (collapse it once you know your way, and it stays collapsed in that browser), and your five most recently modified Knowledge Graphs, with **View all** leading to the full list. The stetiq logo at the top of the sidebar always leads back to Home.
+
 The sidebar always has three entries:
 
-- **Knowledge Graphs**: the list of Knowledge Graphs. Inside a Knowledge Graph it becomes a back link, and the sidebar lists that Knowledge Graph's sections below it.
+- **Knowledge Graphs**: the list of Knowledge Graphs, at `/ui/kg`. Inside a Knowledge Graph it becomes a back link, and the sidebar lists that Knowledge Graph's sections below it.
 - **Help**: this guide.
 - **Settings**: the theme (light, dark or system) and your access. In local mode, Access says every Knowledge Graph is editable and names the user your changes are recorded as. On a server, it shows who you are signed in as, your grants (*read* or *edit* per Knowledge Graph, `*` meaning all of them) and a **Sign out** button.
 
@@ -29,7 +31,7 @@ Without *edit*, these controls stay visible but disabled, with a *Needs edit acc
 
 ## The Knowledge Graphs list
 
-The landing page lists every Knowledge Graph you can read, with:
+The Knowledge Graphs page (`/ui/kg`) lists every Knowledge Graph you can read, with:
 
 - **Contract Alias version**: the Ontology Version its Contract Alias points to.
 - **Latest version**: its newest Ontology Version.

@@ -18,7 +18,7 @@ test('signing in with an API Token keeps it in an HttpOnly, SameSite=Strict cook
   await page.getByLabel('API Token').fill(adaToken(stetiq.seeded).value)
   await page.getByRole('button', { name: 'Sign in' }).click()
 
-  await expect(page.getByRole('heading', { level: 1, name: 'Knowledge Graphs' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Welcome to stetiq' })).toBeVisible()
   const token = (await context.cookies()).find((c) => c.name === 'stetiq_token')
   expect(token).toMatchObject({ httpOnly: true, sameSite: 'Strict', path: '/' })
 })
