@@ -16,7 +16,7 @@ export function NotFoundPage({
       <PageHeader title={title} />
       <p className="text-sm">
         {message}{' '}
-        <Link to="/" className="text-primary underline-offset-4 hover:underline">
+        <Link to="/kg" className="text-primary underline-offset-4 hover:underline">
           Back to Knowledge Graphs
         </Link>
       </p>

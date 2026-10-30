@@ -23,7 +23,7 @@ import { KNOWLEDGE_GRAPH_SECTIONS, kgUrl } from './knowledge-graph-sections'
 export function AppSidebar() {
   const atSettings = useMatch('/settings') !== null
   const atHelp = useMatch('/help/*') !== null
-  const atLanding = useMatch('/') !== null
+  const atList = useMatch('/kg') !== null
   const knowledgeGraph = useMatch('/kg/:name/*')?.params.name
 
   return (
@@ -50,15 +50,15 @@ export function AppSidebar() {
               <SidebarMenu>
                 <SidebarMenuItem>
                   {knowledgeGraph === undefined ? (
-                    <SidebarMenuButton asChild isActive={atLanding} tooltip="Knowledge Graphs">
-                      <Link to="/">
+                    <SidebarMenuButton asChild isActive={atList} tooltip="Knowledge Graphs">
+                      <Link to="/kg">
                         <Network />
                         <span>Knowledge Graphs</span>
                       </Link>
                     </SidebarMenuButton>
                   ) : (
                     <SidebarMenuButton asChild tooltip="Back to Knowledge Graphs">
-                      <Link to="/" aria-label="Back to Knowledge Graphs">
+                      <Link to="/kg" aria-label="Back to Knowledge Graphs">
                         <ArrowLeft />
                         <span>Knowledge Graphs</span>
                       </Link>

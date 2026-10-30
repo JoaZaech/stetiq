@@ -124,7 +124,7 @@ const helpRoute: RouteObject = {
 }
 
 const knowledgeGraphRoute: RouteObject = {
-  path: 'kg/:name',
+  path: ':name',
   element: <KnowledgeGraphLayout />,
   handle: crumb(({ name }) => name ?? ''),
   children: [
@@ -163,7 +163,9 @@ export const routes: RouteObject[] = [
         // signed-out reader to sign-in (api/client.ts).
         children: [
           {
-            // Pathless: puts "Knowledge Graphs" first in the breadcrumbs of every page below.
+            // The list, and every Knowledge Graph below it: "Knowledge Graphs" comes first
+            // in their breadcrumbs and links to the list.
+            path: 'kg',
             handle: crumb(() => 'Knowledge Graphs'),
             children: [{ index: true, element: <KnowledgeGraphsPage /> }, knowledgeGraphRoute],
           },

@@ -31,7 +31,7 @@ test('a Knowledge Graph shows its sections in the sidebar and its header', async
   await expect(page.getByRole('heading', { level: 2 })).toHaveText('Promotions')
 
   await page.getByRole('link', { name: 'Back to Knowledge Graphs' }).click()
-  await expect(page).toHaveURL(/\/ui\/?$/)
+  await expect(page).toHaveURL('/ui/kg')
   await expect(page.getByRole('navigation', { name: 'Knowledge Graph' })).toHaveCount(0)
 })
 
