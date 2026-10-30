@@ -47,7 +47,10 @@ describe('conceptTables', () => {
         label: 'OPENED',
         description: undefined,
         deprecated: false,
-        patterns: ['(Agent)-[OPENED]->(Ticket)', '(Customer)-[OPENED]->(Ticket)'],
+        patterns: [
+          ['Agent', 'OPENED', 'Ticket'],
+          ['Customer', 'OPENED', 'Ticket'],
+        ],
         attributes: 1,
       },
     ])
@@ -80,7 +83,7 @@ describe('conceptTables', () => {
     ])
   })
 
-  it('counts a redeclared attribute once, as the class’s own',() => {
+  it('counts a redeclared attribute once, as the class’s own', () => {
     const { classes } = conceptTables({
       node_types: [
         {
@@ -96,7 +99,8 @@ describe('conceptTables', () => {
       patterns: [],
     })
 
-    expect(classes.find((c) => c.label === 'Sub')).toMatchObject({ attributes: 1, inheritedAttributes: 1 })  })
+    expect(classes.find((c) => c.label === 'Sub')).toMatchObject({ attributes: 1, inheritedAttributes: 1 })
+  })
 
   it('lists each class’s outgoing and incoming relations with the class at the other end', () => {
     const { classes } = conceptTables({
@@ -109,8 +113,15 @@ describe('conceptTables', () => {
     })
 
     expect(classes.map((c) => [c.label, c.outgoing, c.incoming])).toEqual([
-      ['Paper', ['CITES → Paper'], ['CITES ← Paper', 'WROTE ← Person']],
-      ['Person', ['WROTE → Paper'], []],
+      [
+        'Paper',
+        [{ relation: 'CITES', other: 'Paper' }],
+        [
+          { relation: 'CITES', other: 'Paper' },
+          { relation: 'WROTE', other: 'Person' },
+        ],
+      ],
+      ['Person', [{ relation: 'WROTE', other: 'Paper' }], []],
     ])
   })
 
@@ -131,7 +142,7 @@ describe('conceptTables', () => {
     })
 
     expect(relations.map((r) => [r.label, r.patterns, r.attributes, r.deprecated])).toEqual([
-      ['CITES', ['(Paper)-[CITES]->(Paper)'], 2, false],
+      ['CITES', [['Paper', 'CITES', 'Paper']], 2, false],
       ['UNUSED', [], 0, true],
     ])
   })

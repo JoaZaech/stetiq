@@ -22,7 +22,15 @@ import {
   useConceptSelection,
   useShowOnMap,
 } from './concept-selection'
-import { type ClassOrRelation, type ClassRow, type RelationRow, conceptTables } from './concepts'
+import {
+  type ClassOrRelation,
+  type ClassRow,
+  conceptTables,
+  type Connection,
+  type Pattern,
+  patternId,
+  type RelationRow,
+} from './concepts'
 import { MAP_VIEW_OPTIONS, MAP_VIEWS } from './map-view'
 import { OntologyMap } from './OntologyMap'
 import { conceptRowId, selectedRowProps, type TableLinks, TableLinksContext } from './table-links'
@@ -282,30 +290,25 @@ const classColumn = createDataTableColumnHelper<ClassRow>()
 
 const none = <span className="text-muted-foreground">—</span>
 
-/** A class's outgoing or incoming relation as `ClassRow` has it: `HAS_TRIP → Trip`, `HAS_TRIP ← Route`. */
-const CONNECTION = /^(.*) ([→←]) (.*)$/
+/** How a class's outgoing and incoming relations point: `HAS_TRIP → Trip`, `HAS_TRIP ← Route`. */
+const ARROW = { outgoing: '→', incoming: '←' } as const
+
+/** A connection as text, as its column filters and searches it. */
+const connectionText = (direction: keyof typeof ARROW) => (row: ClassRow) =>
+  row[direction].map((c) => `${c.relation} ${ARROW[direction]} ${c.other}`)
 
 /** A class's outgoing or incoming relations, one per line, each name a link. */
-const connections = (items: readonly string[]) =>
+const connections = (items: readonly Connection[], direction: keyof typeof ARROW) =>
   items.length === 0 ? (
     none
   ) : (
     <div className="font-mono text-xs">
-      {items.map((item) => {
-        const [, relation, arrow, other] = CONNECTION.exec(item) ?? []
-        return (
-          <div key={item}>
-            {relation === undefined ? (
-              item
-            ) : (
-              <>
-                <ConceptLink concept={{ kind: 'relation', label: relation }} /> {arrow}{' '}
-                <ConceptLink concept={{ kind: 'class', label: other }} />
-              </>
-            )}
-          </div>
-        )
-      })}
+      {items.map(({ relation, other }) => (
+        <div key={`${relation} ${other}`}>
+          <ConceptLink concept={{ kind: 'relation', label: relation }} /> {ARROW[direction]}{' '}
+          <ConceptLink concept={{ kind: 'class', label: other }} />
+        </div>
+      ))}
     </div>
   )
 
@@ -360,19 +363,21 @@ const classColumns = classColumn.columns([
       )
     },
   }),
-  classColumn.accessor('outgoing', {
+  classColumn.accessor(connectionText('outgoing'), {
+    id: 'outgoing',
     header: 'Outgoing',
     ...filterColumn('text'),
     enableSorting: false,
     enableGlobalFilter: false,
-    cell: ({ getValue }) => connections(getValue()),
+    cell: ({ row }) => connections(row.original.outgoing, 'outgoing'),
   }),
-  classColumn.accessor('incoming', {
+  classColumn.accessor(connectionText('incoming'), {
+    id: 'incoming',
     header: 'Incoming',
     ...filterColumn('text'),
     enableSorting: false,
     enableGlobalFilter: false,
-    cell: ({ getValue }) => connections(getValue()),
+    cell: ({ row }) => connections(row.original.incoming, 'incoming'),
   }),
   classColumn.accessor('constraints', {
     header: 'Constraints',
@@ -446,12 +451,8 @@ function ClassesGrid({ classes, selected }: { classes: ClassRow[]; selected: Sel
 
 const relationColumn = createDataTableColumnHelper<RelationRow>()
 
-/** A Pattern `(Source)-[REL]->(Target)`, its two class names set apart from the syntax. */
-const PATTERN = /^\((.*)\)-\[(.*)\]->\((.*)\)$/
-
-function PatternText({ pattern }: { pattern: string }) {
-  const [, source, relation, target] = PATTERN.exec(pattern) ?? []
-  if (source === undefined) return <div>{pattern}</div>
+/** A Pattern as `(Source)-[REL]->(Target)`, its two class names set apart from the syntax. */
+function PatternText({ pattern: [source, relation, target] }: { pattern: Pattern }) {
   const syntax = (text: string) => <span className="text-muted-foreground">{text}</span>
   return (
     <div>
@@ -481,18 +482,20 @@ const relationColumns = relationColumn.columns([
       />
     ),
   }),
-  relationColumn.accessor('patterns', {
+  // Filtered by the Patterns' text, `(Source)-[REL]->(Target)`.
+  relationColumn.accessor((row) => row.patterns.map(patternId), {
+    id: 'patterns',
     header: 'Patterns',
     ...filterColumn('text'),
     enableSorting: false,
     enableGlobalFilter: false,
-    cell: ({ getValue }) =>
-      getValue().length === 0 ? (
+    cell: ({ row: { original } }) =>
+      original.patterns.length === 0 ? (
         none
       ) : (
         <div className="font-mono text-xs">
-          {getValue().map((p) => (
-            <PatternText key={p} pattern={p} />
+          {original.patterns.map((p) => (
+            <PatternText key={patternId(p)} pattern={p} />
           ))}
         </div>
       ),

@@ -1,5 +1,6 @@
 import type { ConceptKind, OwnerKind } from '@/api/ontology-diff'
 import type { Ontology, OntologyConcept } from '@/api/ontology-versions'
+import { codePointOrder } from '@/lib/compare'
 
 /** Each kind of Concept as the Map and the Table name it. */
 export const CONCEPT_NOUN = {
@@ -39,18 +40,24 @@ export interface ClassRow {
   attributes: number
   /** How many more it inherits along its superclass chain (a redeclared one counts as its own). */
   inheritedAttributes: number
-  /** Its own Patterns out of it, as `HAS_TRIP → Trip` (relation, then target), sorted. */
-  outgoing: string[]
-  /** Its own Patterns into it, as `HAS_TRIP ← Route` (relation, then source), sorted. */
-  incoming: string[]
+  /** Its own Patterns out of it, each with its target, by relation then target. */
+  outgoing: Connection[]
+  /** Its own Patterns into it, each with its source, by relation then source. */
+  incoming: Connection[]
+}
+
+/** One of a class's Patterns, seen from the class: its relation, and the class at its other end. */
+export interface Connection {
+  relation: string
+  other: string
 }
 
 export interface RelationRow {
   label: string
   description?: string
   deprecated: boolean
-  /** `(Source)-[REL]->(Target)`, the syntax of `Pattern.__str__`. */
-  patterns: string[]
+  /** Its Patterns, in the order of their ids (`patternId`). */
+  patterns: Pattern[]
   /** How many attributes it declares. */
   attributes: number
 }
@@ -70,8 +77,11 @@ export interface ConceptTables {
   attributes: AttributeRow[]
 }
 
+/** A Pattern: which class (source) may link to which (target) through a relation. */
+export type Pattern = Ontology['patterns'][number]
+
 /** A Pattern as `(Source)-[REL]->(Target)`, the syntax of `Pattern.__str__`. */
-export const patternId = ([source, relation, target]: Ontology['patterns'][number]) =>
+export const patternId = ([source, relation, target]: Pattern) =>
   `(${source})-[${relation}]->(${target})`
 
 /** The constraints declared on class `label`, or only those on its attribute `name`. */
@@ -99,6 +109,9 @@ export function superclassChain(ontology: Ontology, label: string): OntologyConc
   }
   return chain
 }
+
+const byConnection = (a: Connection, b: Connection) =>
+  codePointOrder(a.relation, b.relation) || codePointOrder(a.other, b.other)
 
 /** An Ontology's Concepts as three tables: classes in hierarchy order, relations, attributes. */
 export function conceptTables(ontology: Ontology): ConceptTables {
@@ -133,12 +146,12 @@ export function conceptTables(ontology: Ontology): ConceptTables {
         inheritedAttributes: inheritedNames(node).size,
         outgoing: ontology.patterns
           .filter(([source]) => source === node.label)
-          .map(([, relation, target]) => `${relation} → ${target}`)
-          .sort(),
+          .map(([, relation, target]) => ({ relation, other: target }))
+          .sort(byConnection),
         incoming: ontology.patterns
           .filter(([, , target]) => target === node.label)
-          .map(([source, relation]) => `${relation} ← ${source}`)
-          .sort(),
+          .map(([source, relation]) => ({ relation, other: source }))
+          .sort(byConnection),
       })
       visit(node.label, depth + 1)
     }
@@ -151,8 +164,7 @@ export function conceptTables(ontology: Ontology): ConceptTables {
     deprecated: rel.deprecated ?? false,
     patterns: ontology.patterns
       .filter(([, relationship]) => relationship === rel.label)
-      .map(patternId)
-      .sort(),
+      .sort((a, b) => codePointOrder(patternId(a), patternId(b))),
     attributes: (rel.properties ?? []).length,
   }))
 
