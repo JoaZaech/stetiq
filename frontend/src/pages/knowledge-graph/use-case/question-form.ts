@@ -61,6 +61,59 @@ export function withQuestion(useCase: UseCase, question: CompetencyQuestion): Us
   }
 }
 
+// Concept-reference syntax, as use_case/concepts.py `parse_concept_reference` reads it
+// (`\x60` is a backtick).
+const IDENT = String.raw`[^\s()\[\]{}.:|\x60,-][^\s()\[\]{}.:|\x60,]*`
+const LABEL_RE = new RegExp(`^${IDENT}$`)
+const PROPERTY_RE = new RegExp(`^${IDENT}\\.${IDENT}$`)
+const PATH_RE = new RegExp(
+  String.raw`^\((?:${IDENT})?\)(<)?-\[(?:${IDENT}(?:\|${IDENT})*)?\]-(>)?\((?:${IDENT})?\)$`,
+)
+
+/** `Label`, `Owner.property` or `(Source)-[REL]->(Target)` (one direction at most). */
+export function isConceptReference(text: string): boolean {
+  const ref = text.trim()
+  if (LABEL_RE.test(ref) || PROPERTY_RE.test(ref)) return true
+  const path = PATH_RE.exec(ref)
+  return path !== null && !(path[1] && path[2])
+}
+
+/**
+ * The form's errors, per field, before anything is sent: a missing id or question, an
+ * id another question in the Use Case has (`otherIds`), an expected answer that is not
+ * JSON, malformed Concept references. Empty when the draft can be saved.
+ */
+export function validateDraft(draft: QuestionDraft, otherIds: readonly string[]): DraftErrors {
+  const errors: DraftErrors = {}
+  const id = draft.id.trim()
+  if (!id) errors.id = 'Needs an id.'
+  else if (otherIds.includes(id)) errors.id = `Another Competency Question already has the id ${id}.`
+  if (!draft.question.trim()) errors.question = 'Needs the question in natural language.'
+  if (draft.expected_answer.trim()) {
+    try {
+      JSON.parse(draft.expected_answer)
+    } catch (error) {
+      errors.expected_answer = `Not valid JSON: ${(error as Error).message}`
+    }
+  }
+  const malformed = splitConcepts(draft.concepts).filter((c) => !isConceptReference(c))
+  if (malformed.length) {
+    errors.concepts = `Not a Concept reference: ${malformed.map((c) => JSON.stringify(c)).join(', ')}.`
+  }
+  return errors
+}
+
+const SERVER_FIELD_RE = /^[^:]*?\.(id|question|query|expected_answer|concepts): /
+
+/**
+ * The form field a server Use Case validation error is about (`<path>.<field>: ...`, or
+ * `<id>: duplicate competency question id`); undefined when it is about the whole Use Case.
+ */
+export function serverErrorField(message: string): DraftField | undefined {
+  if (/: duplicate competency question id$/.test(message)) return 'id'
+  return SERVER_FIELD_RE.exec(message)?.[1] as DraftField | undefined
+}
+
 /** `useCase` without the question `id`. */
 export function withoutQuestion(useCase: UseCase, id: string): UseCase {
   return { ...useCase, competency_questions: useCase.competency_questions.filter((q) => q.id !== id) }

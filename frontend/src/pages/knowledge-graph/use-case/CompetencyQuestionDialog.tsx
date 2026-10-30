@@ -1,4 +1,5 @@
 import { useId, useState, type ReactNode } from 'react'
+import { ApiError } from '@/api/client'
 import { useSaveUseCase, type CompetencyQuestion, type SavedUseCase, type UseCase } from '@/api/use-cases'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Button } from '@/components/ui/button'
@@ -19,6 +20,8 @@ import {
   draftOf,
   EMPTY_DRAFT,
   questionOf,
+  serverErrorField,
+  validateDraft,
   withQuestion,
   type DraftErrors,
   type DraftField,
@@ -78,10 +81,21 @@ export function CompetencyQuestionDialog({
           noValidate
           onSubmit={(event) => {
             event.preventDefault()
+            const otherIds = useCase.competency_questions
+              .map((q) => q.id)
+              .filter((id) => id !== question?.id)
+            const invalid = validateDraft(draft, otherIds)
+            setErrors(invalid)
+            if (Object.keys(invalid).length) return
             saving.mutate(withQuestion(useCase, questionOf(draft)), {
               onSuccess: (saved) => {
                 setOpen(false)
                 onSaved(saved)
+              },
+              onError: (error) => {
+                // The server re-validates: put what it refuses on its field too.
+                const field = error instanceof ApiError ? serverErrorField(error.message) : undefined
+                if (field) setErrors({ [field]: error.message })
               },
             })
           }}

@@ -1,5 +1,5 @@
 import { useCallback, useId, useState, type ReactNode } from 'react'
-import { Pencil, Plus } from 'lucide-react'
+import { Pencil, Plus, Trash2 } from 'lucide-react'
 import {
   useUseCaseVersions,
   type CompetencyQuestion,
@@ -17,6 +17,7 @@ import { KnowledgeGraphSectionPage } from '../KnowledgeGraphSectionPage'
 import { useKnowledgeGraphName } from '../params'
 import { CompetencyQuestionDialog } from './CompetencyQuestionDialog'
 import { CompetencyQuestionsTable } from './CompetencyQuestionsTable'
+import { RemoveCompetencyQuestionDialog } from './RemoveCompetencyQuestionDialog'
 import { UseCaseVersionsTable } from './UseCaseVersionsTable'
 
 const SECTION = knowledgeGraphSection('use-case')
@@ -106,21 +107,38 @@ function LatestVersion({ name, version, onSaved }: LatestVersionProps) {
   const useCase = version.use_case
   const rowActions = useCallback(
     (question: CompetencyQuestion) => (
-      <NeedsEditAccess knowledgeGraph={name}>
-        {(disabled) => (
-          <CompetencyQuestionDialog
-            knowledgeGraph={name}
-            useCase={useCase}
-            question={question}
-            onSaved={onSaved}
-            trigger={
-              <Button variant="ghost" size="icon-sm" disabled={disabled} aria-label={`Edit ${question.id}`}>
-                <Pencil />
-              </Button>
-            }
-          />
-        )}
-      </NeedsEditAccess>
+      <>
+        <NeedsEditAccess knowledgeGraph={name}>
+          {(disabled) => (
+            <CompetencyQuestionDialog
+              knowledgeGraph={name}
+              useCase={useCase}
+              question={question}
+              onSaved={onSaved}
+              trigger={
+                <Button variant="ghost" size="icon-sm" disabled={disabled} aria-label={`Edit ${question.id}`}>
+                  <Pencil />
+                </Button>
+              }
+            />
+          )}
+        </NeedsEditAccess>
+        <NeedsEditAccess knowledgeGraph={name}>
+          {(disabled) => (
+            <RemoveCompetencyQuestionDialog
+              knowledgeGraph={name}
+              useCase={useCase}
+              question={question}
+              onSaved={onSaved}
+              trigger={
+                <Button variant="ghost" size="icon-sm" disabled={disabled} aria-label={`Remove ${question.id}`}>
+                  <Trash2 />
+                </Button>
+              }
+            />
+          )}
+        </NeedsEditAccess>
+      </>
     ),
     [name, useCase, onSaved],
   )
