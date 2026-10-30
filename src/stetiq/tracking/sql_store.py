@@ -144,7 +144,7 @@ observations = Table(
     Column("schema_json", Text, nullable=False),
 )
 
-# --- Aliases and Promotion (ticket #9) ---------------------------------------------------
+# --- Aliases and Promotion ---------------------------------------------------------------
 
 aliases = Table(
     "aliases",
@@ -171,7 +171,7 @@ promotions = Table(
     Column("to_version", Integer, nullable=False),
     Column("actor", Text, nullable=False),
     Column("promoted_at", Text, nullable=False),
-    Column("gate_result", Text, nullable=True),  # filled once Gates exist (#14)
+    Column("gate_result", Text, nullable=True),  # filled once Gates exist
 )
 
 # Only Knowledge Graphs that designated a non-default Contract Alias have a row.
@@ -182,7 +182,7 @@ contract_aliases = Table(
     Column("alias", Text, nullable=False),
 )
 
-# --- Conformance, Evolution Mode, Candidates (ticket #8): new tables only, so stores
+# --- Conformance, Evolution Mode, Candidates: new tables only, so stores
 # created before them keep working (create_all adds missing tables).
 
 # Absent row = the default Evolution Mode.
@@ -215,7 +215,7 @@ run_candidates = Table(
 )
 
 
-# --- Drift (ticket #16): a new table only. Drift events are alerts, never versions.
+# --- Drift: a new table only. Drift events are alerts, never versions.
 drift_events = Table(
     "drift_events",
     metadata,
@@ -245,7 +245,7 @@ evaluation_results = Table(
     Column("created_at", Text, nullable=False),
     # The Evaluator's parameters (e.g. its reference Ontology Version), JSON; "{}" if none.
     Column("parameters_json", Text, nullable=False, server_default="{}"),
-    Column("use_case_version", Integer, nullable=True),  # ticket #10; added to old DBs on start
+    Column("use_case_version", Integer, nullable=True),  # added to old DBs on start
 )
 Index(
     "ix_evaluation_results_subject",
@@ -254,7 +254,7 @@ Index(
     evaluation_results.c.subject_id,
 )
 
-# --- API tokens (ticket #17; server mode only, see stetiq.auth) -------------------------
+# --- API tokens (server mode only, see stetiq.auth) -------------------------
 
 api_tokens = Table(
     "api_tokens",
@@ -297,7 +297,7 @@ def _add_missing_columns(engine) -> None:
                 conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}")
 
 
-# --- Gates (ticket #14): insert-only; each row holds the Gate definitions it used.
+# --- Gates: insert-only; each row holds the Gate definitions it used.
 gate_results = Table(
     "gate_results",
     metadata,

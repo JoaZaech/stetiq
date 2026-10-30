@@ -1,6 +1,6 @@
 """In-memory fake Graph Source for tests.
 
-Seeded with nodes and relationships (the test plays the role of the user's pipeline
+Seeded with nodes and relationships (the test plays the role of the user's extraction workflow
 writing into the graph database), it computes the Observed Schema the same way the
 Neo4j adapter's scoped Cypher does, so the shared contract suite keeps it honest.
 `execute_read` returns canned results registered with `add_query_result`.
@@ -144,12 +144,12 @@ def _in_scope(node: _Node, scope: GraphSourceScope) -> bool:
     return True
 
 
-def _observed_properties(elements: list[dict[str, Any]]) -> tuple[ObservedProperty, ...]:
-    total = len(elements)
+def _observed_properties(records: list[dict[str, Any]]) -> tuple[ObservedProperty, ...]:
+    total = len(records)
     types: dict[str, set[str]] = defaultdict(set)
     filled: Counter[str] = Counter()
-    for element in elements:
-        for name, value in element.items():
+    for record in records:
+        for name, value in record.items():
             if value is None:
                 continue
             filled[name] += 1

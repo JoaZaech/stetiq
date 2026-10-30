@@ -116,12 +116,12 @@ def pattern_subject(source: str, relationship: str, target: str) -> str:
 
 
 def assess_conformance(declared: Ontology, observed: ObservedSchema) -> Conformance:
-    """Compare element by element. Elements are node types, relationship types, their
+    """Compare item by item. The checked items are node types, relationship types, their
     properties and endpoint patterns, taken from both sides: every declared one and every
     observed one that is not declared.
 
-    `score` = conforming elements / all elements, where an element conforms when it is
-    both declared and observed and has no mismatch. Every element of an absent or
+    `score` = conforming items / all items, where an item conforms when it is
+    both declared and observed and has no mismatch. Every item of an absent or
     undeclared type is reported on its own (an absent `Ticket` also makes
     `Ticket.opened_at` absent), so the score and the breakdown always agree.
     Order: node types, then relationship types, each by label with its properties
@@ -159,7 +159,7 @@ class _Checks:
     def presence(
         self, subject: str, kind: SubjectKind, is_declared: bool, is_observed: bool
     ) -> bool:
-        """Record an absent/undeclared element; True when it is on both sides."""
+        """Record an absent/undeclared item; True when it is on both sides."""
         if not is_declared:
             self.record(
                 subject, kind, [Mismatch(subject, kind, MismatchKind.UNDECLARED)]

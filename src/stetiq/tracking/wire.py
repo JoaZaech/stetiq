@@ -136,7 +136,7 @@ def error_from_json(d: dict[str, Any]) -> errors.StetiqError:
     return cls(d["error"]["message"])
 
 
-# --- Graph Sources, Construction Runs, Observations (ticket #4) -------------------------
+# --- Graph Sources, Construction Runs, Observations -------------------------------------
 
 ERROR_STATUS[errors.GraphSourceNotBoundError] = 409
 
@@ -221,7 +221,7 @@ def observation_from_json(d: dict[str, Any]) -> Observation:
     )
 
 
-# --- Use Cases (ticket #10) --------------------------------------------------------------
+# --- Use Cases ---------------------------------------------------------------------------
 
 ERROR_STATUS[errors.UseCaseValidationError] = 422
 
@@ -246,7 +246,7 @@ def use_case_version_from_json(d: dict[str, Any]) -> UseCaseVersion:
     )
 
 
-# --- Aliases and Promotion (ticket #9) ---------------------------------------------------
+# --- Aliases and Promotion ---------------------------------------------------------------
 
 ERROR_STATUS[errors.InvalidAliasNameError] = 422
 
@@ -293,7 +293,7 @@ def promotion_from_json(d: dict[str, Any]) -> Promotion:
     )
 
 
-# --- Drift (ticket #16) ------------------------------------------------------------------
+# --- Drift -------------------------------------------------------------------------------
 
 ERROR_STATUS[errors.InvalidDriftConfigError] = 422
 
@@ -349,13 +349,13 @@ def observation_outcome_from_json(d: dict[str, Any]) -> ObservationOutcome:
     )
 
 
-# --- API-token authentication (ticket #17) -----------------------------------------------
+# --- API-token authentication ------------------------------------------------------------
 
 ERROR_STATUS[errors.AuthenticationError] = 401
 ERROR_STATUS[errors.PermissionDeniedError] = 403
 
 
-# --- Gates (ticket #14) ------------------------------------------------------------------
+# --- Gates -------------------------------------------------------------------------------
 
 ERROR_STATUS[errors.GateConfigError] = 422
 

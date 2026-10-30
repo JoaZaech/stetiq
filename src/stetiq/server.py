@@ -38,8 +38,8 @@ def create_app(
     Every API request needs an API token from `tokens` (default: the registry in the
     same database). GET needs `read` on the targeted Knowledge Graph, anything else `edit`.
 
-    `question_mapper` is the model structural answerability maps unmapped Competency
-    Questions with (ticket #12); it only applies when `service` is not given.
+    `question_mapper` maps Competency Questions with neither a Concept mapping nor a
+    query for structural answerability; it only applies when `service` is not given.
     """
     if service is None or tokens is None:
         store = SqlStore(database_url or DEFAULT_DATABASE_URL)
@@ -258,7 +258,7 @@ def create_app(
     def get_contract_alias(name: str) -> dict[str, str]:
         return {"alias": tracking.get_contract_alias(name)}
     # Evaluation results. Subject paths: ontology-versions/{number} here; Construction
-    # Runs add runs/{id}/evaluations with run-level evaluation (ticket #13).
+    # Runs add runs/{id}/evaluations with run-level evaluation.
     version_path = "/knowledge-graphs/{name}/ontology-versions/{number}"
 
     @api.get(version_path + "/evaluations")
@@ -295,7 +295,7 @@ def create_app(
         results = tracking.evaluate_ontology_version(name, number, use_case_version)
         return [wire.evaluation_result_to_json(r) for r in results]
 
-    # Run-level evaluation (ticket #13). Results live under the run's Knowledge Graph,
+    # Run-level evaluation. Results live under the run's Knowledge Graph,
     # whose subject check also confirms the run belongs to it.
     run_path = "/knowledge-graphs/{name}/runs/{run_id}"
 
@@ -346,7 +346,7 @@ def create_app(
     def get_use_case_version(name: str, number: int) -> dict[str, Any]:
         return wire.use_case_version_to_json(tracking.get_use_case_version(name, number))
 
-    # --- Gates (ticket #14) ----------------------------------------------------------
+    # --- Gates -----------------------------------------------------------------------
 
     @api.post("/knowledge-graphs/{name}/gate-results", status_code=201)
     def evaluate_gates(
@@ -364,5 +364,5 @@ def create_app(
         return [wire.gate_result_to_json(r) for r in tracking.list_gate_results(name)]
 
     app.include_router(api)
-    app.include_router(ui_router(tracking, registry))  # read-only web UI (ticket #18)
+    app.include_router(ui_router(tracking, registry))  # read-only web UI
     return app

@@ -32,7 +32,7 @@ class GraphSourceScope:
 class ObservedProperty:
     name: str
     types: tuple[str, ...]  # graphrag property type names (see ontology PROPERTY_TYPES), sorted
-    count: int  # elements of the owning type that have this property
+    count: int  # nodes or relationships of the owning type that have this property
     fill_rate: float  # count / owning type's count
 
 

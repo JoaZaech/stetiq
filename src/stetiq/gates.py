@@ -45,7 +45,7 @@ class GateInputs:
     evaluations: Sequence[EvaluationResult] = ()  # latest per Evaluator (and parameters)
     observed: ObservedSchema | None = None  # the subject's Observed Schema
     baseline: ObservedSchema | None = None  # the Observation before it
-    # Run-level results (ticket #13: conformance, observed_schema,
+    # Run-level results (conformance, observed_schema,
     # competency_question_execution, custom run Evaluators) of the subject's run.
     run_evaluations: Sequence[EvaluationResult] = ()
 

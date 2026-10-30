@@ -18,7 +18,7 @@
       - {type: UNIQUENESS, node_type: Ticket, property_name: opened_at}
 
 `parse_yaml` validates and raises `OntologyValidationError` naming the
-offending element; `to_yaml` emits the canonical (sorted, defaults omitted) form.
+offending path; `to_yaml` emits the canonical (sorted, defaults omitted) form.
 """
 
 from __future__ import annotations
@@ -64,62 +64,62 @@ _NODE_TYPE_KEYS = _CONCEPT_KEYS | {"parent"}
 _PROPERTY_KEYS = {"name", "type", "description", "required"}
 
 
-def _fail(element: str, problem: str) -> OntologyValidationError:
-    return OntologyValidationError(f"{element}: {problem}")
+def _fail(path: str, problem: str) -> OntologyValidationError:
+    return OntologyValidationError(f"{path}: {problem}")
 
 
-def _check_keys(element: str, d: dict[str, Any], allowed: set[str]) -> None:
+def _check_keys(path: str, d: dict[str, Any], allowed: set[str]) -> None:
     unknown = sorted(set(d) - allowed)
     if unknown:
-        raise _fail(element, f"unknown key(s) {', '.join(unknown)}; allowed: {', '.join(sorted(allowed))}")
+        raise _fail(path, f"unknown key(s) {', '.join(unknown)}; allowed: {', '.join(sorted(allowed))}")
 
 
-def _optional_str(element: str, value: Any) -> str | None:
+def _optional_str(path: str, value: Any) -> str | None:
     if value is not None and not isinstance(value, str):
-        raise _fail(element, "must be a string")
+        raise _fail(path, "must be a string")
     return value
 
 
-def _bool(element: str, value: Any) -> bool:
+def _bool(path: str, value: Any) -> bool:
     if not isinstance(value, bool):
-        raise _fail(element, f"must be true or false, got {value!r}")
+        raise _fail(path, f"must be true or false, got {value!r}")
     return value
 
 
-def _label(element: str, value: Any) -> str:
+def _label(path: str, value: Any) -> str:
     if not isinstance(value, str) or not value.strip():
-        raise _fail(element, "needs a non-empty string label")
+        raise _fail(path, "needs a non-empty string label")
     return value
 
 
-def _parse_property(element: str, raw: Any) -> Property:
+def _parse_property(path: str, raw: Any) -> Property:
     if not isinstance(raw, dict):
-        raise _fail(element, "must be a mapping with name and type")
+        raise _fail(path, "must be a mapping with name and type")
     if "name" not in raw:
-        raise _fail(element, "property needs a name")
-    name = _label(element, raw["name"])
-    element = f"{element.rsplit('.properties[', 1)[0]}.{name}"
-    _check_keys(element, raw, _PROPERTY_KEYS)
+        raise _fail(path, "property needs a name")
+    name = _label(path, raw["name"])
+    path = f"{path.rsplit('.properties[', 1)[0]}.{name}"
+    _check_keys(path, raw, _PROPERTY_KEYS)
     ptype = raw.get("type")
     if ptype not in PROPERTY_TYPES:
-        raise _fail(element, f"unknown property type {ptype!r}; allowed: {', '.join(sorted(PROPERTY_TYPES))}")
+        raise _fail(path, f"unknown property type {ptype!r}; allowed: {', '.join(sorted(PROPERTY_TYPES))}")
     return Property(
         name=name,
         type=ptype,
-        description=_optional_str(f"{element}.description", raw.get("description")),
-        required=_bool(f"{element}.required", raw.get("required", False)),
+        description=_optional_str(f"{path}.description", raw.get("description")),
+        required=_bool(f"{path}.required", raw.get("required", False)),
     )
 
 
 def _parse_concept(section: str, index: int, raw: Any) -> dict[str, Any]:
-    element = f"{section}[{index}]"
+    path = f"{section}[{index}]"
     if isinstance(raw, str):
         raw = {"label": raw}
     if not isinstance(raw, dict):
-        raise _fail(element, "must be a label or a mapping with a label")
+        raise _fail(path, "must be a label or a mapping with a label")
     if "label" not in raw:
-        raise _fail(element, "needs a label")
-    label = _label(element, raw["label"])
+        raise _fail(path, "needs a label")
+    label = _label(path, raw["label"])
     _check_keys(label, raw, _NODE_TYPE_KEYS if section == "node_types" else _CONCEPT_KEYS)
     raw_props = raw.get("properties") or []
     if not isinstance(raw_props, list):
@@ -185,17 +185,17 @@ def _parse_patterns(doc: dict[str, Any], node_labels: set[str], rel_labels: set[
         raise _fail("patterns", "must be a list")
     patterns = []
     for i, p in enumerate(raw):
-        element = f"patterns[{i}]"
+        path = f"patterns[{i}]"
         if isinstance(p, dict) and set(p) == {"source", "relationship", "target"}:
             p = [p["source"], p["relationship"], p["target"]]
         if not (isinstance(p, list) and len(p) == 3 and all(isinstance(x, str) for x in p)):
-            raise _fail(element, f"must be a [source, relationship type, target] triple, got {p!r}")
+            raise _fail(path, f"must be a [source, relationship type, target] triple, got {p!r}")
         source, rel, target = p
         for node in (source, target):
             if node not in node_labels:
-                raise _fail(f"{element} {p}", f"node type {node!r} is not declared in node_types")
+                raise _fail(f"{path} {p}", f"node type {node!r} is not declared in node_types")
         if rel not in rel_labels:
-            raise _fail(f"{element} {p}", f"relationship type {rel!r} is not declared in relationship_types")
+            raise _fail(f"{path} {p}", f"relationship type {rel!r} is not declared in relationship_types")
         patterns.append(Pattern(source, rel, target))
     return patterns
 
@@ -215,24 +215,24 @@ def _parse_constraints(doc: dict[str, Any], nodes: list[dict[str, Any]]) -> list
 
     constraints: list[Constraint] = []
     for i, c in enumerate(raw):
-        element = f"constraints[{i}]"
+        path = f"constraints[{i}]"
         if not isinstance(c, dict):
-            raise _fail(element, "must be a mapping with type, node_type and property_name")
-        _check_keys(element, c, _CONSTRAINT_KEYS)
+            raise _fail(path, "must be a mapping with type, node_type and property_name")
+        _check_keys(path, c, _CONSTRAINT_KEYS)
         if c.get("type") not in CONSTRAINT_TYPES:
             raise _fail(
-                element,
+                path,
                 f"unknown constraint type {c.get('type')!r}; allowed: {', '.join(sorted(CONSTRAINT_TYPES))}",
             )
         node_type = c.get("node_type")
         if node_type not in by_label:
-            raise _fail(element, f"node type {node_type!r} is not declared in node_types")
+            raise _fail(path, f"node type {node_type!r} is not declared in node_types")
         prop = c.get("property_name")
         if prop not in properties_of(node_type):
-            raise _fail(f"{element} {node_type}.{prop}", "property is not declared on the node type or its ancestors")
+            raise _fail(f"{path} {node_type}.{prop}", "property is not declared on the node type or its ancestors")
         constraint = Constraint(c["type"], node_type, prop)
         if constraint in constraints:
-            raise _fail(element, "constraint is declared more than once")
+            raise _fail(path, "constraint is declared more than once")
         constraints.append(constraint)
     return constraints
 

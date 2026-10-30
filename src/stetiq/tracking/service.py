@@ -237,7 +237,7 @@ class LocalTrackingService:
         self, store: Store, *, question_mapper: CompetencyQuestionMapper | None = None
     ) -> None:
         """`question_mapper` is the model interface structural answerability uses for
-        Competency Questions with neither a Concept mapping nor a query (ticket #12)."""
+        Competency Questions with neither a Concept mapping nor a query."""
         self._store = store
         self._question_mapper = question_mapper
 

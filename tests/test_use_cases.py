@@ -309,7 +309,7 @@ def test_the_concepts_and_paths_a_query_uses_are_read_from_its_cypher(
 
 
 class StubMapper:
-    """A deterministic stand-in for the LLM behind the model interface (ticket #12)."""
+    """A deterministic stand-in for the LLM behind the model interface."""
 
     def __init__(self):
         self.asked = []

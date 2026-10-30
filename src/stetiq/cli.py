@@ -480,7 +480,7 @@ def _echo_run(run) -> None:
         typer.echo(f"  Candidate: Ontology Version {run.candidate_version}")
 
 
-# --- API tokens (ticket #17): admin commands, run against the server's database ----------
+# --- API tokens: admin commands, run against the server's database ----------
 
 token_app = typer.Typer(
     no_args_is_help=True,
@@ -553,7 +553,7 @@ def token_revoke(token_id: str, database_url: DatabaseUrl = None) -> None:
     typer.echo(f"Revoked token {token_id}")
 
 
-# --- On-demand Observation and Drift (ticket #16) ---------------------------------------
+# --- On-demand Observation and Drift ----------------------------------------------------
 
 drift_app = typer.Typer(no_args_is_help=True, help="Drift events.")
 app.add_typer(drift_app, name="drift")

@@ -8,7 +8,7 @@ per-item details. There are two subject kinds:
 - `"construction_run"`: `ConstructionRunEvaluator.evaluate(run)` gets a
   `ConstructionRunSubject`: the run, its Declared Ontology, its Observation
   (Observed Schema) and read-only Graph Source access. Invoked at the end of a
-  run (ticket #13).
+  run.
 
 Write a custom Evaluator by subclassing one of the two base classes, set a
 unique `name`, and register it with `Client.register_evaluator`.
@@ -80,7 +80,7 @@ class OntologyVersionEvaluator(ABC):
 class ReadOnlyGraphSource(Protocol):
     """A Graph Source narrowed to the run's scope, read-only (executed Competency Questions).
 
-    Ticket #13 binds `GraphSource.execute_read(scope, ...)` to the run's Observation
+    Run-level evaluation binds `GraphSource.execute_read(scope, ...)` to the run's Observation
     scope. Results are evaluated and discarded, never stored (ADR 0001).
     """
 
@@ -90,7 +90,7 @@ class ReadOnlyGraphSource(Protocol):
 
 
 class ConstructionRunSubject(Protocol):
-    """What a run-level Evaluator sees; the concrete value is built by ticket #13.
+    """What a run-level Evaluator sees; the concrete value is `stetiq.evaluation.run.RunSubject`.
 
     Results are stored with subject_kind "construction_run", subject_id `run.id`.
     """

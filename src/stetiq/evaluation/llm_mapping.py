@@ -1,4 +1,4 @@
-"""An LLM behind the `CompetencyQuestionMapper` model interface (ticket #12).
+"""An LLM behind the `CompetencyQuestionMapper` model interface.
 
 `LlmQuestionMapper` asks a Claude model to map a natural-language Competency
 Question onto the Concepts and paths of an Ontology, as Concept references

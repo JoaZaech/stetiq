@@ -1,4 +1,4 @@
-"""Run-level evaluation (ticket #13): Evaluators whose subject is a Construction Run.
+"""Run-level evaluation: Evaluators whose subject is a Construction Run.
 
 Built-in run Evaluators, by stable name (Gates refer to these names and metrics):
 

@@ -1,4 +1,4 @@
-"""The read-only web UI (ticket #18): server-rendered HTML, no JavaScript, no build step.
+"""The read-only web UI: server-rendered HTML, no JavaScript, no build step.
 
 Mounted by `server.create_app` under `/ui`. It reads the same `TrackingService` the
 REST API wraps and never changes anything.

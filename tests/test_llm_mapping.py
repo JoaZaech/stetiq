@@ -1,4 +1,4 @@
-"""LLM-assisted Competency Question mapping (ticket #12).
+"""LLM-assisted Competency Question mapping.
 
 The LLM sits behind the `CompetencyQuestionMapper` model interface. These tests
 drive it through the public SDK with a deterministic fake Anthropic client (the

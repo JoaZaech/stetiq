@@ -37,7 +37,7 @@ def parse_use_case_yaml(text: str) -> UseCase:
 
 
 def parse_use_case_dict(data: Any) -> UseCase:
-    """Validate a Use Case given as plain data; raises UseCaseValidationError naming the element."""
+    """Validate a Use Case given as plain data; raises UseCaseValidationError naming the offending path."""
     if not isinstance(data, dict):
         raise UseCaseValidationError("Use Case: expected a mapping with competency_questions")
     unknown = set(data) - _TOP_LEVEL_KEYS
@@ -54,15 +54,15 @@ def parse_use_case_dict(data: Any) -> UseCase:
 
 
 def _question(index: int, raw: Any) -> CompetencyQuestion:
-    element = f"competency_questions[{index}]"
+    path = f"competency_questions[{index}]"
     if not isinstance(raw, dict):
-        raise UseCaseValidationError(f"{element}: expected a mapping with id and question")
+        raise UseCaseValidationError(f"{path}: expected a mapping with id and question")
     unknown = set(raw) - _QUESTION_KEYS
     if unknown:
-        raise UseCaseValidationError(f"{element}: unknown keys {sorted(unknown)}")
+        raise UseCaseValidationError(f"{path}: unknown keys {sorted(unknown)}")
     concepts = raw.get("concepts", ())
     if isinstance(concepts, str) or not isinstance(concepts, (list, tuple)):
-        raise UseCaseValidationError(f"{element}.concepts: must be a list of Concept references")
+        raise UseCaseValidationError(f"{path}.concepts: must be a list of Concept references")
     return CompetencyQuestion(
         id=raw.get("id"),
         question=raw.get("question"),
@@ -72,27 +72,27 @@ def _question(index: int, raw: Any) -> CompetencyQuestion:
     )
 
 
-def check_question(q: CompetencyQuestion, element: str | None = None) -> CompetencyQuestion:
-    element = element or (q.id if isinstance(q.id, str) and q.id else "competency question")
+def check_question(q: CompetencyQuestion, path: str | None = None) -> CompetencyQuestion:
+    path = path or (q.id if isinstance(q.id, str) and q.id else "competency question")
     if not isinstance(q.id, str) or not q.id.strip():
-        raise UseCaseValidationError(f"{element}.id: needs a non-empty string id")
+        raise UseCaseValidationError(f"{path}.id: needs a non-empty string id")
     if not isinstance(q.question, str) or not q.question.strip():
-        raise UseCaseValidationError(f"{element}.question: needs the question in natural language")
+        raise UseCaseValidationError(f"{path}.question: needs the question in natural language")
     if q.query is not None and (not isinstance(q.query, str) or not q.query.strip()):
-        raise UseCaseValidationError(f"{element}.query: must be a non-empty Cypher string")
+        raise UseCaseValidationError(f"{path}.query: must be a non-empty Cypher string")
     try:
         json.dumps(q.expected_answer, allow_nan=False)
     except (TypeError, ValueError):
         raise UseCaseValidationError(
-            f"{element}.expected_answer: must be a JSON value (strings, numbers, lists, mappings)"
+            f"{path}.expected_answer: must be a JSON value (strings, numbers, lists, mappings)"
         ) from None
     for c in q.concepts:
         if not isinstance(c, str):
-            raise UseCaseValidationError(f"{element}.concepts: {c!r} is not a Concept reference")
+            raise UseCaseValidationError(f"{path}.concepts: {c!r} is not a Concept reference")
         try:
             parse_concept_reference(c)
         except ValueError as e:
-            raise UseCaseValidationError(f"{element}.concepts: {e}") from None
+            raise UseCaseValidationError(f"{path}.concepts: {e}") from None
     return q
 
 

@@ -1,4 +1,4 @@
-"""The read-only web UI (ticket #18), tested over HTTP against the real server app.
+"""The read-only web UI, tested over HTTP against the real server app.
 
 Data is seeded through the SDK in local mode on the same database the server reads.
 The UI authenticates with an API Token entered once and kept in an HttpOnly cookie.

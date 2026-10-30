@@ -685,7 +685,7 @@ class Client:
 
 
 class ActiveRun:
-    """A running Construction Run, as handed to the user's pipeline by `start_run`."""
+    """A running Construction Run, as handed to the user's extraction workflow by `start_run`."""
 
     def __init__(
         self,

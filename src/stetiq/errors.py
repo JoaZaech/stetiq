@@ -3,7 +3,7 @@ class StetiqError(Exception):
 
 
 class OntologyValidationError(StetiqError):
-    """A Declared Ontology is malformed; the message names the offending element."""
+    """A Declared Ontology is malformed; the message names the offending path."""
 
 
 class MissingDeclaredOntologyError(StetiqError):
@@ -39,7 +39,7 @@ class RunNotActiveError(StetiqError):
 
 
 class UseCaseValidationError(StetiqError):
-    """A Use Case or Competency Question is malformed; the message names the element."""
+    """A Use Case or Competency Question is malformed; the message names the offending path."""
 
 
 class InvalidAliasNameError(StetiqError):

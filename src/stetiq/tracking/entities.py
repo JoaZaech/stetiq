@@ -101,7 +101,7 @@ class RunComparison:
         return tuple(r.ontology_version for r in self.runs)
 
 
-# --- Aliases and Promotion (ticket #9) ---------------------------------------------------
+# --- Aliases and Promotion ---------------------------------------------------------------
 
 DEFAULT_CONTRACT_ALIAS = "production"
 _ALIAS_NAME = re.compile(r"[A-Za-z0-9_.-]+")
@@ -175,7 +175,7 @@ class UseCaseVersion:
     use_case: UseCase
 
 
-# --- Drift (ticket #16) ------------------------------------------------------------------
+# --- Drift -------------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -217,7 +217,7 @@ class ObservationOutcome:
         return self.drift is not None
 
 
-# --- Gates (ticket #14) --------------------------------------------------------------
+# --- Gates ---------------------------------------------------------------------------
 
 # What a Gate evaluation was run for: an Ontology Version (e.g. a Candidate) or a run.
 GateSubjectKind = Literal["ontology_version", "construction_run"]
