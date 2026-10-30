@@ -15,8 +15,10 @@ SCOPE = GraphSourceScope(database="neo4j", label="KG")
 
 
 @pytest.fixture
-def reader_credentials(neo4j_container, neo4j_admin_driver):
+def reader_credentials(neo4j_container, neo4j_admin_driver, neo4j_enterprise):
     """A least-privilege user holding only the built-in `reader` role."""
+    if not neo4j_enterprise:
+        pytest.skip("users with roles need a Neo4j Enterprise image")
     neo4j_admin_driver.execute_query(
         "CREATE OR REPLACE USER stetiq_reader SET PASSWORD 'readerpassword' CHANGE NOT REQUIRED",
         database_="system",
