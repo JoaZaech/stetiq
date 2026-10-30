@@ -4,13 +4,14 @@
  * views. One value, a kind and a name:
  *
  * - `class:Trip`: a class;
- * - `relation:HAS_TRIP`: a relation, which the Map shows as its first Pattern link;
+ * - `relation:HAS_TRIP`: a relation, which the Map shows as one of its Pattern links;
  * - `link:(Route)-[HAS_TRIP]->(Trip)`: one Pattern link, by its id;
  * - `path:Customer->Product`: two classes, for the shortest paths between them.
  */
 import { useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router'
 import type { Ontology } from '@/api/ontology-versions'
+import { setOrDeleteParam } from '@/lib/search-params'
 import { type ClassOrRelation, patternId } from './concepts'
 import type { MapSelection } from './ontology-map-focus'
 
@@ -79,11 +80,8 @@ export function selectedRows(ontology: Ontology, selection: ConceptSelection | n
 export const isSelectedRow = (rows: SelectedRows, { kind, label }: ClassOrRelation) =>
   (kind === 'class' ? rows.classes : rows.relations).has(label)
 
-const write = (p: URLSearchParams, selection: ConceptSelection | null) => {
-  if (selection) p.set(SELECT_PARAM, formatSelection(selection))
-  else p.delete(SELECT_PARAM)
-  return p
-}
+const write = (p: URLSearchParams, selection: ConceptSelection | null) =>
+  setOrDeleteParam(p, SELECT_PARAM, selection && formatSelection(selection))
 
 /**
  * The selection in `?select=` and a setter for it. Selecting replaces the history entry,

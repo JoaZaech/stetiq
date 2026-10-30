@@ -9,6 +9,7 @@
  */
 import { useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router'
+import { setOrDeleteParam } from './search-params'
 import { useViewParam } from './view-param'
 
 export type ViewMode = 'table' | 'chart'
@@ -53,11 +54,7 @@ export function useChartSearch(): [string, (search: string) => void] {
   const setSearch = useCallback(
     (next: string) =>
       setParams(
-        (p) => {
-          if (next) p.set('charts', next)
-          else p.delete('charts')
-          return p
-        },
+        (p) => setOrDeleteParam(p, 'charts', next),
         { replace: true },
       ),
     [setParams],

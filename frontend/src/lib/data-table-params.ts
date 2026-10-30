@@ -26,6 +26,7 @@ import type {
   Updater,
 } from '@tanstack/react-table'
 import type { ColumnFilterKind } from './data-table'
+import { setOrDeleteParam } from './search-params'
 
 export interface DataTableParamsOptions {
   /** Names this grid's params, e.g. `classes` → `?classes.sort=label`. */
@@ -106,16 +107,14 @@ export function writeDataTableParams(
     else if (kind === 'text') params.set(filterParam(key, id), String(value))
   }
 
-  if (state.globalFilter) params.set(searchParam(options), state.globalFilter)
-  else params.delete(searchParam(options))
+  setOrDeleteParam(params, searchParam(options), state.globalFilter)
 
   params.delete(columnParam(key))
   for (const id of optional) if (state.columnVisibility[id]) params.append(columnParam(key), id)
 
   if (options.grouping && state.grouping) {
     const [id = NO_GROUPING] = state.grouping
-    if (id === options.grouping[0]) params.delete(groupParam(key))
-    else params.set(groupParam(key), id)
+    setOrDeleteParam(params, groupParam(key), id === options.grouping[0] ? null : id)
   }
 }
 

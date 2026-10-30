@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { createDataTableColumnHelper, filterColumn, useDataTable } from '@/lib/data-table'
 import { type DataTableParamsOptions, useDataTableParams } from '@/lib/data-table-params'
 import { formatCount } from '@/lib/format'
+import { setOrDeleteParam } from '@/lib/search-params'
 import { type ComparisonRow, comparisonRows } from './comparison-rows'
 import { isSelectedRow, selectedRows, useConceptSelection, useShowOnMap } from './concept-selection'
 import { ChangeLevelBadge } from './MapChangeSummary'
@@ -111,14 +112,7 @@ function ComparisonGrid({ comparison, base, target }: { comparison: OntologyComp
     [setSelection, showOnMap],
   )
   const setShowDocumentation = (show: boolean) =>
-    setParams(
-      (p) => {
-        if (show) p.set(DOCUMENTATION_PARAM, '1')
-        else p.delete(DOCUMENTATION_PARAM)
-        return p
-      },
-      { replace: true },
-    )
+    setParams((p) => setOrDeleteParam(p, DOCUMENTATION_PARAM, show ? '1' : null), { replace: true })
 
   return (
     <section aria-label="Ontology Diff" className="space-y-4">

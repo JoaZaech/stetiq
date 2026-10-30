@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { useSearchParams } from 'react-router'
+import { setOrDeleteParam } from './search-params'
 
 /**
  * A page's view toggle, kept in `?view=` so links open in the same view. The first of
@@ -13,11 +14,7 @@ export function useViewParam<M extends string>(modes: readonly [M, ...M[]]): [M,
   const mode = modes.find((m) => m === value) ?? fallback
   const setMode = useCallback(
     (next: M) =>
-      setParams((p) => {
-        if (next === fallback) p.delete('view')
-        else p.set('view', next)
-        return p
-      }),
+      setParams((p) => setOrDeleteParam(p, 'view', next === fallback ? null : next)),
     [setParams, fallback],
   )
   return [mode, setMode]

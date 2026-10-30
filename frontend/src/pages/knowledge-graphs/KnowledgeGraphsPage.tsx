@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useDataTable } from '@/lib/data-table'
+import { setOrDeleteParam } from '@/lib/search-params'
 import { knowledgeGraphColumns } from './knowledge-graph-columns'
 import { KnowledgeGraphsLoaded } from './KnowledgeGraphsLoaded'
 
@@ -43,11 +44,7 @@ function KnowledgeGraphTable({ data }: { data: KnowledgeGraphSummary[] }) {
 
   const setSearch = (value: string) =>
     setSearchParams(
-      (params) => {
-        if (value) params.set('q', value)
-        else params.delete('q')
-        return params
-      },
+      (params) => setOrDeleteParam(params, 'q', value),
       { replace: true },
     )
 

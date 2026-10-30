@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { createDataTableColumnHelper, filterColumn, useDataTable } from '@/lib/data-table'
 import { type DataTableParamsOptions, useDataTableParams } from '@/lib/data-table-params'
 import { formatCount } from '@/lib/format'
+import { setOrDeleteParam } from '@/lib/search-params'
 import { useViewParam } from '@/lib/view-param'
 import { attributeRows } from './attribute-rows'
 import { AttributesGrid, type GroupRequest } from './AttributesGrid'
@@ -62,14 +63,7 @@ export function OntologyTab() {
             className="pl-8"
             value={query}
             onChange={(e) =>
-              setParams(
-                (p) => {
-                  if (e.target.value) p.set('q', e.target.value)
-                  else p.delete('q')
-                  return p
-                },
-                { replace: true },
-              )
+              setParams((p) => setOrDeleteParam(p, 'q', e.target.value), { replace: true })
             }
           />
         </div>
