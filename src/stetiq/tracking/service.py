@@ -81,6 +81,9 @@ class TrackingService(Protocol):
 
     def get_knowledge_graph(self, name: str) -> KnowledgeGraph: ...
 
+    def list_knowledge_graphs(self) -> list[KnowledgeGraph]:
+        """By name. In server mode, only those the API token can read."""
+
     def register_ontology(
         self, knowledge_graph: str, ontology: Ontology, origin: Origin = "registered"
     ) -> OntologyVersion: ...
@@ -211,6 +214,9 @@ class LocalTrackingService:
         if kg is None:
             raise NotFoundError(f"Knowledge Graph {name!r} does not exist")
         return kg
+
+    def list_knowledge_graphs(self) -> list[KnowledgeGraph]:
+        return self._store.list_knowledge_graphs()
 
     def register_ontology(
         self, knowledge_graph: str, ontology: Ontology, origin: Origin = "registered"

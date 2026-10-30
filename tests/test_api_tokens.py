@@ -123,6 +123,19 @@ def test_permissions_are_per_knowledge_graph(server, support, support_ontology):
         support_editor.create_knowledge_graph("hr", ontology=support_ontology)
 
 
+def test_listing_knowledge_graphs_shows_only_those_the_token_can_read(
+    server, support, support_ontology
+):
+    admin = _client(server, _issue(server, "admin", {"*": "edit"}))
+    admin.create_knowledge_graph("billing", ontology=support_ontology)
+    support_reader = _client(server, _issue(server, "ada", {"support": "read"}))
+
+    assert [kg.name for kg in support_reader.list_knowledge_graphs()] == ["support"]
+    assert [kg.name for kg in admin.list_knowledge_graphs()] == ["billing", "support"]
+    with pytest.raises(stetiq.AuthenticationError):
+        _client(server).list_knowledge_graphs()
+
+
 def test_the_audit_log_records_the_tokens_user_as_actor(server, support):
     ada = _client(server, _issue(server, "ada", {"support": "edit"}), actor="someone-else")
 

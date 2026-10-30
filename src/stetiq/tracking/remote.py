@@ -79,6 +79,9 @@ class RemoteTrackingService:
     def get_knowledge_graph(self, name: str) -> KnowledgeGraph:
         return wire.knowledge_graph_from_json(self._call("GET", self._kg_path(name)))
 
+    def list_knowledge_graphs(self) -> list[KnowledgeGraph]:
+        return [wire.knowledge_graph_from_json(k) for k in self._call("GET", "/knowledge-graphs")]
+
     def register_ontology(
         self, knowledge_graph: str, ontology: Ontology, origin: Origin = "registered"
     ) -> OntologyVersion:
