@@ -4,7 +4,7 @@
  * (source, relation, target); relations are not nodes. No React and no I/O here.
  */
 import ELK from 'elkjs/lib/elk.bundled.js'
-import type { Ontology, OntologyProperty } from '@/api/ontology-versions'
+import type { Ontology, OntologyConcept, OntologyProperty } from '@/api/ontology-versions'
 import { conceptTables, searchConcepts } from './concepts'
 
 export interface MapNode {
@@ -169,12 +169,14 @@ export function detailsOf(ontology: Ontology, selection: MapSelection | null): M
     if (!node) return null
     const properties: DetailProperty[] = []
     const seen = new Set<string>()
-    for (let c = node; c && !seen.has(c.label); c = c.parent === undefined ? undefined : classes.get(c.parent)) {
+    let c: OntologyConcept | undefined = node
+    while (c && !seen.has(c.label)) {
       seen.add(c.label)
       for (const p of c.properties ?? []) {
         if (properties.some((q) => q.name === p.name)) continue
         properties.push(detailProperty(p, c === node ? undefined : c.label))
       }
+      c = c.parent === undefined ? undefined : classes.get(c.parent)
     }
     return {
       kind: 'class',
