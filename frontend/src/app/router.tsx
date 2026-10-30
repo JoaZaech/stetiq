@@ -28,6 +28,7 @@ const RunComparePage = lazyPage(() => import('@/pages/knowledge-graph/runs/RunCo
 const RunConformanceTab = lazyPage(() => import('@/pages/knowledge-graph/runs/RunConformanceTab'), (m) => m.RunConformanceTab)
 const RunEvaluationsTab = lazyPage(() => import('@/pages/knowledge-graph/runs/RunEvaluationsTab'), (m) => m.RunEvaluationsTab)
 const RunOverviewTab = lazyPage(() => import('@/pages/knowledge-graph/runs/RunOverviewTab'), (m) => m.RunOverviewTab)
+const HomePage = lazyPage(() => import('@/pages/home/HomePage'), (m) => m.HomePage)
 const KnowledgeGraphsPage = lazyPage(() => import('@/pages/knowledge-graphs/KnowledgeGraphsPage'), (m) => m.KnowledgeGraphsPage)
 const ChangesTab = lazyPage(() => import('@/pages/knowledge-graph/versions/ChangesTab'), (m) => m.ChangesTab)
 const OntologyDiffPage = lazyPage(() => import('@/pages/knowledge-graph/versions/OntologyDiffPage'), (m) => m.OntologyDiffPage)
@@ -162,6 +163,7 @@ export const routes: RouteObject[] = [
         // Pathless: the signed-in pages. They read `/api/v1`, and a 401 there sends a
         // signed-out reader to sign-in (api/client.ts).
         children: [
+          { index: true, element: <HomePage />, handle: crumb(() => 'Home') },
           {
             // The list, and every Knowledge Graph below it: "Knowledge Graphs" comes first
             // in their breadcrumbs and links to the list.

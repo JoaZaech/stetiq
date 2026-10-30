@@ -2,6 +2,8 @@ import { useEffect, type ReactNode } from 'react'
 
 interface PageHeaderProps {
   title: string
+  /** The browser tab title, when it should differ from `title`. */
+  tabTitle?: string
   /** One line under the title. */
   description?: ReactNode
   /** Buttons on the right, e.g. Promote or Compare. */
@@ -9,10 +11,10 @@ interface PageHeaderProps {
 }
 
 /** The title block every page starts with; also sets the browser tab title. */
-export function PageHeader({ title, description, actions }: PageHeaderProps) {
+export function PageHeader({ title, tabTitle = title, description, actions }: PageHeaderProps) {
   useEffect(() => {
-    document.title = `${title} · stetiq`
-  }, [title])
+    document.title = `${tabTitle} · stetiq`
+  }, [tabTitle])
 
   return (
     <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
