@@ -48,3 +48,11 @@ class InvalidAliasNameError(StetiqError):
 
 class GraphSourceWriteRejectedError(StetiqError):
     """A query sent to a Graph Source was not read-only; adapters never issue writes."""
+
+
+class AuthenticationError(StetiqError):
+    """Server mode: the request carried no API token, or one that is unknown or revoked."""
+
+
+class PermissionDeniedError(StetiqError):
+    """Server mode: the API token lacks the permission this Knowledge Graph operation needs."""

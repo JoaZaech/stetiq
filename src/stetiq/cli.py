@@ -302,3 +302,76 @@ def alias_contract(
         typer.echo(client.get_contract_alias(knowledge_graph))
     except StetiqError as e:
         raise _fail(e) from None
+
+
+# --- API tokens (ticket #17): admin commands, run against the server's database ----------
+
+token_app = typer.Typer(
+    no_args_is_help=True,
+    help="API tokens for server mode (admin: talks to the server's database directly).",
+)
+app.add_typer(token_app, name="token")
+
+DatabaseUrl = Annotated[
+    str | None,
+    typer.Option(
+        "--database-url",
+        envvar="STETIQ_DATABASE_URL",
+        help="The stetiq server's database (default sqlite:///.stetiq/server.db)",
+    ),
+]
+
+
+def _token_registry(database_url: str | None):
+    from stetiq.auth import TokenRegistry
+    from stetiq.server import DEFAULT_DATABASE_URL
+
+    return TokenRegistry(database_url or DEFAULT_DATABASE_URL)
+
+
+def _grants_text(grants) -> str:
+    return ",".join(f"{kg}={permission}" for kg, permission in sorted(grants.items()))
+
+
+@token_app.command("create")
+def token_create(
+    user: Annotated[str, typer.Argument(help="Recorded as actor in the audit log")],
+    grant: Annotated[
+        list[str],
+        typer.Option("--grant", help="KNOWLEDGE_GRAPH=read|edit (repeatable; `*` = every KG)"),
+    ],
+    database_url: DatabaseUrl = None,
+) -> None:
+    """Issue an API token for USER; the token is printed once (last line of output)."""
+    grants: dict[str, str] = {}
+    for g in grant:
+        kg, sep, permission = g.rpartition("=")
+        if not sep:
+            raise _fail(StetiqError(f"Grant {g!r}: expected KNOWLEDGE_GRAPH=read|edit"))
+        grants[kg] = permission
+    try:
+        token, value = _token_registry(database_url).issue(user, grants)
+    except StetiqError as e:
+        raise _fail(e) from None
+    typer.echo(f"Created token {token.id} for {token.user} ({_grants_text(token.grants)}):")
+    typer.echo(value)
+
+
+@token_app.command("list")
+def token_list(database_url: DatabaseUrl = None) -> None:
+    """List API tokens (never their secrets)."""
+    tokens = _token_registry(database_url).list()
+    typer.echo(f"{'ID':<9} {'USER':<16} {'STATUS':<8} GRANTS")
+    for t in tokens:
+        status = "revoked" if t.revoked_at else "active"
+        typer.echo(f"{t.id:<9} {t.user:<16} {status:<8} {_grants_text(t.grants)}")
+
+
+@token_app.command("revoke")
+def token_revoke(token_id: str, database_url: DatabaseUrl = None) -> None:
+    """Revoke the API token TOKEN_ID; requests using it are rejected from now on."""
+    try:
+        _token_registry(database_url).revoke(token_id)
+    except StetiqError as e:
+        raise _fail(e) from None
+    typer.echo(f"Revoked token {token_id}")

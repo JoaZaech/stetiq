@@ -332,9 +332,13 @@ def mapped_client(request, tmp_path):
         service = LocalTrackingService(SqlStore(url), question_mapper=mapper)
         yield stetiq.Client(url, service=service), mapper
     else:
+        from stetiq.auth import TokenRegistry
+
+        _, token = TokenRegistry(url).issue("tester", {"*": "edit"})
         with TestClient(create_app(url, question_mapper=mapper)) as http:
             base = str(http.base_url)
-            yield stetiq.Client(base, service=RemoteTrackingService(base, http=http)), mapper
+            service = RemoteTrackingService(base, http=http, token=token)
+            yield stetiq.Client(base, service=service), mapper
 
 
 def test_questions_without_a_query_or_mapping_are_mapped_through_the_model_interface(

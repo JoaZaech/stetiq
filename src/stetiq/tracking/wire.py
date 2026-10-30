@@ -287,3 +287,9 @@ def promotion_from_json(d: dict[str, Any]) -> Promotion:
         promoted_at=datetime.fromisoformat(d["promoted_at"]),
         gate_result=d["gate_result"],
     )
+
+
+# --- API-token authentication (ticket #17) -----------------------------------------------
+
+ERROR_STATUS[errors.AuthenticationError] = 401
+ERROR_STATUS[errors.PermissionDeniedError] = 403

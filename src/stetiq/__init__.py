@@ -3,6 +3,8 @@
 from stetiq.client import ActiveRun, Client
 from stetiq.conformance import Conformance, Mismatch, MismatchKind
 from stetiq.errors import (
+    AuthenticationError,
+    PermissionDeniedError,
     EvaluatorError,
     GraphSourceNotBoundError,
     GraphSourceUnavailableError,
@@ -40,6 +42,8 @@ from stetiq.tracking import (
 from stetiq.use_case import CompetencyQuestion, UseCase
 
 __all__ = [
+    "AuthenticationError",
+    "PermissionDeniedError",
     "Alias",
     "InvalidAliasNameError",
     "Promotion",

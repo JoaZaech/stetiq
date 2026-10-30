@@ -234,6 +234,20 @@ Index(
     evaluation_results.c.subject_id,
 )
 
+# --- API tokens (ticket #17; server mode only, see stetiq.auth) -------------------------
+
+api_tokens = Table(
+    "api_tokens",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("user", Text, nullable=False),
+    Column("secret_hash", Text, nullable=False, unique=True),  # sha256 of the full token
+    Column("grants_json", Text, nullable=False),  # {"<kg or *>": "read" | "edit"}
+    Column("created_at", Text, nullable=False),
+    Column("revoked_at", Text, nullable=True),
+)
+
+
 # Use Case versions: numbered per Knowledge Graph, independently of Ontology Versions.
 use_case_versions = Table(
     "use_case_versions",
