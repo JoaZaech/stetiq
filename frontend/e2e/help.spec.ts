@@ -101,3 +101,71 @@ test('an unknown guide page shows the not-found page', async ({ page }) => {
 
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Page not found')
 })
+
+test('a mermaid block renders as a diagram', async ({ page }) => {
+  await page.goto('/ui/help/getting-started')
+
+  const diagram = page.getByRole('article').getByRole('figure')
+  await expect(diagram.locator('svg')).toBeVisible()
+  await expect(diagram).toContainText('Install stetiq')
+  await expect(diagram.locator('pre')).toHaveCount(0)
+})
+
+test('a diagram that does not parse shows its source and an error note', async ({ page }) => {
+  // Break the Getting started diagram (bundled at build time) by unclosing a node label.
+  await page.route('**/ui/assets/*.js', async (route) => {
+    const response = await route.fetch()
+    const body = (await response.text()).replace('[Install stetiq]', '[Install stetiq')
+    await route.fulfill({ response, body })
+  })
+  await page.goto('/ui/help/getting-started')
+
+  const diagram = page.getByRole('article').getByRole('figure')
+  await expect(diagram.locator('pre code')).toContainText('install[Install stetiq -->')
+  await expect(diagram).toContainText("This diagram couldn't be drawn")
+  await expect(diagram.locator('svg')).toHaveCount(0)
+})
+
+test('diagrams are redrawn in the colours of the current theme', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' })
+  await page.goto('/ui/help/getting-started')
+  const shape = page
+    .getByRole('article')
+    .getByRole('figure')
+    .locator('svg .node')
+    .first()
+    .locator('rect, path')
+    .first()
+  // Relative luminance of the node's fill, 0 (black) to 1 (white).
+  const lightness = () =>
+    shape.evaluate((el) => {
+      const [r, g, b] = getComputedStyle(el).fill.match(/\d+/g)!.map(Number)
+      return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+    })
+  await expect.poll(lightness).toBeGreaterThan(0.6)
+
+  await page.emulateMedia({ colorScheme: 'dark' })
+
+  await expect.poll(lightness).toBeLessThan(0.4)
+})
+
+test('a Help page without diagrams does not load Mermaid', async ({ page }) => {
+  const scripts: string[] = []
+  page.on('request', (request) => {
+    if (request.resourceType() === 'script') scripts.push(request.url())
+  })
+  const mermaidScripts = () => scripts.filter((url) => /mermaid/i.test(url))
+
+  await page.goto('/ui/help/concepts')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Concepts')
+  await page.waitForLoadState('networkidle')
+  expect(mermaidScripts()).toEqual([])
+
+  // A page with a diagram does load it, so the check above can fail.
+  await page
+    .getByRole('navigation', { name: 'Guide' })
+    .getByRole('link', { name: 'Getting started' })
+    .click()
+  await expect(page.getByRole('article').getByRole('figure').locator('svg')).toBeVisible()
+  expect(mermaidScripts()).not.toEqual([])
+})

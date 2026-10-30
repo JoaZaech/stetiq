@@ -4,6 +4,11 @@ stetiq versions, evaluates and governs the Ontology of a Knowledge Graph, the wa
 
 This page takes you from installing stetiq to your first tracked Construction Run in the web UI. The words used here (Knowledge Graph, Ontology Version, Construction Run…) are explained on the [Concepts](./02-concepts.md) page.
 
+```mermaid
+flowchart LR
+  install[Install stetiq] --> ui[Open the web UI] --> kg[Create a Knowledge Graph] --> run[Track a Construction Run]
+```
+
 ## Install
 
 stetiq needs Python 3.12 or later. Install it from PyPI:
