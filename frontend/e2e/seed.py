@@ -146,6 +146,38 @@ def described_support(client: stetiq.Client) -> dict[str, Any]:
     }
 
 
+SUPPORT_USE_CASE_V2 = (
+    SUPPORT_USE_CASE
+    + """  - id: agent-names
+    question: What are our agents called?
+    concepts: [Agent.name]
+"""
+)
+
+SUPPORT_USE_CASE_V3 = """
+description: Support agents triage and answer tickets
+competency_questions:
+  - id: customer-names
+    question: What is each customer called?
+    concepts: [Customer.name]
+  - id: ticket-dates
+    question: When was each ticket opened?
+    query: MATCH (t:Ticket) RETURN t.opened_at
+    expected_answer: [{opened_at: "2026-01-01"}]
+    concepts: [Ticket.opened_at]
+"""
+
+
+def support_use_case_versions(client: stetiq.Client) -> dict[str, Any]:
+    """`support_lineage`, with three Use Case Versions: v1 asks `customer-names`, v2 adds
+    `agent-names`, v3 rewords `customer-names`, drops `agent-names`, adds `ticket-dates`
+    and changes the description."""
+    seeded = support_lineage(client)
+    client.register_use_case("support", SUPPORT_USE_CASE_V2)
+    client.register_use_case("support", SUPPORT_USE_CASE_V3)
+    return seeded
+
+
 def observed_support(_client: stetiq.Client) -> dict[str, Any]:
     """`support` observed twice: once at the end of a Construction Run (no Drift), then
     on demand after a `Refund` node type and more Tickets appeared, which raises a Drift
@@ -174,6 +206,7 @@ SCENARIOS: dict[str, Scenario] = {
     "support_lineage": support_lineage,
     "support_lineage_reader": support_lineage_reader,
     "described_support": described_support,
+    "support_use_case_versions": support_use_case_versions,
     "observed_support": observed_support,
 }
 
