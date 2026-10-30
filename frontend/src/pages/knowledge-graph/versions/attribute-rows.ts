@@ -1,5 +1,5 @@
 import type { Ontology } from '@/api/ontology-versions'
-import { conceptTables } from './concepts'
+import { conceptTables, constraintsOn, superclassChain } from './concepts'
 import { type DetailProperty, detailsOf } from './ontology-map-focus'
 
 /** An attribute as the Attributes grid lists it: one row per attribute a class or relation has. */
@@ -14,7 +14,7 @@ export interface AttributeGridRow {
   name: string
   type: string
   required: boolean
-  /** Whether a uniqueness constraint on the owner covers it. */
+  /** Whether a uniqueness constraint covers it, on the owner or the ancestor that declares it; classes only. */
   unique: boolean
   /** The ancestor class that declares it, when the owner inherits it; absent when its own. */
   inheritedFrom?: string
@@ -27,9 +27,12 @@ export interface AttributeGridRow {
  * them), then each relation's.
  */
 export function attributeRows(ontology: Ontology): AttributeGridRow[] {
-  const unique = new Set(
-    (ontology.constraints ?? []).filter((c) => c.type === 'UNIQUENESS').map((c) => `${c.node_type}.${c.property_name}`),
-  )
+  // A uniqueness constraint covers an attribute on the class it is declared on and on
+  // every subclass: on the owner or any class up its chain, the declaring one included.
+  const unique = (owner: string, name: string) =>
+    superclassChain(ontology, owner).some((c) =>
+      constraintsOn(ontology, c.label, name).some((k) => k.type === 'UNIQUENESS'),
+    )
   const row = (
     owner: string,
     ownerKind: AttributeGridRow['ownerKind'],
@@ -43,7 +46,7 @@ export function attributeRows(ontology: Ontology): AttributeGridRow[] {
     name: p.name,
     type: p.type,
     required: p.required,
-    unique: unique.has(`${owner}.${p.name}`),
+    unique: ownerKind === 'class' && unique(owner, p.name),
     inheritedFrom: p.inheritedFrom,
     description: p.description,
   })

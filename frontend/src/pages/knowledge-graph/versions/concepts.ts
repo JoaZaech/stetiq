@@ -48,9 +48,15 @@ export interface ConceptTables {
 export const patternId = ([source, relation, target]: Ontology['patterns'][number]) =>
   `(${source})-[${relation}]->(${target})`
 
+/** The constraints declared on class `label`, or only those on its attribute `name`. */
+export const constraintsOn = (ontology: Ontology, label: string, name?: string) =>
+  (ontology.constraints ?? []).filter(
+    (c) => c.node_type === label && (name === undefined || c.property_name === name),
+  )
+
 /** The constraints declared on class `label`, each as e.g. `UNIQUENESS (name)`. */
 export const constraintsOf = (ontology: Ontology, label: string) =>
-  (ontology.constraints ?? []).filter((c) => c.node_type === label).map((c) => `${c.type} (${c.property_name})`)
+  constraintsOn(ontology, label).map((c) => `${c.type} (${c.property_name})`)
 
 /**
  * Class `label` and its ancestors, nearest first: the chain its attributes are inherited

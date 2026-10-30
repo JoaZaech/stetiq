@@ -59,4 +59,31 @@ describe('attributeRows', () => {
 
     expect(unique).toEqual(['Customer.email', 'Customer.name'])
   })
+
+  it('marks an inherited attribute unique where a uniqueness constraint covers it on the declaring class', () => {
+    const ontology: Ontology = {
+      ...ONTOLOGY,
+      constraints: [{ type: 'UNIQUENESS', node_type: 'Person', property_name: 'name' }],
+    }
+
+    const unique = attributeRows(ontology)
+      .filter((a) => a.unique)
+      .map((a) => a.id)
+
+    expect(unique).toEqual(['Person.name', 'Agent.name', 'Supervisor.name', 'Customer.name'])
+  })
+
+  it('never marks a relation’s attribute unique, even when a class of the same label has a uniqueness constraint', () => {
+    const ontology: Ontology = {
+      node_types: [{ label: 'KNOWS', properties: [{ name: 'since', type: 'DATE' }] }],
+      relationship_types: [{ label: 'KNOWS', properties: [{ name: 'since', type: 'DATE' }] }],
+      patterns: [['KNOWS', 'KNOWS', 'KNOWS']],
+      constraints: [{ type: 'UNIQUENESS', node_type: 'KNOWS', property_name: 'since' }],
+    }
+
+    expect(attributeRows(ontology).map((a) => [a.ownerKind, a.unique])).toEqual([
+      ['class', true],
+      ['relation', false],
+    ])
+  })
 })

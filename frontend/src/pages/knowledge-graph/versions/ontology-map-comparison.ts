@@ -1,6 +1,7 @@
 /** Two Ontology Versions superimposed on one Map, each item marked with how it changed. */
 import { CLASSIFICATIONS, type Classification, type OntologyChange, type OntologyDiff } from '@/api/ontology-diff'
 import type { Ontology } from '@/api/ontology-versions'
+import { constraintsOn } from './concepts'
 import { ontologyMap, type OntologyMap, type PatternLink } from './ontology-map'
 import type { MapSelection } from './ontology-map-focus'
 
@@ -111,10 +112,7 @@ function attributeDeclaration(ontology: Ontology, kind: OwnerKind, label: string
   const attribute = conceptsOf(ontology, kind)
     .find((c) => c.label === label)
     ?.properties?.find((p) => p.name === name)
-  const constraints =
-    kind === 'node_type'
-      ? (ontology.constraints ?? []).filter((c) => c.node_type === label && c.property_name === name)
-      : []
+  const constraints = kind === 'node_type' ? constraintsOn(ontology, label, name) : []
   return { ...attribute, constraints }
 }
 
