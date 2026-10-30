@@ -19,6 +19,7 @@ from typing import Any
 
 import stetiq
 from stetiq.auth import TokenRegistry
+from stetiq.graph_source import GraphSourceScope
 
 Scenario = Callable[[stetiq.Client], dict[str, Any]]
 
@@ -34,6 +35,27 @@ def empty(client: stetiq.Client) -> dict[str, Any]:
     return {}
 
 
+ONTOLOGY = """
+node_types: [Customer, Ticket]
+relationship_types: [OPENED]
+patterns: [[Customer, OPENED, Ticket]]
+"""
+
+
+def knowledge_graphs(client: stetiq.Client) -> dict[str, Any]:
+    """Two Knowledge Graphs: `support` (v2 registered, Contract Alias still on v1, a
+    finished run) and `billing` (v1 only, a failed run)."""
+    scope = GraphSourceScope(database="neo4j")
+    client.create_knowledge_graph("support", ontology=ONTOLOGY)
+    client.register_ontology("support", ONTOLOGY.replace("Ticket]", "Ticket, Agent]", 1))
+    client.bind_graph_source("support", scope)
+    client.start_run("support", ontology_version=1).end()
+    client.create_knowledge_graph("billing", ontology=ONTOLOGY)
+    client.bind_graph_source("billing", scope)
+    client.start_run("billing", ontology_version=1).fail()
+    return {}
+
+
 def signed_in_users(client: stetiq.Client) -> dict[str, Any]:
     """`support` and `billing`, and a token for ada: edit on `support`, read on `billing`."""
     for kg in ("support", "billing"):
@@ -41,7 +63,11 @@ def signed_in_users(client: stetiq.Client) -> dict[str, Any]:
     return {"ada": issue_token(client, "ada", {"support": "edit", "billing": "read"})}
 
 
-SCENARIOS: dict[str, Scenario] = {"empty": empty, "signed_in_users": signed_in_users}
+SCENARIOS: dict[str, Scenario] = {
+    "empty": empty,
+    "knowledge_graphs": knowledge_graphs,
+    "signed_in_users": signed_in_users,
+}
 
 
 def main(scenario: str, tracking_uri: str) -> None:
