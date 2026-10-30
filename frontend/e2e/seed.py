@@ -327,15 +327,23 @@ def observed_support(_client: stetiq.Client) -> dict[str, Any]:
     return {"run_id": run.id, "observation_id": outcome.observation.id}
 
 
-# For the Ontology Map: two relations between Customer and Ticket, and a self-loop.
+# For the Ontology Map: two relations between Customer and Ticket, a self-loop, Agent and
+# Customer under Party, and a deprecated class (LegacyTicket) and relation (FILED).
 MAP_ONTOLOGY = """
-node_types: [Customer, Product, Ticket]
-relationship_types: [ABOUT, DUPLICATES, FOLLOWS, OPENED]
+node_types:
+  - {label: Agent, parent: Party}
+  - {label: Customer, parent: Party}
+  - {label: LegacyTicket, parent: Ticket, deprecated: true}
+  - Party
+  - Product
+  - Ticket
+relationship_types: [ABOUT, DUPLICATES, {label: FILED, deprecated: true}, FOLLOWS, OPENED]
 patterns:
   - [Customer, OPENED, Ticket]
   - [Customer, FOLLOWS, Ticket]
   - [Ticket, ABOUT, Product]
   - [Ticket, DUPLICATES, Ticket]
+  - [Customer, FILED, LegacyTicket]
 """
 
 
