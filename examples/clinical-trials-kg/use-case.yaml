@@ -1,0 +1,58 @@
+# What the safety monitor needs the trial registry Knowledge Graph to answer.
+#
+# A question with a `query` is executed against the graph at the end of every
+# Construction Run (competency_question_execution). Every question is also judged
+# structurally against each Ontology Version (structural_answerability): does the
+# Ontology even have the Concepts the question needs? The Cypher below is what we
+# would run on Neo4j; the example's local graph database file answers these same queries.
+description: "Trial safety monitoring: serious events, who is enrolled where, and whether the protocol is being followed."
+competency_questions:
+  - id: serious-events-per-trial
+    question: How many serious adverse events has each trial reported?
+    query: >-
+      MATCH (a:AdverseEvent {serious: true})-[:REPORTED_IN]->(t:Trial)
+      RETURN t.registry_id AS trial, count(a) AS serious_events ORDER BY trial
+    # The safety monitor reconciled these against the paper SAE forms.
+    expected_answer:
+      - {trial: TR-2024-011, serious_events: 3}
+      - {trial: TR-2024-017, serious_events: 4}
+      - {trial: TR-2024-023, serious_events: 5}
+      - {trial: TR-2025-004, serious_events: 3}
+      - {trial: TR-2025-009, serious_events: 1}
+      - {trial: TR-2025-012, serious_events: 2}
+  - id: participants-per-site
+    question: How many participants has each site enrolled?
+    query: >-
+      MATCH (p:Participant)-[:ENROLLED_AT]->(s:Site)
+      RETURN s.site_id AS site, count(p) AS participants ORDER BY participants DESC, site
+  - id: drugs-under-test
+    question: Which drugs are under test, and in how many trials each?
+    # Drug is a subtype of Intervention: the hierarchy lets the question name the subtype.
+    query: >-
+      MATCH (t:Trial)-[:TESTS]->(d:Drug)
+      RETURN d.name AS drug, count(t) AS trials ORDER BY drug
+  - id: protocol-deviations
+    question: Which protocol deviations occur, and how often?
+    query: >-
+      MATCH (p:Participant)-[:ATTENDED]->(v:Visit) WHERE v.deviation IS NOT NULL
+      RETURN v.deviation AS deviation, count(v) AS visits ORDER BY visits DESC, deviation
+  - id: site-investigators
+    question: Who is the responsible investigator at each site?
+    query: >-
+      MATCH (s:Site)-[:LED_BY]->(i:Investigator)
+      RETURN s.site_id AS site, i.staff_id AS investigator ORDER BY site
+  - id: conditions-studied
+    question: Which conditions are being studied, and by how many trials?
+    query: >-
+      MATCH (t:Trial)-[:STUDIES]->(c:Condition)
+      RETURN c.code AS condition, count(t) AS trials ORDER BY condition
+  - id: events-per-arm
+    question: How many adverse events were experienced in each treatment arm?
+    # Needs Arm, ASSIGNED_TO and EXPERIENCED, which Ontology Version 1 lacks.
+    query: >-
+      MATCH (p:Participant)-[:ASSIGNED_TO]->(a:Arm) MATCH (p)-[:EXPERIENCED]->(e:AdverseEvent)
+      RETURN a.code AS arm, count(e) AS events ORDER BY arm
+  - id: consent-withdrawals
+    question: Which participants withdrew consent, and when?
+    # No query and no Concept mapping yet: stetiq reports it as unmapped until a
+    # question mapper (STETIQ_QUESTION_MAPPER) or a human maps it.

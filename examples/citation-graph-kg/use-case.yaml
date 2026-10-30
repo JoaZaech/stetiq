@@ -1,0 +1,37 @@
+# What the research office needs scholar-kg to answer: Use Case Version 1.
+#
+# Every question has a Cypher query, so it is judged structurally against each Ontology
+# Version (structural_answerability) and executed against the graph at the end of every
+# Construction Run (competency_question_execution). The local graph file answers these
+# same query texts; on Neo4j they would simply run.
+#
+# The research office adds two more questions later with add_competency_question
+# (Use Case Versions 2 and 3); see demo.py.
+description: "Research output of the university: who publishes with whom, what gets cited, and which grants pay for it."
+competency_questions:
+  - id: papers-per-author
+    question: How many papers has each author written?
+    query: >-
+      MATCH (a:Author)-[:AUTHORED]->(p:Paper)
+      RETURN a.name AS author, count(p) AS papers ORDER BY papers DESC, author
+  - id: most-cited-paper
+    question: Which paper has received the most citations, and how many?
+    query: >-
+      MATCH (p:Paper)<-[:CITES]-(c:Paper)
+      RETURN p.doi AS doi, count(c) AS citations ORDER BY citations DESC LIMIT 1
+    expected_answer: {doi: "10.5555/scholar.2019.021", citations: 13}
+  - id: grant-funded-papers
+    question: How many papers does each grant fund?
+    query: >-
+      MATCH (p:Paper)-[:FUNDED_BY]->(g:Grant)
+      RETURN g.id AS grant, count(p) AS papers ORDER BY papers DESC, grant
+  - id: co-authorship-pairs
+    question: Which pairs of authors publish together most often?
+    query: >-
+      MATCH (a:Author)-[:AUTHORED]->(:Paper)<-[:AUTHORED]-(b:Author) WHERE a.name < b.name
+      RETURN a.name AS author, b.name AS co_author, count(*) AS papers ORDER BY papers DESC, author, co_author
+  - id: venues-by-year
+    question: Where did we publish each year?
+    query: >-
+      MATCH (p:Paper)-[:PUBLISHED_IN]->(v:Venue)
+      RETURN p.year AS year, v.name AS venue, count(p) AS papers ORDER BY year, venue

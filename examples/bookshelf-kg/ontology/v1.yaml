@@ -1,0 +1,21 @@
+# Town library Knowledge Graph, Ontology Version 1.
+#
+# Deliberately the smallest Declared Ontology that says anything: a Book, an
+# Author and who wrote what. Everything else the library knows comes later.
+node_types:
+  - label: Book
+    description: One title in the catalogue
+    properties:
+      - {name: isbn, type: STRING, required: true}
+      - {name: title, type: STRING, required: true}
+      - {name: year, type: INTEGER}
+  - label: Author
+    description: A person who wrote a book in the catalogue
+    properties:
+      - {name: name, type: STRING, required: true}
+relationship_types:
+  - WROTE
+patterns:
+  - [Author, WROTE, Book]
+constraints:
+  - {type: UNIQUENESS, node_type: Book, property_name: isbn}

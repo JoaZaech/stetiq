@@ -1,0 +1,13 @@
+venue_id,name,kind
+V01,Journal of Graph Learning,Journal
+V02,Transactions on Knowledge Systems,Journal
+V03,Nature Materials Letters,Journal
+V04,Computational Biology Review,Journal
+V05,Physical Review Topics,Journal
+V06,Journal of Environmental Modelling,Journal
+V07,International Conference on Knowledge Graphs,Conference
+V08,European Symposium on Scientific Computing,Conference
+V09,Workshop on Research Information Systems,Conference
+V10,Conference on Data Stewardship,Conference
+V11,Alpine Materials Congress,Conference
+V12,Symposium on Open Science Infrastructure,Conference

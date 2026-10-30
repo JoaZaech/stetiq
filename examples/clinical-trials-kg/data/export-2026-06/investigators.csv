@@ -1,0 +1,11 @@
+staff_id,specialty,orcid,site_id
+INV-001,cardiology,0000-0002-6305-3471,S-01
+INV-002,endocrinology,0000-0002-7468-1791,S-02
+INV-003,orthopaedics,0000-0002-2186-9779,S-03
+INV-004,pulmonology,0000-0002-2542-6991,S-04
+INV-005,nephrology,0000-0002-1950-9313,S-05
+INV-006,cardiology,0000-0002-4517-1614,S-06
+INV-007,endocrinology,0000-0002-2408-8104,S-07
+INV-008,orthopaedics,0000-0002-7851-2144,S-08
+INV-009,pulmonology,0000-0002-4943-2486,S-01
+INV-010,nephrology,0000-0002-7955-1968,S-02

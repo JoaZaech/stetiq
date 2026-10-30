@@ -1,0 +1,854 @@
+[
+ {
+  "doi": "10.5555/scholar.2016.001",
+  "title": "Sparse regression for glacier mass balance in computational physics",
+  "year": 2016,
+  "venue_id": "V05",
+  "abstract": "We study glacier mass balance in computational physics with sparse regression and report stable estimates across institutions.",
+  "authors": [
+   "A036",
+   "A088",
+   "A009",
+   "A097"
+  ],
+  "grants": []
+ },
+ {
+  "doi": "10.5555/scholar.2016.002",
+  "title": "Finite-element simulation for citation prediction in open science infrastructure",
+  "year": 2016,
+  "venue_id": "V05",
+  "abstract": "We study citation prediction in open science infrastructure with finite-element simulation and report consistent gains over strong baselines.",
+  "authors": [
+   "A048",
+   "A066",
+   "A102",
+   "A020"
+  ],
+  "grants": [
+   "G-2016-041"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2016.003",
+  "title": "Monte Carlo sampling for glacier mass balance in alpine hydrology",
+  "year": 2016,
+  "venue_id": "V07",
+  "abstract": "We study glacier mass balance in alpine hydrology with monte carlo sampling and report consistent gains over strong baselines.",
+  "authors": [
+   "A112",
+   "A025",
+   "A106"
+  ],
+  "grants": [
+   "G-2016-041"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2016.004",
+  "title": "Bayesian inference for patient triage in alpine hydrology",
+  "year": 2016,
+  "venue_id": "V10",
+  "abstract": "We study patient triage in alpine hydrology with bayesian inference and report agreement with experimental measurements.",
+  "authors": [
+   "A081",
+   "A053"
+  ],
+  "grants": [
+   "G-2016-041"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2016.005",
+  "title": "Causal discovery for funding attribution in structural biology",
+  "year": 2016,
+  "venue_id": "V11",
+  "abstract": "We study funding attribution in structural biology with causal discovery and report previously unreported failure modes.",
+  "authors": [
+   "A023",
+   "A028",
+   "A111"
+  ],
+  "grants": [
+   "G-2016-041"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2016.006",
+  "title": "Causal discovery for citation prediction in clinical records",
+  "year": 2016,
+  "venue_id": "V01",
+  "abstract": "We study citation prediction in clinical records with causal discovery and report previously unreported failure modes.",
+  "authors": [
+   "A015",
+   "A117",
+   "A010"
+  ],
+  "grants": [
+   "G-2016-041"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2017.007",
+  "title": "Monte Carlo sampling for research assessment in alpine hydrology",
+  "year": 2017,
+  "venue_id": "V02",
+  "abstract": "We study research assessment in alpine hydrology with monte carlo sampling and report consistent gains over strong baselines.",
+  "authors": [
+   "A110",
+   "A076",
+   "A068"
+  ],
+  "grants": [
+   "G-2017-112"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2017.008",
+  "title": "Transfer learning for citation prediction in computational physics",
+  "year": 2017,
+  "venue_id": "V05",
+  "abstract": "We study citation prediction in computational physics with transfer learning and report a reusable open benchmark.",
+  "authors": [
+   "A002",
+   "A001"
+  ],
+  "grants": [
+   "G-2017-112"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2017.009",
+  "title": "Bayesian inference for catalyst screening in computational physics",
+  "year": 2017,
+  "venue_id": "V11",
+  "abstract": "We study catalyst screening in computational physics with bayesian inference and report a reusable open benchmark.",
+  "authors": [
+   "A116",
+   "A117"
+  ],
+  "grants": []
+ },
+ {
+  "doi": "10.5555/scholar.2017.010",
+  "title": "Spectral methods for materials discovery in heterogeneous catalysis",
+  "year": 2017,
+  "venue_id": "V06",
+  "abstract": "We study materials discovery in heterogeneous catalysis with spectral methods and report stable estimates across institutions.",
+  "authors": [
+   "A111",
+   "A039",
+   "A113",
+   "A041"
+  ],
+  "grants": [
+   "G-2017-112"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2017.011",
+  "title": "Sparse regression for author disambiguation in alpine hydrology",
+  "year": 2017,
+  "venue_id": "V08",
+  "abstract": "We study author disambiguation in alpine hydrology with sparse regression and report stable estimates across institutions.",
+  "authors": [
+   "A028",
+   "A014",
+   "A045"
+  ],
+  "grants": [
+   "G-2017-112"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2017.012",
+  "title": "Transfer learning for protein folding in computational physics",
+  "year": 2017,
+  "venue_id": "V10",
+  "abstract": "We study protein folding in computational physics with transfer learning and report consistent gains over strong baselines.",
+  "authors": [
+   "A071",
+   "A013",
+   "A004"
+  ],
+  "grants": []
+ },
+ {
+  "doi": "10.5555/scholar.2018.013",
+  "title": "A knowledge-graph approach for topic drift in scholarly communication",
+  "year": 2018,
+  "venue_id": "V10",
+  "abstract": "We study topic drift in scholarly communication with a knowledge-graph approach and report agreement with experimental measurements.",
+  "authors": [
+   "A006",
+   "A075"
+  ],
+  "grants": [
+   "G-2018-007"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2018.014",
+  "title": "Spectral methods for catalyst screening in alpine hydrology",
+  "year": 2018,
+  "venue_id": "V06",
+  "abstract": "We study catalyst screening in alpine hydrology with spectral methods and report stable estimates across institutions.",
+  "authors": [
+   "A010",
+   "A072"
+  ],
+  "grants": [
+   "G-2018-233"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2018.015",
+  "title": "A knowledge-graph approach for patient triage in battery materials",
+  "year": 2018,
+  "venue_id": "V01",
+  "abstract": "We study patient triage in battery materials with a knowledge-graph approach and report previously unreported failure modes.",
+  "authors": [
+   "A064",
+   "A003"
+  ],
+  "grants": []
+ },
+ {
+  "doi": "10.5555/scholar.2018.016",
+  "title": "Bayesian inference for catalyst screening in heterogeneous catalysis",
+  "year": 2018,
+  "venue_id": "V10",
+  "abstract": "We study catalyst screening in heterogeneous catalysis with bayesian inference and report a reusable open benchmark.",
+  "authors": [
+   "A047",
+   "A028"
+  ],
+  "grants": [
+   "G-2018-233"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2018.017",
+  "title": "Spectral methods for metadata quality in computational physics",
+  "year": 2018,
+  "venue_id": "V04",
+  "abstract": "We study metadata quality in computational physics with spectral methods and report previously unreported failure modes.",
+  "authors": [
+   "A012",
+   "A011",
+   "A073"
+  ],
+  "grants": []
+ },
+ {
+  "doi": "10.5555/scholar.2018.018",
+  "title": "Finite-element simulation for funding attribution in alpine hydrology",
+  "year": 2018,
+  "venue_id": "V06",
+  "abstract": "We study funding attribution in alpine hydrology with finite-element simulation and report a two-fold reduction in annotation effort.",
+  "authors": [
+   "A039",
+   "A112"
+  ],
+  "grants": [
+   "G-2016-041"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2019.019",
+  "title": "Monte Carlo sampling for protein folding in battery materials",
+  "year": 2019,
+  "venue_id": "V04",
+  "abstract": "We study protein folding in battery materials with monte carlo sampling and report agreement with experimental measurements.",
+  "authors": [
+   "A007",
+   "A047",
+   "A079"
+  ],
+  "grants": []
+ },
+ {
+  "doi": "10.5555/scholar.2019.020",
+  "title": "A knowledge-graph approach for author disambiguation in heterogeneous catalysis",
+  "year": 2019,
+  "venue_id": "V11",
+  "abstract": "We study author disambiguation in heterogeneous catalysis with a knowledge-graph approach and report agreement with experimental measurements.",
+  "authors": [
+   "A099",
+   "A078",
+   "A066",
+   "A111"
+  ],
+  "grants": []
+ },
+ {
+  "doi": "10.5555/scholar.2019.021",
+  "title": "Spectral methods for research assessment in open science infrastructure",
+  "year": 2019,
+  "venue_id": "V05",
+  "abstract": "We study research assessment in open science infrastructure with spectral methods and report a reusable open benchmark.",
+  "authors": [
+   "A020",
+   "A104"
+  ],
+  "grants": [
+   "G-2017-112"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2019.022",
+  "title": "Transfer learning for topic drift in alpine hydrology",
+  "year": 2019,
+  "venue_id": "V06",
+  "abstract": "We study topic drift in alpine hydrology with transfer learning and report previously unreported failure modes.",
+  "authors": [
+   "A032",
+   "A011",
+   "A069",
+   "A020"
+  ],
+  "grants": [
+   "G-2017-112",
+   "G-2018-233"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2019.023",
+  "title": "Graph neural networks for glacier mass balance in battery materials",
+  "year": 2019,
+  "venue_id": "V05",
+  "abstract": "We study glacier mass balance in battery materials with graph neural networks and report consistent gains over strong baselines.",
+  "authors": [
+   "A098",
+   "A039",
+   "A006",
+   "A107"
+  ],
+  "grants": [
+   "G-2017-112"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2019.024",
+  "title": "Causal discovery for materials discovery in clinical records",
+  "year": 2019,
+  "venue_id": "V12",
+  "abstract": "We study materials discovery in clinical records with causal discovery and report a two-fold reduction in annotation effort.",
+  "authors": [
+   "A044",
+   "A111",
+   "A065"
+  ],
+  "grants": [
+   "G-2018-007"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2020.025",
+  "title": "Graph neural networks for peer-review bias in computational physics",
+  "year": 2020,
+  "venue_id": "V08",
+  "abstract": "We study peer-review bias in computational physics with graph neural networks and report a reusable open benchmark.",
+  "authors": [
+   "A069",
+   "A066",
+   "A040"
+  ],
+  "grants": [
+   "G-2018-233"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2020.026",
+  "title": "Monte Carlo sampling for glacier mass balance in battery materials",
+  "year": 2020,
+  "venue_id": "V07",
+  "abstract": "We study glacier mass balance in battery materials with monte carlo sampling and report a two-fold reduction in annotation effort.",
+  "authors": [
+   "A077",
+   "A008"
+  ],
+  "grants": []
+ },
+ {
+  "doi": "10.5555/scholar.2020.027",
+  "title": "Spectral methods for metadata quality in computational physics",
+  "year": 2020,
+  "venue_id": "V08",
+  "abstract": "We study metadata quality in computational physics with spectral methods and report previously unreported failure modes.",
+  "authors": [
+   "A015",
+   "A067",
+   "A102"
+  ],
+  "grants": [
+   "G-2019-078"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2020.028",
+  "title": "Sparse regression for research assessment in battery materials",
+  "year": 2020,
+  "venue_id": "V03",
+  "abstract": "We study research assessment in battery materials with sparse regression and report a two-fold reduction in annotation effort.",
+  "authors": [
+   "A103",
+   "A052"
+  ],
+  "grants": [
+   "G-2018-233"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2020.029",
+  "title": "Monte Carlo sampling for patient triage in computational physics",
+  "year": 2020,
+  "venue_id": "V10",
+  "abstract": "We study patient triage in computational physics with monte carlo sampling and report a reusable open benchmark.",
+  "authors": [
+   "A024",
+   "A102"
+  ],
+  "grants": [
+   "G-2020-150"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2020.030",
+  "title": "Transfer learning for metadata quality in clinical records",
+  "year": 2020,
+  "venue_id": "V01",
+  "abstract": "We study metadata quality in clinical records with transfer learning and report previously unreported failure modes.",
+  "authors": [
+   "A025",
+   "A009",
+   "A001",
+   "A071"
+  ],
+  "grants": []
+ },
+ {
+  "doi": "10.5555/scholar.2021.031",
+  "title": "Causal discovery for topic drift in heterogeneous catalysis",
+  "year": 2021,
+  "venue_id": "V11",
+  "abstract": "We study topic drift in heterogeneous catalysis with causal discovery and report previously unreported failure modes.",
+  "authors": [
+   "A028",
+   "A097",
+   "A026",
+   "A079"
+  ],
+  "grants": []
+ },
+ {
+  "doi": "10.5555/scholar.2021.032",
+  "title": "Finite-element simulation for patient triage in scholarly communication",
+  "year": 2021,
+  "venue_id": "V04",
+  "abstract": "We study patient triage in scholarly communication with finite-element simulation and report a two-fold reduction in annotation effort.",
+  "authors": [
+   "A018",
+   "A048",
+   "A090",
+   "A087"
+  ],
+  "grants": []
+ },
+ {
+  "doi": "10.5555/scholar.2021.033",
+  "title": "Contrastive pretraining for citation prediction in clinical records",
+  "year": 2021,
+  "venue_id": "V06",
+  "abstract": "We study citation prediction in clinical records with contrastive pretraining and report stable estimates across institutions.",
+  "authors": [
+   "A007",
+   "A020",
+   "A098"
+  ],
+  "grants": [
+   "G-2016-041"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2021.034",
+  "title": "Transfer learning for materials discovery in computational physics",
+  "year": 2021,
+  "venue_id": "V03",
+  "abstract": "We study materials discovery in computational physics with transfer learning and report a reusable open benchmark.",
+  "authors": [
+   "A045",
+   "A063",
+   "A105"
+  ],
+  "grants": [
+   "G-2016-041"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2021.035",
+  "title": "Transfer learning for patient triage in battery materials",
+  "year": 2021,
+  "venue_id": "V01",
+  "abstract": "We study patient triage in battery materials with transfer learning and report previously unreported failure modes.",
+  "authors": [
+   "A062",
+   "A102"
+  ],
+  "grants": [
+   "G-2021-204"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2021.036",
+  "title": "Contrastive pretraining for protein folding in clinical records",
+  "year": 2021,
+  "venue_id": "V09",
+  "abstract": "We study protein folding in clinical records with contrastive pretraining and report a reusable open benchmark.",
+  "authors": [
+   "A079",
+   "A013"
+  ],
+  "grants": [
+   "G-2018-007"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2022.037",
+  "title": "Sparse regression for author disambiguation in computational physics",
+  "year": 2022,
+  "venue_id": "V07",
+  "abstract": "We study author disambiguation in computational physics with sparse regression and report stable estimates across institutions.",
+  "authors": [
+   "A097",
+   "A107"
+  ],
+  "grants": []
+ },
+ {
+  "doi": "10.5555/scholar.2022.038",
+  "title": "Contrastive pretraining for author disambiguation in structural biology",
+  "year": 2022,
+  "venue_id": "V01",
+  "abstract": "We study author disambiguation in structural biology with contrastive pretraining and report a two-fold reduction in annotation effort.",
+  "authors": [
+   "A025",
+   "A007"
+  ],
+  "grants": [
+   "G-2018-007"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2022.039",
+  "title": "Agent-based modelling for citation prediction in battery materials",
+  "year": 2022,
+  "venue_id": "V03",
+  "abstract": "We study citation prediction in battery materials with agent-based modelling and report stable estimates across institutions.",
+  "authors": [
+   "A080",
+   "A037"
+  ],
+  "grants": [
+   "G-2018-233",
+   "G-2021-019"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2022.040",
+  "title": "Graph neural networks for peer-review bias in alpine hydrology",
+  "year": 2022,
+  "venue_id": "V08",
+  "abstract": "We study peer-review bias in alpine hydrology with graph neural networks and report a reusable open benchmark.",
+  "authors": [
+   "A119",
+   "A111"
+  ],
+  "grants": []
+ },
+ {
+  "doi": "10.5555/scholar.2022.041",
+  "title": "Sparse regression for metadata quality in open science infrastructure",
+  "year": 2022,
+  "venue_id": "V12",
+  "abstract": "We study metadata quality in open science infrastructure with sparse regression and report stable estimates across institutions.",
+  "authors": [
+   "A075",
+   "A070"
+  ],
+  "grants": [
+   "G-2020-150",
+   "G-2022-066"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2022.042",
+  "title": "A knowledge-graph approach for peer-review bias in computational physics",
+  "year": 2022,
+  "venue_id": "V02",
+  "abstract": "We study peer-review bias in computational physics with a knowledge-graph approach and report agreement with experimental measurements.",
+  "authors": [
+   "A008",
+   "A109",
+   "A047"
+  ],
+  "grants": [
+   "G-2018-007"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2023.043",
+  "title": "Transfer learning for peer-review bias in open science infrastructure",
+  "year": 2023,
+  "venue_id": "V01",
+  "abstract": "We study peer-review bias in open science infrastructure with transfer learning and report stable estimates across institutions.",
+  "authors": [
+   "A046",
+   "A107"
+  ],
+  "grants": []
+ },
+ {
+  "doi": "10.5555/scholar.2023.044",
+  "title": "Graph neural networks for author disambiguation in structural biology",
+  "year": 2023,
+  "venue_id": "V06",
+  "abstract": "We study author disambiguation in structural biology with graph neural networks and report previously unreported failure modes.",
+  "authors": [
+   "A091",
+   "A063"
+  ],
+  "grants": [
+   "G-2017-112",
+   "G-2022-066"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2023.045",
+  "title": "A knowledge-graph approach for funding attribution in scholarly communication",
+  "year": 2023,
+  "venue_id": "V06",
+  "abstract": "We study funding attribution in scholarly communication with a knowledge-graph approach and report consistent gains over strong baselines.",
+  "authors": [
+   "A092",
+   "A011"
+  ],
+  "grants": [
+   "G-2019-078"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2023.046",
+  "title": "Agent-based modelling for citation prediction in structural biology",
+  "year": 2023,
+  "venue_id": "V05",
+  "abstract": "We study citation prediction in structural biology with agent-based modelling and report agreement with experimental measurements.",
+  "authors": [
+   "A120",
+   "A115"
+  ],
+  "grants": [
+   "G-2017-112"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2023.047",
+  "title": "A knowledge-graph approach for peer-review bias in scholarly communication",
+  "year": 2023,
+  "venue_id": "V06",
+  "abstract": "We study peer-review bias in scholarly communication with a knowledge-graph approach and report a reusable open benchmark.",
+  "authors": [
+   "A005",
+   "A044"
+  ],
+  "grants": [
+   "G-2021-204"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2023.048",
+  "title": "Graph neural networks for peer-review bias in computational physics",
+  "year": 2023,
+  "venue_id": "V12",
+  "abstract": "We study peer-review bias in computational physics with graph neural networks and report consistent gains over strong baselines.",
+  "authors": [
+   "A119",
+   "A074",
+   "A001"
+  ],
+  "grants": []
+ },
+ {
+  "doi": "10.5555/scholar.2024.049",
+  "title": "Graph neural networks for citation prediction in open science infrastructure",
+  "year": 2024,
+  "venue_id": "V04",
+  "abstract": "We study citation prediction in open science infrastructure with graph neural networks and report agreement with experimental measurements.",
+  "authors": [
+   "A076",
+   "A005",
+   "A047"
+  ],
+  "grants": [
+   "G-2017-112"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2024.050",
+  "title": "Graph neural networks for metadata quality in battery materials",
+  "year": 2024,
+  "venue_id": "V12",
+  "abstract": "We study metadata quality in battery materials with graph neural networks and report stable estimates across institutions.",
+  "authors": [
+   "A105",
+   "A103",
+   "A033"
+  ],
+  "grants": [
+   "G-2022-066"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2024.051",
+  "title": "A knowledge-graph approach for glacier mass balance in heterogeneous catalysis",
+  "year": 2024,
+  "venue_id": "V01",
+  "abstract": "We study glacier mass balance in heterogeneous catalysis with a knowledge-graph approach and report stable estimates across institutions.",
+  "authors": [
+   "A104",
+   "A086",
+   "A079",
+   "A063"
+  ],
+  "grants": []
+ },
+ {
+  "doi": "10.5555/scholar.2024.052",
+  "title": "Bayesian inference for topic drift in structural biology",
+  "year": 2024,
+  "venue_id": "V09",
+  "abstract": "We study topic drift in structural biology with bayesian inference and report a reusable open benchmark.",
+  "authors": [
+   "A009",
+   "A102"
+  ],
+  "grants": []
+ },
+ {
+  "doi": "10.5555/scholar.2024.053",
+  "title": "Graph neural networks for topic drift in heterogeneous catalysis",
+  "year": 2024,
+  "venue_id": "V08",
+  "abstract": "We study topic drift in heterogeneous catalysis with graph neural networks and report stable estimates across institutions.",
+  "authors": [
+   "A031",
+   "A035",
+   "A104",
+   "A091"
+  ],
+  "grants": [
+   "G-2023-012"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2024.054",
+  "title": "Agent-based modelling for catalyst screening in scholarly communication",
+  "year": 2024,
+  "venue_id": "V07",
+  "abstract": "We study catalyst screening in scholarly communication with agent-based modelling and report consistent gains over strong baselines.",
+  "authors": [
+   "A078",
+   "A045",
+   "A040"
+  ],
+  "grants": [
+   "G-2022-066"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2025.055",
+  "title": "Causal discovery for metadata quality in clinical records",
+  "year": 2025,
+  "venue_id": "V01",
+  "abstract": "We study metadata quality in clinical records with causal discovery and report agreement with experimental measurements.",
+  "authors": [
+   "A081",
+   "A062",
+   "A047"
+  ],
+  "grants": [
+   "G-2020-150"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2025.056",
+  "title": "Transfer learning for glacier mass balance in scholarly communication",
+  "year": 2025,
+  "venue_id": "V10",
+  "abstract": "We study glacier mass balance in scholarly communication with transfer learning and report previously unreported failure modes.",
+  "authors": [
+   "A102",
+   "A087",
+   "A052"
+  ],
+  "grants": []
+ },
+ {
+  "doi": "10.5555/scholar.2025.057",
+  "title": "Graph neural networks for author disambiguation in open science infrastructure",
+  "year": 2025,
+  "venue_id": "V05",
+  "abstract": "We study author disambiguation in open science infrastructure with graph neural networks and report stable estimates across institutions.",
+  "authors": [
+   "A105",
+   "A088"
+  ],
+  "grants": [
+   "G-2018-233"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2025.058",
+  "title": "Bayesian inference for author disambiguation in open science infrastructure",
+  "year": 2025,
+  "venue_id": "V10",
+  "abstract": "We study author disambiguation in open science infrastructure with bayesian inference and report consistent gains over strong baselines.",
+  "authors": [
+   "A064",
+   "A072",
+   "A006"
+  ],
+  "grants": [
+   "G-2017-112",
+   "G-2023-012"
+  ]
+ },
+ {
+  "doi": "10.5555/scholar.2025.059",
+  "title": "Active learning for peer-review bias in computational physics",
+  "year": 2025,
+  "venue_id": "V04",
+  "abstract": "We study peer-review bias in computational physics with active learning and report agreement with experimental measurements.",
+  "authors": [
+   "A120",
+   "A111",
+   "A077"
+  ],
+  "grants": []
+ },
+ {
+  "doi": "10.5555/scholar.2025.060",
+  "title": "Agent-based modelling for author disambiguation in computational physics",
+  "year": 2025,
+  "venue_id": "V04",
+  "abstract": "We study author disambiguation in computational physics with agent-based modelling and report stable estimates across institutions.",
+  "authors": [
+   "A021",
+   "A035",
+   "A061"
+  ],
+  "grants": [
+   "G-2021-019"
+  ]
+ }
+]

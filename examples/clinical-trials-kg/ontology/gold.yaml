@@ -1,0 +1,107 @@
+# The data standards team's reference Ontology for trial registries, modelled loosely
+# on a CDISC-like vocabulary (study, site, subject, arm, intervention, adverse event,
+# visit) but kept to this hospital's own terms. Registered as its own Knowledge Graph
+# (trial-registry-gold) and used as the reference of the gold_alignment Evaluator.
+#
+# It holds Concepts the registry does not populate yet: the sponsor, the body system
+# of a condition, the outcome of an adverse event, and consent withdrawals.
+node_types:
+  - label: Trial
+    description: One registered clinical trial
+    properties:
+      - {name: registry_id, type: STRING, required: true}
+      - {name: title, type: STRING}
+      - {name: phase, type: STRING}
+      - {name: status, type: STRING}
+  - label: Sponsor
+    description: The organisation responsible for the trial
+    properties:
+      - {name: name, type: STRING, required: true}
+  - label: Site
+    description: A hospital or practice where a trial recruits
+    properties:
+      - {name: site_id, type: STRING, required: true}
+      - {name: city, type: STRING}
+      - {name: country, type: STRING}
+  - label: Investigator
+    description: The clinician responsible for a site
+    properties:
+      - {name: staff_id, type: STRING, required: true}
+      - {name: specialty, type: STRING}
+  - label: Participant
+    description: A pseudonymous trial participant
+    properties:
+      - {name: pseudonym, type: STRING, required: true}
+      - {name: age_band, type: STRING}
+      - {name: enrolled_on, type: DATE}
+  - label: Intervention
+    description: What a trial tests
+    properties:
+      - {name: code, type: STRING, required: true}
+      - {name: name, type: STRING, required: true}
+  - label: Drug
+    description: A medicinal product
+    parent: Intervention
+  - label: Device
+    description: A medical device
+    parent: Intervention
+  - label: Procedure
+    description: A clinical procedure or care pathway
+    parent: Intervention
+  - label: Condition
+    description: The condition a trial studies
+    properties:
+      - {name: code, type: STRING, required: true}
+      - {name: term, type: STRING}
+      - {name: system, type: STRING, description: The ICD chapter's body system}
+  - label: AdverseEvent
+    description: An adverse event reported during a trial
+    properties:
+      - {name: ae_id, type: STRING, required: true}
+      - {name: severity, type: STRING}
+      - {name: serious, type: BOOLEAN}
+      - {name: onset, type: DATE}
+      - {name: outcome, type: STRING, description: "recovered, recovering, not recovered or fatal"}
+  - label: Visit
+    description: A scheduled participant visit
+    properties:
+      - {name: visit_id, type: STRING, required: true}
+      - {name: number, type: INTEGER}
+      - {name: scheduled, type: DATE}
+      - {name: window_days, type: INTEGER}
+      - {name: deviation, type: STRING}
+  - label: Arm
+    description: A treatment arm of a trial
+    properties:
+      - {name: code, type: STRING, required: true}
+      - {name: kind, type: STRING}
+relationship_types:
+  - label: SPONSORED_BY
+  - label: CONDUCTED_AT
+  - label: LED_BY
+  - label: ENROLLED_AT
+  - label: CONSENTED_TO
+  - label: WITHDREW_FROM
+    description: A participant withdrew consent from the trial
+  - label: TESTS
+  - label: STUDIES
+  - label: REPORTED_IN
+  - label: ATTENDED
+  - label: ASSIGNED_TO
+  - label: EXPERIENCED
+patterns:
+  - [Trial, SPONSORED_BY, Sponsor]
+  - [Trial, CONDUCTED_AT, Site]
+  - [Site, LED_BY, Investigator]
+  - [Participant, ENROLLED_AT, Site]
+  - [Participant, CONSENTED_TO, Trial]
+  - [Participant, WITHDREW_FROM, Trial]
+  - [Trial, TESTS, Intervention]
+  - [Trial, STUDIES, Condition]
+  - [AdverseEvent, REPORTED_IN, Trial]
+  - [Participant, ATTENDED, Visit]
+  - [Participant, ASSIGNED_TO, Arm]
+  - [Participant, EXPERIENCED, AdverseEvent]
+constraints:
+  - {type: UNIQUENESS, node_type: Trial, property_name: registry_id}
+  - {type: UNIQUENESS, node_type: Participant, property_name: pseudonym}

@@ -1,0 +1,41 @@
+# Repo config for scholar-kg (see docs/guide/06-stetiq-yaml.md).
+#
+# In this example the CLI and the demo talk to a stetiq server, so the tracking URI is the
+# server's http:// address and the API Token comes from $STETIQ_TOKEN (README.md).
+knowledge_graph: scholar-kg
+
+# The Construction Entry Point the CI bot runs (`stetiq run`, or run_entry_point in the
+# demo). scholar_pipeline.py reads SCHOLAR_GRAPH_FILE from the environment, the way a real
+# loader reads its database credentials. --merge-by-orcid is the fix the research office
+# adopted after the author_dedupe Gate failed: ORCID records are matched to authors by the
+# works they share, not by how a name is spelled.
+entry_point:
+  command: python scholar_pipeline.py --ontology {ontology} --scope {graph_source} --merge-by-orcid
+
+gates:
+  - name: no-breaking-changes
+    check: ontology_diff
+    max_classification: additive
+  - name: graph-conforms
+    check: conformance
+    min_score: 1.0
+  - name: no-duplicate-authors       # scholar_evaluators.AuthorDedupe, a custom run Evaluator
+    check: metric
+    evaluator: author_dedupe
+    metric: duplicate_authors
+    max: 0
+  - name: questions-answerable
+    check: metric
+    evaluator: structural_answerability
+    metric: answerable_ratio
+    min: 0.85
+  - name: no-isolated-node-types
+    check: metric
+    evaluator: isolated_node_types
+    metric: isolated_node_types
+    max: 0
+  - name: no-orphans
+    check: metric
+    evaluator: orphan_concepts
+    metric: orphan_concepts
+    max: 0

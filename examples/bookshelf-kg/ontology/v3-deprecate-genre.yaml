@@ -1,0 +1,74 @@
+# Town library Knowledge Graph, Ontology Version 3: Subject replaces Genre.
+#
+# Compared with v2-hierarchy.yaml:
+# - Genre and IN_GENRE are deprecated, each pointing at its replacement
+#   (deprecated: true, replacedBy: ...). They stay declared: during the
+#   changeover the catalogue carries both, and the Ontology Diff is "deprecating".
+# - Subject (the controlled heading from the MARC 650 field) and HAS_SUBJECT join.
+# - The duplicate uniqueness constraint on Author.name is gone; Person.name
+#   is unique once, and Author inherits that.
+node_types:
+  - label: Person
+    description: Anyone the library knows by name
+    properties:
+      - {name: name, type: STRING, required: true}
+  - label: Author
+    description: A person who wrote a book in the catalogue
+    parent: Person
+  - label: Member
+    description: A person holding a library card
+    parent: Person
+    properties:
+      - {name: card, type: STRING, required: true}
+  - label: Book
+    description: One title in the catalogue
+    properties:
+      - {name: isbn, type: STRING, required: true}
+      - {name: title, type: STRING, required: true}
+      - {name: year, type: INTEGER}
+  - label: Branch
+    description: A library building
+    properties:
+      - {name: code, type: STRING, required: true}
+      - {name: name, type: STRING, required: true}
+  - label: Loan
+    description: One checkout from the circulation log
+    properties:
+      - {name: id, type: STRING, required: true}
+      - {name: borrowed, type: DATE, required: true}
+      - {name: due, type: DATE, required: true}
+      - {name: returned, type: DATE, description: Empty while the book is out}
+  - label: Genre
+    description: The loose shelf tag a branch puts on a book
+    deprecated: true
+    replacedBy: Subject
+    properties:
+      - {name: name, type: STRING, required: true}
+  - label: Subject
+    description: A controlled subject heading (MARC 650)
+    properties:
+      - {name: heading, type: STRING, required: true}
+relationship_types:
+  - WROTE
+  - HELD_AT
+  - MEMBER_OF
+  - BORROWED
+  - OF_BOOK
+  - MANAGES
+  - label: IN_GENRE
+    deprecated: true
+    replacedBy: HAS_SUBJECT
+  - HAS_SUBJECT
+patterns:
+  - [Author, WROTE, Book]
+  - [Book, HELD_AT, Branch]
+  - [Member, MEMBER_OF, Branch]
+  - [Member, BORROWED, Loan]
+  - [Loan, OF_BOOK, Book]
+  - [Person, MANAGES, Branch]
+  - [Book, IN_GENRE, Genre]
+  - [Book, HAS_SUBJECT, Subject]
+constraints:
+  - {type: UNIQUENESS, node_type: Book, property_name: isbn}
+  - {type: UNIQUENESS, node_type: Person, property_name: name}
+  - {type: UNIQUENESS, node_type: Member, property_name: card}

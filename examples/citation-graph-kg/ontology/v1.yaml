@@ -1,0 +1,44 @@
+# scholar-kg, first Declared Ontology: what the research office knew when it wrote it.
+# Written from the publication database export (papers.json, authors.csv, venues.csv,
+# grants.csv, citations.csv). The ORCID sync went live afterwards; nothing here knows
+# about Author.orcid, Grant.funder or co-authorship edges.
+node_types:
+  - label: Paper
+    description: A peer-reviewed research output from the publication database
+    properties:
+      - {name: doi, type: STRING, required: true, description: "The paper's DOI, e.g. 10.5555/scholar.2019.021"}
+      - {name: title, type: STRING, required: true}
+      - {name: year, type: INTEGER, description: Publication year}
+      - {name: abstract, type: STRING}
+  - label: Author
+    description: A person who authored at least one paper
+    properties:
+      - {name: name, type: STRING, required: true, description: "Name as spelled in the publication database"}
+      - {name: department, type: STRING, description: "Home department, when the person is university staff"}
+  - label: Venue
+    description: A journal or conference a paper appeared in
+    properties:
+      - {name: name, type: STRING, required: true}
+      - {name: kind, type: STRING, description: Journal or Conference}
+  - label: Grant
+    description: A funded project papers acknowledge
+    properties:
+      - {name: id, type: STRING, required: true, description: "The grant number, e.g. G-2019-078"}
+      - {name: title, type: STRING}
+relationship_types:
+  - label: AUTHORED
+    description: The author wrote the paper
+  - label: PUBLISHED_IN
+    description: The venue the paper appeared in
+  - label: FUNDED_BY
+    description: The grant the paper acknowledges
+  - label: CITES
+    description: The citing paper references the cited paper
+patterns:
+  - [Author, AUTHORED, Paper]
+  - [Paper, PUBLISHED_IN, Venue]
+  - [Paper, FUNDED_BY, Grant]
+  - [Paper, CITES, Paper]
+constraints:
+  - {type: UNIQUENESS, node_type: Paper, property_name: doi}
+  - {type: UNIQUENESS, node_type: Grant, property_name: id}

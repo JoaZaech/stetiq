@@ -1,0 +1,12 @@
+code,name,class,registry_id
+DRG-ASA-75,aspirin 75 mg,Drug,TR-2024-011
+DRG-CLO-75,clopidogrel 75 mg,Drug,TR-2024-011
+DEV-CGM-3,continuous glucose monitor,Device,TR-2024-017
+DRG-MET-500,metformin 500 mg,Drug,TR-2024-017
+PRC-MOB-24,mobilisation within 24 h,Procedure,TR-2024-023
+PRC-PHY-STD,standard physiotherapy,Procedure,TR-2024-023
+DRG-BUD-200,budesonide 200 µg,Drug,TR-2025-004
+DEV-ECG-PATCH,adhesive ECG patch,Device,TR-2025-009
+DEV-HOLTER,24 h Holter monitor,Device,TR-2025-009
+DRG-ATO-80,atorvastatin 80 mg,Drug,TR-2025-012
+DRG-ATO-20,atorvastatin 20 mg,Drug,TR-2025-012

@@ -1,0 +1,43 @@
+# What the head librarian needs the Knowledge Graph to answer.
+#
+# A question with a `query` is executed against the Graph Source at the end of
+# every Construction Run (competency_question_execution). Every question is also
+# judged structurally against each Ontology Version (structural_answerability):
+# does the Ontology have the Concepts the question needs? Against v1 only the
+# first one does; against v3 every mapped question does.
+description: "Town library: who wrote what, what is overdue, and what the branches lend."
+competency_questions:
+  - id: books-per-author
+    question: How many books by each author does the library hold?
+    query: >-
+      MATCH (a:Author)-[:WROTE]->(b:Book)
+      RETURN a.name AS author, count(b) AS books ORDER BY books DESC
+  - id: overdue-loans
+    question: Which loans are overdue today, and which book is out on each?
+    # The expected answer names loans and titles, never a member: the Use Case is
+    # stored in stetiq, and who holds a book stays in the Graph Source (ADR 0001).
+    query: >-
+      MATCH (m:Member)-[:BORROWED]->(l:Loan)-[:OF_BOOK]->(b:Book)
+      WHERE l.returned IS NULL AND l.due < date('2026-10-30')
+      RETURN l.id AS loan, b.title AS book
+    expected_answer:
+      - {loan: L-9006, book: On the Origin of Species}
+      - {loan: L-9008, book: Nineteen Eighty-Four}
+      - {loan: L-9010, book: Nineteen Eighty-Four}
+  - id: members-per-branch
+    question: How many members call each branch their home branch?
+    query: >-
+      MATCH (m:Member)-[:MEMBER_OF]->(br:Branch)
+      RETURN br.name AS branch, count(m) AS members
+  - id: popular-books
+    question: Which books are borrowed most?
+    query: >-
+      MATCH (l:Loan)-[:OF_BOOK]->(b:Book)
+      RETURN b.title AS book, count(l) AS loans ORDER BY loans DESC
+  - id: books-by-subject
+    question: Which books does the library hold on a given subject heading?
+    # An explicit Concept mapping instead of a query: judged structurally, not executed.
+    concepts: [Book, Subject, "(Book)-[HAS_SUBJECT]->(Subject)", Subject.heading]
+  - id: authors-who-are-members
+    question: Which authors in the catalogue also hold a library card?
+    # Neither a query nor a Concept mapping yet: stetiq reports it as unmapped.
