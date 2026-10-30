@@ -11,6 +11,8 @@ import {
   Position,
   ReactFlow,
   useInternalNode,
+  useReactFlow,
+  useStore,
   type Edge,
   type EdgeProps,
   type Node,
@@ -27,11 +29,13 @@ import { cn } from '@/lib/utils'
 import { MapChangeSummary } from './MapChangeSummary'
 import { MapDetailsPanel } from './MapDetailsPanel'
 import { MapPathPanel } from './MapPathPanel'
+import { MapSearchResults } from './MapSearchResults'
 import { filterOntologyMap, ontologyMap, type LinkRoute, type MapFilters } from './ontology-map'
 import { changesOf, type MapChange, type MapChangeKind, type OntologyComparison } from './ontology-map-comparison'
 import { detailsOf, focusOf, searchMap, type MapSelection } from './ontology-map-focus'
 import { layoutOntologyMap, NODE_SIZE, type Point } from './ontology-map-layout'
 import { shortestPaths } from './ontology-map-paths'
+import { searchOntology, type SearchResult } from './ontology-map-search'
 
 /**
  * How an item is drawn against the selection and the search: `selected` is the selection
@@ -152,7 +156,8 @@ type OntologyMapProps = { query?: string } & (
 /**
  * An Ontology as a node-link Map: classes as nodes, Patterns as links named by relation.
  * Selecting a class or link focuses its neighbourhood and opens its details; `query`, the
- * Concept search, highlights its matches.
+ * Concept search, highlights the Concepts it names and lists its results beside the Map,
+ * where picking one selects it and centres the Map on it.
  *
  * Given a `comparison` instead, it draws both versions superimposed: change kind as mark
  * style (added solid, removed a dashed ghost, modified ringed, unchanged muted), severity
@@ -183,6 +188,16 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
     [selectedFocus, reachable, selection],
   )
   const matches = useMemo(() => searchMap(ontology, query), [ontology, query])
+  const results = useMemo(() => searchOntology(ontology, query), [ontology, query])
+  // The selection a search result picked, which the Map stays centred on while it lasts.
+  const [located, setLocated] = useState<MapSelection | null>(null)
+  /** What picking `result` selects: a class, or a relation's first Pattern link; null when none is shown. */
+  const selectionFor = (result: SearchResult): MapSelection | null => {
+    if (result.kind === 'class')
+      return shown.nodes.some((n) => n.label === result.label) ? { kind: 'class', label: result.label } : null
+    const link = shown.links.find((l) => l.relation === result.label)
+    return link ? { kind: 'link', id: link.id } : null
+  }
   const details = useMemo(
     () => (selectedFocus ? detailsOf(ontology, selection) : null),
     [selectedFocus, ontology, selection],
@@ -272,6 +287,16 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
     return { nodes, edges: [...subclassEdges, ...patternEdges] }
   }, [layout.data, shown, focus, matches, selection, comparison])
 
+  const centre = useMemo(() => {
+    if (!layout.data || !located || located !== selection) return null
+    if (located.kind === 'class') return center(layout.data[located.label])
+    if (located.kind !== 'link') return null
+    const link = map.links.find((l) => l.id === located.id)
+    if (!link) return null
+    const [a, b] = [center(layout.data[link.source]), center(layout.data[link.target])]
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+  }, [layout.data, located, selection, map])
+
   if (layout.error) return <ErrorAlert error={layout.error} title="The Map could not be laid out" />
   if (!elements) return <Skeleton className="h-[32rem] w-full" />
   return (
@@ -282,6 +307,18 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
           selection={selection}
           onPreview={setPreview}
           onSelect={setSelection}
+        />
+      )}
+      {query.trim() !== '' && (
+        <MapSearchResults
+          query={query}
+          results={results}
+          canPick={(r) => selectionFor(r) !== null}
+          onPick={(r) => {
+            const picked = selectionFor(r)
+            setSelection(picked)
+            setLocated(picked)
+          }}
         />
       )}
       <ReactFlow
@@ -324,6 +361,7 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
           />
         </Panel>
         {comparison && <ComparisonLegend />}
+        <CentreOn point={centre} />
       </ReactFlow>
       {details && (
         <MapDetailsPanel details={details} onClose={() => setSelection(null)}>
@@ -339,6 +377,20 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
       <SubclassArrowhead />
     </div>
   )
+}
+
+/**
+ * Centres the Map on `point` (at a readable zoom at least), and again whenever the canvas
+ * resizes, as it does when the details panel opens.
+ */
+function CentreOn({ point }: { point: Point | null }) {
+  const { setCenter, getZoom } = useReactFlow()
+  const width = useStore((s) => s.width)
+  const height = useStore((s) => s.height)
+  useEffect(() => {
+    if (point) void setCenter(point.x, point.y, { zoom: Math.max(getZoom(), 1), duration: 200 })
+  }, [point, width, height, setCenter, getZoom])
+  return null
 }
 
 /** A comparison's details section: the Ontology Diff's changes behind the selection. */
