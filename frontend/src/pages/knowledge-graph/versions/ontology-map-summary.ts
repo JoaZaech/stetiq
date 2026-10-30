@@ -3,20 +3,28 @@
  * and each changed Concept's changes in words.
  */
 import { CLASSIFICATIONS, type Classification, type OntologyChange } from '@/api/ontology-diff'
-import { changesOfConcept, type OntologyComparison, type OwnerKind } from './ontology-map-comparison'
+import {
+  changesOfConcept,
+  isDocumentationOnly,
+  type OntologyComparison,
+  type OwnerKind,
+} from './ontology-map-comparison'
 import type { MapSelection } from './ontology-map-focus'
 
 /**
- * How much a change weighs in the summary. For now the Diff's classification; the core's
- * Ontology Diff is the only source of severity.
+ * How much a change weighs in a comparison: documentation-only when only a description
+ * differs, otherwise the Diff's classification. The core's Ontology Diff is the only
+ * source of severity; documentation-only weighs less than any severity, without changing
+ * the Diff's classification.
  */
-export type ChangeLevel = Classification
+export type ChangeLevel = 'documentation-only' | Classification
 
 /** Every level, from the least to the most weighty. */
-export const CHANGE_LEVELS: readonly ChangeLevel[] = CLASSIFICATIONS
+export const CHANGE_LEVELS: readonly ChangeLevel[] = ['documentation-only', ...CLASSIFICATIONS]
 
 /** The level of one of a comparison's Diff changes. */
-const levelOf = (change: OntologyChange): ChangeLevel => change.classification
+export const levelOf = (comparison: OntologyComparison, change: OntologyChange): ChangeLevel =>
+  isDocumentationOnly(comparison, change) ? 'documentation-only' : change.classification
 
 /** How weighty `level` is: the higher, the weightier. */
 const weight = (level: ChangeLevel) => CHANGE_LEVELS.indexOf(level)
@@ -56,8 +64,13 @@ export interface ConceptChanges {
 export interface ChangeSummary {
   /** The headline: a count per level, the weightiest first, leaving out levels with none. */
   counts: LevelCount[]
-  /** Every changed class and relation, the weightiest first, equal ones by label. */
+  /**
+   * Every changed class and relation with changes beyond documentation, those changes
+   * only, the weightiest first, equal ones by label.
+   */
   concepts: ConceptChanges[]
+  /** The documentation-only changes, set apart: grouped the same way, by label. */
+  documentationOnly: ConceptChanges[]
 }
 
 /** The words for a class and a relation, as the Map says them. */
@@ -66,8 +79,7 @@ export const CONCEPT_NOUN: Record<OwnerKind, string> = { node_type: 'class', rel
 const DIFF_NOUN: Record<OwnerKind, string> = { node_type: 'node type', relationship_type: 'relationship type' }
 
 /** `change`, to the class or relation `label` or to one of its attributes, in words. */
-function statementOf(kind: OwnerKind, label: string, change: OntologyChange): ChangeStatement {
-  const level = levelOf(change)
+function statementOf(kind: OwnerKind, label: string, change: OntologyChange, level: ChangeLevel): ChangeStatement {
   if (change.concept_kind === 'property') {
     const attribute = change.concept.slice(label.length + 1)
     const text =
@@ -90,7 +102,7 @@ const byWeight = <T extends { level: ChangeLevel }>(a: T, b: T) => weight(b.leve
 
 /** The summary of the comparison's Ontology Diff. */
 export function summarizeChanges(comparison: OntologyComparison): ChangeSummary {
-  const levels = comparison.diff.changes.map(levelOf)
+  const levels = comparison.diff.changes.map((c) => levelOf(comparison, c))
   const counts = [...CHANGE_LEVELS]
     .reverse()
     .map((level) => ({ level, count: levels.filter((l) => l === level).length }))
@@ -99,16 +111,22 @@ export function summarizeChanges(comparison: OntologyComparison): ChangeSummary 
     ...comparison.ontology.node_types.map((n): [OwnerKind, string] => ['node_type', n.label]),
     ...comparison.ontology.relationship_types.map((r): [OwnerKind, string] => ['relationship_type', r.label]),
   ]
-  const concepts = owners
-    .flatMap(([kind, label]): ConceptChanges[] => {
-      const statements = changesOfConcept(comparison, kind, label)
-        .map((c) => statementOf(kind, label, c))
-        .sort(byWeight)
-      if (statements.length === 0) return []
-      return [{ kind, label, level: statements[0].level, statements, selection: selectionOf(comparison, kind, label) }]
-    })
-    .sort((a, b) => byWeight(a, b) || compare(a.label, b.label) || compare(a.kind, b.kind))
-  return { counts, concepts }
+  const grouped = owners.flatMap(([kind, label]): ConceptChanges[] => {
+    const statements = changesOfConcept(comparison, kind, label)
+      .map((c) => statementOf(kind, label, c, levelOf(comparison, c)))
+      .sort(byWeight)
+    const documented = statements.filter((s) => s.level === 'documentation-only')
+    const selection = selectionOf(comparison, kind, label)
+    return [statements.filter((s) => s.level !== 'documentation-only'), documented]
+      .filter((s) => s.length > 0)
+      .map((s) => ({ kind, label, level: s[0].level, statements: s, selection }))
+  })
+  const byLabel = (a: ConceptChanges, b: ConceptChanges) => compare(a.label, b.label) || compare(a.kind, b.kind)
+  return {
+    counts,
+    concepts: grouped.filter((c) => c.level !== 'documentation-only').sort((a, b) => byWeight(a, b) || byLabel(a, b)),
+    documentationOnly: grouped.filter((c) => c.level === 'documentation-only').sort(byLabel),
+  }
 }
 
 /** Where the class or relation `label` is on the comparison's Map. */
@@ -121,7 +139,8 @@ function selectionOf(comparison: OntologyComparison, kind: OwnerKind, label: str
 
 /**
  * The summary's entry for what is selected on the Map: a class's own, or a link's
- * relation's. Null when that has no changes, or for any other selection.
+ * relation's, its documentation-only one when it has no other. Null when that has no
+ * changes, or for any other selection.
  */
 export function summaryConceptOf(
   comparison: OntologyComparison,
@@ -134,7 +153,8 @@ export function summaryConceptOf(
       : selection?.kind === 'link'
         ? ['relationship_type', comparison.map.links.find((l) => l.id === selection.id)?.relation]
         : []
-  return summary.concepts.find((c) => c.kind === kind && c.label === label) ?? null
+  const of = (c: ConceptChanges) => c.kind === kind && c.label === label
+  return summary.concepts.find(of) ?? summary.documentationOnly.find(of) ?? null
 }
 
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)

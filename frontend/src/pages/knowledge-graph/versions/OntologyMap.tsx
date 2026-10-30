@@ -28,7 +28,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { type ConceptSelection, formatSelection, useConceptSelection } from './concept-selection'
-import { MapChangeSummary } from './MapChangeSummary'
+import { ChangeLevelBadge, MapChangeSummary } from './MapChangeSummary'
 import { MapDetailsPanel } from './MapDetailsPanel'
 import { MapPathPanel } from './MapPathPanel'
 import { MapSearchResults } from './MapSearchResults'
@@ -45,6 +45,7 @@ import { layoutOntologyMap, NODE_SIZE, type Point, type Size } from './ontology-
 import { LABEL_FONT_SIZE, labelShown, linkShape, READABLE_ZOOM, straightPath, type Box } from './ontology-map-links'
 import { shortestPaths } from './ontology-map-paths'
 import { searchOntology, type SearchResult } from './ontology-map-search'
+import { levelOf } from './ontology-map-summary'
 
 /**
  * How an item is drawn against the selection and the search: `selected` is the selection
@@ -125,11 +126,16 @@ interface ChangeStyle {
   muted: boolean
   /** Its label outlined in its severity's colour, as a modified class is ringed. */
   outlined: boolean
+  /** A small neutral dot beside its label, in no severity's colour. */
+  dot: boolean
   /** The legend's swatch. */
   swatch: string
 }
 
-/** Change kind's channel, mark style: added solid, removed a dashed ghost, modified ringed, unchanged muted. */
+/**
+ * Change kind's channel, mark style: added solid, removed a dashed ghost, modified ringed,
+ * documentation-only a neutral dot on an otherwise plain mark, unchanged muted.
+ */
 const CHANGE_STYLE: Record<MapChangeKind, ChangeStyle> = {
   added: {
     node: 'border-2 font-semibold',
@@ -138,6 +144,7 @@ const CHANGE_STYLE: Record<MapChangeKind, ChangeStyle> = {
     emphasized: true,
     muted: false,
     outlined: false,
+    dot: false,
     swatch: 'border-2 border-foreground bg-foreground/15',
   },
   removed: {
@@ -147,6 +154,7 @@ const CHANGE_STYLE: Record<MapChangeKind, ChangeStyle> = {
     emphasized: false,
     muted: false,
     outlined: false,
+    dot: false,
     swatch: 'border-2 border-dashed border-foreground',
   },
   modified: {
@@ -156,7 +164,19 @@ const CHANGE_STYLE: Record<MapChangeKind, ChangeStyle> = {
     emphasized: false,
     muted: false,
     outlined: true,
+    dot: false,
     swatch: 'border ring-2 ring-foreground ring-offset-1 ring-offset-card',
+  },
+  // Nearly unchanged: no severity hue and no emphasis, only the dot.
+  'documentation-only': {
+    node: 'text-muted-foreground shadow-none',
+    nodeSeverity: [],
+    dashed: false,
+    emphasized: false,
+    muted: false,
+    outlined: false,
+    dot: true,
+    swatch: 'flex items-center justify-center border bg-card',
   },
   unchanged: {
     node: 'bg-muted text-muted-foreground shadow-none',
@@ -165,8 +185,20 @@ const CHANGE_STYLE: Record<MapChangeKind, ChangeStyle> = {
     emphasized: false,
     muted: true,
     outlined: false,
+    dot: false,
     swatch: 'border bg-muted',
   },
+}
+
+/** A documentation-only change's mark: small, round and neutral. */
+function DocumentationDot({ className }: { className?: string }) {
+  return (
+    <span
+      aria-hidden
+      data-documentation-dot
+      className={cn('inline-block size-1.5 shrink-0 rounded-full bg-muted-foreground', className)}
+    />
+  )
 }
 
 /** How `change` is drawn, or nothing outside a comparison. */
@@ -488,7 +520,7 @@ function ChangeDetails({
           {changes.map((c) => (
             <li key={`${c.concept}:${c.detail}`} className="space-y-1">
               <div className="flex items-center gap-2">
-                <ClassificationBadge classification={c.classification} />
+                <ChangeLevelBadge level={levelOf(comparison, c)} />
                 <span className="text-xs text-muted-foreground">{c.kind}</span>
               </div>
               <div className="text-xs">{c.detail}</div>
@@ -508,9 +540,11 @@ function ComparisonLegend() {
       aria-label="Legend"
       className="flex max-w-[45%] flex-wrap items-center gap-x-3 gap-y-1 rounded-md border bg-card px-3 py-2 text-xs shadow-xs"
     >
-      {Object.entries(CHANGE_STYLE).map(([kind, { swatch }]) => (
+      {Object.entries(CHANGE_STYLE).map(([kind, { swatch, dot }]) => (
         <span key={kind} className="flex items-center gap-1">
-          <span aria-hidden className={cn('inline-block h-3 w-5 rounded-sm', swatch)} />
+          <span aria-hidden className={cn('inline-block h-3 w-5 rounded-sm', swatch)}>
+            {dot && <DocumentationDot />}
+          </span>
           {kind}
         </span>
       ))}
@@ -589,6 +623,7 @@ function ClassNodeView({ data }: NodeProps<ClassNode>) {
         style={{ height: NODE_SIZE.height - 2 }}
       >
         {data.label}
+        {style.dot && <DocumentationDot className="ml-1.5" />}
       </span>
       {data.attributes && data.attributes.length > 0 && <ChangedAttributes attributes={data.attributes} />}
       {/* React Flow attaches links to handles; links are drawn centre to centre, so these stay hidden. */}
@@ -672,6 +707,8 @@ function PatternEdgeView({ id, source, target, data, markerEnd }: EdgeProps<Patt
             >
               {data.relation}
             </span>
+            {/* On the pill's corner, so the label keeps the size the layout made room for. */}
+            {style.dot && <DocumentationDot className="absolute -top-0.5 -right-0.5" />}
           </div>
         </ViewportPortal>
       )}

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { OntologyDiff } from '@/api/ontology-diff'
 import type { Ontology } from '@/api/ontology-versions'
 import { compareOntologies } from './ontology-map-comparison'
-import { summarizeChanges, summaryConceptOf } from './ontology-map-summary'
+import { levelOf, summarizeChanges, summaryConceptOf } from './ontology-map-summary'
 
 // Canonical form, as the server sends it: a city transit network, v2 → v3.
 const V2: Ontology = {
@@ -49,7 +49,9 @@ describe('summarizeChanges', () => {
 
     expect(counts).toEqual([
       { level: 'breaking', count: 2 },
-      { level: 'additive', count: 3 },
+      { level: 'additive', count: 2 },
+      // HAS_TRIP only gained a description.
+      { level: 'documentation-only', count: 1 },
     ])
   })
 
@@ -60,8 +62,37 @@ describe('summarizeChanges', () => {
       // Equally severe Concepts in label order.
       ['node_type', 'Stop', 'breaking'],
       ['node_type', 'Trip', 'breaking'],
-      ['relationship_type', 'HAS_TRIP', 'additive'],
     ])
+  })
+
+  it('sets the documentation-only changes apart, grouped by Concept', () => {
+    const described: Ontology = {
+      ...V3,
+      node_types: V3.node_types.map((n) =>
+        n.label === 'Stop'
+          ? { ...n, properties: [{ name: 'wheelchair_boarding', type: 'INTEGER', description: 'Step-free access' }] }
+          : n.label === 'Route'
+            ? { ...n, description: 'A line riders know by name' }
+            : n,
+      ),
+    }
+    const { counts, concepts, documentationOnly } = summarizeChanges(
+      compareOntologies(V2, described, {
+        classification: 'breaking',
+        changes: [
+          { concept: 'Route', concept_kind: 'node_type', kind: 'changed', classification: 'additive', detail: 'description changed' },
+          ...DIFF.changes,
+        ],
+      }),
+    )
+
+    expect(counts.at(-1)).toEqual({ level: 'documentation-only', count: 2 })
+    expect(documentationOnly.map((c) => [c.label, c.level, c.statements.map((s) => s.text)])).toEqual([
+      ['HAS_TRIP', 'documentation-only', ['description changed']],
+      ['Route', 'documentation-only', ['description changed']],
+    ])
+    // Stop's attribute was added with its description, so that change is not documentation-only.
+    expect(concepts.map((c) => c.label)).toEqual(['Stop', 'Trip'])
   })
 
   it("orders a Concept's changes most severe first, and says each in words", () => {
@@ -72,7 +103,7 @@ describe('summarizeChanges', () => {
         { concept: 'Stop', concept_kind: 'node_type', kind: 'deprecated', classification: 'deprecating', detail: 'node type Stop deprecated; replaced by Platform' },
       ],
     }
-    const { concepts } = summarizeChanges(
+    const { concepts, documentationOnly } = summarizeChanges(
       compareOntologies(V2, { ...V3, node_types: V3.node_types.map((n) => (n.label === 'Stop' ? { ...n, deprecated: true } : n)) }, deprecating),
     )
 
@@ -81,7 +112,7 @@ describe('summarizeChanges', () => {
       [null, 'deprecated; replaced by Platform', 'deprecating'],
       ['wheelchair_boarding', 'added', 'additive'],
     ])
-    expect(concepts[2].statements.map((s) => [s.attribute, s.text])).toEqual([[null, 'description changed']])
+    expect(documentationOnly[0].statements.map((s) => [s.attribute, s.text])).toEqual([[null, 'description changed']])
   })
 
   it('says how each kind of change landed', () => {
@@ -128,7 +159,21 @@ describe('summarizeChanges', () => {
   it('says when nothing changed', () => {
     const summary = summarizeChanges(compareOntologies(V2, V2, { classification: null, changes: [] }))
 
-    expect(summary).toMatchObject({ counts: [], concepts: [] })
+    expect(summary).toEqual({ counts: [], concepts: [], documentationOnly: [] })
+  })
+})
+
+describe('levelOf', () => {
+  it("gives a change the Diff's classification, or documentation-only when only a description differs", () => {
+    const comparison = compareOntologies(V2, V3, DIFF)
+
+    expect(DIFF.changes.map((c) => [c.concept, levelOf(comparison, c)])).toEqual([
+      ['Stop.wheelchairBoarding', 'breaking'],
+      ['Stop.wheelchair_boarding', 'additive'],
+      ['Trip.bikesAllowed', 'breaking'],
+      ['Trip.bikes_allowed', 'additive'],
+      ['HAS_TRIP', 'documentation-only'],
+    ])
   })
 })
 
