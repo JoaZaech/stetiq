@@ -1,9 +1,13 @@
 """CLI smoke tests: the CLI is a thin layer over the SDK, which is tested in depth."""
 
+import sys
+
 import yaml
 from typer.testing import CliRunner
 
+import stetiq
 from stetiq.cli import app
+from stetiq.graph_source import GraphSourceScope, InMemoryGraphSource
 
 
 def test_cli_registers_lists_and_fetches_ontology_versions(tmp_path, monkeypatch, support_ontology):
@@ -146,3 +150,84 @@ def test_cli_reports_an_unknown_alias(tmp_path, monkeypatch, support_ontology):
 
     assert result.exit_code == 1
     assert "nope" in result.output
+
+
+# The user's pipeline for `stetiq run`: checks it got the Declared Ontology, exits with argv[2].
+RUN_PIPELINE = """
+import pathlib, sys, yaml
+assert yaml.safe_load(pathlib.Path(sys.argv[1]).read_text())["patterns"] == [["Customer", "OPENED", "Ticket"]]
+sys.exit(int(sys.argv[2]))
+"""
+
+
+def _repo_with_entry_point(tmp_path, monkeypatch, support_ontology, exit_code):
+    uri = f"sqlite:///{tmp_path / 'stetiq.db'}"
+    monkeypatch.setenv("STETIQ_TRACKING_URI", uri)
+    # Plays STETIQ_GRAPH_SOURCE_URI pointing at the graph the pipeline wrote to.
+    graph = InMemoryGraphSource()
+    graph.add_node(["Customer"], {"name": "Ada"})
+    monkeypatch.setattr("stetiq.client.graph_source_from_env", lambda: graph)
+    sdk = stetiq.Client(uri, graph_source=graph)
+    sdk.create_knowledge_graph("kg", ontology=support_ontology)
+    sdk.bind_graph_source("kg", GraphSourceScope(database="neo4j"))
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pipeline.py").write_text(RUN_PIPELINE)
+    (repo / "stetiq.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "knowledge_graph": "kg",
+                "entry_point": {"command": [sys.executable, "pipeline.py", "{ontology}", str(exit_code)]},
+            }
+        )
+    )
+    return sdk, graph, repo
+
+
+def test_cli_run_invokes_the_entry_point_and_exits_zero_when_the_run_finishes(
+    tmp_path, monkeypatch, support_ontology
+):
+    sdk, _, repo = _repo_with_entry_point(tmp_path, monkeypatch, support_ontology, exit_code=0)
+    monkeypatch.chdir(repo)  # default --config ./stetiq.yaml, default KG from it
+
+    result = CliRunner().invoke(app, ["run"])
+
+    assert result.exit_code == 0, result.output
+    [run] = sdk.list_runs("kg")
+    assert run.status == "finished"
+    assert run.id in result.output
+    assert "Conformance" in result.output
+
+
+def test_cli_run_exits_non_zero_when_the_entry_point_fails(tmp_path, monkeypatch, support_ontology):
+    sdk, _, repo = _repo_with_entry_point(tmp_path, monkeypatch, support_ontology, exit_code=2)
+
+    result = CliRunner().invoke(app, ["run", "kg", "--config", str(repo / "stetiq.yaml")])
+
+    assert result.exit_code == 1
+    [run] = sdk.list_runs("kg")
+    assert run.status == "failed"
+    assert "exited with code 2" in result.output
+
+
+def test_cli_run_exits_non_zero_when_strict_mode_fails_the_run(tmp_path, monkeypatch, support_ontology):
+    sdk, graph, repo = _repo_with_entry_point(tmp_path, monkeypatch, support_ontology, exit_code=0)
+    sdk.set_evolution_mode("kg", "strict")
+    graph.add_node(["Agent"], {})
+
+    result = CliRunner().invoke(app, ["run", "--config", str(repo / "stetiq.yaml"), "--ontology-version", "1"])
+
+    assert result.exit_code == 1
+    assert [r.status for r in sdk.list_runs("kg")] == ["failed"]
+    assert "Agent" in result.output
+
+
+def test_cli_run_reports_a_config_without_an_entry_point(tmp_path):
+    config = tmp_path / "stetiq.yaml"
+    config.write_text("gates: {}\n")
+
+    result = CliRunner().invoke(app, ["run", "kg", "--config", str(config)])
+
+    assert result.exit_code == 1
+    assert "entry_point" in result.output

@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import getpass
 import os
+import subprocess
+import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 
+from stetiq.entry_point import EntryPoint, EntryPointError, placeholder_values
 from stetiq.errors import EvaluatorError, GraphSourceUnavailableError
 from stetiq.evaluation.framework import (
     Evaluator,
@@ -17,6 +20,7 @@ from stetiq.evaluation.framework import (
 from stetiq.evaluation.structural import BUILT_IN_EVALUATORS
 from stetiq.graph_source import GraphSource, GraphSourceScope, graph_source_from_env
 from stetiq.ontology import Ontology, parse_yaml
+from stetiq.ontology.yaml_format import to_yaml
 from stetiq.ontology.diff import OntologyDiff, diff_ontologies
 from stetiq.tracking import (
     Alias,
@@ -38,11 +42,12 @@ from stetiq.tracking.entities import DriftEvent, EvolutionMode, ObservationOutco
 TRACKING_URI_ENV = "STETIQ_TRACKING_URI"
 DEFAULT_TRACKING_URI = "sqlite:///.stetiq/stetiq.db"
 ACTOR_ENV = "STETIQ_ACTOR"
+TOKEN_ENV = "STETIQ_TOKEN"
 
 
 def resolve_actor(actor: str | None = None) -> str:
-    """Who the audit log records for Alias moves: `actor`, else $STETIQ_ACTOR, else the OS user.
-    (Until API-token auth exists the server trusts what the SDK sends.)"""
+    """Who the audit log records for Alias moves in local mode: `actor`, else $STETIQ_ACTOR,
+    else the OS user. (In server mode the server records the API token's user instead.)"""
     if actor or os.environ.get(ACTOR_ENV):
         return actor or os.environ[ACTOR_ENV]
     try:
@@ -59,15 +64,21 @@ def resolve_tracking_uri(tracking_uri: str | None = None) -> str:
     return tracking_uri or os.environ.get(TRACKING_URI_ENV) or DEFAULT_TRACKING_URI
 
 
-def service_for_uri(tracking_uri: str) -> TrackingService:
+def resolve_token(token: str | None = None) -> str | None:
+    """The API token for server mode: `token`, else $STETIQ_TOKEN (local mode needs none)."""
+    return token or os.environ.get(TOKEN_ENV) or None
+
+
+def service_for_uri(tracking_uri: str, *, token: str | None = None) -> TrackingService:
     """Pick the mode from the tracking URI.
 
-    - `http://` / `https://`: remote mode, talking to a stetiq server
-    - `sqlite:///<path>`, `postgresql[+psycopg]://...`: local mode, in-process over that database
+    - `http://` / `https://`: remote mode, talking to a stetiq server with API `token`
+    - `sqlite:///<path>`, `postgresql[+psycopg]://...`: local mode, in-process over that
+      database (tokenless: `token` is ignored)
     """
     scheme = tracking_uri.split(":", 1)[0].lower()
     if scheme in ("http", "https"):
-        return RemoteTrackingService(tracking_uri)
+        return RemoteTrackingService(tracking_uri, token=resolve_token(token))
     if scheme == "sqlite" or scheme.startswith("postgresql"):
         return LocalTrackingService(SqlStore(tracking_uri))
     raise ValueError(
@@ -94,14 +105,18 @@ class Client:
         service: TrackingService | None = None,
         graph_source: GraphSource | None = None,
         actor: str | None = None,
+        token: str | None = None,
     ) -> None:
         """`graph_source` is the adapter (e.g. Neo4j, with its credentials) used to observe
         the bound Graph Source scope when a Construction Run ends. It runs in this
         process: the stetiq server never connects to the graph database. Without it, a
         Neo4j adapter is built on first use from `$STETIQ_GRAPH_SOURCE_URI` (plus
-        `$STETIQ_GRAPH_SOURCE_USER` / `$STETIQ_GRAPH_SOURCE_PASSWORD`)."""
+        `$STETIQ_GRAPH_SOURCE_USER` / `$STETIQ_GRAPH_SOURCE_PASSWORD`).
+
+        `token` (else $STETIQ_TOKEN) is the API token server mode requires; local mode
+        ignores it. In server mode the audit log records the token's user, not `actor`."""
         self.tracking_uri = resolve_tracking_uri(tracking_uri)
-        self._service = service or service_for_uri(self.tracking_uri)
+        self._service = service or service_for_uri(self.tracking_uri, token=token)
         self._graph_source = graph_source
         self.actor = resolve_actor(actor)
         # Custom Evaluators run in this process (the user's code), in every mode;
@@ -336,6 +351,47 @@ class Client:
                 "or set STETIQ_GRAPH_SOURCE_URI"
             )
         return self._graph_source
+
+    def run_entry_point(
+        self,
+        knowledge_graph: str,
+        entry_point: EntryPoint,
+        *,
+        ontology_version: int | None = None,
+        alias: str | None = None,
+        cwd: str | os.PathLike[str] | None = None,
+    ) -> ConstructionRun:
+        """Invoke the Construction Entry Point as a Construction Run (what `stetiq run` does).
+
+        The Declared Ontology (chosen as for `start_run`) is written to a temporary file
+        and the command runs with its placeholders filled in, inheriting this process's
+        environment and output streams. A zero exit ends the run the same way SDK
+        instrumentation does (Observation, Conformance, Evolution Mode); a non-zero exit
+        fails the run without observing, so it never yields a Candidate. The exit code
+        is logged as the run param `entry_point.exit_code`. Returns the final run:
+        check `status`, since a strict Evolution Mode can also fail it."""
+        with self.start_run(knowledge_graph, ontology_version=ontology_version, alias=alias) as run:
+            with tempfile.TemporaryDirectory(prefix="stetiq-run-") as tmp:
+                ontology_path = Path(tmp) / f"declared-ontology-v{run.ontology_version}.yaml"
+                ontology_path.write_text(to_yaml(run.declared_ontology))
+                scope = self._service.get_graph_source(knowledge_graph)
+                argv = entry_point.argv(
+                    placeholder_values(
+                        ontology_path=str(ontology_path),
+                        scope=scope,
+                        knowledge_graph=knowledge_graph,
+                        ontology_version=run.ontology_version,
+                        run_id=run.id,
+                    )
+                )
+                try:
+                    exit_code = subprocess.run(argv, cwd=cwd).returncode
+                except OSError as e:
+                    raise EntryPointError(f"could not start the Construction Entry Point {argv[0]!r}: {e}") from e
+            run.log_param("entry_point.exit_code", exit_code)
+            if exit_code != 0:
+                run.fail()
+        return self.get_run(run.id)
 
     def get_run(self, run_id: str) -> ConstructionRun:
         return self._service.get_run(run_id)

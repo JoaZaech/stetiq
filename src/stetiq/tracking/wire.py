@@ -311,3 +311,9 @@ def observation_outcome_from_json(d: dict[str, Any]) -> ObservationOutcome:
         observation=observation_from_json(d["observation"]),
         drift=None if drift is None else drift_event_from_json(drift),
     )
+
+
+# --- API-token authentication (ticket #17) -----------------------------------------------
+
+ERROR_STATUS[errors.AuthenticationError] = 401
+ERROR_STATUS[errors.PermissionDeniedError] = 403
