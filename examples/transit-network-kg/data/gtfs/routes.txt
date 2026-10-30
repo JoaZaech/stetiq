@@ -1,0 +1,11 @@
+route_id,agency_id,route_short_name,route_long_name,route_type
+T1,LHT,1,Airport Terminal - Harbour,0
+T2,LHT,2,University - Stadium,0
+T3,LHT,3,Tech Park - South Beach,0
+B11,LHT,11,Westgate - North Cemetery,3
+B12,LHT,12,Harbour - Water Tower,3
+B14,LHT,14,University - Orchard,3
+B17,LHT,17,Airport Terminal - Central Station,3
+B21,LHT,21,Depot North - Westgate,3
+B24,LHT,24,Hospital - Trade Fair,3
+N1,LHT,N1,Night line Central Station - Airport Terminal,3

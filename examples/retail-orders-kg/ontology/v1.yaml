@@ -1,0 +1,94 @@
+# Retail orders Knowledge Graph, first Declared Ontology.
+# Written by the analytics team from the order database and the catalogue export.
+# Departments are Categories too (Department is a child of Category), which is why the
+# category tree has one node type and the hierarchy Evaluator reports depth 2.
+node_types:
+  - label: Customer
+    description: A person with an account or a guest checkout, after deduplication
+    properties:
+      - {name: id, type: STRING, required: true}
+      - {name: email, type: STRING, required: true}
+      - {name: name, type: STRING}
+      - {name: city, type: STRING}
+      - {name: postcode, type: STRING}
+      - {name: since, type: DATE}
+  - label: Order
+    description: One checkout, with its lines
+    properties:
+      - {name: id, type: STRING, required: true}
+      - {name: placed_at, type: DATE, required: true}
+      - {name: status, type: STRING}
+      - {name: channel, type: STRING}
+      - {name: total, type: FLOAT}
+  - label: OrderLine
+    description: One product in one order, at the price paid
+    properties:
+      - {name: id, type: STRING, required: true}
+      - {name: quantity, type: INTEGER, required: true}
+      - {name: unit_price, type: FLOAT, required: true}
+  - label: Product
+    description: A sellable item from the catalogue
+    properties:
+      - {name: sku, type: STRING, required: true}
+      - {name: name, type: STRING, required: true}
+      - {name: price, type: FLOAT}
+      - {name: weight_kg, type: FLOAT}
+  - label: Category
+    description: A node of the category tree (department, category or subcategory)
+    properties:
+      - {name: code, type: STRING, required: true}
+      - {name: name, type: STRING, required: true}
+  - label: Department
+    description: A root of the category tree; every Department is also a Category
+    parent: Category
+  - label: Supplier
+    description: The vendor a product is bought from
+    properties:
+      - {name: code, type: STRING, required: true}
+      - {name: name, type: STRING, required: true}
+      - {name: country, type: STRING}
+  - label: Warehouse
+    description: A fulfilment site shipments leave from
+    properties:
+      - {name: code, type: STRING, required: true}
+      - {name: name, type: STRING, required: true}
+      - {name: city, type: STRING}
+      - {name: region, type: STRING}
+  - label: Shipment
+    description: One parcel fulfilling an order
+    properties:
+      - {name: id, type: STRING, required: true}
+      - {name: shipped_at, type: DATE}
+      - {name: carrier, type: STRING}
+      - {name: tracking_number, type: STRING}
+relationship_types:
+  - label: PLACED
+    description: The customer who checked the order out
+  - label: CONTAINS
+    description: The lines of an order
+  - label: OF_PRODUCT
+    description: The product an order line sells
+  - label: IN_CATEGORY
+    description: The subcategory a product is listed under
+  - label: SUBCATEGORY_OF
+    description: Child category to parent category; departments are the roots
+  - label: SUPPLIED_BY
+    description: The supplier a product is bought from
+  - label: SHIPPED_FROM
+    description: The warehouse a shipment left
+  - label: FULFILLS
+    description: The order a shipment delivers
+patterns:
+  - [Customer, PLACED, Order]
+  - [Order, CONTAINS, OrderLine]
+  - [OrderLine, OF_PRODUCT, Product]
+  - [Product, IN_CATEGORY, Category]
+  - [Category, SUBCATEGORY_OF, Category]
+  - [Category, SUBCATEGORY_OF, Department]   # the Observed Schema reports both labels of a department
+  - [Product, SUPPLIED_BY, Supplier]
+  - [Shipment, SHIPPED_FROM, Warehouse]
+  - [Shipment, FULFILLS, Order]
+constraints:
+  - {type: UNIQUENESS, node_type: Customer, property_name: id}
+  - {type: UNIQUENESS, node_type: Order, property_name: id}
+  - {type: UNIQUENESS, node_type: Product, property_name: sku}

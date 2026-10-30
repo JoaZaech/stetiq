@@ -1,0 +1,54 @@
+# What the analytics team needs the retail-orders Knowledge Graph to answer.
+#
+# A question with a `query` is executed against the Graph Source at the end of every
+# Construction Run (competency_question_execution); every question is also judged
+# structurally against each Ontology Version (structural_answerability). The Cypher is
+# what we would run on Neo4j; the example's in-memory Graph Source answers these same
+# query strings with canned aggregates (retail_graph.py).
+description: "Online retail: what sells, what comes back, where it ships from, and who we depend on."
+competency_questions:
+  - id: top-categories-by-revenue
+    question: Which departments bring in the most revenue?
+    query: >-
+      MATCH (o:Order)-[:CONTAINS]->(l:OrderLine)-[:OF_PRODUCT]->(p:Product)-[:IN_CATEGORY]->(c:Category)
+      MATCH (c)-[:SUBCATEGORY_OF*0..2]->(d:Department)
+      RETURN d.name AS department, sum(l.quantity * l.unit_price) AS revenue ORDER BY revenue DESC
+  - id: return-rate-per-product
+    question: Which products come back most often?
+    query: >-
+      MATCH (p:Product)<-[:OF_PRODUCT]-(l:OrderLine)<-[:RETURNED]-(r:Return)
+      WITH p, count(DISTINCT r) AS returned
+      MATCH (p)<-[:OF_PRODUCT]-(l2:OrderLine)
+      RETURN p.sku AS sku, returned * 1.0 / count(l2) AS return_rate ORDER BY return_rate DESC
+  - id: lines-per-order
+    question: How many lines does an order carry on average?
+    query: >-
+      MATCH (o:Order)-[:CONTAINS]->(l:OrderLine)
+      WITH o, count(l) AS lines RETURN avg(lines) AS lines_per_order
+  - id: suppliers-behind-orders
+    question: Which suppliers stand behind the most orders (two hops away, through the product)?
+    query: >-
+      MATCH (o:Order)-[:CONTAINS]->(:OrderLine)-[:OF_PRODUCT]->(:Product)-[:SUPPLIED_BY]->(s:Supplier)
+      RETURN s.name AS supplier, count(DISTINCT o) AS orders ORDER BY orders DESC
+  - id: category-tree-depth
+    question: How deep is the category tree?
+    query: >-
+      MATCH path = (:Category)-[:SUBCATEGORY_OF*]->(root:Category)
+      WHERE NOT (root)-[:SUBCATEGORY_OF]->()
+      RETURN max(length(path)) + 1 AS depth
+    expected_answer: 3
+  - id: orders-per-warehouse
+    question: How many shipments left each warehouse?
+    query: >-
+      MATCH (s:Shipment)-[:SHIPPED_FROM]->(w:Warehouse)
+      RETURN w.name AS warehouse, count(s) AS shipments ORDER BY shipments DESC
+  - id: repeat-customers
+    question: How many customers ordered more than once?
+    query: >-
+      MATCH (c:Customer)-[:PLACED]->(o:Order)
+      WITH c, count(o) AS orders WHERE orders > 1
+      RETURN count(c) AS repeat_customers
+  - id: basket-affinity
+    question: Which products are bought together most often?
+    # No query and no Concept mapping yet: stetiq reports it as unmapped until a question
+    # mapper (STETIQ_QUESTION_MAPPER) or a human maps it.

@@ -1,0 +1,15 @@
+{
+  "season": "autumn 2026",
+  "comment": "One weekly Observation per entry, taken on `observed_on`. `orders_factor` is the week's new Orders as a fraction of the Orders already in the graph (0.06 = 6 % growth). `shipped_share` is the share of the new Orders that already have a Shipment, `return_share` the share of new OrderLines that come back as a Return. `events` is what else happens to the Graph Source that week.",
+  "defaults": {"shipped_share": 0.9, "return_share": 0.05},
+  "weeks": [
+    {"week": 1, "observed_on": "2026-09-06", "orders_factor": 0.0, "events": []},
+    {"week": 2, "observed_on": "2026-09-13", "orders_factor": 0.06, "events": []},
+    {"week": 3, "observed_on": "2026-09-20", "orders_factor": 0.06, "events": []},
+    {"week": 4, "observed_on": "2026-09-27", "orders_factor": 1.65, "shipped_share": 0.5, "return_share": 0.0, "events": ["flash_sale"]},
+    {"week": 5, "observed_on": "2026-10-04", "orders_factor": 0.04, "events": ["bin_migration"]},
+    {"week": 6, "observed_on": "2026-10-11", "orders_factor": 0.05, "events": ["shipment_retention"], "retention_passes": [0.35, 0.38]},
+    {"week": 7, "observed_on": "2026-10-18", "orders_factor": 0.04, "events": ["ontology_v4"]},
+    {"week": 8, "observed_on": "2026-10-25", "orders_factor": 0.05, "events": []}
+  ]
+}
