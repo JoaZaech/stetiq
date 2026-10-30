@@ -45,7 +45,8 @@ from stetiq.use_case import (
     parse_use_case_dict,
     parse_use_case_yaml,
 )
-from stetiq.tracking.entities import EvolutionMode
+from stetiq.drift import DriftThresholds
+from stetiq.tracking.entities import DriftEvent, EvolutionMode, ObservationOutcome
 
 TRACKING_URI_ENV = "STETIQ_TRACKING_URI"
 DEFAULT_TRACKING_URI = "sqlite:///.stetiq/stetiq.db"
@@ -402,6 +403,15 @@ class Client:
         observes the Graph Source); an exception inside it marks the run failed."""
         if ontology_version is not None and alias is not None:
             raise ValueError("start_run takes ontology_version or alias, not both")
+        graph_source = self._require_graph_source()
+        if ontology_version is None:
+            alias = alias or self.get_contract_alias(knowledge_graph)
+            ontology_version = self.get_alias(knowledge_graph, alias).version
+        run = self._service.start_run(knowledge_graph, ontology_version)
+        declared = self._service.get_ontology_version(knowledge_graph, ontology_version)
+        return ActiveRun(self._service, graph_source, run, declared.ontology)
+
+    def _require_graph_source(self) -> GraphSource:
         if self._graph_source is None:
             self._graph_source = graph_source_from_env()
         if self._graph_source is None:
@@ -409,12 +419,7 @@ class Client:
                 "Client has no Graph Source adapter to observe with; pass graph_source=... "
                 "or set STETIQ_GRAPH_SOURCE_URI"
             )
-        if ontology_version is None:
-            alias = alias or self.get_contract_alias(knowledge_graph)
-            ontology_version = self.get_alias(knowledge_graph, alias).version
-        run = self._service.start_run(knowledge_graph, ontology_version)
-        declared = self._service.get_ontology_version(knowledge_graph, ontology_version)
-        return ActiveRun(self._service, self._graph_source, run, declared.ontology)
+        return self._graph_source
 
     def run_entry_point(
         self,
@@ -483,6 +488,25 @@ class Client:
     def list_observations(self, knowledge_graph: str) -> list[Observation]:
         """All Observations of the Knowledge Graph's Graph Source, oldest first."""
         return self._service.list_observations(knowledge_graph)
+
+    def observe(
+        self, knowledge_graph: str, *, thresholds: DriftThresholds | None = None
+    ) -> ObservationOutcome:
+        """Observe the bound Graph Source scope now, outside any Construction Run (what
+        `stetiq observe` does; schedule it with cron, Airflow or CI).
+
+        The Observation is compared with the Contract Alias's Ontology Version
+        (structural Drift) and with the previous Observation (statistical Drift, only
+        beyond `thresholds`). Drift raises a Drift event, returned and listed by
+        `list_drift_events`; it never creates an Ontology Version."""
+        graph_source = self._require_graph_source()
+        scope = self._service.get_graph_source(knowledge_graph)
+        schema = graph_source.observe(scope)
+        return self._service.record_observation(knowledge_graph, (scope, schema), thresholds)
+
+    def list_drift_events(self, knowledge_graph: str) -> list[DriftEvent]:
+        """The Knowledge Graph's Drift events, oldest first."""
+        return self._service.list_drift_events(knowledge_graph)
 
 
 class ActiveRun:

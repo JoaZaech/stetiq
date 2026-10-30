@@ -440,3 +440,90 @@ def token_revoke(token_id: str, database_url: DatabaseUrl = None) -> None:
     except StetiqError as e:
         raise _fail(e) from None
     typer.echo(f"Revoked token {token_id}")
+
+
+# --- On-demand Observation and Drift (ticket #16) ---------------------------------------
+
+drift_app = typer.Typer(no_args_is_help=True, help="Drift events.")
+app.add_typer(drift_app, name="drift")
+
+# `stetiq observe` exits with this code when the Observation raised Drift (errors exit 1),
+# so a scheduler can tell "the graph drifted" from "the check could not run".
+DRIFT_EXIT_CODE = 3
+DEFAULT_CONFIG = Path(DEFAULT_CONFIG_PATH)
+
+ConfigPath = Annotated[
+    Path | None,
+    typer.Option("--config", dir_okay=False, help="Repo config file (default ./stetiq.yaml, if present)"),
+]
+
+
+def _repo_config(path: Path | None) -> dict:
+    """The repo config; a missing default ./stetiq.yaml means an empty config."""
+    if path is None:
+        return load_config(DEFAULT_CONFIG) if DEFAULT_CONFIG.is_file() else {}
+    if not path.is_file():
+        raise StetiqError(f"config file {path} does not exist")
+    try:
+        return load_config(path)
+    except (ValueError, yaml.YAMLError) as e:
+        raise StetiqError(f"{path}: {e}") from None
+
+
+def _echo_findings(findings) -> None:
+    for f in findings:
+        typer.echo(f"  {f.kind:<15} {f.subject_kind:<18} {f.subject}  {f.detail}".rstrip())
+
+
+@app.command("observe")
+def observe(
+    knowledge_graph: Annotated[
+        str | None, typer.Argument(help="Default: `knowledge_graph` from the repo config")
+    ] = None,
+    config: ConfigPath = None,
+    tracking_uri: TrackingUri = None,
+) -> None:
+    """Observe the Knowledge Graph's Graph Source now and check it for Drift.
+
+    Compares the Observed Schema with the Contract Alias's Ontology Version and the
+    previous Observation (thresholds from the `drift:` section of the repo config).
+    Exits 3 on Drift, 1 on errors. Schedule it with your own cron, Airflow or CI."""
+    from stetiq.drift import thresholds_from_config
+
+    try:
+        settings = _repo_config(config)
+        thresholds = thresholds_from_config(settings)
+        kg = knowledge_graph or settings.get("knowledge_graph")
+        if not kg:
+            raise StetiqError("no Knowledge Graph given (argument or `knowledge_graph` in the repo config)")
+        outcome = _client(tracking_uri).observe(kg, thresholds=thresholds)
+    except StetiqError as e:
+        raise _fail(e) from None
+    obs = outcome.observation
+    typer.echo(f"Observation {obs.id} of {kg} at {obs.observed_at.isoformat()}")
+    if outcome.drift is None:
+        typer.echo("No Drift")
+        return
+    d = outcome.drift
+    typer.echo(
+        f"Drift: {len(d.findings)} finding(s) against {d.contract_alias} "
+        f"(Ontology Version {d.ontology_version})"
+    )
+    _echo_findings(d.findings)
+    raise typer.Exit(code=DRIFT_EXIT_CODE)
+
+
+@drift_app.command("list")
+def drift_list(knowledge_graph: str, tracking_uri: TrackingUri = None) -> None:
+    """List a Knowledge Graph's Drift events, oldest first."""
+    try:
+        events = _client(tracking_uri).list_drift_events(knowledge_graph)
+    except StetiqError as e:
+        raise _fail(e) from None
+    typer.echo(f"{'DETECTED':<33} {'CONTRACT':<16} {'STRUCT':<7} {'STATS':<6} OBSERVATION")
+    for e in events:
+        contract = f"{e.contract_alias}@{e.ontology_version}"
+        typer.echo(
+            f"{e.detected_at.isoformat():<33} {contract:<16} {len(e.structural):<7} "
+            f"{len(e.statistical):<6} {e.observation_id}"
+        )

@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Literal
 
 from stetiq.conformance import Conformance
+from stetiq.drift import DriftFinding, DriftThresholds
 from stetiq.errors import InvalidAliasNameError
 from stetiq.evaluation.framework import Detail, MetricValue, ParameterValue, SubjectKind
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
@@ -164,3 +165,45 @@ class UseCaseVersion:
     content_hash: str
     created_at: datetime
     use_case: UseCase
+
+
+# --- Drift (ticket #16) ------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class DriftEvent:
+    """An alert raised by an on-demand Observation that diverged from the contract (or,
+    beyond `thresholds`, from the previous Observation). Never an Ontology Version.
+
+    `contract_alias` / `ontology_version` are the contract the Observation was compared
+    with at the time; `thresholds` are the statistical thresholds used."""
+
+    id: str
+    knowledge_graph: str
+    observation_id: str
+    previous_observation_id: str | None
+    contract_alias: str
+    ontology_version: int
+    detected_at: datetime
+    findings: tuple[DriftFinding, ...]
+    thresholds: DriftThresholds = field(default_factory=DriftThresholds)
+
+    @property
+    def structural(self) -> tuple[DriftFinding, ...]:
+        return tuple(f for f in self.findings if f.structural)
+
+    @property
+    def statistical(self) -> tuple[DriftFinding, ...]:
+        return tuple(f for f in self.findings if not f.structural)
+
+
+@dataclass(frozen=True)
+class ObservationOutcome:
+    """What an on-demand Observation produced: the Observation, and its Drift event if any."""
+
+    observation: Observation
+    drift: DriftEvent | None = None
+
+    @property
+    def drifted(self) -> bool:
+        return self.drift is not None

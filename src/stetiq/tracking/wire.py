@@ -26,6 +26,8 @@ from stetiq.tracking.entities import (
 )
 from stetiq import use_case as use_case_format
 from stetiq.tracking.entities import Alias, Promotion
+from stetiq.drift import DriftFinding, DriftThresholds
+from stetiq.tracking.entities import DriftEvent, ObservationOutcome
 
 API_PREFIX = "/api/v1"
 
@@ -286,6 +288,62 @@ def promotion_from_json(d: dict[str, Any]) -> Promotion:
         actor=d["actor"],
         promoted_at=datetime.fromisoformat(d["promoted_at"]),
         gate_result=d["gate_result"],
+    )
+
+
+# --- Drift (ticket #16) ------------------------------------------------------------------
+
+ERROR_STATUS[errors.InvalidDriftConfigError] = 422
+
+
+def drift_thresholds_to_json(t: DriftThresholds) -> dict[str, Any]:
+    return t.to_dict()
+
+
+def drift_thresholds_from_json(d: dict[str, Any] | None) -> DriftThresholds:
+    return DriftThresholds() if d is None else DriftThresholds.from_dict(d)
+
+
+def drift_event_to_json(e: DriftEvent) -> dict[str, Any]:
+    return {
+        "id": e.id,
+        "knowledge_graph": e.knowledge_graph,
+        "observation_id": e.observation_id,
+        "previous_observation_id": e.previous_observation_id,
+        "contract_alias": e.contract_alias,
+        "ontology_version": e.ontology_version,
+        "detected_at": e.detected_at.isoformat(),
+        "findings": [f.to_dict() for f in e.findings],
+        "thresholds": e.thresholds.to_dict(),
+    }
+
+
+def drift_event_from_json(d: dict[str, Any]) -> DriftEvent:
+    return DriftEvent(
+        id=d["id"],
+        knowledge_graph=d["knowledge_graph"],
+        observation_id=d["observation_id"],
+        previous_observation_id=d["previous_observation_id"],
+        contract_alias=d["contract_alias"],
+        ontology_version=d["ontology_version"],
+        detected_at=datetime.fromisoformat(d["detected_at"]),
+        findings=tuple(DriftFinding.from_dict(f) for f in d["findings"]),
+        thresholds=drift_thresholds_from_json(d.get("thresholds")),
+    )
+
+
+def observation_outcome_to_json(o: ObservationOutcome) -> dict[str, Any]:
+    return {
+        "observation": observation_to_json(o.observation),
+        "drift_event": None if o.drift is None else drift_event_to_json(o.drift),
+    }
+
+
+def observation_outcome_from_json(d: dict[str, Any]) -> ObservationOutcome:
+    drift = d.get("drift_event")
+    return ObservationOutcome(
+        observation=observation_from_json(d["observation"]),
+        drift=None if drift is None else drift_event_from_json(drift),
     )
 
 
