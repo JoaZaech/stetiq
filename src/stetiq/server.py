@@ -227,7 +227,11 @@ def create_app(
 
     @api.get("/knowledge-graphs/{name}/ontology-versions")
     def list_ontology_versions(name: str) -> list[dict[str, Any]]:
-        return [wire.ontology_version_to_json(v) for v in tracking.list_ontology_versions(name)]
+        candidates = set(tracking.list_candidates(name))
+        return [
+            wire.ontology_version_to_json(v, candidate=v.number in candidates)
+            for v in tracking.list_ontology_versions(name)
+        ]
 
     @api.get("/knowledge-graphs/{name}/ontology-versions/{number}")
     def get_ontology_version(name: str, number: int) -> dict[str, Any]:

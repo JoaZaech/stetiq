@@ -416,6 +416,32 @@ def test_the_diff_route_returns_the_classified_changes_between_two_versions(
     }
 
 
+def test_the_version_list_says_which_versions_are_candidates(http, database_url, two_versions):
+    sdk = stetiq.Client(database_url)
+    sdk.register_ontology("support", "node_types:\n  - label: Invoice\n")
+    sdk.set_alias("support", "staging", 2)
+
+    r = http.get(
+        "/api/v1/knowledge-graphs/support/ontology-versions",
+        headers=bearer(database_url, {"support": "read"}),
+    )
+
+    # v1 holds the Contract Alias and v2 was promoted; only v3 was never pointed to.
+    assert [(v["number"], v["candidate"]) for v in r.json()] == [(1, False), (2, False), (3, True)]
+
+
+def test_a_version_payload_without_the_candidate_flag_still_parses(http, database_url):
+    sdk = stetiq.Client(database_url)
+    sdk.create_knowledge_graph("support", ontology="node_types:\n  - label: Customer\n")
+    payload = http.get(
+        "/api/v1/knowledge-graphs/support/ontology-versions/1",
+        headers=bearer(database_url, {"support": "read"}),
+    ).json()
+
+    assert "candidate" not in payload
+    assert wire.ontology_version_from_json(payload) == sdk.get_ontology_version("support", 1)
+
+
 def diff(http, kg, base, target, headers):
     return http.get(
         f"/api/v1/knowledge-graphs/{kg}/ontology-diff",

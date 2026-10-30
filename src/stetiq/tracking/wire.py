@@ -77,8 +77,11 @@ def knowledge_graph_from_json(d: dict[str, Any]) -> KnowledgeGraph:
     )
 
 
-def ontology_version_to_json(v: OntologyVersion) -> dict[str, Any]:
-    return {
+def ontology_version_to_json(
+    v: OntologyVersion, *, candidate: bool | None = None
+) -> dict[str, Any]:
+    """`candidate` is only sent by the version list (older servers never send it)."""
+    out = {
         "knowledge_graph": v.knowledge_graph,
         "number": v.number,
         "content_hash": v.content_hash,
@@ -86,6 +89,9 @@ def ontology_version_to_json(v: OntologyVersion) -> dict[str, Any]:
         "created_at": v.created_at.isoformat(),
         "ontology": to_dict(v.ontology),
     }
+    if candidate is not None:
+        out["candidate"] = candidate
+    return out
 
 
 def ontology_version_from_json(d: dict[str, Any]) -> OntologyVersion:

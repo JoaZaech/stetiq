@@ -336,10 +336,10 @@ class Client:
     def latest_candidate(self, knowledge_graph: str) -> OntologyVersion:
         """The newest Ontology Version no Alias has pointed to yet; the latest version
         when every version has been pointed to."""
-        versions = self.list_ontology_versions(knowledge_graph)
-        aliased = {p.to_version for p in self.list_promotions(knowledge_graph)}
-        candidates = [v for v in versions if v.number not in aliased]
-        return (candidates or versions)[-1]
+        candidates = self._service.list_candidates(knowledge_graph)
+        if candidates:
+            return self.get_ontology_version(knowledge_graph, candidates[-1])
+        return self.list_ontology_versions(knowledge_graph)[-1]
 
     def diff_ontologies(self, base: OntologyInput, target: OntologyInput) -> OntologyDiff:
         """The Ontology Diff between two Ontologies that need not be registered (e.g. files in a repo)."""

@@ -98,6 +98,11 @@ class RemoteTrackingService:
         data = self._call("GET", self._kg_path(knowledge_graph) + "/ontology-versions")
         return [wire.ontology_version_from_json(v) for v in data]
 
+    def list_candidates(self, knowledge_graph: str) -> list[int]:
+        # The server marks Candidates in its version list.
+        data = self._call("GET", self._kg_path(knowledge_graph) + "/ontology-versions")
+        return [v["number"] for v in data if v.get("candidate")]
+
     def get_ontology_version(self, knowledge_graph: str, number: int) -> OntologyVersion:
         data = self._call("GET", f"{self._kg_path(knowledge_graph)}/ontology-versions/{number}")
         return wire.ontology_version_from_json(data)

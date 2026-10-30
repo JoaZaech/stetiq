@@ -118,6 +118,11 @@ class TrackingService(Protocol):
 
     def get_ontology_version(self, knowledge_graph: str, number: int) -> OntologyVersion: ...
 
+    def list_candidates(self, knowledge_graph: str) -> list[int]:
+        """The numbers of the Knowledge Graph's Candidates (Ontology Versions no Alias
+        has pointed to yet), ascending."""
+        ...
+
     def bind_graph_source(self, knowledge_graph: str, scope: GraphSourceScope) -> None: ...
 
     def get_graph_source(self, knowledge_graph: str) -> GraphSourceScope: ...
@@ -512,6 +517,12 @@ class LocalTrackingService:
     def list_ontology_versions(self, knowledge_graph: str) -> list[OntologyVersion]:
         self.get_knowledge_graph(knowledge_graph)
         return self._store.list_ontology_versions(knowledge_graph)
+
+    def list_candidates(self, knowledge_graph: str) -> list[int]:
+        with self._store.transaction():
+            versions = self.list_ontology_versions(knowledge_graph)
+            pointed_to = {p.to_version for p in self._store.list_promotions(knowledge_graph)}
+        return [v.number for v in versions if v.number not in pointed_to]
 
     def get_ontology_version(self, knowledge_graph: str, number: int) -> OntologyVersion:
         self.get_knowledge_graph(knowledge_graph)
