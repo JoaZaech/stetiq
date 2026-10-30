@@ -211,11 +211,11 @@ test('the Ontology tab lists Concepts grouped, with hierarchy and constraints, a
   const relations = page.getByRole('table', { name: 'Relations' })
   const attributes = page.getByRole('table', { name: 'Attributes' })
   await expect(classes.getByRole('row')).toHaveText([
-    /Class.*Superclass.*Constraints/,
-    /^Party/,
-    /^Agent\s*Party/,
-    /^Customer\s*Someone who opens tickets\s*Party\s*UNIQUENESS \(name\)/,
-    /^Ticket/,
+    /Class.*Superclass.*Attributes.*Outgoing.*Incoming.*Constraints.*Description/,
+    /^Party\s*—\s*1\s*—/,
+    /^Agent\s*Party\s*0\s*\(1\)/,
+    /^Customer\s*Party\s*0\s*\(1\)\s*OPENED → Ticket\s*—\s*UNIQUENESS \(name\)\s*Someone who opens tickets/,
+    /^Ticket\s*—\s*2\s*—\s*OPENED ← Customer/,
   ])
   await expect(relations.getByRole('row').nth(1)).toHaveText(/OPENED.*\(Customer\)-\[OPENED\]->\(Ticket\)/)
   await expect(attributes.getByRole('row')).toHaveText([

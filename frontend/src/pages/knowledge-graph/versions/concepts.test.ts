@@ -66,6 +66,52 @@ describe('conceptTables', () => {
 
     expect(classes.map((c) => [c.label, c.depth])).toEqual([['Orphan', 0]])
   })
+
+  it('counts each class’s own attributes and those it inherits along its superclass chain', () => {
+    const { classes } = conceptTables(ONTOLOGY)
+
+    expect(classes.map((c) => [c.label, c.attributes, c.inheritedAttributes])).toEqual([
+      ['Person', 1, 0],
+      ['Agent', 0, 1],
+      ['Supervisor', 0, 1],
+      ['Customer', 0, 1],
+      ['Ticket', 1, 0],
+    ])
+  })
+
+  it('counts a redeclared attribute once, as the class’s own',() => {
+    const { classes } = conceptTables({
+      node_types: [
+        {
+          label: 'Base',
+          properties: [
+            { name: 'id', type: 'STRING' },
+            { name: 'name', type: 'STRING' },
+          ],
+        },
+        { label: 'Sub', parent: 'Base', properties: [{ name: 'id', type: 'INTEGER' }] },
+      ],
+      relationship_types: [],
+      patterns: [],
+    })
+
+    expect(classes.find((c) => c.label === 'Sub')).toMatchObject({ attributes: 1, inheritedAttributes: 1 })  })
+
+  it('lists each class’s outgoing and incoming relations with the class at the other end', () => {
+    const { classes } = conceptTables({
+      node_types: [{ label: 'Paper' }, { label: 'Person' }],
+      relationship_types: [{ label: 'CITES' }, { label: 'WROTE' }],
+      patterns: [
+        ['Paper', 'CITES', 'Paper'],
+        ['Person', 'WROTE', 'Paper'],
+      ],
+    })
+
+    expect(classes.map((c) => [c.label, c.outgoing, c.incoming])).toEqual([
+      ['Paper', ['CITES → Paper'], ['CITES ← Paper', 'WROTE ← Person']],
+      ['Person', ['WROTE → Paper'], []],
+    ])
+  })
 })
 
 describe('searchConcepts', () => {
