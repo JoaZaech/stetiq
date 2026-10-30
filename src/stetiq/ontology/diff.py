@@ -179,8 +179,9 @@ def _diff_concepts(
                     )
                 )
             changes += _diff_properties(old[label], new[label])
-            if kind == "node_type":
-                changes += _diff_parent(old[label], new[label])
+            old_concept, new_concept = old[label], new[label]
+            if isinstance(old_concept, NodeType) and isinstance(new_concept, NodeType):
+                changes += _diff_parent(old_concept, new_concept)
             if kind == "relationship_type":
                 changes += _diff_patterns(label, base_ontology, target_ontology)
     return changes

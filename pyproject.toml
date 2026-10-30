@@ -52,3 +52,8 @@ target-version = "py312"
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "BLE"]
 # Typer and FastAPI declare options/dependencies as call defaults by design.
 ignore = ["B008", "E501"]  # line length is left to `ruff format`
+
+[tool.pyright]
+include = ["src"]
+typeCheckingMode = "standard"
+pythonVersion = "3.12"

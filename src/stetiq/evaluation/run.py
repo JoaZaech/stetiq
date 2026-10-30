@@ -170,9 +170,9 @@ class CompetencyQuestionExecution(ConstructionRunEvaluator):
 
     def evaluate(self, run: ConstructionRunSubject) -> Evaluation:
         questions = self.use_case.competency_questions
-        executed = [q for q in questions if q.query]
-        details = [self._execute(q, run.graph_source) for q in executed]
-        passed = sum(d.data["status"] == "passed" for d in details)
+        executed = [(q, q.query) for q in questions if q.query]
+        details = [self._execute(q, query, run.graph_source) for q, query in executed]
+        passed = sum(d.data is not None and d.data["status"] == "passed" for d in details)
         return Evaluation(
             metrics={
                 "questions": len(executed),
@@ -185,10 +185,10 @@ class CompetencyQuestionExecution(ConstructionRunEvaluator):
         )
 
     @staticmethod
-    def _execute(question: CompetencyQuestion, graph: ReadOnlyGraphSource) -> Detail:
+    def _execute(question: CompetencyQuestion, query: str, graph: ReadOnlyGraphSource) -> Detail:
         check = "non_empty" if question.expected_answer is None else "expected_answer"
         try:
-            rows = graph.execute_read(question.query)
+            rows = graph.execute_read(query)
         except Exception as exc:  # noqa: BLE001 - any failure fails the question
             # Only the exception type: a database message can quote instance values.
             return Detail(

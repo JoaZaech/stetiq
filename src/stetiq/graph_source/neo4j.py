@@ -15,7 +15,7 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, LiteralString, cast
 from urllib.parse import unquote, urlsplit, urlunsplit
 
 import neo4j
@@ -80,12 +80,12 @@ class Neo4jGraphSource:
         params = dict(parameters or {})
 
         def work(tx: neo4j.ManagedTransaction) -> list[dict[str, Any]]:
-            plan = tx.run(f"EXPLAIN {query}", params).consume()
+            plan = tx.run(_cypher(f"EXPLAIN {query}"), params).consume()
             if plan.query_type != "r":
                 raise GraphSourceWriteRejectedError(
                     f"Graph Source queries must be read-only; query type is {plan.query_type!r}"
                 )
-            return [record.data() for record in tx.run(query, params)]
+            return [record.data() for record in tx.run(_cypher(query), params)]
 
         with self._session(scope) as session:
             return session.execute_read(work)
@@ -94,7 +94,9 @@ class Neo4jGraphSource:
         params = {"scope_label": scope.label, "namespace": scope.namespace}
         with self._session(scope) as session:
             rows = session.execute_read(
-                lambda tx: {name: tx.run(q, params).data() for name, q in _queries(scope).items()}
+                lambda tx: {
+                    name: tx.run(_cypher(q), params).data() for name, q in _queries(scope).items()
+                }
             )
 
         node_counts = {r["label"]: r["count"] for r in rows["node_counts"]}
@@ -161,6 +163,14 @@ def _in_scope(var: str, scope: GraphSourceScope) -> str:
 # Labels of a node, minus the scope label (a scoping artefact).
 def _labels(var: str) -> str:
     return f"[l IN labels({var}) WHERE $scope_label IS NULL OR l <> $scope_label]"
+
+
+def _cypher(query: str) -> LiteralString:
+    """Hand a dynamic query to the driver. Its `LiteralString` guard against injection
+    does not fit here: Competency Question queries are user-supplied by design (and
+    `execute_read` rejects any that is not read-only), and the observation queries
+    only interpolate the (quoted) scope label and fixed fragments built here."""
+    return cast(LiteralString, query)
 
 
 def _queries(scope: GraphSourceScope) -> dict[str, str]:

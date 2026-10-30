@@ -184,7 +184,8 @@ def _check_concepts(
         for name in sorted(declared_props.keys() | observed_props.keys()):
             subject = f"{label}.{name}"
             dp, op = declared_props.get(name), observed_props.get(name)
-            if checks.presence(subject, "property", dp is not None, op is not None):
+            present = checks.presence(subject, "property", dp is not None, op is not None)
+            if present and dp is not None and op is not None:
                 checks.record(subject, "property", _property_mismatches(subject, label, dp, op))
 
 

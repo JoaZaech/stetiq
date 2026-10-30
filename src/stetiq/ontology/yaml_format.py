@@ -235,7 +235,7 @@ def _parse_constraints(doc: dict[str, Any], nodes: list[dict[str, Any]]) -> list
                 f"unknown constraint type {c.get('type')!r}; allowed: {', '.join(sorted(CONSTRAINT_TYPES))}",
             )
         node_type = c.get("node_type")
-        if node_type not in by_label:
+        if not isinstance(node_type, str) or node_type not in by_label:
             raise _fail(path, f"node type {node_type!r} is not declared in node_types")
         prop = c.get("property_name")
         if prop not in properties_of(node_type):

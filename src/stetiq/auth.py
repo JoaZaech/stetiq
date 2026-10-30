@@ -89,11 +89,12 @@ class TokenRegistry:
         """Create a token; returns it and its full secret value (not retrievable later)."""
         if not user:
             raise StetiqError("A token needs a user")
+        created_at = datetime.now(UTC)
         token = ApiToken(
             id=secrets.token_hex(4),
             user=user,
             grants=validate_grants(grants),
-            created_at=datetime.now(UTC),
+            created_at=created_at,
         )
         value = f"{TOKEN_PREFIX}_{token.id}_{secrets.token_urlsafe(32)}"
         with self._store._connection() as conn:
@@ -103,7 +104,7 @@ class TokenRegistry:
                     user=token.user,
                     secret_hash=_hash(value),
                     grants_json=json.dumps(token.grants, sort_keys=True),
-                    created_at=token.created_at.isoformat(),
+                    created_at=created_at.isoformat(),
                     revoked_at=None,
                 )
             )

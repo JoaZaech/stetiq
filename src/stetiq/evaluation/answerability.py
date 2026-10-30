@@ -206,8 +206,9 @@ class StructuralAnswerability(OntologyVersionEvaluator):
             "required": [str(r) for r in required],
             "missing": missing,
         }
-        if source == "model" and getattr(self.mapper, "description", None):
-            data["mapper"] = str(self.mapper.description)
+        description = getattr(self.mapper, "description", None)
+        if source == "model" and description:
+            data["mapper"] = str(description)
         if error:
             data["error"] = error
         return data

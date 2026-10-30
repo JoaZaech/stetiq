@@ -93,7 +93,7 @@ class LlmQuestionMapper:
     def client(self) -> Any:
         if self._client is None:
             try:
-                import anthropic
+                import anthropic  # pyright: ignore[reportMissingImports] - optional extra
             except ImportError as exc:  # pragma: no cover - depends on the environment
                 raise LlmMappingError(
                     "LLM mapping needs the anthropic SDK: pip install 'stetiq[llm]'"

@@ -385,13 +385,17 @@ def _parse_diff(name: str, p: _Params) -> Gate:
     return OntologyDiffGate(name=name, max_classification=classification)
 
 
-def _number(p: _Params, key: str, default: Any = ...) -> float | None:
-    value = p.get(key, default, kind=(int, float))
+def _number(p: _Params, key: str) -> float | None:
+    value = p.get(key, None, kind=(int, float))
     return None if value is None else float(value)
 
 
+def _required_number(p: _Params, key: str) -> float:
+    return float(p.get(key, kind=(int, float)))
+
+
 def _parse_conformance(name: str, p: _Params) -> Gate:
-    score = _number(p, "min_score")
+    score = _required_number(p, "min_score")
     if not 0.0 <= score <= 1.0:
         raise GateConfigError(f"Gate {name!r}: min_score must be between 0 and 1")
     p.done()
@@ -401,7 +405,7 @@ def _parse_conformance(name: str, p: _Params) -> Gate:
 def _parse_metric(name: str, p: _Params) -> Gate:
     evaluator = p.get("evaluator", kind=str)
     metric = p.get("metric", kind=str)
-    low, high = _number(p, "min", None), _number(p, "max", None)
+    low, high = _number(p, "min"), _number(p, "max")
     if low is None and high is None:
         raise GateConfigError(f"Gate {name!r}: give 'min' and/or 'max'")
     if low is not None and high is not None and low > high:
@@ -414,7 +418,7 @@ def _parse_metric(name: str, p: _Params) -> Gate:
 
 
 def _parse_count_drop(name: str, p: _Params) -> Gate:
-    drop = _number(p, "max_drop")
+    drop = _required_number(p, "max_drop")
     if not 0.0 <= drop <= 1.0:
         raise GateConfigError(f"Gate {name!r}: max_drop must be a fraction between 0 and 1")
     p.done()

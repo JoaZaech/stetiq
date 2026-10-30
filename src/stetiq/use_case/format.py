@@ -15,7 +15,7 @@ Cases hash equally (identical content registers as the existing version).
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
@@ -63,9 +63,10 @@ def _question(index: int, raw: Any) -> CompetencyQuestion:
     concepts = raw.get("concepts", ())
     if isinstance(concepts, str) or not isinstance(concepts, (list, tuple)):
         raise UseCaseValidationError(f"{path}.concepts: must be a list of Concept references")
+    # Unchecked YAML values: `check_question` (via `check_use_case`) validates them.
     return CompetencyQuestion(
-        id=raw.get("id"),
-        question=raw.get("question"),
+        id=cast(str, raw.get("id")),
+        question=cast(str, raw.get("question")),
         query=raw.get("query"),
         expected_answer=raw.get("expected_answer"),
         concepts=tuple(concepts),

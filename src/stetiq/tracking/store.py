@@ -6,6 +6,7 @@ Implementation: `SqlStore` (SQLite or Postgres; used by local mode and the serve
 
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
 from datetime import datetime
 from typing import Protocol
 
@@ -162,6 +163,6 @@ class Store(Protocol):
         """Ordered oldest first."""
         ...
 
-    def transaction(self):
+    def transaction(self) -> AbstractContextManager[None]:
         """Context manager making the enclosed store calls atomic."""
         ...

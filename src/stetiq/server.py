@@ -7,7 +7,7 @@ over a `SqlStore` (SQLite or Postgres) and translates JSON <-> entities with
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Body, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -20,6 +20,7 @@ from stetiq.evaluation.framework import SubjectKind
 from stetiq.gates import parse_gates
 from stetiq.ontology import parse_dict
 from stetiq.tracking import LocalTrackingService, SqlStore, TrackingService, wire
+from stetiq.tracking.entities import EvolutionMode
 from stetiq.use_case import parse_use_case_dict
 from stetiq.web import ui_router
 
@@ -162,7 +163,7 @@ def create_app(
 
     @api.put("/knowledge-graphs/{name}/evolution-mode")
     def set_evolution_mode(name: str, mode: str = Body(embed=True)) -> dict[str, str]:
-        tracking.set_evolution_mode(name, mode)  # validates the mode
+        tracking.set_evolution_mode(name, cast(EvolutionMode, mode))  # validates the mode
         return {"mode": mode}
 
     @api.get("/knowledge-graphs/{name}/evolution-mode")

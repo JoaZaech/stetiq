@@ -810,7 +810,7 @@ def runs_compare(run_ids: list[str], tracking_uri: TrackingUri = None) -> None:
             return "-"
         return f"{value:g}" if isinstance(value, float) else str(value)
 
-    rows = [("run", tuple(r.id[:12] for r in cmp.runs))]
+    rows: list[tuple[str, tuple[object, ...]]] = [("run", tuple(r.id[:12] for r in cmp.runs))]
     rows.append(("ontology_version", cmp.ontology_versions))
     rows += [(f"param {k}", v) for k, v in cmp.params.items()]
     rows += [(f"metric {k}", v) for k, v in cmp.metrics.items()]
