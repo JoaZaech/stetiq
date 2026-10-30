@@ -16,7 +16,7 @@ import json
 import uuid
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
-from typing import Protocol
+from typing import Protocol, get_args
 
 from stetiq import use_case as use_case_format
 from stetiq.conformance import assess_conformance, candidate_ontology
@@ -64,6 +64,7 @@ from stetiq.tracking.entities import (
     EvolutionMode,
     GateResult,
     KnowledgeGraph,
+    KnowledgeGraphSummary,
     Observation,
     ObservationOutcome,
     OntologyVersion,
@@ -99,8 +100,13 @@ class TrackingService(Protocol):
 
     def get_knowledge_graph(self, name: str) -> KnowledgeGraph: ...
 
-    def list_knowledge_graphs(self) -> list[KnowledgeGraph]:
-        """By name. In server mode, only those the API token can read."""
+    def set_knowledge_graph_description(self, name: str, description: str | None) -> KnowledgeGraph:
+        """Replace the markdown description; a blank one clears it."""
+        ...
+
+    def list_knowledge_graphs(self) -> list[KnowledgeGraphSummary]:
+        """By name, each with a summary of its state. In server mode, only those the API
+        token can read."""
         ...
 
     def register_ontology(self, knowledge_graph: str, ontology: Ontology) -> OntologyVersion:
@@ -111,6 +117,11 @@ class TrackingService(Protocol):
     def list_ontology_versions(self, knowledge_graph: str) -> list[OntologyVersion]: ...
 
     def get_ontology_version(self, knowledge_graph: str, number: int) -> OntologyVersion: ...
+
+    def list_candidates(self, knowledge_graph: str) -> list[int]:
+        """The numbers of the Knowledge Graph's Candidates (Ontology Versions no Alias
+        has pointed to yet), ascending."""
+        ...
 
     def bind_graph_source(self, knowledge_graph: str, scope: GraphSourceScope) -> None: ...
 
@@ -197,6 +208,14 @@ class TrackingService(Protocol):
         Evaluator name then parameters."""
         ...
 
+    def list_evaluation_results(
+        self, knowledge_graph: str, subject_kind: SubjectKind
+    ) -> list[EvaluationResult]:
+        """The latest result per (subject, Evaluator, parameters) across every subject
+        of `subject_kind` in the Knowledge Graph: `get_evaluation_results` for each of
+        them at once. Subjects come in the order of their first stored result."""
+        ...
+
     def evaluate_construction_run(self, run_id: str) -> list[EvaluationResult]:
         """(Re-)run the built-in run Evaluators that need no Graph Source access
         (`conformance`, `observed_schema`) on a run with an Observation, and store the
@@ -205,7 +224,10 @@ class TrackingService(Protocol):
 
     def register_use_case(self, knowledge_graph: str, use_case: UseCase) -> UseCaseVersion:
         """Store a new Use Case version (identical content returns the existing one).
-        Never creates an Ontology Version."""
+        Never creates an Ontology Version.
+
+        A new version is at once used to judge the latest Ontology Version's structural
+        answerability, and that result is stored; a dedupe hit judges nothing again."""
         ...
 
     def list_use_case_versions(self, knowledge_graph: str) -> list[UseCaseVersion]: ...
@@ -261,8 +283,32 @@ class LocalTrackingService:
             raise NotFoundError(f"Knowledge Graph {name!r} does not exist")
         return kg
 
-    def list_knowledge_graphs(self) -> list[KnowledgeGraph]:
-        return self._store.list_knowledge_graphs()
+    def set_knowledge_graph_description(self, name: str, description: str | None) -> KnowledgeGraph:
+        description = description.strip() if description is not None else None
+        with self._store.transaction():
+            self.get_knowledge_graph(name)
+            self._store.set_knowledge_graph_description(name, description or None)
+            return self.get_knowledge_graph(name)
+
+    def list_knowledge_graphs(self) -> list[KnowledgeGraphSummary]:
+        """All Knowledge Graphs by name, each with its summary."""
+        with self._store.transaction():
+            return [self._summarise(kg) for kg in self._store.list_knowledge_graphs()]
+
+    def _summarise(self, kg: KnowledgeGraph) -> KnowledgeGraphSummary:
+        name = kg.name
+        versions = self._store.list_ontology_versions(name)
+        runs = self._store.list_runs(name)
+        contract = self._store.get_alias(
+            name, self._store.get_contract_alias(name) or DEFAULT_CONTRACT_ALIAS
+        )
+        return KnowledgeGraphSummary(
+            knowledge_graph=kg,
+            contract_version=None if contract is None else contract.version,
+            latest_version=versions[-1].number if versions else None,
+            last_run_status=runs[-1].status if runs else None,
+            last_modified_at=self._store.last_change_at(name),
+        )
 
     def register_ontology(self, knowledge_graph: str, ontology: Ontology) -> OntologyVersion:
         with self._store.transaction():
@@ -445,15 +491,30 @@ class LocalTrackingService:
         self, knowledge_graph: str, subject_kind: SubjectKind, subject_id: str
     ) -> list[EvaluationResult]:
         self._check_subject(knowledge_graph, subject_kind, subject_id)
-        latest = {
-            (r.evaluator, json.dumps(r.parameters, sort_keys=True)): r
-            for r in self._store.list_evaluation_results(knowledge_graph, subject_kind, subject_id)
-        }
-        return [latest[key] for key in sorted(latest)]
+        return _latest_per_evaluator(
+            self._store.list_evaluation_results(knowledge_graph, subject_kind, subject_id)
+        )
+
+    def list_evaluation_results(
+        self, knowledge_graph: str, subject_kind: SubjectKind
+    ) -> list[EvaluationResult]:
+        self.get_knowledge_graph(knowledge_graph)
+        if subject_kind not in get_args(SubjectKind):
+            raise EvaluatorError(f"Unsupported evaluation subject kind {subject_kind!r}")
+        by_subject: dict[str, list[EvaluationResult]] = {}
+        for result in self._store.list_evaluation_results(knowledge_graph, subject_kind):
+            by_subject.setdefault(result.subject_id, []).append(result)
+        return [r for results in by_subject.values() for r in _latest_per_evaluator(results)]
 
     def list_ontology_versions(self, knowledge_graph: str) -> list[OntologyVersion]:
         self.get_knowledge_graph(knowledge_graph)
         return self._store.list_ontology_versions(knowledge_graph)
+
+    def list_candidates(self, knowledge_graph: str) -> list[int]:
+        with self._store.transaction():
+            versions = self.list_ontology_versions(knowledge_graph)
+            pointed_to = {p.to_version for p in self._store.list_promotions(knowledge_graph)}
+        return [v.number for v in versions if v.number not in pointed_to]
 
     def get_ontology_version(self, knowledge_graph: str, number: int) -> OntologyVersion:
         self.get_knowledge_graph(knowledge_graph)
@@ -605,6 +666,10 @@ class LocalTrackingService:
                 use_case=use_case,
             )
             self._store.add_use_case_version(version)
+            # The latest Ontology Version is judged against the new questions at once.
+            ontology_versions = self._store.list_ontology_versions(knowledge_graph)
+            if ontology_versions:
+                self._run_answerability(ontology_versions[-1], version.number)
             return version
 
     def list_use_case_versions(self, knowledge_graph: str) -> list[UseCaseVersion]:
@@ -820,6 +885,13 @@ class LocalTrackingService:
             if result.ontology_version == version:
                 return "passed" if result.passed else "failed"
         return None
+
+
+def _latest_per_evaluator(results: Sequence[EvaluationResult]) -> list[EvaluationResult]:
+    """One subject's results, oldest first -> the latest per (Evaluator, parameters),
+    ordered by Evaluator name then parameters."""
+    latest = {(r.evaluator, json.dumps(r.parameters, sort_keys=True)): r for r in results}
+    return [latest[key] for key in sorted(latest)]
 
 
 def _now() -> datetime:

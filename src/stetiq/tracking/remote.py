@@ -24,6 +24,7 @@ from stetiq.tracking.entities import (
     EvolutionMode,
     GateResult,
     KnowledgeGraph,
+    KnowledgeGraphSummary,
     Observation,
     ObservationOutcome,
     OntologyVersion,
@@ -81,8 +82,14 @@ class RemoteTrackingService:
     def get_knowledge_graph(self, name: str) -> KnowledgeGraph:
         return wire.knowledge_graph_from_json(self._call("GET", self._kg_path(name)))
 
-    def list_knowledge_graphs(self) -> list[KnowledgeGraph]:
-        return [wire.knowledge_graph_from_json(k) for k in self._call("GET", "/knowledge-graphs")]
+    def set_knowledge_graph_description(self, name: str, description: str | None) -> KnowledgeGraph:
+        body = {"description": description}
+        data = self._call("PUT", self._kg_path(name) + "/description", body)
+        return wire.knowledge_graph_from_json(data)
+
+    def list_knowledge_graphs(self) -> list[KnowledgeGraphSummary]:
+        data = self._call("GET", "/knowledge-graphs")
+        return [wire.knowledge_graph_summary_from_json(k) for k in data]
 
     def register_ontology(self, knowledge_graph: str, ontology: Ontology) -> OntologyVersion:
         body = {"ontology": to_dict(ontology)}
@@ -92,6 +99,11 @@ class RemoteTrackingService:
     def list_ontology_versions(self, knowledge_graph: str) -> list[OntologyVersion]:
         data = self._call("GET", self._kg_path(knowledge_graph) + "/ontology-versions")
         return [wire.ontology_version_from_json(v) for v in data]
+
+    def list_candidates(self, knowledge_graph: str) -> list[int]:
+        # The server marks Candidates in its version list.
+        data = self._call("GET", self._kg_path(knowledge_graph) + "/ontology-versions")
+        return [v["number"] for v in data if v.get("candidate")]
 
     def get_ontology_version(self, knowledge_graph: str, number: int) -> OntologyVersion:
         data = self._call("GET", f"{self._kg_path(knowledge_graph)}/ontology-versions/{number}")
@@ -259,6 +271,12 @@ class RemoteTrackingService:
         self, knowledge_graph: str, subject_kind: SubjectKind, subject_id: str
     ) -> list[EvaluationResult]:
         path = self._subject_path(knowledge_graph, subject_kind, subject_id) + "/evaluations"
+        return [wire.evaluation_result_from_json(r) for r in self._call("GET", path)]
+
+    def list_evaluation_results(
+        self, knowledge_graph: str, subject_kind: SubjectKind
+    ) -> list[EvaluationResult]:
+        path = f"{self._kg_path(knowledge_graph)}/evaluations?subject_kind={quote(subject_kind)}"
         return [wire.evaluation_result_from_json(r) for r in self._call("GET", path)]
 
     # --- Use Cases ------------------------------------------------------------------

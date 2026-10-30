@@ -1,0 +1,251 @@
+import { lazy, Suspense, useMemo, type ReactNode } from 'react'
+import { Link, useNavigate } from 'react-router'
+import { type Alias, useAliases, useContractAlias } from '@/api/aliases'
+import { useOntologyVersions, type ListedOntologyVersion } from '@/api/ontology-versions'
+import { kgCompareUrl, knowledgeGraphSection, kgUrl } from '@/app/knowledge-graph-sections'
+import { CompareToolbar } from '@/components/CompareToolbar'
+import { DataTable } from '@/components/DataTable'
+import { ErrorAlert } from '@/components/ErrorAlert'
+import { ColumnPicker } from '@/components/ColumnPicker'
+import { ViewModeToggle } from '@/components/ViewModeToggle'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Skeleton } from '@/components/ui/skeleton'
+import { createDataTableColumnHelper, useDataTable } from '@/lib/data-table'
+import { formatDateTime, formatMetric } from '@/lib/format'
+import { metricSeries } from '@/lib/metric-charts'
+import { metricColumnId, useChartSearch, useShownColumns, useViewMode } from '@/lib/metric-view-params'
+import { KnowledgeGraphSectionPage } from '../KnowledgeGraphSectionPage'
+import { useKnowledgeGraphName } from '../params'
+import { AliasChips, CandidateBadge } from './AliasChips'
+import { aliasesByVersion } from './lineage'
+import { type VersionMetrics, useVersionMetrics } from './version-metrics'
+
+const SECTION = knowledgeGraphSection('versions')
+
+/** One row of the version table. */
+interface VersionRow {
+  knowledgeGraph: string
+  number: number
+  origin: ListedOntologyVersion['origin']
+  createdAt: string
+  aliases: string[]
+  contractAlias: string | undefined
+  candidate: boolean
+  /** Evaluator metrics by `<evaluator>/<metric>` (see `evaluatorMetrics`). */
+  metrics: Readonly<Record<string, number>>
+}
+
+const column = createDataTableColumnHelper<VersionRow>()
+
+const columns = column.columns([
+  // Select two rows, then Compare: the Ontology Diff between them.
+  column.display({
+    id: 'select',
+    header: () => <span className="sr-only">Select</span>,
+    enableSorting: false,
+    cell: ({ row }) => (
+      <Checkbox
+        aria-label={`Select v${row.original.number}`}
+        checked={row.getIsSelected()}
+        onCheckedChange={(checked) => row.toggleSelected(checked === true)}
+      />
+    ),
+  }),
+  column.accessor('number', {
+    header: 'Version',
+    cell: ({ row }) => (
+      <Link
+        to={kgUrl(row.original.knowledgeGraph, 'versions', row.original.number)}
+        className="font-medium text-primary underline-offset-4 hover:underline"
+      >
+        v{row.original.number}
+      </Link>
+    ),
+  }),
+  column.accessor('origin', { header: 'Origin' }),
+  column.accessor('createdAt', {
+    header: 'Created',
+    sortFn: 'datetime',
+    cell: ({ getValue }) => <time dateTime={getValue()}>{formatDateTime(getValue())}</time>,
+  }),
+  column.display({
+    id: 'aliases',
+    header: 'Aliases',
+    cell: ({ row }) => (
+      <span className="inline-flex flex-wrap items-center gap-1">
+        <AliasChips aliases={row.original.aliases} contractAlias={row.original.contractAlias} />
+        {row.original.candidate && <CandidateBadge />}
+      </span>
+    ),
+  }),
+])
+
+/** A column for one Evaluator metric; a version without it shows a dash and sorts last. */
+function metricColumn(metric: string) {
+  return column.accessor((row) => row.metrics[metric], {
+    id: metricColumnId(metric),
+    header: metric,
+    sortFn: 'basic',
+    sortUndefined: 'last',
+    cell: ({ getValue }) => {
+      const value = getValue()
+      return value === undefined ? (
+        <span className="text-muted-foreground">—</span>
+      ) : (
+        <span className="tabular-nums">{formatMetric(value)}</span>
+      )
+    },
+  })
+}
+
+const NO_METRICS: Readonly<Record<string, number>> = {}
+
+/**
+ * `/kg/:name/versions`: the Knowledge Graph's Ontology Versions, newest first, as a table
+ * with optional Evaluator metric columns, or as one chart per Evaluator metric.
+ */
+export function OntologyVersionsPage() {
+  const name = useKnowledgeGraphName()
+  const versions = useOntologyVersions(name)
+  const aliases = useAliases(name)
+  const contractAlias = useContractAlias(name)
+  const metrics = useVersionMetrics(name)
+  const [mode, setMode] = useViewMode()
+  const [shownColumns, setShownColumn] = useShownColumns()
+
+  const actions = (
+    <>
+      {mode === 'table' && (
+        <ColumnPicker
+          groups={[
+            {
+              label: 'Evaluator metrics',
+              columns: metrics.names.map((m) => ({ id: metricColumnId(m), label: m })),
+            },
+          ]}
+          visible={shownColumns}
+          onToggle={setShownColumn}
+        />
+      )}
+      <ViewModeToggle mode={mode} onChange={setMode} />
+    </>
+  )
+
+  let content: ReactNode
+  if (versions.isError || aliases.isError || metrics.error) {
+    content = <ErrorAlert error={versions.error ?? aliases.error ?? metrics.error} />
+  } else if (versions.isPending || aliases.isPending || metrics.isPending) {
+    content = <Skeleton className="h-32 w-full" />
+  } else if (versions.data.length === 0) {
+    content = <p className="text-sm text-muted-foreground">No Ontology Versions yet.</p>
+  } else if (mode === 'chart') {
+    content = <VersionCharts versions={versions.data} metrics={metrics} />
+  } else {
+    content = (
+      <VersionTable
+        name={name}
+        versions={versions.data}
+        aliases={aliases.data}
+        contractAlias={contractAlias.data}
+        metrics={metrics}
+        shownColumns={shownColumns}
+      />
+    )
+  }
+  return (
+    <KnowledgeGraphSectionPage section={SECTION} actions={actions}>
+      {content}
+    </KnowledgeGraphSectionPage>
+  )
+}
+
+function VersionTable({
+  name,
+  versions,
+  aliases,
+  contractAlias,
+  metrics,
+  shownColumns,
+}: {
+  name: string
+  versions: ListedOntologyVersion[]
+  aliases: Alias[]
+  contractAlias: string | undefined
+  metrics: VersionMetrics
+  shownColumns: ReadonlySet<string>
+}) {
+  // Rows stay referentially stable between renders, as `useDataTable` needs.
+  const data = useMemo(() => {
+    const aliased = aliasesByVersion(aliases)
+    return versions.map(
+      (v): VersionRow => ({
+        knowledgeGraph: name,
+        number: v.number,
+        origin: v.origin,
+        createdAt: v.created_at,
+        aliases: aliased.get(v.number) ?? [],
+        contractAlias,
+        candidate: v.candidate ?? false,
+        metrics: metrics.byVersion.get(v.number) ?? NO_METRICS,
+      }),
+    )
+  }, [name, versions, aliases, contractAlias, metrics])
+  // Every metric has a column, in name order; only the chosen ones are visible.
+  const allColumns = useMemo(
+    () => column.columns([...columns, ...metrics.names.map(metricColumn)]),
+    [metrics],
+  )
+  const columnVisibility = useMemo(
+    () => Object.fromEntries(metrics.names.map((m) => [metricColumnId(m), shownColumns.has(metricColumnId(m))])),
+    [metrics, shownColumns],
+  )
+  const table = useDataTable({
+    data,
+    columns: allColumns,
+    getRowId: (row) => String(row.number),
+    state: { columnVisibility },
+    initialState: { sorting: [{ id: 'number', desc: true }] },
+  })
+  const navigate = useNavigate()
+  const selected = table.getSelectedRowModel().rows.map((row) => row.original.number)
+  const compare = () => navigate(kgCompareUrl(name, 'versions', [...selected].sort((a, b) => a - b)))
+  return (
+    <div className="space-y-3">
+      <CompareToolbar
+        selected={selected.length}
+        needs="two"
+        noun="versions"
+        readyHint="Ontology Diff from the older to the newer version"
+        onCompare={compare}
+      />
+      <DataTable table={table} label="Ontology Versions" empty="No Ontology Versions yet." />
+    </div>
+  )
+}
+
+// Recharts is large: load the chart grid only when the chart view is opened.
+const MetricChartGrid = lazy(() => import('@/components/MetricChartGrid'))
+
+function VersionCharts({ versions, metrics }: { versions: ListedOntologyVersion[]; metrics: VersionMetrics }) {
+  const [search, setSearch] = useChartSearch()
+  const series = useMemo(
+    () =>
+      metricSeries(
+        versions.map((v) => ({ x: v.number, metrics: metrics.byVersion.get(v.number) ?? NO_METRICS })),
+      ),
+    [versions, metrics],
+  )
+  const xAxis = useMemo(
+    () => ({
+      label: 'Ontology Version',
+      format: (x: number) => `v${x}`,
+      ticks: versions.map((v) => v.number).sort((a, b) => a - b),
+    }),
+    [versions],
+  )
+  return (
+    <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+      <MetricChartGrid series={series} xAxis={xAxis} search={search} onSearchChange={setSearch} />
+    </Suspense>
+  )
+}

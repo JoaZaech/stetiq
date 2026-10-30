@@ -35,8 +35,16 @@ class Store(Protocol):
 
     def get_knowledge_graph(self, name: str) -> KnowledgeGraph | None: ...
 
+    def set_knowledge_graph_description(self, name: str, description: str | None) -> None: ...
+
     def list_knowledge_graphs(self) -> list[KnowledgeGraph]:
         """All Knowledge Graphs, by name."""
+        ...
+
+    def last_change_at(self, knowledge_graph: str) -> datetime | None:
+        """The newest timestamp recorded for the Knowledge Graph: its creation, an
+        Ontology Version, a run's start or end, a Promotion, a Use Case Version or an
+        Observation. None for an unknown Knowledge Graph."""
         ...
 
     def add_ontology_version(self, version: OntologyVersion) -> None:
@@ -136,9 +144,10 @@ class Store(Protocol):
         ...
 
     def list_evaluation_results(
-        self, knowledge_graph: str, subject_kind: str, subject_id: str
+        self, knowledge_graph: str, subject_kind: str, subject_id: str | None = None
     ) -> list[EvaluationResult]:
-        """Every stored result for the subject, oldest first."""
+        """Every stored result for the subject (every subject of the kind when
+        `subject_id` is None), oldest first."""
         ...
 
     def add_use_case_version(self, version: UseCaseVersion) -> None:

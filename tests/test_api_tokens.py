@@ -130,8 +130,8 @@ def test_listing_knowledge_graphs_shows_only_those_the_token_can_read(
     admin.create_knowledge_graph("billing", ontology=support_ontology)
     support_reader = _client(server, _issue(server, "ada", {"support": "read"}))
 
-    assert [kg.name for kg in support_reader.list_knowledge_graphs()] == ["support"]
-    assert [kg.name for kg in admin.list_knowledge_graphs()] == ["billing", "support"]
+    assert [s.knowledge_graph.name for s in support_reader.list_knowledge_graphs()] == ["support"]
+    assert [s.knowledge_graph.name for s in admin.list_knowledge_graphs()] == ["billing", "support"]
     with pytest.raises(stetiq.AuthenticationError):
         _client(server).list_knowledge_graphs()
 

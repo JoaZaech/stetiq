@@ -27,6 +27,11 @@ Permission = Literal["read", "edit"]
 PERMISSIONS: tuple[str, ...] = get_args(Permission)
 ALL_KNOWLEDGE_GRAPHS = "*"
 TOKEN_PREFIX = "stq"
+# The web UI keeps a signed-in token in this HttpOnly cookie (ADR 0003). A write
+# authenticated by it must echo the readable CSRF cookie in the CSRF header.
+TOKEN_COOKIE = "stetiq_token"
+CSRF_COOKIE = "stetiq_csrf"
+CSRF_HEADER = "X-CSRF-Token"
 
 
 @dataclass(frozen=True)
@@ -73,6 +78,20 @@ def bearer_token(authorization: str | None) -> str | None:
     """The token value of an `Authorization: Bearer <token>` header, else None."""
     scheme, _, value = (authorization or "").partition(" ")
     return value.strip() or None if scheme.lower() == "bearer" else None
+
+
+def new_csrf_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def check_csrf(cookie: str | None, header: str | None) -> None:
+    """Double-submit check: another site can make the browser send our cookies, but it
+    cannot read the CSRF cookie to copy it into the header."""
+    if not cookie or not header or not secrets.compare_digest(cookie.encode(), header.encode()):
+        raise PermissionDeniedError(
+            f"Missing or invalid CSRF token: send the {CSRF_COOKIE} cookie's value "
+            f"in the {CSRF_HEADER} header"
+        )
 
 
 def _hash(secret: str) -> str:

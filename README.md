@@ -61,3 +61,14 @@ Run this in the same session, before you clear it. It looks back over the sessio
 - **Large project that isn't clear yet:** start with `/wayfinder` instead of grilling. It works through the open decisions as GitHub issues, then joins this flow at `/to-spec`.
 - **Bug reports and requests from other people:** run `/triage` on them to label them and make them ready to build, then build them with `/implement`.
 - **A bug that's hard to track down:** use `/diagnosing-bugs`.
+
+## Building a release
+
+The wheel ships the built web UI (ADR 0003), so build the frontend before the Python package:
+
+```
+cd frontend && npm ci && npm run build && cd ..
+uv build
+```
+
+`npm run build` writes to `src/stetiq/_frontend/`, which `uv build` packs. Without it the wheel has no UI. `tests/test_packaging.py` builds a wheel and checks the UI is inside; it skips locally when the frontend is not built, and fails under `CI` (set on GitHub Actions), where the `frontend` job's build is downloaded first.

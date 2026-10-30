@@ -7,26 +7,42 @@ over a `SqlStore` (SQLite or Postgres) and translates JSON <-> entities with
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, cast
 
 from fastapi import APIRouter, Body, Depends, FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
-from stetiq.auth import ApiToken, Permission, TokenRegistry, bearer_token
+from stetiq.auth import (
+    ALL_KNOWLEDGE_GRAPHS,
+    CSRF_COOKIE,
+    CSRF_HEADER,
+    TOKEN_COOKIE,
+    ApiToken,
+    Permission,
+    TokenRegistry,
+    bearer_token,
+    check_csrf,
+    new_csrf_token,
+)
 from stetiq.errors import NotFoundError, PermissionDeniedError, StetiqError
 from stetiq.evaluation.answerability import CompetencyQuestionMapper
 from stetiq.evaluation.framework import SubjectKind
 from stetiq.gates import parse_gates
 from stetiq.ontology import parse_dict
+from stetiq.ontology.diff import diff_ontologies
 from stetiq.tracking import LocalTrackingService, SqlStore, TrackingService, wire
 from stetiq.tracking.entities import EvolutionMode
+from stetiq.ui import FRONTEND_DIR, ui_router
 from stetiq.use_case import parse_use_case_dict
-from stetiq.web import ui_router
 
 DATABASE_URL_ENV = "STETIQ_DATABASE_URL"
 DEFAULT_DATABASE_URL = "sqlite:///.stetiq/server.db"
 CREATE_KG_PATH = wire.API_PREFIX + "/knowledge-graphs"
+WHOAMI_PATH = wire.API_PREFIX + "/whoami"
+SIGN_IN_PATH = "/auth/sign-in"
+SIGN_OUT_PATH = "/auth/sign-out"
 
 
 class RecordedEvaluation(BaseModel):
@@ -46,20 +62,49 @@ def create_app(
     service: TrackingService | None = None,
     tokens: TokenRegistry | None = None,
     question_mapper: CompetencyQuestionMapper | None = None,
+    frontend_dir: Path = FRONTEND_DIR,
+    local_actor: str | None = None,
 ) -> FastAPI:
     """Build the app over `service`, or over a `SqlStore` at `database_url`.
 
     Every API request needs an API token from `tokens` (default: the registry in the
     same database). GET needs `read` on the targeted Knowledge Graph, anything else `edit`.
 
+    With `local_actor` (`stetiq ui`), authentication is off: every request may edit every
+    Knowledge Graph, and the audit log records `local_actor`.
+
+    The built web UI in `frontend_dir` is served at `/ui`.
+
     `question_mapper` maps Competency Questions with neither a Concept mapping nor a
     query for structural answerability; it only applies when `service` is not given.
     """
-    if service is None or tokens is None:
+    store = None
+    if service is None:
         store = SqlStore(database_url or DEFAULT_DATABASE_URL)
-        service = service or LocalTrackingService(store, question_mapper=question_mapper)
-        tokens = tokens or TokenRegistry(store)
+        service = LocalTrackingService(store, question_mapper=question_mapper)
+    if tokens is None and local_actor is None:
+        tokens = TokenRegistry(store or SqlStore(database_url or DEFAULT_DATABASE_URL))
     tracking, registry = service, tokens
+    # Local mode: whoever runs `stetiq ui` owns the database.
+    local_token = (
+        None
+        if local_actor is None
+        else ApiToken(id="local", user=local_actor, grants={ALL_KNOWLEDGE_GRAPHS: "edit"})
+    )
+
+    def authenticate(request: Request) -> ApiToken:
+        if local_token is not None:
+            return local_token
+        assert registry is not None  # tokens are only left out in local mode
+        bearer = bearer_token(request.headers.get("authorization"))
+        if bearer is not None:
+            return registry.authenticate(bearer)
+        # The web UI's sign-in cookie. A browser sends it along with requests that other
+        # sites trigger, so a write must also prove it comes from a page of ours.
+        token = registry.authenticate(request.cookies.get(TOKEN_COOKIE))
+        if request.method not in ("GET", "HEAD"):
+            check_csrf(request.cookies.get(CSRF_COOKIE), request.headers.get(CSRF_HEADER))
+        return token
 
     def _target_knowledge_graph(token: ApiToken, path_params: dict[str, str]) -> str | None:
         """Which Knowledge Graph a request acts on, from its path parameters.
@@ -85,12 +130,14 @@ def create_app(
         return None
 
     def authorize(request: Request) -> None:
-        token = registry.authenticate(bearer_token(request.headers.get("authorization")))
+        token = authenticate(request)
         request.state.token = token
         needed: Permission = "read" if request.method in ("GET", "HEAD") else "edit"
         kg = _target_knowledge_graph(token, request.path_params)
         if kg is not None:
             token.require(kg, needed)
+        elif (request.method, request.url.path) == ("GET", WHOAMI_PATH):
+            pass  # who-am-I describes the token itself, not a Knowledge Graph
         elif not (request.method in ("POST", "GET") and request.url.path == CREATE_KG_PATH):
             # Fail closed: a route whose Knowledge Graph we cannot tell is not reachable.
             raise PermissionDeniedError(f"Cannot authorize {request.method} {request.url.path}")
@@ -110,6 +157,41 @@ def create_app(
 
     api = APIRouter(prefix=wire.API_PREFIX, dependencies=[Depends(authorize)])
 
+    def describe(token: ApiToken) -> dict[str, Any]:
+        return wire.whoami_to_json(token, local=local_token is not None)
+
+    @api.get("/whoami")
+    def whoami(request: Request) -> dict[str, Any]:
+        """Who the request acts as: the token's user and grants, or the local actor
+        with edit on every Knowledge Graph under `stetiq ui`."""
+        return describe(request.state.token)
+
+    # --- Web UI sign-in (ADR 0002: an existing token is pasted, never issued) ----------
+
+    @app.post(SIGN_IN_PATH)
+    def sign_in(
+        request: Request, response: Response, token: str = Body(embed=True)
+    ) -> dict[str, Any]:
+        """Check a pasted API Token and keep it in an HttpOnly cookie for the web UI."""
+        if registry is None or local_token is not None:
+            raise StetiqError("stetiq ui runs without tokens: there is nothing to sign in to")
+        signed_in = registry.authenticate(token)
+        secure = request.url.scheme == "https"
+        response.set_cookie(
+            TOKEN_COOKIE, token, httponly=True, samesite="strict", path="/", secure=secure
+        )
+        # Not HttpOnly: the app echoes it in the CSRF header (double-submit).
+        response.set_cookie(
+            CSRF_COOKIE, new_csrf_token(), samesite="strict", path="/", secure=secure
+        )
+        return describe(signed_in)
+
+    @app.post(SIGN_OUT_PATH, status_code=204)
+    def sign_out(response: Response) -> None:
+        """Make the browser forget the signed-in token (the token itself stays valid)."""
+        for cookie in (TOKEN_COOKIE, CSRF_COOKIE):
+            response.delete_cookie(cookie, path="/", samesite="strict")
+
     @api.post("/knowledge-graphs", status_code=201)
     def create_knowledge_graph(
         request: Request,
@@ -124,14 +206,21 @@ def create_app(
     def list_knowledge_graphs(request: Request) -> list[dict[str, Any]]:
         token = request.state.token
         return [
-            wire.knowledge_graph_to_json(kg)
-            for kg in tracking.list_knowledge_graphs()
-            if token.allows(kg.name, "read")
+            wire.knowledge_graph_summary_to_json(s)
+            for s in tracking.list_knowledge_graphs()
+            if token.allows(s.knowledge_graph.name, "read")
         ]
 
     @api.get("/knowledge-graphs/{name}")
     def get_knowledge_graph(name: str) -> dict[str, Any]:
         return wire.knowledge_graph_to_json(tracking.get_knowledge_graph(name))
+
+    @api.put("/knowledge-graphs/{name}/description")
+    def set_knowledge_graph_description(
+        name: str, description: str | None = Body(embed=True)
+    ) -> dict[str, Any]:
+        kg = tracking.set_knowledge_graph_description(name, description)
+        return wire.knowledge_graph_to_json(kg)
 
     @api.post("/knowledge-graphs/{name}/ontology-versions")
     def register_ontology(name: str, ontology: dict[str, Any] = Body(embed=True)) -> dict[str, Any]:
@@ -141,11 +230,25 @@ def create_app(
 
     @api.get("/knowledge-graphs/{name}/ontology-versions")
     def list_ontology_versions(name: str) -> list[dict[str, Any]]:
-        return [wire.ontology_version_to_json(v) for v in tracking.list_ontology_versions(name)]
+        candidates = set(tracking.list_candidates(name))
+        return [
+            wire.ontology_version_to_json(v, candidate=v.number in candidates)
+            for v in tracking.list_ontology_versions(name)
+        ]
 
     @api.get("/knowledge-graphs/{name}/ontology-versions/{number}")
     def get_ontology_version(name: str, number: int) -> dict[str, Any]:
         return wire.ontology_version_to_json(tracking.get_ontology_version(name, number))
+
+    @api.get("/knowledge-graphs/{name}/ontology-diff")
+    def diff_ontology_versions(name: str, base: int, target: int) -> dict[str, Any]:
+        # The same pure diff `Client.diff_ontology_versions` composes; no defaults here.
+        return wire.ontology_diff_to_json(
+            diff_ontologies(
+                tracking.get_ontology_version(name, base).ontology,
+                tracking.get_ontology_version(name, target).ontology,
+            )
+        )
 
     # --- Graph Sources -------------------------------------------------------------
 
@@ -240,9 +343,14 @@ def create_app(
 
     @api.put("/knowledge-graphs/{name}/aliases/{alias}")
     def set_alias(
-        request: Request, name: str, alias: str, version: int = Body(), actor: str = Body()
+        request: Request,
+        name: str,
+        alias: str,
+        version: int = Body(),
+        actor: str | None = Body(None),
     ) -> dict[str, Any]:
-        # The audit log records the token's user; the actor the SDK sends is ignored.
+        # The audit log records the token's user. Older SDKs still send an actor, which is
+        # accepted for wire compatibility and ignored; the web UI sends none.
         del actor
         user = request.state.token.user
         return wire.alias_to_json(tracking.set_alias(name, alias, version, user))
@@ -312,6 +420,12 @@ def create_app(
     def record_run_evaluation(name: str, run_id: str, body: RecordedEvaluation) -> dict[str, Any]:
         return record(name, "construction_run", run_id, body)
 
+    @api.get("/knowledge-graphs/{name}/evaluations")
+    def list_evaluations(name: str, subject_kind: str) -> list[dict[str, Any]]:
+        # The service rejects an unknown subject kind with its own error.
+        results = tracking.list_evaluation_results(name, cast(SubjectKind, subject_kind))
+        return [wire.evaluation_result_to_json(r) for r in results]
+
     @api.post(version_path + "/evaluate")
     def evaluate_version(
         name: str, number: int, use_case_version: int | None = Body(None, embed=True)
@@ -357,5 +471,5 @@ def create_app(
         return [wire.gate_result_to_json(r) for r in tracking.list_gate_results(name)]
 
     app.include_router(api)
-    app.include_router(ui_router(tracking, registry))  # read-only web UI
+    app.include_router(ui_router(frontend_dir))
     return app

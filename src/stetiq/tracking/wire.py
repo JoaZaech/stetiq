@@ -13,12 +13,14 @@ from typing import Any
 
 from stetiq import errors
 from stetiq import use_case as use_case_format
+from stetiq.auth import ApiToken
 from stetiq.conformance import Conformance
 from stetiq.drift import DriftFinding, DriftThresholds
 from stetiq.evaluation.framework import Detail, Evaluation
 from stetiq.gates import outcome_from_dict, outcome_to_dict
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import from_dict, to_dict
+from stetiq.ontology.diff import OntologyDiff
 from stetiq.tracking.entities import (
     Alias,
     ConstructionRun,
@@ -26,6 +28,7 @@ from stetiq.tracking.entities import (
     EvaluationResult,
     GateResult,
     KnowledgeGraph,
+    KnowledgeGraphSummary,
     Observation,
     ObservationOutcome,
     OntologyVersion,
@@ -45,16 +48,63 @@ ERROR_STATUS: dict[type[errors.StetiqError], int] = {
 }
 
 
+def _dt(value: str | None) -> datetime | None:
+    return None if value is None else datetime.fromisoformat(value)
+
+
+def _iso(value: datetime | None) -> str | None:
+    return None if value is None else value.isoformat()
+
+
 def knowledge_graph_to_json(kg: KnowledgeGraph) -> dict[str, Any]:
-    return {"name": kg.name, "created_at": kg.created_at.isoformat()}
+    return {"name": kg.name, "created_at": kg.created_at.isoformat(), "description": kg.description}
 
 
 def knowledge_graph_from_json(d: dict[str, Any]) -> KnowledgeGraph:
-    return KnowledgeGraph(name=d["name"], created_at=datetime.fromisoformat(d["created_at"]))
+    # The description is optional: older servers do not send it.
+    return KnowledgeGraph(
+        name=d["name"],
+        created_at=datetime.fromisoformat(d["created_at"]),
+        description=d.get("description"),
+    )
 
 
-def ontology_version_to_json(v: OntologyVersion) -> dict[str, Any]:
+def knowledge_graph_summary_to_json(s: KnowledgeGraphSummary) -> dict[str, Any]:
+    """A list item: the Knowledge Graph's own fields with the summary fields beside them."""
     return {
+        **knowledge_graph_to_json(s.knowledge_graph),
+        "contract_version": s.contract_version,
+        "latest_version": s.latest_version,
+        "last_run_status": s.last_run_status,
+        "last_modified_at": _iso(s.last_modified_at),
+    }
+
+
+def knowledge_graph_summary_from_json(d: dict[str, Any]) -> KnowledgeGraphSummary:
+    # The summary fields are optional: older servers do not send them.
+    return KnowledgeGraphSummary(
+        knowledge_graph=knowledge_graph_from_json(d),
+        contract_version=d.get("contract_version"),
+        latest_version=d.get("latest_version"),
+        last_run_status=d.get("last_run_status"),
+        last_modified_at=_dt(d.get("last_modified_at")),
+    )
+
+
+def whoami_to_json(token: ApiToken, *, local: bool) -> dict[str, Any]:
+    """Who a request acts as: `local` under `stetiq ui`, else a server API Token."""
+    return {
+        "mode": "local" if local else "server",
+        "user": token.user,
+        "grants": dict(token.grants),
+    }
+
+
+def ontology_version_to_json(
+    v: OntologyVersion, *, candidate: bool | None = None
+) -> dict[str, Any]:
+    """`candidate` is only sent by the version list (older servers never send it)."""
+    out = {
         "knowledge_graph": v.knowledge_graph,
         "number": v.number,
         "content_hash": v.content_hash,
@@ -62,6 +112,9 @@ def ontology_version_to_json(v: OntologyVersion) -> dict[str, Any]:
         "created_at": v.created_at.isoformat(),
         "ontology": to_dict(v.ontology),
     }
+    if candidate is not None:
+        out["candidate"] = candidate
+    return out
 
 
 def ontology_version_from_json(d: dict[str, Any]) -> OntologyVersion:
@@ -73,6 +126,23 @@ def ontology_version_from_json(d: dict[str, Any]) -> OntologyVersion:
         created_at=datetime.fromisoformat(d["created_at"]),
         ontology=from_dict(d["ontology"]),
     )
+
+
+def ontology_diff_to_json(d: OntologyDiff) -> dict[str, Any]:
+    """`classification` is the most severe change's, or None when nothing changed."""
+    return {
+        "classification": d.classification and str(d.classification),
+        "changes": [
+            {
+                "concept": c.concept,
+                "concept_kind": c.concept_kind,
+                "kind": str(c.kind),
+                "classification": str(c.classification),
+                "detail": c.detail,
+            }
+            for c in d.changes
+        ],
+    }
 
 
 def _detail_to_json(d: Detail) -> dict[str, Any]:
@@ -157,10 +227,6 @@ ERROR_STATUS[errors.RunNotActiveError] = 409
 ERROR_STATUS[errors.InvalidEvolutionModeError] = 422
 
 
-def _dt(value: str | None) -> datetime | None:
-    return None if value is None else datetime.fromisoformat(value)
-
-
 def run_to_json(run: ConstructionRun) -> dict[str, Any]:
     return {
         "id": run.id,
@@ -168,7 +234,7 @@ def run_to_json(run: ConstructionRun) -> dict[str, Any]:
         "ontology_version": run.ontology_version,
         "status": run.status,
         "started_at": run.started_at.isoformat(),
-        "ended_at": None if run.ended_at is None else run.ended_at.isoformat(),
+        "ended_at": _iso(run.ended_at),
         "params": dict(run.params),
         "metrics": dict(run.metrics),
         "observation_id": run.observation_id,

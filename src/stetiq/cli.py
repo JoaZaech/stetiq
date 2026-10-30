@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import ipaddress
 from pathlib import Path
 from typing import Annotated
 
@@ -83,6 +84,53 @@ def server(
     uvicorn.run(create_app(database_url, question_mapper=mapper), host=host, port=port)
 
 
+def _is_loopback(host: str) -> bool:
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+@app.command("ui")
+def ui(
+    tracking_uri: TrackingUri = None,
+    host: Annotated[str, typer.Option(help="Interface to bind")] = "127.0.0.1",
+    port: Annotated[int, typer.Option(help="Port to listen on")] = 5000,
+    no_auth: Annotated[
+        bool,
+        typer.Option(
+            "--no-auth",
+            help="Confirm that serving an unauthenticated UI on a non-loopback --host is intended",
+        ),
+    ] = False,
+) -> None:
+    """Open the web UI over the local tracking database, with no API Token (like `mlflow ui`).
+
+    Every action is recorded with the local actor ($STETIQ_ACTOR, else the OS user)."""
+    import uvicorn
+
+    from stetiq.client import resolve_actor, resolve_tracking_uri, service_for_uri
+    from stetiq.server import create_app
+    from stetiq.tracking import RemoteTrackingService
+
+    if not (_is_loopback(host) or no_auth):
+        raise typer.BadParameter(
+            f"{host} is not a loopback address and `stetiq ui` has no authentication; "
+            "pass --no-auth to serve it there anyway",
+            param_hint="--host",
+        )
+    uri = resolve_tracking_uri(tracking_uri)
+    service = service_for_uri(uri)
+    if isinstance(service, RemoteTrackingService):
+        raise _fail(
+            StetiqError(f"{uri} is a stetiq server: open its web UI at {uri.rstrip('/')}/ui")
+        )
+    typer.echo(f"stetiq UI over {uri}: http://{host}:{port}/ui")
+    uvicorn.run(create_app(service=service, local_actor=resolve_actor()), host=host, port=port)
+
+
 @kg_app.command("create")
 def kg_create(
     name: str,
@@ -110,7 +158,7 @@ def kg_list(tracking_uri: TrackingUri = None) -> None:
     except StetiqError as e:
         raise _fail(e) from None
     typer.echo(f"{'NAME':<32} CREATED")
-    for kg in kgs:
+    for kg in (s.knowledge_graph for s in kgs):
         typer.echo(f"{kg.name:<32} {kg.created_at.isoformat()}")
 
 
@@ -172,6 +220,27 @@ def kg_evolution_mode(
         typer.echo(client.get_evolution_mode(knowledge_graph))
     except StetiqError as e:
         raise _fail(e) from None
+
+
+@kg_app.command("description")
+def kg_description(
+    knowledge_graph: str,
+    description: Annotated[
+        str | None,
+        typer.Argument(help="Markdown; an empty string clears it. Omit to show the current one"),
+    ] = None,
+    tracking_uri: TrackingUri = None,
+) -> None:
+    """Show or set the Knowledge Graph's markdown description."""
+    try:
+        client = _client(tracking_uri)
+        if description is not None:
+            kg = client.set_knowledge_graph_description(knowledge_graph, description)
+        else:
+            kg = client.get_knowledge_graph(knowledge_graph)
+    except StetiqError as e:
+        raise _fail(e) from None
+    typer.echo(kg.description or "")
 
 
 @ontology_app.command("register")

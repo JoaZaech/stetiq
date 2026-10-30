@@ -307,3 +307,36 @@ def test_re_running_evaluation_on_a_missing_version_is_not_found(client, kg):
         client.evaluate(kg.name, 7)
     with pytest.raises(stetiq.NotFoundError):
         client.get_evaluation_results(kg.name, 7)
+
+
+# --- Every version's results at once (the web UI's version list) -------------------------
+
+
+def test_the_latest_results_of_every_ontology_version_are_listed_in_one_call(client, kg):
+    client.register_ontology(kg.name, WITH_ISOLATED_AGENT)
+    client.register_evaluator(UndescribedConcepts())
+    client.evaluate(kg.name, 1)  # a newer result for each of v1's Evaluators
+
+    results = client.list_evaluation_results(kg.name)
+
+    keys = [(r.subject_id, r.evaluator) for r in results]
+    assert len(keys) == len(set(keys))  # only the latest per (version, Evaluator)
+    assert {r.subject_kind for r in results} == {"ontology_version"}
+    assert by_evaluator(r for r in results if r.subject_id == "1") == by_evaluator(
+        client.get_evaluation_results(kg.name, 1)
+    )
+    assert by_evaluator(r for r in results if r.subject_id == "2") == by_evaluator(
+        client.get_evaluation_results(kg.name, 2)
+    )
+    assert "undescribed_concepts" not in by_evaluator(r for r in results if r.subject_id == "2")
+
+
+def test_results_are_listed_per_subject_kind(client, kg):
+    assert client.list_evaluation_results(kg.name, "construction_run") == []
+
+
+def test_listing_results_needs_a_known_knowledge_graph_and_subject_kind(client, kg):
+    with pytest.raises(stetiq.NotFoundError):
+        client.list_evaluation_results("nope")
+    with pytest.raises(stetiq.EvaluatorError, match="subject kind"):
+        client.list_evaluation_results(kg.name, "observation")

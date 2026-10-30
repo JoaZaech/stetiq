@@ -20,6 +20,7 @@ from stetiq.evaluation.framework import (
     ConstructionRunEvaluator,
     Evaluator,
     OntologyVersionEvaluator,
+    SubjectKind,
     check_evaluation,
     check_evaluator,
 )
@@ -36,6 +37,7 @@ from stetiq.tracking import (
     EvaluationResult,
     GateResult,
     KnowledgeGraph,
+    KnowledgeGraphSummary,
     LocalTrackingService,
     Observation,
     OntologyVersion,
@@ -186,8 +188,13 @@ class Client:
     def get_knowledge_graph(self, name: str) -> KnowledgeGraph:
         return self._service.get_knowledge_graph(name)
 
-    def list_knowledge_graphs(self) -> list[KnowledgeGraph]:
-        """All Knowledge Graphs by name (in server mode: those the API token can read)."""
+    def set_knowledge_graph_description(self, name: str, description: str | None) -> KnowledgeGraph:
+        """Replace the Knowledge Graph's markdown description; None or blank clears it."""
+        return self._service.set_knowledge_graph_description(name, description)
+
+    def list_knowledge_graphs(self) -> list[KnowledgeGraphSummary]:
+        """All Knowledge Graphs by name, each with a summary of its state (in server
+        mode: those the API token can read)."""
         return self._service.list_knowledge_graphs()
 
     def register_ontology(self, knowledge_graph: str, ontology: OntologyInput) -> OntologyVersion:
@@ -211,6 +218,14 @@ class Client:
         return self._service.get_evaluation_results(
             knowledge_graph, "ontology_version", str(version)
         )
+
+    def list_evaluation_results(
+        self, knowledge_graph: str, subject_kind: SubjectKind = "ontology_version"
+    ) -> list[EvaluationResult]:
+        """The latest result of every Evaluator for every Ontology Version (or every
+        Construction Run, with `subject_kind="construction_run"`) of the Knowledge Graph
+        at once; `subject_id` says which subject each result belongs to."""
+        return self._service.list_evaluation_results(knowledge_graph, subject_kind)
 
     def evaluate(
         self,
@@ -323,10 +338,10 @@ class Client:
     def latest_candidate(self, knowledge_graph: str) -> OntologyVersion:
         """The newest Ontology Version no Alias has pointed to yet; the latest version
         when every version has been pointed to."""
-        versions = self.list_ontology_versions(knowledge_graph)
-        aliased = {p.to_version for p in self.list_promotions(knowledge_graph)}
-        candidates = [v for v in versions if v.number not in aliased]
-        return (candidates or versions)[-1]
+        candidates = self._service.list_candidates(knowledge_graph)
+        if candidates:
+            return self.get_ontology_version(knowledge_graph, candidates[-1])
+        return self.list_ontology_versions(knowledge_graph)[-1]
 
     def diff_ontologies(self, base: OntologyInput, target: OntologyInput) -> OntologyDiff:
         """The Ontology Diff between two Ontologies that need not be registered (e.g. files in a repo)."""
