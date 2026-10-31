@@ -2,7 +2,8 @@ import { type GatePreview, runGatePreview } from '@/api/gate-previews'
 import { type GateResult, latestGateResult } from '@/api/gate-results'
 import type { EvaluationResult } from '@/api/ontology-versions'
 import type { ConstructionRun } from '@/api/runs'
-import type { MetricPoint } from '@/lib/metric-charts'
+import { formatMetric } from '@/lib/format'
+import { type MetricPoint, type MetricSeries, metricSeries } from '@/lib/metric-charts'
 import { evaluatorLabel, evaluatorMetrics } from '../versions/evaluator-metrics'
 
 /** A compared value; `null` where a run has none (e.g. a param it did not log). */
@@ -73,6 +74,7 @@ export function runChartPoints(
   for (const result of evaluations) byRun.set(result.subject_id, [...(byRun.get(result.subject_id) ?? []), result])
   return runs.map((run) => ({
     x: Date.parse(run.started_at),
+    id: run.id,
     metrics: {
       ...run.metrics,
       ...(run.conformance === null ? {} : { [CONFORMANCE_METRIC]: run.conformance.score }),
@@ -144,6 +146,95 @@ export function kpiVerdict(kpi: Kpi, value: number | null | undefined, gating: R
   const passed = outcomes.every((o) => o.passed)
   const verdict = passed ? 'pass' : value === null || value === undefined ? 'no-result' : 'fail'
   return { verdict, origin: judging.origin, outcomes }
+}
+
+/** One bound a Gate sets on a KPI: a metric Gate's `min`/`max`, a conformance Gate's `min_score`. */
+export interface GateBound {
+  gate: string
+  bound: 'min' | 'max'
+  value: number
+}
+
+/** The bounds the Gates of `outcomes` (one Gate result's or Gate Preview's) set on `kpi`, in Gate order. */
+export function kpiGateBounds(kpi: Kpi, outcomes: readonly GateOutcome[]): GateBound[] {
+  return outcomes
+    .filter((o) => covers(o.gate, kpi))
+    .flatMap(({ gate }) => {
+      const limits: [GateBound['bound'], unknown][] =
+        gate.check === 'conformance'
+          ? [['min', gate.min_score]]
+          : [
+              ['min', gate.min],
+              ['max', gate.max],
+            ]
+      return limits.flatMap(([bound, value]) => (typeof value === 'number' ? [{ gate: gate.name, bound, value }] : []))
+    })
+}
+
+/** A run chart's series with the KPI it charts. */
+export type RunChartSeries = MetricSeries & { kpi: Kpi }
+
+/**
+ * The run charts (see `runChartPoints`), each gated KPI with its Gate bounds as reference
+ * lines and each point judged as the compare page judges its cell (`kpiVerdict`): pass or
+ * fail, recorded over preview, with a note on where the verdicts came from. The bounds are
+ * the Gate definitions the Gate Previews used. Ungated KPIs stay as they are.
+ */
+export function runChartSeries(
+  runs: readonly ConstructionRun[],
+  evaluations: readonly EvaluationResult[],
+  gateResults: readonly GateResult[],
+  previews: readonly GatePreview[],
+): RunChartSeries[] {
+  const evaluatorKeys = new Set(Object.keys(evaluatorMetrics(evaluations)))
+  const gatings = new Map(runs.map((run) => [run.id, runGating(run.id, gateResults, previews)]))
+  const definitions = previews[0]?.outcomes ?? []
+  return metricSeries(runChartPoints(runs, evaluations)).map((series): RunChartSeries => {
+    const kpi: Kpi =
+      series.metric === CONFORMANCE_METRIC
+        ? { kind: 'conformance' }
+        : {
+            kind: evaluatorKeys.has(series.metric) ? 'evaluator' : 'run-metric',
+            key: series.metric,
+          }
+    const origins: VerdictOrigin[] = []
+    const points = series.points.map((point) => {
+      const gating = point.id === undefined ? undefined : gatings.get(point.id)
+      const verdict = gating === undefined ? undefined : kpiVerdict(kpi, point.value, gating)
+      if (verdict === undefined || (verdict.verdict !== 'pass' && verdict.verdict !== 'fail')) return point
+      origins.push(verdict.origin)
+      return {
+        ...point,
+        status: {
+          passed: verdict.verdict === 'pass',
+          label: `${verdict.verdict} (${verdict.origin})`,
+        },
+      }
+    })
+    const references = kpiGateBounds(kpi, definitions).map((b) => ({
+      name: b.gate,
+      label: `${b.bound} ${formatMetric(b.value)}`,
+      value: b.value,
+    }))
+    const note = verdictsNote(origins)
+    return {
+      ...series,
+      kpi,
+      points,
+      ...(references.length > 0 ? { references } : {}),
+      ...(note === undefined ? {} : { note }),
+    }
+  })
+}
+
+/** Where a chart's verdicts came from, e.g. "Verdicts: preview" or "Verdicts: 1 recorded, 3 preview". */
+function verdictsNote(origins: readonly VerdictOrigin[]): string | undefined {
+  if (origins.length === 0) return undefined
+  const recorded = origins.filter((o) => o === 'recorded').length
+  const preview = origins.length - recorded
+  if (preview === 0) return 'Verdicts: recorded'
+  if (recorded === 0) return 'Verdicts: preview'
+  return `Verdicts: ${recorded} recorded, ${preview} preview`
 }
 
 /** How the compared runs fare on one KPI; `gated` counts the runs a Gate judges on it. */
