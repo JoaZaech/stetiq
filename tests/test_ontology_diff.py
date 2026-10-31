@@ -118,6 +118,7 @@ def test_widening_a_propertys_type_is_additive(client):
     )
 
     assert summary(d) == [("Ticket.priority", "changed", "additive")]
+    assert attributes(d) == [("Ticket", "node_type", "priority")]
 
 
 def test_adding_an_optional_property_is_additive_but_a_required_one_is_breaking(diff):
@@ -294,6 +295,7 @@ def test_adding_a_constraint_is_breaking_and_dropping_one_is_additive(client):
     assert summary(client.diff_ontologies(unique, plain)) == [
         ("Customer.email", "changed", "additive")
     ]
+    assert attributes(client.diff_ontologies(unique, plain)) == [("Customer", "node_type", "email")]
 
 
 def _with_node_type(label: str) -> str:
