@@ -270,7 +270,7 @@ client.add_competency_question(
 )
 ```
 
-`add_competency_question` adds one question to the latest Use Case Version, keeping its Consumers and Tasks, and registers the result as a new one. `client.get_use_case_version("support")` without a number returns the latest Use Case Version, and raises `NoUseCaseError` (a `NotFoundError`) when there is none. Every new Ontology Version is judged against the latest Use Case (`structural_answerability`: does the Ontology have the Concepts each question needs?). At the end of a Construction Run, the SDK also executes the questions that have a `query` against your Graph Source (`competency_question_execution`). Their rows are judged and then dropped: only the result leaves your process.
+`add_competency_question` adds one question to the latest Use Case Version, keeping its Consumers and Tasks, and registers the result as a new one. `client.get_use_case_version("support")` without a number returns the latest Use Case Version, and raises `NoUseCaseError` (a `NotFoundError`) when there is none. Every new Ontology Version is judged against the latest Use Case (`structural_answerability`: does the Ontology have the Concepts each question needs?). Its `questions_serving_no_task` metric counts the questions no Task needs, so a [metric Gate](./06-stetiq-yaml.md#evaluators-and-their-metrics) can require that every question serves a Task. At the end of a Construction Run, the SDK also executes the questions that have a `query` against your Graph Source (`competency_question_execution`). Their rows are judged and then dropped: only the result leaves your process.
 
 ## Evaluators
 

@@ -81,6 +81,7 @@ def test_an_existing_ontology_version_is_re_evaluated_against_a_new_use_case_ver
         "unanswerable_questions": 0,
         "unmapped_questions": 0,
         "answerable_ratio": 1.0,
+        "questions_serving_no_task": 2,
     }
     assert per_question(result)["tickets-per-customer"] == {
         "status": "answerable",
@@ -675,3 +676,61 @@ def test_a_malformed_consumer_model_is_rejected_with_the_same_message_in_every_m
         client.register_use_case(kg.name, use_case)
 
     assert str(raised.value) == message
+
+
+# --- Questions that serve no Task --------------------------------------------------
+
+
+def test_no_question_serves_no_task_when_every_question_serves_one(client, kg):
+    client.register_use_case(kg.name, WITH_CONSUMERS)
+
+    result = answerability(client.get_evaluation_results(kg.name, 1))
+
+    assert result.metrics["questions_serving_no_task"] == 0
+
+
+def test_every_question_serves_no_task_in_a_use_case_without_consumers(client, kg):
+    client.register_use_case(kg.name, USE_CASE)
+
+    result = answerability(client.get_evaluation_results(kg.name, 1))
+
+    assert result.metrics["questions_serving_no_task"] == 2
+
+
+def test_a_question_no_task_needs_counts_as_serving_no_task(client, kg):
+    client.register_use_case(
+        kg.name,
+        WITH_CONSUMERS.replace(
+            "competency_questions: [tickets-per-customer, customer-names]",
+            "competency_questions: [tickets-per-customer]",
+        ),
+    )
+
+    result = answerability(client.get_evaluation_results(kg.name, 1))
+
+    assert result.metrics["questions_serving_no_task"] == 1
+
+
+EVERY_QUESTION_SERVES_A_TASK = """
+gates:
+  - name: every-question-serves-a-task
+    check: metric
+    evaluator: structural_answerability
+    metric: questions_serving_no_task
+    max: 0
+"""
+
+
+def test_a_metric_gate_on_questions_serving_no_task_passes_or_fails(client, kg):
+    client.register_use_case(kg.name, WITH_CONSUMERS)
+    passing = client.evaluate_gates(kg.name, EVERY_QUESTION_SERVES_A_TASK, version=1)
+
+    client.register_use_case(kg.name, USE_CASE)
+    failing = client.evaluate_gates(kg.name, EVERY_QUESTION_SERVES_A_TASK, version=1)
+
+    assert passing.passed
+    assert not failing.passed
+    assert (
+        "structural_answerability.questions_serving_no_task = 2 > max 0"
+        in failing.failed[0].reasons[0]
+    )

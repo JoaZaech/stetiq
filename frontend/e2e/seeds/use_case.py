@@ -75,4 +75,38 @@ def support_use_case_consumers(client: stetiq.Client) -> dict[str, Any]:
     return seeded
 
 
-SCENARIOS: tuple[Scenario, ...] = (support_use_case_versions, support_use_case_consumers)
+SUPPORT_USE_CASE_FOR_READINESS = (
+    SUPPORT_USE_CASE_V2
+    + """  - id: refund-amounts
+    question: How much was refunded per ticket?
+    concepts: [Refund.amount]
+  - id: satisfaction
+    question: How satisfied is each customer?
+  - id: ticket-count
+    question: How many tickets are there?
+    concepts: [Ticket]
+consumers:
+  - id: triage-bot
+    name: Triage bot
+    tasks:
+      - id: route-ticket
+        description: Route a new ticket to an agent
+        competency_questions: [customer-names, agent-names, refund-amounts, satisfaction]
+"""
+)
+
+
+def support_task_readiness(client: stetiq.Client) -> dict[str, Any]:
+    """`support_lineage`, with a Use Case whose Triage bot has one Task needing four
+    questions: two answerable on the latest Ontology Version (v3), `refund-amounts`
+    unanswerable and `satisfaction` unmapped. `ticket-count` serves no Task."""
+    seeded = support_lineage(client)
+    client.register_use_case("support", SUPPORT_USE_CASE_FOR_READINESS)
+    return seeded
+
+
+SCENARIOS: tuple[Scenario, ...] = (
+    support_use_case_versions,
+    support_use_case_consumers,
+    support_task_readiness,
+)

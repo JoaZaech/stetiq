@@ -133,7 +133,8 @@ class StructuralAnswerability(OntologyVersionEvaluator):
     """Per Competency Question: answerable, unanswerable (with the missing Concepts) or unmapped.
 
     Metrics: `questions`, `answerable_questions`, `unanswerable_questions`,
-    `unmapped_questions`, `answerable_ratio`. One Detail per question (`item` = the
+    `unmapped_questions`, `answerable_ratio`, and `questions_serving_no_task` (the
+    questions no Consumer's Task needs: all of them in a Use Case without Consumers). One Detail per question (`item` = the
     question id, `metric` = the count it falls in) whose `data` is
     `{status, source, required, missing}` (Concept references as strings; plus
     `mapper` when a described mapper produced the mapping, and `error` when it failed).
@@ -161,6 +162,9 @@ class StructuralAnswerability(OntologyVersionEvaluator):
                 )
             )
         total = len(self.use_case.competency_questions)
+        needed = {
+            q for c in self.use_case.consumers for t in c.tasks for q in t.competency_questions
+        }
         return Evaluation(
             metrics={
                 "questions": total,
@@ -168,6 +172,9 @@ class StructuralAnswerability(OntologyVersionEvaluator):
                 "unanswerable_questions": counts["unanswerable"],
                 "unmapped_questions": counts["unmapped"],
                 "answerable_ratio": counts["answerable"] / total if total else 1.0,
+                "questions_serving_no_task": sum(
+                    q.id not in needed for q in self.use_case.competency_questions
+                ),
             },
             details=details,
         )
