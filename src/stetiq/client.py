@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 from stetiq.drift import DriftThresholds
 from stetiq.entry_point import EntryPoint, EntryPointError, placeholder_values
@@ -128,13 +129,20 @@ def _evaluation_key(evaluator: str, parameters: Mapping[str, object]) -> str:
 # A Use Case given to the SDK: Use Case YAML text, a path to a YAML file, a `UseCase`,
 # or just its Competency Questions.
 UseCaseInput = (
-    str | os.PathLike[str] | UseCase | list[CompetencyQuestion] | tuple[CompetencyQuestion, ...]
+    str
+    | os.PathLike[str]
+    | dict[str, Any]
+    | UseCase
+    | list[CompetencyQuestion]
+    | tuple[CompetencyQuestion, ...]
 )
 
 
 def _to_use_case(use_case: UseCaseInput) -> UseCase:
     if isinstance(use_case, UseCase):
         return use_case
+    if isinstance(use_case, dict):
+        return parse_use_case_dict(use_case)
     if isinstance(use_case, (list, tuple)):
         return UseCase(competency_questions=tuple(use_case))
     if isinstance(use_case, os.PathLike):

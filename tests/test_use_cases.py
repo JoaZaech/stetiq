@@ -513,6 +513,36 @@ def test_a_use_case_with_consumers_can_be_given_as_a_model(client, kg):
     assert version.use_case.consumers == use_case.consumers
 
 
+def test_a_use_case_with_consumers_can_be_given_as_a_dict(client, kg):
+    version = client.register_use_case(
+        kg.name,
+        {
+            "competency_questions": [{"id": "q", "question": "Which customers are there?"}],
+            "consumers": [
+                {
+                    "id": "crm",
+                    "name": "CRM sync",
+                    "tasks": [
+                        {
+                            "id": "sync",
+                            "description": "Sync customers",
+                            "competency_questions": ["q"],
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+
+    assert version.use_case.consumers == (
+        stetiq.Consumer(
+            id="crm",
+            name="CRM sync",
+            tasks=(stetiq.Task("sync", "Sync customers", competency_questions=("q",)),),
+        ),
+    )
+
+
 def test_a_use_case_without_consumers_hashes_as_it_did_before_consumers_existed(client, kg):
     version = client.register_use_case(kg.name, USE_CASE)
 
