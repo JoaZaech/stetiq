@@ -17,6 +17,7 @@ import { KnowledgeGraphSectionPage } from '../KnowledgeGraphSectionPage'
 import { useKnowledgeGraphName } from '../params'
 import { CompetencyQuestionDialog } from './CompetencyQuestionDialog'
 import { CompetencyQuestionsTable } from './CompetencyQuestionsTable'
+import { ConsumerCards } from './ConsumerCards'
 import { RemoveCompetencyQuestionDialog } from './RemoveCompetencyQuestionDialog'
 import { savedMessage } from './saved-message'
 import { StructuralAnswerability } from './StructuralAnswerability'
@@ -28,8 +29,8 @@ const SECTION = knowledgeGraphSection('use-case')
 const NO_USE_CASE: UseCase = { competency_questions: [] }
 
 /**
- * `/kg/:name/use-case`: the latest Use Case Version (description and Competency
- * Questions), then every Use Case Version, to compare.
+ * `/kg/:name/use-case`: the latest Use Case Version (description, Competency Questions,
+ * and its Consumers with their Tasks), then every Use Case Version, to compare.
  *
  * Editors add, edit and remove Competency Questions here; each save sends the complete
  * edited Use Case and registers a new Use Case Version.
@@ -73,6 +74,9 @@ export function UseCasePage() {
           {latest ? (
             <>
               <LatestVersion name={name} version={latest} onSaved={setSaved} />
+              <Panel title="Consumers">
+                <ConsumerCards useCase={latest.use_case} />
+              </Panel>
               <StructuralAnswerability knowledgeGraph={name} useCaseVersion={latest.number} />
               <Panel title="Use Case Versions">
                 <UseCaseVersionsTable name={name} versions={versions.data} />

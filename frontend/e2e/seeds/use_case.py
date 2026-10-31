@@ -42,4 +42,37 @@ def support_use_case_versions(client: stetiq.Client) -> dict[str, Any]:
     return seeded
 
 
-SCENARIOS: tuple[Scenario, ...] = (support_use_case_versions,)
+SUPPORT_USE_CASE_WITH_CONSUMERS = (
+    SUPPORT_USE_CASE_V2
+    + """consumers:
+  - id: triage-bot
+    name: Triage bot
+    kind: agent
+    contact: Ada Lovelace
+    description: Routes new tickets to the right team.
+    tasks:
+      - id: route-ticket
+        description: Route a new ticket to an agent
+        competency_questions: [customer-names, agent-names]
+      - id: greet-customer
+        description: Greet the customer by name
+        competency_questions: [customer-names]
+  - id: workload-dashboard
+    name: Workload dashboard
+    tasks:
+      - id: show-agents
+        description: List the agents on shift
+"""
+)
+
+
+def support_use_case_consumers(client: stetiq.Client) -> dict[str, Any]:
+    """`support_lineage`, with a Use Case whose two Consumers have Tasks: the Triage bot
+    (every optional field set, two Tasks) and the Workload dashboard (only a name, and a
+    Task that needs no Competency Question)."""
+    seeded = support_lineage(client)
+    client.register_use_case("support", SUPPORT_USE_CASE_WITH_CONSUMERS)
+    return seeded
+
+
+SCENARIOS: tuple[Scenario, ...] = (support_use_case_versions, support_use_case_consumers)
