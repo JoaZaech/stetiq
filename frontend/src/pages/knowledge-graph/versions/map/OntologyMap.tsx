@@ -189,7 +189,7 @@ const changeKindLabel = (kind: MapChangeKind): string => (kind === 'cosmetic' ? 
 
 type OntologyMapProps = {
   query?: string
-  /** Where its filters go, in the page's header row (`useMapFiltersSlot`); none shows none. */
+  /** Where its filters go, in the page's header row (`useMapViewControls`); none shows none. */
   filtersIn?: HTMLElement | null
 } & (
   | { ontology: Ontology; comparison?: never }

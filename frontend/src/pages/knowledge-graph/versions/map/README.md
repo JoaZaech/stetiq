@@ -2,7 +2,7 @@
 
 The Ontology Map: an Ontology Version drawn as a node-link diagram, on the Ontology tab and (with a comparison) on the Changes tab and Compare page.
 
-**Entry point:** `OntologyMap.tsx` (`OntologyMap`), the React Flow canvas. It has one panel, on its right, framed by `MapSidePanel`: `MapDetailsPanel`, `MapPathPanel`, `MapSearchResults` or, in a comparison, the change summary (`MapChangeSummary`), which collapses to a rail (`MapChangesRail`). Nothing overlays the top of the canvas: its filters go in the page's header row beside the Table / Map toggle (`filtersIn`, from `useMapFiltersSlot` in `../map-view.ts`), and a comparison's one-row change-kind key (`ChangeKindKey`) sits bottom-left by the zoom controls. It decides nothing about selection, focus or centring: it draws what `ontology-map-view.ts` returns and forwards each gesture to it.
+**Entry point:** `OntologyMap.tsx` (`OntologyMap`), the React Flow canvas. It has one panel, on its right, framed by `MapSidePanel`: `MapDetailsPanel`, `MapPathPanel`, `MapSearchResults` or, in a comparison, the change summary (`MapChangeSummary`), which collapses to a rail (`MapChangesRail`). Nothing overlays the top of the canvas: its filters go in the page's header row beside the Table / Map toggle (`filtersIn`, from `useMapViewControls` in `../map-view-controls.tsx`), and a comparison's one-row change-kind key (`ChangeKindKey`) sits bottom-left by the zoom controls. It decides nothing about selection, focus or centring: it draws what `ontology-map-view.ts` returns and forwards each gesture to it.
 
 **Pure modules** (no React, each with a `.test.ts`):
 

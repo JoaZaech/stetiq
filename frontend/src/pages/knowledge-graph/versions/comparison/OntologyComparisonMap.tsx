@@ -8,7 +8,7 @@ import { useOntologyComparison } from './use-ontology-comparison'
 /**
  * Loads versions `base` and `target` and their Ontology Diff, and draws them superimposed
  * on one Map: the Changes tab's Map, and the Compare page's for any two versions. Its
- * filters go in `filtersIn` (`useMapFiltersSlot`).
+ * filters go in `filtersIn` (`useMapViewControls`).
  */
 export function OntologyComparisonMap({
   knowledgeGraph,
