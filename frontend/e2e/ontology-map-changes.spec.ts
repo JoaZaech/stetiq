@@ -148,3 +148,58 @@ test.describe('with a Pattern added beside another of its relation', () => {
     await expect.poll(() => change('(Customer)-[OPENED]->(Ticket)')).toEqual(['unchanged', null])
   })
 })
+
+test.describe('city transit, v2 → v3', () => {
+  test.use({ seed: 'ontology_map_transit' })
+
+  /** The Map's zoom: the scale of its viewport's transform. */
+  const zoom = (map: Locator) =>
+    map.locator('.react-flow__viewport').evaluate((el) => new DOMMatrixReadOnly(getComputedStyle(el).transform).a)
+
+  test('opens on the changes, at a zoom whose class names can be read', async ({ page }) => {
+    await page.goto('/ui/kg/city-transit/versions/3/changes')
+    const map = ontologyMap(page)
+
+    // Trip and Stop broke, and HAS_TRIP from Route is documentation-only.
+    for (const label of ['Route', 'Stop', 'Trip']) await expect(shape(map, label)).toBeInViewport()
+    await expect.poll(() => zoom(map)).toBeGreaterThanOrEqual(0.85)
+    // Framed on them: centred on their bounds, not on the whole Map's.
+    const centre = (box: { x: number; y: number; width: number; height: number }) => ({
+      x: box.x + box.width / 2,
+      y: box.y + box.height / 2,
+    })
+    const boxes = await Promise.all(['Route', 'Stop', 'Trip'].map(async (l) => (await shape(map, l).boundingBox())!))
+    const [left, top] = [Math.min(...boxes.map((b) => b.x)), Math.min(...boxes.map((b) => b.y))]
+    const right = Math.max(...boxes.map((b) => b.x + b.width))
+    const bottom = Math.max(...boxes.map((b) => b.y + b.height))
+    const changes = centre({ x: left, y: top, width: right - left, height: bottom - top })
+    const pane = centre((await map.locator('.react-flow__renderer').boundingBox())!)
+    expect(Math.abs(changes.x - pane.x)).toBeLessThan(8)
+    expect(Math.abs(changes.y - pane.y)).toBeLessThan(8)
+
+    // Fit view still frames everything.
+    await map.getByRole('button', { name: 'Fit View' }).click()
+    await expect(shape(map, 'Agency')).toBeInViewport()
+    expect(await zoom(map)).toBeGreaterThanOrEqual(0.85)
+  })
+
+  test('with OPERATES selected, the breaking classes stay readable with their severity outline', async ({ page }) => {
+    await page.goto('/ui/kg/city-transit/versions/3/changes?select=relation:OPERATES')
+    const map = ontologyMap(page)
+    const drawn = (label: string) =>
+      shape(map, label).evaluate((el: HTMLElement) => ({
+        context: el.dataset.context === 'true',
+        faded: el.dataset.faded === 'true',
+        opacity: Number(getComputedStyle(el).opacity),
+        outlined: getComputedStyle(el).boxShadow !== 'none',
+      }))
+
+    for (const label of ['Trip', 'Stop']) {
+      await expect.poll(() => drawn(label)).toEqual({ context: true, faded: false, opacity: 0.6, outlined: true })
+    }
+    // SERVES did not change: it fades out of the focus.
+    await expect
+      .poll(() => linkPath(map, '(Trip)-[SERVES]->(Stop)').evaluate((el: SVGElement) => Number(el.style.opacity)))
+      .toBe(0.2)
+  })
+})
