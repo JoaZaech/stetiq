@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useSearchParams } from 'react-router'
-import { CLASSIFICATION_LABEL } from '@/api/ontology-diff'
+import { CLASSIFICATION_LABEL, compareSeverity } from '@/api/ontology-diff'
 import { ClassificationBadge } from '@/components/OntologyDiff'
 import { DataTable, DataTableRowCount } from '@/components/DataTable'
 import { ErrorAlert } from '@/components/ErrorAlert'
@@ -14,8 +14,7 @@ import { setOrDeleteParam } from '@/lib/search-params'
 import { type ComparisonRow, comparisonRows } from './comparison-rows'
 import { isSelectedRow, selectedRows, useConceptSelection, useShowOnMap } from '../concept-selection'
 import { LevelCounts } from './MapChangeSummary'
-import type { OntologyComparison } from './ontology-map-comparison'
-import { compareLevels, summarizeChanges } from './ontology-map-summary'
+import { type OntologyComparison, summarizeChanges } from './ontology-map-comparison'
 import { selectedRowProps, type TableLinks, TableLinksContext } from '../table/table-links'
 import { ShowOnMap } from '../table/TableLinks'
 import { useOntologyComparison } from './use-ontology-comparison'
@@ -39,7 +38,7 @@ const columns = column.columns([
     header: 'Severity',
     ...filterColumn('values'),
     // The weightiest first when sorted descending, as the rows come.
-    sortFn: (a, b) => compareLevels(a.original.level, b.original.level),
+    sortFn: (a, b) => compareSeverity(a.original.level, b.original.level),
     sortDescFirst: true,
     cell: ({ row }) => <ClassificationBadge classification={row.original.level} />,
   }),

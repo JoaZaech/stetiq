@@ -95,3 +95,27 @@ test('a comparison without changes says so', async ({ page }) => {
 
   await expect(summaryOf(page)).toContainText('No changes between the two versions.')
 })
+
+test.describe('with a filter hiding the first changed Pattern of a relation', () => {
+  test.use({ seed: 'ontology_map_hidden_pattern' })
+
+  test('a relation picked in the summary or on the Map selects the same link', async ({ page }) => {
+    // OPENED gained two Patterns; the first, to the deprecated LegacyTicket, is hidden.
+    await page.goto('/ui/kg/support/versions/2/changes?select=relation:OPENED')
+    const details = page.getByRole('complementary', { name: 'Details' })
+    await expect(details).toContainText('(Agent)-[OPENED]->(LegacyTicket)')
+    // By keyboard: with the summary and details open, the legend overlaps the filters.
+    await page.getByRole('switch', { name: 'Hide deprecated' }).focus()
+    await page.keyboard.press('Space')
+
+    // Selected on the Map, the relation is its first changed link still shown.
+    await expect(details).toContainText('(Agent)-[OPENED]->(Ticket)')
+
+    // Picked in the summary, it is the same link.
+    await page.keyboard.press('Escape')
+    await expect(details).toHaveCount(0)
+    await entry(summaryOf(page), 'OPENED').getByRole('button').click()
+    await expect(details).toContainText('(Agent)-[OPENED]->(Ticket)')
+    await expect(entry(summaryOf(page), 'OPENED').getByRole('button')).toHaveAttribute('aria-current', 'true')
+  })
+})

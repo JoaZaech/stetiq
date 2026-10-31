@@ -37,7 +37,7 @@ import { MapSearchResults } from './MapSearchResults'
 import { filterOntologyMap, ontologyMap, type LinkRoute, type MapFilters } from './ontology-map'
 import {
   changesOf,
-  linkChanged,
+  selectionOf,
   type AttributeChange,
   type MapChange,
   type MapChangeKind,
@@ -224,13 +224,15 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
   )
   /**
    * What selecting `concept` selects on the Map: a class, or a relation as one of its
-   * shown links, in a comparison its first changed one as the change summary has it;
+   * shown links, in a comparison the one the change summary selects (`selectionOf`);
    * null when none is shown.
    */
   const selectionFor = useCallback(
     (concept: ConceptSelection | null): MapSelection | null =>
       concept?.kind === 'relation'
-        ? relationSelection(shown.links, concept.label, (l) => comparison !== undefined && linkChanged(comparison, l))
+        ? comparison
+          ? selectionOf(comparison, concept, shown.links)
+          : relationSelection(shown.links, concept.label, () => false)
         : concept,
     [shown, comparison],
   )
@@ -360,6 +362,7 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
       {comparison && (
         <MapChangeSummary
           comparison={comparison}
+          shown={shown.links}
           selection={selection}
           onPreview={setPreview}
           onSelect={setSelection}

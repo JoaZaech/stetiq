@@ -2,10 +2,9 @@
  * The rows of a comparison's Table: one per Ontology Diff change, with the level it
  * weighs at (its classification) and where it is on the Map.
  */
-import type { Classification, OntologyChange } from '@/api/ontology-diff'
+import { type Classification, compareSeverity, type OntologyChange } from '@/api/ontology-diff'
 import { type ClassOrRelation, CONCEPT_NOUN, type ConceptNoun } from '../concepts'
 import type { OntologyComparison } from './ontology-map-comparison'
-import { compareLevels } from './ontology-map-summary'
 
 /** One Diff change, as a row of the comparison's Table. */
 export interface ComparisonRow {
@@ -43,5 +42,5 @@ export function comparisonRows(comparison: OntologyComparison): ComparisonRow[] 
       owner: ownerOf(change),
     }),
   )
-  return rows.sort((a, b) => compareLevels(b.level, a.level))
+  return rows.sort((a, b) => compareSeverity(b.level, a.level))
 }
