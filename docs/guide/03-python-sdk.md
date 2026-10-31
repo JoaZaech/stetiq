@@ -268,7 +268,7 @@ client.set_alias("support", "production", 3)                # Promotion (or roll
 client.list_promotions("support")                           # the audit log
 ```
 
-`evaluate_gates` sends the Gate definitions to the tracking service, which computes and records the outcome. Gates never block a Promotion, but the audit log records whether the version's latest Gate result passed. Gates are written in [`stetiq.yaml`](./06-stetiq-yaml.md).
+`evaluate_gates` sends the Gate definitions to the tracking service, which computes and records the outcome. It gates the latest Ontology Version by default, `version=N`, or a Construction Run with `run=ID`; passing both `version` and `run` raises `ConflictingArgumentsError`. Gates never block a Promotion, but the audit log records whether the version's latest Gate result passed. Gates are written in [`stetiq.yaml`](./06-stetiq-yaml.md).
 
 ## Errors
 

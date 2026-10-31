@@ -426,7 +426,7 @@ def test_malformed_gates_are_rejected_naming_the_problem(client, support_kg, con
 
 
 def test_gates_are_evaluated_for_a_version_or_a_run_not_both(client, support_kg):
-    with pytest.raises(stetiq.GateConfigError) as raised:
+    with pytest.raises(stetiq.ConflictingArgumentsError) as raised:
         client.evaluate_gates(support_kg, NO_BREAKING, version=2, run="any-run")
 
     assert str(raised.value) == "Gates are evaluated for a version or a run, not both"

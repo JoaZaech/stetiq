@@ -857,7 +857,7 @@ class LocalTrackingService:
         run: str | None = None,
     ) -> GateResult:
         if version is not None and run is not None:
-            raise GateConfigError("Gates are evaluated for a version or a run, not both")
+            raise ConflictingArgumentsError("Gates are evaluated for a version or a run, not both")
         if not gates:
             raise GateConfigError("No Gates to evaluate")
         with self._store.transaction():
