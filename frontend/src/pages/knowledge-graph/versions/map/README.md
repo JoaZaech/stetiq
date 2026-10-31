@@ -8,8 +8,8 @@ The Ontology Map: an Ontology Version drawn as a node-link diagram, on the Ontol
 
 - `ontology-map-view.ts`: the Map's view state, which wires the modules below together. `createDrawnMapOf` makes the function that computes the drawn Map (`DrawnMap`): it takes the Ontology or comparison, `?select=`, the search and the Map's own state (filters, the change summary's preview, the selection it is centred on) and returns the selection, focus, details, paths, search results, each item's emphasis, and what to centre on. `respondTo` answers a gesture (a click, shift-click, Escape, a search result picked, a filter switched) with the next state and selection. Each step is remembered, so paths and search run once per change of what they read. Test a Map rule here, not in Playwright.
 - `ontology-map.ts`: the Ontology as a node-link dataset (`ontologyMap`) and its filters (`filterOntologyMap`).
-- `ontology-map-layout.ts`: where each class goes, a seeded ELK stress layout (`layoutOntologyMap`).
-- `ontology-map-sizes.ts`: node and label sizes from monospace text length (`classSizes`, `labelSize`).
+- `ontology-map-layout.ts`: where each class goes, a seeded ELK stress layout, then SPOrE overlap removal at each class's size (`layoutOntologyMap`).
+- `ontology-map-sizes.ts`: node and label sizes from monospace text length; a class fits its whole name (`classSizes`, `labelSize`).
 - `ontology-map-links.ts`: a Pattern link's shape and when its label shows (`linkShape`, `labelShown`).
 - `ontology-map-focus.ts`: a selection's focus and details, the changes kept as context outside it, and the search's matches (`focusOf`, `pathFocus`, `contextOf`, `changedOf`, `detailsOf`, `searchMap`, `MapSelection`).
 - `ontology-map-paths.ts`: shortest paths between two classes (`shortestPaths`).

@@ -47,6 +47,7 @@ import {
   ATTRIBUTE_LINE_HEIGHT,
   ATTRIBUTE_MARKER,
   attributeLine,
+  CLASS_NAME_FONT_SIZE,
   classSizes,
   MONOSPACE_FONT_SIZE,
   NODE_SIZE,
@@ -224,8 +225,15 @@ export function OntologyMap({ ontology, comparison, query = '' }: OntologyMapPro
     document.addEventListener('keydown', escape)
     return () => document.removeEventListener('keydown', escape)
   }, [])
-  // A comparison's changed classes grow to list their changed attributes.
-  const sizes = useMemo(() => classSizes(comparison?.changes.attributes), [comparison])
+  // Each class grows to fit its name and, in a comparison, to list its changed attributes.
+  const sizes = useMemo(
+    () =>
+      classSizes(
+        map.nodes.map((n) => n.label),
+        comparison?.changes.attributes,
+      ),
+    [map, comparison],
+  )
   // The whole Map is laid out, and filters only hide, so nothing moves when one changes.
   const layout = useQuery({
     queryKey: ['ontology-map-layout', map, sizes],
@@ -495,8 +503,8 @@ function ClassNodeView({ data }: NodeProps<ClassNode>) {
       )}
     >
       <span
-        className={cn('flex max-w-full shrink-0 items-center truncate', data.deprecated && 'line-through')}
-        style={{ height: NODE_SIZE.height - 2 }}
+        className={cn('flex shrink-0 items-center font-mono whitespace-nowrap', data.deprecated && 'line-through')}
+        style={{ height: NODE_SIZE.height - 2, fontSize: CLASS_NAME_FONT_SIZE }}
       >
         {data.label}
         {style.dot && <CosmeticDot className="ml-1.5" />}
