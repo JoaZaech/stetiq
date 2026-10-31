@@ -278,21 +278,21 @@ describe('cosmetic changes', () => {
     ],
   }
 
-  it('draws a Concept with only cosmetic changes as documentation-only, with no severity', () => {
+  it('draws a Concept with only cosmetic changes as cosmetic, with no severity', () => {
     const { changes } = compareOntologies(base, target, diff)
 
-    expect(changes.classes.Stop).toEqual({ kind: 'documentation-only', severity: null })
-    expect(changes.links['(Route)-[HAS_TRIP]->(Trip)']).toEqual({ kind: 'documentation-only', severity: null })
+    expect(changes.classes.Stop).toEqual({ kind: 'cosmetic', severity: null })
+    expect(changes.links['(Route)-[HAS_TRIP]->(Trip)']).toEqual({ kind: 'cosmetic', severity: null })
     // A class whose attributes had only cosmetic changes lists none of them.
-    expect(changes.classes.Trip).toEqual({ kind: 'documentation-only', severity: null })
+    expect(changes.classes.Trip).toEqual({ kind: 'cosmetic', severity: null })
     expect(changes.attributes.Trip).toEqual([])
   })
 
-  it("gives an endpoint change to its own link only, so a relation's other links stay documentation-only", () => {
+  it("gives an endpoint change to its own link only, so a relation's other links stay cosmetic", () => {
     const { changes } = compareOntologies(base, target, diff)
 
     expect(changes.links['(Route)-[SERVES]->(Stop)']).toEqual({ kind: 'added', severity: 'additive' })
-    expect(changes.links['(Trip)-[SERVES]->(Stop)']).toEqual({ kind: 'documentation-only', severity: null })
+    expect(changes.links['(Trip)-[SERVES]->(Stop)']).toEqual({ kind: 'cosmetic', severity: null })
   })
 
   it("follows the Diff's classification, not the two Ontologies: a description change it calls additive is not cosmetic", () => {

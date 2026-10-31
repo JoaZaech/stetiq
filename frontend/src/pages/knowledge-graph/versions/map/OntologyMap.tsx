@@ -19,7 +19,7 @@ import {
   type Node,
   type NodeProps,
 } from '@xyflow/react'
-import { CLASSIFICATIONS, isCosmetic, type OntologyChange } from '@/api/ontology-diff'
+import { CLASSIFICATION_LABEL, CLASSIFICATIONS, isCosmetic, type OntologyChange } from '@/api/ontology-diff'
 import type { Ontology } from '@/api/ontology-versions'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { ClassificationBadge } from '@/components/OntologyDiff'
@@ -112,7 +112,7 @@ interface ChangeStyle {
 
 /**
  * Change kind's channel, mark style: added solid, removed a dashed ghost, modified ringed,
- * documentation-only (only cosmetic changes) a neutral dot on an otherwise plain mark,
+ * cosmetic (only cosmetic changes) a neutral dot on an otherwise plain mark,
  * unchanged muted.
  */
 const CHANGE_STYLE: Record<MapChangeKind, ChangeStyle> = {
@@ -147,7 +147,7 @@ const CHANGE_STYLE: Record<MapChangeKind, ChangeStyle> = {
     swatch: 'border ring-2 ring-foreground ring-offset-1 ring-offset-card',
   },
   // Nearly unchanged: no severity hue and no emphasis, only the dot.
-  'documentation-only': {
+  cosmetic: {
     node: 'text-muted-foreground shadow-none',
     nodeSeverity: [],
     dashed: false,
@@ -169,8 +169,8 @@ const CHANGE_STYLE: Record<MapChangeKind, ChangeStyle> = {
   },
 }
 
-/** A documentation-only change's mark: small, round and neutral. */
-function DocumentationDot({ className }: { className?: string }) {
+/** A cosmetic change's mark: small, round and neutral. */
+function CosmeticDot({ className }: { className?: string }) {
   return (
     <span
       aria-hidden
@@ -182,6 +182,9 @@ function DocumentationDot({ className }: { className?: string }) {
 
 /** How `change` is drawn, or nothing outside a comparison. */
 const changeStyle = (change?: MapChange): Partial<ChangeStyle> => (change ? CHANGE_STYLE[change.kind] : {})
+
+/** A change kind as the UI names it (the legend, `data-change`): cosmetic is "documentation-only", as its class is. */
+const changeKindLabel = (kind: MapChangeKind): string => (kind === 'cosmetic' ? CLASSIFICATION_LABEL.cosmetic : kind)
 
 type OntologyMapProps = { query?: string } & (
   | { ontology: Ontology; comparison?: never }
@@ -403,15 +406,15 @@ function ComparisonLegend() {
       aria-label="Legend"
       className="flex max-w-[45%] flex-wrap items-center gap-x-3 gap-y-1 rounded-md border bg-card px-3 py-2 text-xs shadow-xs"
     >
-      {Object.entries(CHANGE_STYLE).map(([kind, { swatch, dot }]) => (
+      {(Object.entries(CHANGE_STYLE) as [MapChangeKind, ChangeStyle][]).map(([kind, { swatch, dot }]) => (
         <span key={kind} className="flex items-center gap-1">
           <span aria-hidden className={cn('inline-block h-3 w-5 rounded-sm', swatch)}>
-            {dot && <DocumentationDot />}
+            {dot && <CosmeticDot />}
           </span>
-          {kind}
+          {changeKindLabel(kind)}
         </span>
       ))}
-      {/* Cosmetic has no Diff colour: its key is the documentation-only mark above. */}
+      {/* Cosmetic has no Diff colour: its key is the cosmetic mark above. */}
       {CLASSIFICATIONS.filter((s) => !isCosmetic(s)).map((s) => (
         <ClassificationBadge key={s} classification={s} />
       ))}
@@ -467,7 +470,7 @@ function ClassNodeView({ data }: NodeProps<ClassNode>) {
       data-selected={data.selected || undefined}
       data-match={data.match || undefined}
       data-faded={data.faded || undefined}
-      data-change={data.change?.kind}
+      data-change={data.change && changeKindLabel(data.change.kind)}
       data-severity={severity ?? undefined}
       className={cn(
         'flex size-full cursor-pointer flex-col items-center justify-center rounded-md border bg-card px-2 text-sm font-medium text-card-foreground shadow-xs transition-opacity',
@@ -487,7 +490,7 @@ function ClassNodeView({ data }: NodeProps<ClassNode>) {
         style={{ height: NODE_SIZE.height - 2 }}
       >
         {data.label}
-        {style.dot && <DocumentationDot className="ml-1.5" />}
+        {style.dot && <CosmeticDot className="ml-1.5" />}
       </span>
       {data.attributes && data.attributes.length > 0 && <ChangedAttributes attributes={data.attributes} />}
       {/* React Flow attaches links to handles; links are drawn centre to centre, so these stay hidden. */}
@@ -542,7 +545,7 @@ function PatternEdgeView({ id, source, target, data, markerEnd }: EdgeProps<Patt
         path={path}
         markerEnd={markerEnd}
         interactionWidth={16}
-        data-change={data.change?.kind}
+        data-change={data.change && changeKindLabel(data.change.kind)}
         data-severity={severity ?? undefined}
         style={{
           stroke,
@@ -576,7 +579,7 @@ function PatternEdgeView({ id, source, target, data, markerEnd }: EdgeProps<Patt
               {data.relation}
             </span>
             {/* On the pill's corner, so the label keeps the size the layout made room for. */}
-            {style.dot && <DocumentationDot className="absolute -top-0.5 -right-0.5" />}
+            {style.dot && <CosmeticDot className="absolute -top-0.5 -right-0.5" />}
           </div>
         </ViewportPortal>
       )}

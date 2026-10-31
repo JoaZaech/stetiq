@@ -62,7 +62,7 @@ export function MapChangeSummary({
             </ul>
           )}
           {summary.cosmetic.length > 0 && (
-            <DocumentationOnly
+            <CosmeticChanges
               concepts={summary.cosmetic}
               count={summary.counts.find((c) => isCosmetic(c.level))?.count ?? 0}
               link={link}
@@ -109,7 +109,7 @@ export function LevelCounts({ counts, ...props }: { counts: LevelCount[] } & Com
  * The cosmetic (documentation-only) changes, collapsed to one line that expands to their entries.
  * It opens by itself when the Map selects one of them.
  */
-function DocumentationOnly({ concepts, count, link }: { concepts: ConceptChanges[]; count: number; link: MapLink }) {
+function CosmeticChanges({ concepts, count, link }: { concepts: ConceptChanges[]; count: number; link: MapLink }) {
   const id = useId()
   const [expanded, setExpanded] = useState(false)
   const open = expanded || (link.current !== null && concepts.includes(link.current))

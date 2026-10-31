@@ -23,14 +23,15 @@ import { type MapSelection, relationSelection } from '../map/ontology-map-focus'
 /**
  * How an item of a comparison changed from the base to the target version: present in
  * one side only (added, removed), changed according to the Ontology Diff (modified),
- * changed only cosmetically (documentation-only: the Diff classes every change to it
- * cosmetic), or none of these. Not the Diff's own change kind, which is per Concept.
+ * changed only cosmetically (cosmetic: the Diff classes every change to it cosmetic; the
+ * UI calls it documentation-only), or none of these. Not the Diff's own change kind,
+ * which is per Concept.
  */
-export type MapChangeKind = 'added' | 'removed' | 'modified' | 'documentation-only' | 'unchanged'
+export type MapChangeKind = 'added' | 'removed' | 'modified' | 'cosmetic' | 'unchanged'
 
 /**
  * An item's change in a comparison, with the severity the Ontology Diff gives it, its
- * cosmetic changes left out (null when unchanged or documentation-only).
+ * cosmetic changes left out (null when unchanged or cosmetic).
  */
 export interface MapChange {
   kind: MapChangeKind
@@ -43,7 +44,7 @@ export interface MapChange {
  */
 export interface AttributeChange {
   name: string
-  kind: Exclude<MapChangeKind, 'unchanged' | 'documentation-only'>
+  kind: Exclude<MapChangeKind, 'unchanged' | 'cosmetic'>
   /** The most severe of the Diff's changes to it. */
   severity: Classification
   /** A modified attribute's changes, as the Diff words them; empty when added or removed. */
@@ -106,7 +107,7 @@ function changesOfLink(compared: ComparedOntologies, link: Pick<PatternLink, 'id
 /**
  * An item's change from which sides have it and the Diff's changes to it: added or
  * removed by side; otherwise modified in the severity of its changes that are not
- * cosmetic, documentation-only when cosmetic ones are all it has, or unchanged.
+ * cosmetic, cosmetic when only cosmetic ones are left, or unchanged.
  */
 function mapChange(inBase: boolean, inTarget: boolean, changes: OntologyChange[]): MapChange {
   const severity = mostSevere(structural(changes).map((c) => c.classification))
@@ -117,7 +118,7 @@ function mapChange(inBase: boolean, inTarget: boolean, changes: OntologyChange[]
       : severity
         ? 'modified'
         : changes.length > 0
-          ? 'documentation-only'
+          ? 'cosmetic'
           : 'unchanged'
   return { kind, severity }
 }
@@ -238,7 +239,7 @@ export function changesOf(comparison: OntologyComparison, selection: MapSelectio
   return []
 }
 
-/** Whether a comparison's link changed in any way, documentation-only included. */
+/** Whether a comparison's link changed in any way, cosmetically included. */
 const linkChanged = (comparison: OntologyComparison, link: PatternLink) =>
   comparison.changes.links[link.id]?.kind !== 'unchanged'
 
