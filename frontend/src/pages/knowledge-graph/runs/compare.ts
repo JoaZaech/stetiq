@@ -148,6 +148,56 @@ export function kpiVerdict(kpi: Kpi, value: number | null | undefined, gating: R
   return { verdict, origin: judging.origin, outcomes }
 }
 
+/** A KPI's name, as its compare row and chart are titled. */
+export function kpiName(kpi: Kpi): string {
+  return kpi.kind === 'conformance' ? CONFORMANCE_METRIC : kpi.key
+}
+
+/** What the KPI drill-down shows about one run's KPI. */
+export interface KpiDrillDown {
+  name: string
+  /** `null` when the run has none. */
+  value: number | null
+  verdict: Verdict
+  /** For an Evaluator KPI, its Evaluator result's detail items about this metric. */
+  details: EvaluationResult['details']
+  /** The run page tab the KPI comes from (`''` is the Overview). */
+  tab: 'evaluations' | 'conformance' | ''
+}
+
+/**
+ * One run's `kpi` in detail: its value, its verdict by `gating` (with the covering Gates'
+ * reasons) and, for an Evaluator KPI, the detail items of the Evaluator result (the one of
+ * `evaluations`, the run's results, with the KPI's parameters) that are about its metric.
+ */
+export function kpiDrillDown(
+  kpi: Kpi,
+  run: ConstructionRun,
+  evaluations: readonly EvaluationResult[],
+  gating: RunGating,
+): KpiDrillDown {
+  const value =
+    kpi.kind === 'conformance'
+      ? (run.conformance?.score ?? null)
+      : kpi.kind === 'run-metric'
+        ? (run.metrics[kpi.key] ?? null)
+        : (evaluatorMetrics(evaluations)[kpi.key] ?? null)
+  const details =
+    kpi.kind !== 'evaluator'
+      ? []
+      : evaluations.flatMap((result) => {
+          const evaluator = evaluatorLabel(result.evaluator, result.parameters)
+          return result.details.filter((d) => `${evaluator}/${d.metric}` === kpi.key)
+        })
+  return {
+    name: kpiName(kpi),
+    value,
+    verdict: kpiVerdict(kpi, value, gating),
+    details,
+    tab: kpi.kind === 'conformance' ? 'conformance' : kpi.kind === 'evaluator' ? 'evaluations' : '',
+  }
+}
+
 /** One bound a Gate sets on a KPI: a metric Gate's `min`/`max`, a conformance Gate's `min_score`. */
 export interface GateBound {
   gate: string

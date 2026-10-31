@@ -211,25 +211,47 @@ test.describe('with Gates', () => {
     await expect(conformance.getByRole('list', { name: 'Bounds' })).toHaveText('conformance-floor: min 0.6')
     await expect(conformance.locator('.recharts-reference-line')).toHaveCount(1)
     await expect(conformance.getByRole('note')).toHaveText('Verdicts: 1 recorded, 3 preview')
-    await expect(conformance.getByRole('img', { name: /0\.5455, fail \(recorded\)$/ })).toHaveCount(1)
-    await expect(conformance.getByRole('img', { name: /0\.5455, fail \(preview\)$/ })).toHaveCount(1)
-    await expect(conformance.getByRole('img', { name: /0\.75, pass \(preview\)$/ })).toHaveCount(2)
+    await expect(conformance.getByRole('button', { name: /0\.5455, fail \(recorded\)$/ })).toHaveCount(1)
+    await expect(conformance.getByRole('button', { name: /0\.5455, fail \(preview\)$/ })).toHaveCount(1)
+    await expect(conformance.getByRole('button', { name: /0\.75, pass \(preview\)$/ })).toHaveCount(2)
 
     // `unreviewed` has no review result, so no point.
     const review = grid.getByRole('figure', { name: 'review (min_confidence=0.5)/score' })
     await expect(review.getByRole('list', { name: 'Bounds' })).toHaveText('review-score: min 0.8')
-    await expect(review.getByRole('img', { name: /, (pass|fail) \((recorded|preview)\)$/ })).toHaveCount(3)
-    await expect(review.getByRole('img', { name: /0\.6, fail \(preview\)$/ })).toBeVisible()
-    await expect(review.getByRole('img', { name: /0\.95, pass \(preview\)$/ })).toBeVisible()
+    await expect(review.getByRole('button', { name: /, (pass|fail) \((recorded|preview)\)$/ })).toHaveCount(3)
+    await expect(review.getByRole('button', { name: /0\.6, fail \(preview\)$/ })).toBeVisible()
+    await expect(review.getByRole('button', { name: /0\.95, pass \(preview\)$/ })).toBeVisible()
 
     // No Gate covers `precision` or the other review configuration: neutral points, no bound.
     for (const name of ['precision', 'review (min_confidence=0.8)/score']) {
       const ungated = grid.getByRole('figure', { name, exact: true })
-      await expect(ungated.getByRole('img', { name: /^.+: \d/ }).first()).toBeVisible()
-      await expect(ungated.getByRole('img', { name: /pass|fail/ })).toHaveCount(0)
+      await expect(ungated.getByRole('button', { name: /^.+: \d/ }).first()).toBeVisible()
+      await expect(ungated.getByRole('button', { name: /pass|fail/ })).toHaveCount(0)
       await expect(ungated.getByRole('list', { name: 'Bounds' })).toHaveCount(0)
       await expect(ungated.locator('.recharts-reference-line')).toHaveCount(0)
     }
+  })
+})
+
+test.describe('the KPI drill-down from the chart view', () => {
+  // The `gates` seed, as above.
+  test.use({ seed: 'gates' })
+
+  test('a chart point opens the side sheet for its run and KPI', async ({ page, stetiq }) => {
+    const { regressed } = stetiq.seeded
+    await page.goto('/ui/kg/support/runs?view=chart')
+    const review = page
+      .getByRole('region', { name: 'Metric charts' })
+      .getByRole('figure', { name: 'review (min_confidence=0.5)/score' })
+    await review.getByRole('button', { name: /0\.6, fail \(preview\)$/ }).click()
+
+    const sheet = page.getByRole('dialog', { name: 'review (min_confidence=0.5)/score' })
+    await expect(sheet).toContainText(`Construction Run ${String(regressed)}`)
+    await expect(sheet.getByRole('definition').first()).toHaveText('0.6')
+    await expect(sheet.getByRole('region', { name: 'Verdict' })).toContainText(/fail\s*preview/)
+    await expect(sheet.getByRole('list', { name: 'review-score reasons' })).toContainText('review.score = 0.6 < min 0.8')
+    await expect(sheet.getByRole('list', { name: 'Detail items' }).getByRole('listitem')).toHaveText([/open-tickets/])
+    await expect(sheet.getByRole('link', { name: 'Open the run’s Evaluations tab' })).toBeVisible()
   })
 })
 
