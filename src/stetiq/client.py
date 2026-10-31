@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import getpass
 import os
 import subprocess
@@ -367,9 +368,8 @@ class Client:
         # The service rejects a question whose id the Use Case already has.
         return self._service.register_use_case(
             knowledge_graph,
-            UseCase(
-                competency_questions=(*current.competency_questions, question),
-                description=current.description,
+            dataclasses.replace(
+                current, competency_questions=(*current.competency_questions, question)
             ),
         )
 

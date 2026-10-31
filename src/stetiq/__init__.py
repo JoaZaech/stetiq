@@ -51,7 +51,7 @@ from stetiq.tracking import (
     RunComparison,
     UseCaseVersion,
 )
-from stetiq.use_case import CompetencyQuestion, UseCase
+from stetiq.use_case import CompetencyQuestion, Consumer, Task, UseCase
 
 __all__ = [
     "ActiveRun",
@@ -66,6 +66,7 @@ __all__ = [
     "Conformance",
     "ConstructionRun",
     "ConstructionRunEvaluator",
+    "Consumer",
     "Detail",
     "DriftEvent",
     "DriftFinding",
@@ -111,6 +112,7 @@ __all__ = [
     "RunComparison",
     "RunNotActiveError",
     "StetiqError",
+    "Task",
     "UseCase",
     "UseCaseValidationError",
     "UseCaseVersion",

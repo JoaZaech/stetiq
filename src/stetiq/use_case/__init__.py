@@ -1,4 +1,4 @@
-"""Use Cases: Competency Questions, versioned independently of Ontology Versions."""
+"""Use Cases: Consumers, Tasks and Competency Questions, versioned apart from the Ontology."""
 
 from stetiq.use_case.concepts import parse_concept_reference
 from stetiq.use_case.format import (
@@ -14,10 +14,12 @@ from stetiq.use_case.format import (
     to_dict,
     to_yaml,
 )
-from stetiq.use_case.model import CompetencyQuestion, UseCase
+from stetiq.use_case.model import CompetencyQuestion, Consumer, Task, UseCase
 
 __all__ = [
     "CompetencyQuestion",
+    "Consumer",
+    "Task",
     "UseCase",
     "canonical_json",
     "canonicalize",

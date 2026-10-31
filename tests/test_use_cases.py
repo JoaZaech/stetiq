@@ -443,3 +443,205 @@ def test_questions_without_a_query_or_mapping_are_mapped_through_the_model_inter
     }
     assert (questions["names"]["status"], questions["names"]["source"]) == ("answerable", "model")
     assert questions["explicit"]["source"] == "concepts"
+
+
+# --- Consumers and Tasks -----------------------------------------------------------
+
+WITH_CONSUMERS = (
+    USE_CASE
+    + """
+consumers:
+  - id: triage-bot
+    name: Triage bot
+    kind: agent
+    contact: Ada Lovelace
+    description: Routes new tickets to the right team.
+    tasks:
+      - id: route-ticket
+        description: Route a new ticket by the customer's history
+        competency_questions: [tickets-per-customer, customer-names]
+  - id: support-dashboard
+    name: Support dashboard
+    tasks:
+      - id: show-workload
+        description: Show each customer's open tickets
+        competency_questions: [tickets-per-customer]
+"""
+)
+
+
+def test_a_use_case_declares_consumers_whose_tasks_need_competency_questions(client, kg):
+    version = client.register_use_case(kg.name, WITH_CONSUMERS)
+
+    consumers = {
+        c.id: c for c in client.get_use_case_version(kg.name, version.number).use_case.consumers
+    }
+    bot = consumers["triage-bot"]
+    assert (bot.name, bot.kind, bot.contact, bot.description) == (
+        "Triage bot",
+        "agent",
+        "Ada Lovelace",
+        "Routes new tickets to the right team.",
+    )
+    assert [(t.id, t.description, t.competency_questions) for t in bot.tasks] == [
+        (
+            "route-ticket",
+            "Route a new ticket by the customer's history",
+            ("customer-names", "tickets-per-customer"),
+        )
+    ]
+    dashboard = consumers["support-dashboard"]
+    assert (dashboard.kind, dashboard.contact, dashboard.description) == (None, None, None)
+    assert dashboard.tasks[0].competency_questions == ("tickets-per-customer",)
+
+
+def test_a_use_case_with_consumers_can_be_given_as_a_model(client, kg):
+    use_case = stetiq.UseCase(
+        competency_questions=(CompetencyQuestion("q", "Which customers are there?"),),
+        consumers=(
+            stetiq.Consumer(
+                id="crm",
+                name="CRM sync",
+                kind="application",
+                tasks=(stetiq.Task("sync", "Sync customers", competency_questions=("q",)),),
+            ),
+        ),
+    )
+
+    version = client.register_use_case(kg.name, use_case)
+
+    assert version.use_case.consumers == use_case.consumers
+
+
+def test_a_use_case_without_consumers_hashes_as_it_did_before_consumers_existed(client, kg):
+    version = client.register_use_case(kg.name, USE_CASE)
+
+    # Computed by the code before Consumers were added: older Use Case Versions still dedupe.
+    assert (
+        version.content_hash == "40b7935ea9ce53e9a32a747efa2defe48c5189a499cf54a47825468d266544d4"
+    )
+    assert version.use_case.consumers == ()
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda y: y.replace("  - id: support-dashboard", "  - id: dashboard"),
+        lambda y: y.replace("kind: agent", "kind: bot"),
+        lambda y: y.replace("competency_questions: [tickets-per-customer]\n", ""),
+        lambda y: y.replace(
+            "      - id: show-workload\n",
+            "      - id: list-customers\n"
+            "        description: List customers\n"
+            "      - id: show-workload\n",
+        ),
+        lambda y: y.split("  - id: support-dashboard")[0],
+    ],
+    ids=["consumer-id", "consumer-kind", "task-questions", "task-added", "consumer-removed"],
+)
+def test_changing_consumers_or_tasks_yields_a_new_use_case_version(client, kg, change):
+    first = client.register_use_case(kg.name, WITH_CONSUMERS)
+
+    changed = client.register_use_case(kg.name, change(WITH_CONSUMERS))
+
+    assert (first.number, changed.number) == (1, 2)
+    assert changed.content_hash != first.content_hash
+
+
+def test_consumers_and_tasks_in_another_order_are_the_same_use_case_version(client, kg):
+    first = client.register_use_case(kg.name, WITH_CONSUMERS)
+    reordered = WITH_CONSUMERS.replace(
+        "[tickets-per-customer, customer-names]", "[customer-names, tickets-per-customer]"
+    )
+    swapped = stetiq.UseCase(
+        competency_questions=first.use_case.competency_questions,
+        description=first.use_case.description,
+        consumers=tuple(reversed(first.use_case.consumers)),
+    )
+
+    assert client.register_use_case(kg.name, reordered).number == 1
+    assert client.register_use_case(kg.name, swapped).number == 1
+    assert len(client.list_use_case_versions(kg.name)) == 1
+
+
+def test_adding_a_competency_question_keeps_the_consumers_and_tasks(client, kg):
+    first = client.register_use_case(kg.name, WITH_CONSUMERS)
+
+    version = client.add_competency_question(
+        kg.name, CompetencyQuestion(id="ticket-count", question="How many tickets are open?")
+    )
+
+    assert version.number == 2
+    assert version.use_case.consumers == first.use_case.consumers
+
+
+QUESTIONS = "competency_questions: [{id: q, question: Who are our customers}]\n"
+
+
+@pytest.mark.parametrize(
+    "consumers, message",
+    [
+        (
+            "[{id: crm, name: CRM, tasks: [{id: sync, description: Sync, competency_questions: [nope]}]}]",
+            "sync.competency_questions: unknown competency question 'nope'",
+        ),
+        ("[{id: crm, name: CRM}, {id: crm, name: CRM again}]", "crm: duplicate consumer id"),
+        (
+            "[{id: crm, name: CRM, tasks: [{id: sync, description: Sync}]},"
+            " {id: bi, name: BI, tasks: [{id: sync, description: Report}]}]",
+            "sync: duplicate task id",
+        ),
+        ("[{name: CRM}]", "consumer.id: needs a non-empty string id"),
+        (
+            "[{id: crm, name: CRM, tasks: [{description: Sync}]}]",
+            "crm task.id: needs a non-empty string id",
+        ),
+        ("[{id: crm}]", "crm.name: needs a name"),
+        ("[{id: crm, name: CRM, tasks: [{id: sync}]}]", "sync.description: needs a description"),
+        ("[{id: crm, name: CRM, owner: Ada}]", "consumers[0]: unknown keys ['owner']"),
+        ("[{id: crm, name: CRM, tasks: sync}]", "consumers[0].tasks: must be a list"),
+    ],
+)
+def test_malformed_consumers_are_rejected_naming_the_element_in_every_mode(
+    client, kg, consumers, message
+):
+    with pytest.raises(stetiq.UseCaseValidationError) as raised:
+        client.register_use_case(kg.name, QUESTIONS + "consumers: " + consumers)
+
+    assert str(raised.value) == message
+    assert client.list_use_case_versions(kg.name) == []
+
+
+@pytest.mark.parametrize(
+    "consumers, message",
+    [
+        (
+            (stetiq.Consumer("crm", "CRM", tasks=(stetiq.Task("sync", "Sync", ("nope",)),)),),
+            "sync.competency_questions: unknown competency question 'nope'",
+        ),
+        (
+            (stetiq.Consumer("crm", "CRM"), stetiq.Consumer("crm", "CRM again")),
+            "crm: duplicate consumer id",
+        ),
+        (
+            (stetiq.Consumer(None, "CRM"),),  # type: ignore[arg-type]
+            "consumer.id: needs a non-empty string id",
+        ),
+        (
+            (stetiq.Consumer("crm", "CRM", tasks=(stetiq.Task("", "Sync"),)),),
+            "crm task.id: needs a non-empty string id",
+        ),
+    ],
+)
+def test_a_malformed_consumer_model_is_rejected_with_the_same_message_in_every_mode(
+    client, kg, consumers, message
+):
+    use_case = stetiq.UseCase(
+        competency_questions=(CompetencyQuestion("q", "Which customers are there?"),),
+        consumers=consumers,
+    )
+
+    with pytest.raises(stetiq.UseCaseValidationError) as raised:
+        client.register_use_case(kg.name, use_case)
+
+    assert str(raised.value) == message
