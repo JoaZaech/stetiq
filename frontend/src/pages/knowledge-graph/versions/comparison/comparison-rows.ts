@@ -18,15 +18,14 @@ export interface ComparisonRow {
   level: Classification
   detail: string
   /** The class or relation to show on the Map: the Concept itself, or an attribute's owner. */
-  owner: ClassOrRelation | null
+  owner: ClassOrRelation
 }
 
 /** Where `change` is on the Map: its class or relation, or the one the Diff says owns the attribute. */
-function ownerOf(change: OntologyChange): ClassOrRelation | null {
-  if (change.concept_kind !== 'property') return { kind: CONCEPT_NOUN[change.concept_kind], label: change.concept }
-  return change.owner !== undefined && change.owner_kind !== undefined
+function ownerOf(change: OntologyChange): ClassOrRelation {
+  return change.concept_kind === 'property'
     ? { kind: CONCEPT_NOUN[change.owner_kind], label: change.owner }
-    : null
+    : { kind: CONCEPT_NOUN[change.concept_kind], label: change.concept }
 }
 
 /** The comparison's Diff changes as rows, the weightiest first, otherwise in the Diff's order. */

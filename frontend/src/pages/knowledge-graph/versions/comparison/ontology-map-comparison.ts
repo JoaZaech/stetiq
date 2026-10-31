@@ -98,7 +98,7 @@ function changesOfConcept({ diff }: ComparedOntologies, kind: OwnerKind, label: 
  */
 function changesOfLink(compared: ComparedOntologies, link: PatternLink): OntologyChange[] {
   return changesOfConcept(compared, 'relationship_type', link.relation).filter(
-    (c) => c.pattern === undefined || patternId(c.pattern) === link.id,
+    (c) => c.concept_kind !== 'relationship_type' || c.pattern === undefined || patternId(c.pattern) === link.id,
   )
 }
 
@@ -209,7 +209,7 @@ export function compareOntologies(base: Ontology, target: Ontology, diff: Ontolo
 function attributeChanges(changes: OntologyChange[]): AttributeChange[] {
   const byName = new Map<string, OntologyChange[]>()
   for (const c of changes) {
-    if (c.attribute === undefined) continue
+    if (c.concept_kind !== 'property') continue
     byName.set(c.attribute, [...(byName.get(c.attribute) ?? []), c])
   }
   return [...byName]
@@ -306,7 +306,7 @@ export interface ChangeSummary {
  */
 function statementOf(kind: OwnerKind, change: OntologyChange): ChangeStatement {
   const level = change.classification
-  if (change.attribute !== undefined) {
+  if (change.concept_kind === 'property') {
     const text =
       change.kind === 'added'
         ? change.required ? 'added, required' : 'added'

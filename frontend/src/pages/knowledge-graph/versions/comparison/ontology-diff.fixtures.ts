@@ -3,7 +3,7 @@
  * (`wire.ontology_diff_to_json`). Each `detail` is worded as `ontology/diff.py` words it,
  * for the tests that show it; no code under test reads it.
  */
-import type { Classification, OntologyChange, OwnerKind } from '@/api/ontology-diff'
+import type { Classification, OntologyChange, OwnerKind, PropertyChange } from '@/api/ontology-diff'
 import { type Pattern, patternId } from '../concepts'
 
 type ChangeKind = OntologyChange['kind']
@@ -24,15 +24,14 @@ export const attributeChange = (
   ownerKind: OwnerKind,
   owner: string,
   attribute: string,
-  change: ChangeKind,
+  change: PropertyChange['kind'],
   classification: Classification,
   { required, detail }: { required?: boolean; detail?: string } = {},
-): OntologyChange => {
+): PropertyChange => {
   const concept = `${owner}.${attribute}`
-  return {
+  const fields = {
     concept,
-    concept_kind: 'property',
-    kind: change,
+    concept_kind: 'property' as const,
     classification,
     detail:
       detail ??
@@ -40,8 +39,8 @@ export const attributeChange = (
     owner,
     owner_kind: ownerKind,
     attribute,
-    ...(change === 'added' && { required: required ?? false }),
   }
+  return change === 'added' ? { ...fields, kind: change, required: required ?? false } : { ...fields, kind: change }
 }
 
 /** A relation's endpoint Pattern added (additive) or removed (breaking). */

@@ -17,6 +17,6 @@ Comparing two Ontology Versions, as a Map or as a Table (`?view=`).
 
 A change's level is its Diff classification. "More severe" is defined once, by `compareSeverity` in `@/api/ontology-diff` (with `mostSevere` and `MOST_SEVERE_FIRST`), which the comparison, its Table and the plain Ontology Diff view (`@/components/OntologyDiff`) all sort by.
 
-These modules read what a Diff change concerns from its fields (`owner`, `owner_kind`, `attribute`, `required`, `pattern`) and the cosmetic class, never from its `detail`, which is only shown. `ontology-diff.fixtures.ts` builds the tests' changes from those fields. The UI names the cosmetic class "documentation-only" (`CLASSIFICATION_LABEL` in `@/api/ontology-diff`).
+These modules read what a Diff change concerns from its fields (`owner`, `owner_kind`, `attribute`, `required`, `pattern`) and the cosmetic class, never from its `detail`, which is only shown. `OntologyChange` in `@/api/ontology-diff` is a union by `concept_kind`: an attribute change always states its owner, owner kind and attribute, and an added one whether it is required. `ontology-diff.fixtures.ts` builds the tests' changes from those fields. The UI names the cosmetic class "documentation-only" (`CLASSIFICATION_LABEL` in `@/api/ontology-diff`).
 
 The Map itself is `../map/OntologyMap.tsx`; the selection, version context and `MapView` stay in `..`.

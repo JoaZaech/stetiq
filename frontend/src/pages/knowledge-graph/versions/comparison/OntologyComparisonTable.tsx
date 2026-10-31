@@ -46,7 +46,7 @@ const columns = column.columns([
   column.display({
     id: 'map',
     header: '',
-    cell: ({ row }) => row.original.owner && <ShowOnMap concept={row.original.owner} />,
+    cell: ({ row }) => <ShowOnMap concept={row.original.owner} />,
   }),
 ])
 
@@ -155,9 +155,7 @@ function ComparisonGrid({ comparison, base, target }: { comparison: OntologyComp
             table={table}
             label="Changes"
             empty="No changes match."
-            rowProps={({ original: { owner } }) =>
-              selectedRowProps(owner !== null && isSelectedRow(highlighted, owner))
-            }
+            rowProps={({ original: { owner } }) => selectedRowProps(isSelectedRow(highlighted, owner))}
           />
         </TableLinksContext>
       )}

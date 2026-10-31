@@ -41,27 +41,44 @@ export type ConceptKind = 'node_type' | 'relationship_type' | 'property'
 /** A class's or a relation's Concept kind: the Concepts that own attributes. */
 export type OwnerKind = Exclude<ConceptKind, 'property'>
 
-/**
- * One change to one Concept (wire.ontology_diff_to_json). The fields after `detail` state
- * what it concerns, present only when it concerns one (and absent from an older server's).
- */
-export interface OntologyChange {
+/** What every change states (wire.ontology_diff_to_json). */
+interface ChangeFields {
   /** A class or relation label, or `<owner>.<attribute>`. */
   concept: string
-  concept_kind: ConceptKind
-  kind: 'added' | 'removed' | 'changed' | 'deprecated'
   classification: Classification
   /** The change in words, for people only: shown, never read by code. */
   detail: string
-  /** An attribute change's owner, its kind and the attribute's name. */
-  owner?: string
-  owner_kind?: OwnerKind
-  attribute?: string
-  /** Whether an added attribute is required. */
-  required?: boolean
-  /** The Pattern an endpoint change adds or removes: source, relation, target. */
+}
+
+/** A change to a class itself. */
+export interface NodeTypeChange extends ChangeFields {
+  concept_kind: 'node_type'
+  kind: 'added' | 'removed' | 'changed' | 'deprecated'
+}
+
+/** A change to a relation itself. */
+export interface RelationshipTypeChange extends ChangeFields {
+  concept_kind: 'relationship_type'
+  kind: 'added' | 'removed' | 'changed' | 'deprecated'
+  /** The Pattern an endpoint change adds or removes (source, relation, target); only an endpoint change has one. */
   pattern?: [string, string, string]
 }
+
+/** A change to an attribute: it states the attribute, its owner and the owner's kind. */
+interface AttributeFields extends ChangeFields {
+  concept_kind: 'property'
+  owner: string
+  owner_kind: OwnerKind
+  attribute: string
+}
+
+/** An attribute added, and whether it is required; or one removed or changed. */
+export type PropertyChange =
+  | (AttributeFields & { kind: 'added'; required: boolean })
+  | (AttributeFields & { kind: 'removed' | 'changed' })
+
+/** One change to one Concept, as the Diff states it for that kind of Concept. */
+export type OntologyChange = NodeTypeChange | RelationshipTypeChange | PropertyChange
 
 /** The Ontology Diff between two Ontology Versions of one Knowledge Graph. */
 export interface OntologyDiff {
