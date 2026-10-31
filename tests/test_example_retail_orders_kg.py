@@ -42,6 +42,43 @@ def result(results, evaluator):
     return found
 
 
+def consumers_of(use_case_version):
+    return {
+        c.id: (c.name, c.kind, {t.id: set(t.competency_questions) for t in c.tasks})
+        for c in use_case_version.use_case.consumers
+    }
+
+
+def test_the_use_case_names_the_consumers_and_the_tasks_they_need_answered(demo):
+    # top-categories-by-revenue serves two Tasks; basket-affinity serves none yet.
+    latest = demo.mara.get_use_case_version(KG)
+    assert latest.number == 1
+    assert consumers_of(latest) == {
+        "analytics-dashboard": (
+            "Sales analytics dashboard",
+            "dashboard",
+            {
+                "weekly-sales-review": {
+                    "top-categories-by-revenue",
+                    "lines-per-order",
+                    "repeat-customers",
+                },
+                "returns-watch": {"return-rate-per-product"},
+            },
+        ),
+        "supplier-risk-report": (
+            "Supplier risk report",
+            "report",
+            {"supplier-concentration": {"suppliers-behind-orders", "orders-per-warehouse"}},
+        ),
+        "merchandising-team": (
+            "Merchandising",
+            "team",
+            {"plan-category-pages": {"category-tree-depth", "top-categories-by-revenue"}},
+        ),
+    }
+
+
 def test_v1_answers_six_of_eight_questions_with_a_two_level_hierarchy(demo):
     results = demo.mara.get_evaluation_results(KG, 1)
     answerability = result(results, "structural_answerability")

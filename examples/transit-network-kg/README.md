@@ -38,8 +38,12 @@ a Candidate inherits the vendor's camelCase, which the `naming_conventions` Eval
 
 **1. Declare.** `stetiq kg create` makes `ontology/v1.yaml` Ontology Version 1 of
 `city-transit` (`production` -> v1); `kg bind-source` binds the Graph Source scope
-`database=transit`; `use-case register` registers 7 Competency Questions, judged against v1 at
-once: 5 answerable, 1 unanswerable (`accessible-stops`), 1 unmapped. `kg evolution-mode strict`.
+`database=transit`; `use-case register` registers the Use Case: four Consumers (the transit
+app's journey planner, the timetable team, the quarterly step-free access report and the
+control room's operations dashboard), their Tasks, and the 7 Competency Questions those
+Tasks need, judged against v1 at once: 5 answerable, 1 unanswerable (`accessible-stops`),
+1 unmapped. `stops-on-route` and `accessible-stops` each serve two Tasks;
+`average-dwell-time` serves none. `kg evolution-mode strict`.
 
 **2. Build.** `stetiq run` starts the Entry Point. The feed carries `Stop.wheelchairBoarding`,
 `Trip.bikesAllowed` and `PARENT_STATION`, none declared by v1: Conformance 0.926, strict
@@ -124,7 +128,7 @@ jobs:
 | `transit_pipeline.py` | The Construction Entry Point: loads a GTFS feed, the depot register and the fare zones into the graph database file |
 | `transit_graph.py`, `transit_evaluators.py` | `TransitGraph`, the file-backed stand-in for Neo4j implementing stetiq's `GraphSource` protocol, with the Cypher queries it answers; `NamingConventions`, the Ontology Version Evaluator the Gate `names-follow-conventions` reads |
 | `stetiq.yaml`, `gates-broken.yaml` | Knowledge Graph name, Entry Point, the Drift limit (`max_count_drop`) and the six Gates; the same Gates with a typo, for act 5 |
-| `use-case.yaml`, `ontology/` | The Competency Questions; `v1` (the team's first version) and `v3` (after the Candidate) |
+| `use-case.yaml`, `ontology/` | The Consumers, their Tasks and the Competency Questions; `v1` (the team's first version) and `v3` (after the Candidate) |
 
 Left standing on purpose: `trips-per-service` keeps its June expectation, so the executed
 question fails on every September run (pass ratio 0.8) until the timetable team updates it, a
