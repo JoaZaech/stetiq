@@ -1,6 +1,6 @@
 import { lazy, type ReactNode, Suspense, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { type ConstructionRun, useRuns } from '@/api/runs'
+import { type ConstructionRun, useAllRunEvaluations, useRuns } from '@/api/runs'
 import { kgCompareUrl, knowledgeGraphSection } from '@/app/knowledge-graph-sections'
 import { ColumnPicker } from '@/components/ColumnPicker'
 import { CompareToolbar } from '@/components/CompareToolbar'
@@ -41,7 +41,8 @@ const statusFilterLabel = (status: RunStatusFilter) =>
 
 /**
  * `/kg/:name/runs`: the Knowledge Graph's Construction Runs, newest first, as a table
- * (select runs to compare them) or as one chart per run metric and Conformance.
+ * (select runs to compare them) or as one chart per run metric, Conformance and Evaluator
+ * result metric.
  */
 export function ConstructionRunsPage() {
   const [mode, setMode] = useViewMode()
@@ -170,10 +171,17 @@ const RUN_X_AXIS = {
   scale: 'time',
 } as const
 
-/** One chart per run metric, plus Conformance, over the runs' start times. */
+/**
+ * One chart per run metric, Conformance and Evaluator result metric (one per Evaluator
+ * parameter configuration), over the runs' start times.
+ */
 function RunCharts({ runs }: { runs: ConstructionRun[] }) {
+  const name = useKnowledgeGraphName()
+  const evaluations = useAllRunEvaluations(name)
   const [search, setSearch] = useChartSearch()
-  const series = useMemo(() => metricSeries(runChartPoints(runs)), [runs])
+  const series = useMemo(() => metricSeries(runChartPoints(runs, evaluations.data)), [runs, evaluations.data])
+  if (evaluations.isError) return <ErrorAlert error={evaluations.error} />
+  if (evaluations.isPending) return <Skeleton className="h-64 w-full" />
   return (
     <Suspense fallback={<Skeleton className="h-64 w-full" />}>
       <MetricChartGrid series={series} xAxis={RUN_X_AXIS} search={search} onSearchChange={setSearch} />

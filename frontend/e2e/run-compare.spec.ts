@@ -83,18 +83,19 @@ test('comparing runs of another Knowledge Graph, or unknown runs, is not found',
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Construction Run not found')
 })
 
-test('the chart view shows one chart per run metric plus Conformance, over start time', async ({ page }) => {
+test('the chart view shows one chart per run metric, Conformance and Evaluator result metric, over start time', async ({
+  page,
+}) => {
   await page.goto('/ui/kg/support/runs')
   await page.getByRole('radio', { name: 'Chart' }).click()
   await expect(page).toHaveURL(/view=chart/)
   await expect(page.getByRole('table', { name: 'Construction Runs' })).toHaveCount(0)
 
   const grid = page.getByRole('region', { name: 'Metric charts' })
-  await expect(grid.getByRole('figure')).toHaveCount(3)
-  for (const name of ['Conformance', 'precision', 'recall']) {
-    await expect(grid.getByRole('figure', { name })).toBeVisible()
+  for (const name of ['Conformance', 'precision', 'recall', 'review (min_confidence=0.5)/score', 'review (min_confidence=0.8)/score']) {
+    await expect(grid.getByRole('figure', { name, exact: true })).toBeVisible()
   }
-  await page.getByRole('searchbox', { name: 'Search metric charts' }).fill('conf')
+  await page.getByRole('searchbox', { name: 'Search metric charts' }).fill('recall')
   await expect(grid.getByRole('figure')).toHaveCount(1)
 
   await page.reload()
