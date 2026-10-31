@@ -58,11 +58,23 @@ export function differs(values: readonly ComparedValue[]): boolean {
 /** The Conformance score's name in the run charts, next to the run metrics. */
 export const CONFORMANCE_METRIC = 'Conformance'
 
-/** Each run at its start time, with its metrics and Conformance score, for the run charts. */
-export function runChartPoints(runs: readonly ConstructionRun[]): MetricPoint[] {
+/**
+ * Each run at its start time, with its metrics, Conformance score and Evaluator results
+ * (keyed `<evaluator>/<metric>`, see `evaluatorMetrics`), for the run charts.
+ * `evaluations` are the Knowledge Graph-wide run results; each joins its run by `subject_id`.
+ */
+export function runChartPoints(
+  runs: readonly ConstructionRun[],
+  evaluations: readonly EvaluationResult[] = [],
+): MetricPoint[] {
+  const byRun = new Map<string, EvaluationResult[]>()
+  for (const result of evaluations) byRun.set(result.subject_id, [...(byRun.get(result.subject_id) ?? []), result])
   return runs.map((run) => ({
     x: Date.parse(run.started_at),
-    metrics:
-      run.conformance === null ? run.metrics : { ...run.metrics, [CONFORMANCE_METRIC]: run.conformance.score },
+    metrics: {
+      ...run.metrics,
+      ...(run.conformance === null ? {} : { [CONFORMANCE_METRIC]: run.conformance.score }),
+      ...evaluatorMetrics(byRun.get(run.id) ?? []),
+    },
   }))
 }

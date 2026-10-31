@@ -143,6 +143,26 @@ test.describe('with Construction Runs', () => {
     await expect(page.locator('body')).not.toContainText('Ada')
   })
 
+  test('the chart view charts Evaluator results, one chart per parameter configuration, under the filters', async ({
+    page,
+  }) => {
+    await page.goto('/ui/kg/support/runs?view=chart')
+    const grid = page.getByRole('region', { name: 'Metric charts' })
+    await expect(grid.getByRole('figure', { name: 'recall' })).toBeVisible()
+    await expect(grid.getByRole('figure', { name: 'Conformance', exact: true })).toBeVisible()
+    await expect(grid.getByRole('figure', { name: 'conformance/score' })).toBeVisible()
+    await expect(grid.getByRole('figure', { name: 'competency_question_execution/pass_ratio' })).toBeVisible()
+
+    await page.getByRole('searchbox', { name: 'Search metric charts' }).fill('review')
+    await expect(grid.getByRole('figure')).toHaveCount(2)
+    await expect(grid.getByRole('figure', { name: 'review (min_confidence=0.5)/score' })).toBeVisible()
+    await expect(grid.getByRole('figure', { name: 'review (min_confidence=0.8)/score' })).toBeVisible()
+
+    // Only the aborted run failed in `support`, and it has no Evaluator results.
+    await page.getByRole('radiogroup', { name: 'Status' }).getByRole('radio', { name: 'Failed' }).click()
+    await expect(grid.getByRole('figure')).toHaveCount(0)
+  })
+
   test('a run that failed before observing says so', async ({ page, stetiq }) => {
     await page.goto(`/ui/kg/support/runs/${String(stetiq.seeded.aborted)}`)
     const alert = page.getByRole('alert')
