@@ -19,14 +19,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
-
-/** The Diff colours, used for nothing else in the app; cosmetic has none. */
-const CLASSIFICATION_STYLE: Record<Classification, string> = {
-  cosmetic: 'text-muted-foreground',
-  additive: 'border-diff-additive/40 bg-diff-additive/10 text-diff-additive',
-  deprecating: 'border-diff-deprecating/40 bg-diff-deprecating/10 text-diff-deprecating',
-  breaking: 'border-diff-breaking/40 bg-diff-breaking/10 text-diff-breaking',
-}
+import { SEVERITY } from './severity-style'
 
 interface OntologyDiffPanelProps {
   knowledgeGraph: string
@@ -120,7 +113,10 @@ export function OntologyDiffView({ diff, base, target, caption }: OntologyDiffVi
 /** A change's (or a whole Diff's) classification, in its Diff colour (cosmetic's neutral). */
 export function ClassificationBadge({ classification }: { classification: Classification }) {
   return (
-    <Badge variant="outline" className={cn(CLASSIFICATION_STYLE[classification])}>
+    <Badge
+      variant="outline"
+      className={cn(SEVERITY.border[classification], SEVERITY.fill[classification], SEVERITY.text[classification])}
+    >
       {CLASSIFICATION_LABEL[classification]}
     </Badge>
   )

@@ -60,7 +60,7 @@ import {
   type LinkEmphasis,
   type MapGesture,
 } from './ontology-map-view'
-import { SEVERITY, severityStroke } from '../comparison/severity-style'
+import { SEVERITY, severityStroke } from '@/components/severity-style'
 
 /** An item's data for how it changed, set on a comparison's Map only. */
 type MapChangeData = { change?: MapChange }

@@ -1,4 +1,7 @@
-/** How severity is drawn in a comparison: the Diff colours, which nothing else uses. */
+/**
+ * How severity is drawn wherever a Diff is shown (the comparison, the Diff view and its
+ * badges): the Diff colours, which nothing else uses.
+ */
 import type { Classification } from '@/api/ontology-diff'
 
 /**

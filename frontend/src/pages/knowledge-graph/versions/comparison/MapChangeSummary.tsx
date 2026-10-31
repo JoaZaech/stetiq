@@ -16,7 +16,7 @@ import {
   summarizeChanges,
   summaryConceptOf,
 } from './ontology-map-comparison'
-import { SEVERITY } from './severity-style'
+import { SEVERITY } from '@/components/severity-style'
 
 /**
  * The change summary beside a comparison's Map: a count per level, then each changed
