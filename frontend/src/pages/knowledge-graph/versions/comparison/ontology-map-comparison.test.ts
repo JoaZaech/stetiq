@@ -59,7 +59,7 @@ const DIFF: OntologyDiff = {
     attributeChange('node_type', 'Ticket', 'priority', 'removed', 'breaking'),
     conceptChange('relationship_type', 'ASSIGNED', 'added', 'additive'),
     conceptChange('relationship_type', 'FILED', 'removed', 'breaking'),
-    endpointChange(['Agent', 'OPENED', 'Ticket'], 'added'),
+    endpointChange(['Agent', 'OPENED', 'Ticket'], 'additive'),
   ],
 }
 
@@ -274,7 +274,7 @@ describe('cosmetic changes', () => {
       attributeDescribed('node_type', 'Trip', 'headsign'),
       conceptDescribed('relationship_type', 'HAS_TRIP'),
       conceptDescribed('relationship_type', 'SERVES'),
-      endpointChange(['Route', 'SERVES', 'Stop'], 'added'),
+      endpointChange(['Route', 'SERVES', 'Stop'], 'additive'),
     ],
   }
 
@@ -345,7 +345,7 @@ describe('changesOf', () => {
     const comparison = compareOntologies(BASE, TARGET, DIFF)
 
     expect(changesOf(comparison, { kind: 'class', label: 'Ticket' }).map((c) => c.detail)).toEqual([
-      'property Ticket.priority removed',
+      'Ticket.priority removed',
     ])
     expect(changesOf(comparison, { kind: 'class', label: 'Product' })).toEqual([])
   })
@@ -375,14 +375,14 @@ describe('changesOf', () => {
     ])
     expect(
       changesOf(comparison, { kind: 'link', id: '(Customer)-[Rating]->(Rating)' }).map((c) => c.detail),
-    ).toEqual(['property Rating.weight removed'])
+    ).toEqual(['Rating.weight removed'])
   })
 
   it("lists the Diff's changes to a selected link: its own Pattern's, and its relation's", () => {
     const comparison = compareOntologies(BASE, TARGET, DIFF)
 
     expect(changesOf(comparison, { kind: 'link', id: '(Agent)-[OPENED]->(Ticket)' }).map((c) => c.detail)).toEqual([
-      'endpoint pattern (Agent)-[OPENED]->(Ticket) added',
+      'endpoint pattern (Agent)-[OPENED]->(Ticket) changed',
     ])
     expect(changesOf(comparison, { kind: 'link', id: '(Customer)-[OPENED]->(Ticket)' })).toEqual([])
     expect(changesOf(comparison, null)).toEqual([])
@@ -407,8 +407,8 @@ describe('selectionOf', () => {
   const comparison = compareOntologies(base, target, {
     classification: 'additive',
     changes: [
-      endpointChange(['Agent', 'OPENED', 'LegacyTicket'], 'added'),
-      endpointChange(['Agent', 'OPENED', 'Ticket'], 'added'),
+      endpointChange(['Agent', 'OPENED', 'LegacyTicket'], 'additive'),
+      endpointChange(['Agent', 'OPENED', 'Ticket'], 'additive'),
     ],
   })
   const opened = { kind: 'relation', label: 'OPENED' } as const

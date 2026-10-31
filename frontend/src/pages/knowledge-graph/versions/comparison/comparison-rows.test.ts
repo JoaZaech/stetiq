@@ -49,10 +49,10 @@ describe('comparisonRows', () => {
     const rows = comparisonRows(compareOntologies(V2, V3, DIFF))
 
     expect(rows.map(({ concept, conceptKind, change, level, detail }) => [concept, conceptKind, change, level, detail])).toEqual([
-      ['Stop.wheelchairBoarding', 'attribute', 'removed', 'breaking', 'property Stop.wheelchairBoarding removed'],
-      ['Trip.bikesAllowed', 'attribute', 'removed', 'breaking', 'property Trip.bikesAllowed removed'],
-      ['Stop.wheelchair_boarding', 'attribute', 'added', 'additive', 'optional property Stop.wheelchair_boarding added'],
-      ['Trip.bikes_allowed', 'attribute', 'added', 'additive', 'optional property Trip.bikes_allowed added'],
+      ['Stop.wheelchairBoarding', 'attribute', 'removed', 'breaking', 'Stop.wheelchairBoarding removed'],
+      ['Trip.bikesAllowed', 'attribute', 'removed', 'breaking', 'Trip.bikesAllowed removed'],
+      ['Stop.wheelchair_boarding', 'attribute', 'added', 'additive', 'Stop.wheelchair_boarding added'],
+      ['Trip.bikes_allowed', 'attribute', 'added', 'additive', 'Trip.bikes_allowed added'],
       // Only a description differs: cosmetic, the least weighty.
       ['HAS_TRIP', 'relation', 'changed', 'cosmetic', 'description changed'],
     ])

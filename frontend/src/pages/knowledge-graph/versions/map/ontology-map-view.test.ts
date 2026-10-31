@@ -37,7 +37,7 @@ const BASE: Ontology = {
   relationship_types: [{ label: 'OPENED' }],
   patterns: [['Agent', 'OPENED', 'Ticket']],
 }
-const OPENED_BY_CUSTOMER = endpointChange(['Customer', 'OPENED', 'Ticket'], 'added')
+const OPENED_BY_CUSTOMER = endpointChange(['Customer', 'OPENED', 'Ticket'], 'additive')
 const COMPARISON = compareOntologies(
   BASE,
   { ...BASE, patterns: [...BASE.patterns, ['Customer', 'OPENED', 'Ticket']] },
