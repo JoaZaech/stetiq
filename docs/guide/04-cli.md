@@ -46,7 +46,7 @@ Local mode needs no token. How to issue one is described in [Server & API Tokens
 
 | Command | What it covers |
 | --- | --- |
-| `stetiq kg` | Knowledge Graphs, their Graph Source, Evolution Mode and description. |
+| `stetiq kg` | Knowledge Graphs, their Graph Source, Evolution Mode, description, Steward and Authority. |
 | `stetiq ontology` | Ontology Versions: register, read, diff and evaluate them. |
 | `stetiq use-case` | The Use Case and its Competency Questions. |
 | `stetiq alias` | Aliases, the Contract Alias, Promotion and its audit log. |
@@ -68,12 +68,15 @@ stetiq kg bind-source support --database neo4j --label Support
 stetiq kg source support
 stetiq kg evolution-mode support strict
 stetiq kg description support "Tickets and the customers who **opened** them."
+stetiq kg steward support "Ada"
+stetiq kg authority support "Support ops board"
 ```
 
 - `kg create` registers the Declared Ontology (a stetiq YAML file) as Ontology Version 1.
 - `kg list` shows, in remote mode, only the Knowledge Graphs your API Token can read.
 - `kg bind-source` binds the Knowledge Graph to its Graph Source: a `--database`, optionally narrowed with `--label` or `--namespace`. It replaces any earlier binding. `kg source` shows it.
 - `kg evolution-mode` shows the Evolution Mode, or sets it to `strict` or `evolving`. `kg description` shows the markdown description, or sets it (an empty string clears it).
+- `kg steward` and `kg authority` show or set the Steward (who watches Drift and keeps Definitions and Competency Questions current) and the Authority (who decides changes to the Ontology). An empty string clears the name. The names are for display and routing only and grant no permission; setting them needs `edit`.
 
 ### Ontology Versions
 

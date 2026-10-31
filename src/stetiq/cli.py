@@ -243,6 +243,46 @@ def kg_description(
     typer.echo(kg.description or "")
 
 
+_GovernanceName = Annotated[
+    str | None,
+    typer.Argument(help="A free string; an empty string clears it. Omit to show the current one"),
+]
+
+
+@kg_app.command("steward")
+def kg_steward(
+    knowledge_graph: str, steward: _GovernanceName = None, tracking_uri: TrackingUri = None
+) -> None:
+    """Show or set the Steward: who watches Drift and keeps Definitions and Competency
+    Questions current. The name grants no permission."""
+    try:
+        client = _client(tracking_uri)
+        if steward is not None:
+            kg = client.set_knowledge_graph_governance(knowledge_graph, steward=steward)
+        else:
+            kg = client.get_knowledge_graph(knowledge_graph)
+    except StetiqError as e:
+        raise _fail(e) from None
+    typer.echo(kg.steward or "")
+
+
+@kg_app.command("authority")
+def kg_authority(
+    knowledge_graph: str, authority: _GovernanceName = None, tracking_uri: TrackingUri = None
+) -> None:
+    """Show or set the Authority: who decides changes to the Ontology. The name grants
+    no permission."""
+    try:
+        client = _client(tracking_uri)
+        if authority is not None:
+            kg = client.set_knowledge_graph_governance(knowledge_graph, authority=authority)
+        else:
+            kg = client.get_knowledge_graph(knowledge_graph)
+    except StetiqError as e:
+        raise _fail(e) from None
+    typer.echo(kg.authority or "")
+
+
 @ontology_app.command("register")
 def ontology_register(
     knowledge_graph: str, ontology: OntologyFile, tracking_uri: TrackingUri = None

@@ -55,15 +55,23 @@ def _iso(value: datetime | None) -> str | None:
 
 
 def knowledge_graph_to_json(kg: KnowledgeGraph) -> dict[str, Any]:
-    return {"name": kg.name, "created_at": kg.created_at.isoformat(), "description": kg.description}
+    return {
+        "name": kg.name,
+        "created_at": kg.created_at.isoformat(),
+        "description": kg.description,
+        "steward": kg.steward,
+        "authority": kg.authority,
+    }
 
 
 def knowledge_graph_from_json(d: dict[str, Any]) -> KnowledgeGraph:
-    # The description is optional: older servers do not send it.
+    # The description, steward and authority are optional: older servers do not send them.
     return KnowledgeGraph(
         name=d["name"],
         created_at=datetime.fromisoformat(d["created_at"]),
         description=d.get("description"),
+        steward=d.get("steward"),
+        authority=d.get("authority"),
     )
 
 
