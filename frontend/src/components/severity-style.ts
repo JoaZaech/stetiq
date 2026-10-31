@@ -6,9 +6,11 @@ import { type Classification, isCosmetic } from '@/api/ontology-diff'
 
 /**
  * Severity's channel: the Diff colours as Tailwind classes, for each part of a mark.
- * Cosmetic has no Diff colour: it is drawn neutral.
+ * Cosmetic has no Diff colour: it is drawn neutral, and keyed by `CosmeticDot`, not a swatch.
  */
-export const SEVERITY: Record<'border' | 'fill' | 'ring' | 'text' | 'swatch',Record<Classification, string>> = {
+export const SEVERITY: Record<'border' | 'fill' | 'ring' | 'text', Record<Classification, string>> & {
+  swatch: Record<Exclude<Classification, 'cosmetic'>, string>
+} = {
   border: {
     cosmetic: 'border-muted-foreground',
     additive: 'border-diff-additive',
@@ -35,7 +37,6 @@ export const SEVERITY: Record<'border' | 'fill' | 'ring' | 'text' | 'swatch',Rec
   },
   /** A key's solid swatch (`SeveritySwatch`). */
   swatch: {
-    cosmetic: 'bg-muted-foreground',
     additive: 'bg-diff-additive',
     deprecating: 'bg-diff-deprecating',
     breaking: 'bg-diff-breaking',

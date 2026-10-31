@@ -91,15 +91,34 @@ test('the panel collapses to a rail of the headline counts, each with its severi
   await expect(counts.locator('[data-swatch]')).toHaveCount(2)
   await expect(counts.locator('[data-swatch="breaking"]')).toHaveCount(1)
   await expect(counts.locator('[data-swatch="additive"]')).toHaveCount(1)
-  await expect(counts.locator('[data-documentation-dot]')).toHaveCount(1)
+  await expect(counts.locator('[data-cosmetic-dot]')).toHaveCount(1)
   const width = (await map.boundingBox())!.width
 
   await page.getByRole('button', { name: 'Collapse panel' }).click()
   const rail = panel(page, 'Changes collapsed')
   await expect(rail.getByRole('status')).toHaveText(/2\s*breaking.*2\s*additive.*1\s*documentation-only/)
-  await expect(rail.locator('[data-swatch], [data-documentation-dot]')).toHaveCount(3)
+  await expect(rail.locator('[data-swatch], [data-cosmetic-dot]')).toHaveCount(3)
   await expect.poll(async () => (await map.boundingBox())!.width).toBeGreaterThan(width + 200)
 
   await rail.getByRole('button', { name: 'Expand panel' }).click()
   await expect(panel(page, 'Change summary')).toBeVisible()
+})
+
+test('a collapsed panel opens again for a selection on the Map, or a shortest path', async ({ page }) => {
+  await page.goto('/ui/kg/city-transit/versions/3/changes')
+  const map = ontologyMap(page)
+  await page.getByRole('button', { name: 'Collapse panel' }).click()
+  await expect(panel(page, 'Changes collapsed')).toBeVisible()
+
+  // A class clicked on the canvas shows its details, not the rail.
+  await item(map, 'Stop').click()
+  await expect(panel(page, 'Details').getByRole('heading', { name: 'Stop' })).toBeVisible()
+  await expect(panel(page, 'Changes collapsed')).toHaveCount(0)
+
+  // Collapsed again, a shift-click shows the shortest path.
+  await page.getByRole('button', { name: 'Collapse panel' }).click()
+  await expect(panel(page, 'Changes collapsed')).toBeVisible()
+  await item(map, 'Trip').click({ modifiers: ['Shift'] })
+  await expect(panel(page, 'Path')).toContainText('Stop → Trip')
+  await expect(panel(page, 'Changes collapsed')).toHaveCount(0)
 })

@@ -2,7 +2,7 @@
 
 The Ontology Map: an Ontology Version drawn as a node-link diagram, on the Ontology tab and (with a comparison) on the Changes tab and Compare page.
 
-**Entry point:** `OntologyMap.tsx` (`OntologyMap`), the React Flow canvas. It has one panel, on its right, framed by `MapSidePanel`: `MapDetailsPanel`, `MapPathPanel`, `MapSearchResults` or, in a comparison, the change summary (`MapChangeSummary`), which collapses to a rail (`MapChangesRail`). Nothing overlays the top of the canvas: its filters go in the page's header row beside the Table / Map toggle (`filtersIn`, from `useMapFiltersSlot` in `../map-view.ts`), and a comparison's one-row change-kind key (`ChangeKindKey`) sits bottom-left by the zoom controls. It decides nothing about selection, focus or centring: it draws what `ontology-map-view.ts` returns and forwards each gesture to it.
+**Entry point:** `OntologyMap.tsx` (`OntologyMap`), the React Flow canvas. It has one panel, on its right, framed by `MapSidePanel`: `MapDetailsPanel`, `MapPathPanel`, `MapSearchResults` or, in a comparison, the change summary (`MapChangeSummary`), which collapses to a rail (`MapChangesRail`). Nothing overlays the top of the canvas: its filters go in the page's header row beside the Table / Map toggle (`filtersIn`, from `useMapViewControls` in `../map-view-controls.tsx`), and a comparison's one-row change-kind key (`ChangeKindKey`) sits bottom-left by the zoom controls. It decides nothing about selection, focus or centring: it draws what `ontology-map-view.ts` returns and forwards each gesture to it.
 
 **Pure modules** (no React, each with a `.test.ts`):
 
@@ -14,6 +14,6 @@ The Ontology Map: an Ontology Version drawn as a node-link diagram, on the Ontol
 - `ontology-map-focus.ts`: a selection's focus and details, the changes kept as context outside it, and the search's matches (`focusOf`, `pathFocus`, `contextOf`, `changedOf`, `detailsOf`, `searchMap`, `MapSelection`).
 - `ontology-map-paths.ts`: shortest paths between two classes (`shortestPaths`).
 - `ontology-map-search.ts`: the Concept search (`searchOntology`).
-- `ontology-map-centre.ts`: where the Map centres, and what it first frames (`centreOf`, `locatedSelection`, `firstFramed`, `FIT_MIN_ZOOM`).
+- `ontology-map-centre.ts`: where the Map centres, and what it first frames (`centreOf`, `locatedSelection`, `firstFramed`, `FIRST_VIEW_MIN_ZOOM`).
 
 `ontology-map.fixtures.ts` holds the Ontologies the Map's tests share. Superimposing two versions lives in `../comparison/`; the selection, Concepts and Table/Map toggle stay in `..`.

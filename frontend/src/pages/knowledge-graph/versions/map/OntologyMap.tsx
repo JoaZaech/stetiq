@@ -28,7 +28,7 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
-import { useConceptSelection } from '../concept-selection'
+import { formatSelection, useConceptSelection } from '../concept-selection'
 import { MapChangeSummary, MapChangesRail } from '../comparison/MapChangeSummary'
 import { CosmeticDot } from '@/components/SeveritySwatch'
 import { MapDetailsPanel } from './MapDetailsPanel'
@@ -45,7 +45,7 @@ import {
   type OntologyComparison,
 } from '../comparison/ontology-map-comparison'
 import { DescriptionDiff } from '../comparison/DescriptionDiff'
-import { centreOf, FIT_MIN_ZOOM } from './ontology-map-centre'
+import { centreOf, FIRST_VIEW_MIN_ZOOM } from './ontology-map-centre'
 import { layoutOntologyMap, type Point } from './ontology-map-layout'
 import { labelShown, linkShape, straightPath, type Box } from './ontology-map-links'
 import {
@@ -86,16 +86,13 @@ type PatternEdge = Edge<
   { relation: string; route: LinkRoute; deprecated: boolean } & LinkEmphasis & MapChangeData,
   'pattern'
 >
-type SubclassEdge = Edge<MapChangeData, 'subclass'>
+type SubclassEdge = Edge<{ faded: boolean } & MapChangeData, 'subclass'>
 
 const NODE_TYPES = { class: ClassNodeView }
 const EDGE_TYPES = { pattern: PatternEdgeView, subclass: SubclassEdgeView }
 
 /** The hollow triangle at the superclass end of a subclass link (see `SubclassArrowhead`). */
 const SUBCLASS_ARROWHEAD = 'ontology-map-subclass-arrowhead'
-
-/** Fit-to-view frames the whole Map, never zooming out so far that class names can no longer be read. */
-const FIT_VIEW_OPTIONS = { minZoom: FIT_MIN_ZOOM }
 
 /**
  * How far the change-kind key sits from the canvas's left edge: past the zoom controls
@@ -106,11 +103,24 @@ const KEY_LEFT = 15 + 26 + 8
 /** The dash of a removed link: a ghost of where it used to be. */
 const REMOVED_DASH = '6 4'
 
+/**
+ * The Map's opacity steps, one per reason a mark recedes, the strongest first: `faded` out
+ * of the focus; `context`, out of it but changed, so still readable; `muted`, unchanged in
+ * a comparison; `deprecated`.
+ */
+const OPACITY = { faded: 0.3, context: 0.6, muted: 0.4, deprecated: 0.5 } as const
+
+/** A mark's opacity: the step of the strongest of its `reasons` to recede (`OPACITY`); none for none. */
+function opacityOf(reasons: Partial<Record<keyof typeof OPACITY, boolean>>): number | undefined {
+  const reason = (Object.keys(OPACITY) as (keyof typeof OPACITY)[]).find((r) => reasons[r])
+  return reason && OPACITY[reason]
+}
+
 /** How one change kind is drawn on every mark. */
 interface ChangeStyle {
   /** A class's box, and the parts of it its severity colours. */
   node: string
-  nodeSeverity: (keyof typeof SEVERITY)[]
+  nodeSeverity: Exclude<keyof typeof SEVERITY, 'swatch'>[]
   /** A link: dashed as a ghost, emphasized (thicker, its label bold), or muted. */
   dashed: boolean
   emphasized: boolean
@@ -192,7 +202,7 @@ const changeKindLabel = (kind: MapChangeKind): string => (kind === 'cosmetic' ? 
 
 type OntologyMapProps = {
   query?: string
-  /** Where its filters go, in the page's header row (`useMapFiltersSlot`); none shows none. */
+  /** Where its filters go, in the page's header row (`useMapViewControls`); none shows none. */
   filtersIn?: HTMLElement | null
 } & (
   | { ontology: Ontology; comparison?: never }
@@ -218,6 +228,13 @@ export function OntologyMap({ ontology, comparison, query = '', filtersIn }: Ont
   const drawnMapOf = useMemo(() => createDrawnMapOf(), [])
   const [state, setState] = useState(() => initialMapState(selected))
   const [collapsed, setCollapsed] = useState(false)
+  // A new selection or search opens a collapsed panel, so its details, path or results show.
+  const shownFor = `${selected ? formatSelection(selected) : ''} ${query.trim()}`
+  const [lastShownFor, setLastShownFor] = useState(shownFor)
+  if (shownFor !== lastShownFor) {
+    setLastShownFor(shownFor)
+    if (shownFor.trim() !== '') setCollapsed(false)
+  }
   const view = drawnMapOf(comparison ? { comparison, selected, query } : { ontology: ontology!, selected, query }, state)
   const { map, shown, selection, details, paths, results, classes, links, subclassLinks, panel } = view
   /** Answers `gesture` as the view says: its next state, and the page's next selection. */
@@ -282,7 +299,6 @@ export function OntologyMap({ ontology, comparison, query = '', filtersIn }: Ont
         ...links[l.id],
       },
       ariaLabel: l.id,
-      className: cn(l.deprecated && 'opacity-50'),
       markerEnd: {
         type: MarkerType.ArrowClosed,
         color: severityStroke(comparison?.changes.links[l.id]?.severity ?? null) ?? 'var(--muted-foreground)',
@@ -293,17 +309,17 @@ export function OntologyMap({ ontology, comparison, query = '', filtersIn }: Ont
       type: 'subclass',
       source: l.child,
       target: l.parent,
-      data: { change: comparison?.changes.subclassLinks[l.id] },
+      data: { change: comparison?.changes.subclassLinks[l.id], ...subclassLinks[l.id] },
       ariaLabel: l.id,
-      className: cn(subclassLinks[l.id].faded && 'opacity-20'),
       markerEnd: SUBCLASS_ARROWHEAD,
     }))
     return { nodes, edges: [...subclassEdges, ...patternEdges] }
   }, [layout.data, sizes, shown, classes, links, subclassLinks, comparison])
 
-  // The Map opens on what `fitTo` names (a comparison's changes), else on all of it.
+  // The Map opens on what `fitTo` names (a comparison's changes), else on all of it, never
+  // zooming out so far that class names can no longer be read. Fit view frames it all.
   const openingFit = useMemo(
-    () => ({ ...FIT_VIEW_OPTIONS, nodes: view.fitTo?.map((id) => ({ id })) }),
+    () => ({ minZoom: FIRST_VIEW_MIN_ZOOM, nodes: view.fitTo?.map((id) => ({ id })) }),
     [view.fitTo],
   )
 
@@ -314,10 +330,10 @@ export function OntologyMap({ ontology, comparison, query = '', filtersIn }: Ont
 
   // The summary and results only collapse; a selection's panel goes back to them, or
   // closes when there is none. Both clear the selection, so the panel shows what it came from.
-  const listNav: MapPanelNav = { onCollapse: comparison && (() => setCollapsed(true)) }
+  const collapseNav: MapPanelNav = { onCollapse: comparison && (() => setCollapsed(true)) }
   const clear = () => respond({ kind: 'clear' })
-  const selectionNav: MapPanelNav = {
-    ...listNav,
+  const backOrCloseNav: MapPanelNav = {
+    ...collapseNav,
     ...(panel && 'back' in panel && panel.back ? { back: { label: BACK_LABEL[panel.back], onBack: clear } } : { onClose: clear }),
   }
 
@@ -343,7 +359,7 @@ export function OntologyMap({ ontology, comparison, query = '', filtersIn }: Ont
         fitView={view.fitView}
         fitViewOptions={openingFit}
       >
-        <Controls showInteractive={false} fitViewOptions={FIT_VIEW_OPTIONS} />
+        <Controls showInteractive={false} />
         {comparison && <ChangeKindKey />}
         <CentreOn point={centre} />
       </ReactFlow>
@@ -358,7 +374,7 @@ export function OntologyMap({ ontology, comparison, query = '', filtersIn }: Ont
               returnTo={panel.returnTo}
               onPreview={(preview) => respond({ kind: 'preview', selection: preview })}
               onSelect={(concept) => respond({ kind: 'select', concept })}
-              nav={listNav}
+              nav={collapseNav}
             />
           )}
           {panel?.kind === 'results' && (
@@ -367,11 +383,11 @@ export function OntologyMap({ ontology, comparison, query = '', filtersIn }: Ont
               results={results}
               canPick={(r) => canPick(view, r)}
               onPick={(r) => respond({ kind: 'pick', result: r })}
-              nav={listNav}
+              nav={collapseNav}
             />
           )}
           {panel?.kind === 'details' && details && (
-            <MapDetailsPanel details={details} nav={selectionNav}>
+            <MapDetailsPanel details={details} nav={backOrCloseNav}>
               {view.changes && comparison && <ChangeDetails comparison={comparison} changes={view.changes} />}
               {details.kind === 'class' && (
                 <p className="text-xs text-muted-foreground">Shift-click another class for the shortest path to it.</p>
@@ -379,7 +395,7 @@ export function OntologyMap({ ontology, comparison, query = '', filtersIn }: Ont
             </MapDetailsPanel>
           )}
           {panel?.kind === 'path' && paths && selection?.kind === 'path' && (
-            <MapPathPanel from={selection.from} to={selection.to} paths={paths} nav={selectionNav} />
+            <MapPathPanel from={selection.from} to={selection.to} paths={paths} nav={backOrCloseNav} />
           )}
         </>
       )}
@@ -530,18 +546,16 @@ function ClassNodeView({ data }: NodeProps<ClassNode>) {
       data-severity={severity ?? undefined}
       className={cn(
         'flex size-full cursor-pointer flex-col items-center justify-center rounded-md border bg-card px-2 text-sm font-medium text-card-foreground shadow-xs transition-opacity',
-        // Deprecated: faded, with a struck-through label.
-        data.deprecated && 'opacity-50',
         // Change kind as mark style, severity in the Diff colours.
         style.node,
         severity && style.nodeSeverity?.map((part) => SEVERITY[part][severity]),
         // Search matches get a ring in the primary colour: diff-* hues are reserved for severity.
         data.match && 'ring-2 ring-primary ring-offset-2 ring-offset-background',
         data.selected && 'border-2 border-foreground',
-        // Changed but out of focus: readable as context, its severity still drawn.
-        data.context && 'opacity-60',
-        data.faded && 'opacity-30',
       )}
+      // Deprecated: faded, with a struck-through label. Changed but out of focus: readable
+      // as context, its severity still drawn.
+      style={{ opacity: opacityOf({ faded: data.faded, context: data.context, deprecated: data.deprecated }) }}
     >
       <span
         className={cn('flex shrink-0 items-center font-mono whitespace-nowrap', data.deprecated && 'line-through')}
@@ -609,7 +623,12 @@ function PatternEdgeView({ id, source, target, data, markerEnd }: EdgeProps<Patt
           stroke,
           strokeWidth: emphasized ? 2 : undefined,
           strokeDasharray: style.dashed ? REMOVED_DASH : undefined,
-          opacity: data.faded ? 0.2 : data.context ? 0.6 : style.muted ? 0.4 : undefined,
+          opacity: opacityOf({
+            faded: data.faded,
+            context: data.context,
+            muted: style.muted,
+            deprecated: data.deprecated,
+          }),
           cursor: 'pointer',
         }}
       />
@@ -628,12 +647,15 @@ function PatternEdgeView({ id, source, target, data, markerEnd }: EdgeProps<Patt
             style={{ left: label.x, top: label.y, width: label.width, height: label.height, fontSize: MONOSPACE_FONT_SIZE }}
           >
             <span
-              className={cn(
-                data.deprecated && 'line-through opacity-50',
-                style.muted && 'opacity-60',
-                data.context && 'opacity-60',
-                data.faded && 'opacity-30',
-              )}
+              className={cn(data.deprecated && 'line-through')}
+              style={{
+                opacity: opacityOf({
+                  faded: data.faded,
+                  context: data.context,
+                  muted: style.muted,
+                  deprecated: data.deprecated,
+                }),
+              }}
             >
               {data.relation}
             </span>
@@ -664,6 +686,7 @@ function SubclassEdgeView({ id, source, target, markerEnd, data }: EdgeProps<Sub
         strokeOpacity: style.muted ? 0.3 : 0.6,
         strokeWidth: 1,
         strokeDasharray: style.dashed ? REMOVED_DASH : undefined,
+        opacity: opacityOf({ faded: data?.faded }),
       }}
     />
   )

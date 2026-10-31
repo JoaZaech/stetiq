@@ -7,7 +7,7 @@ export function CosmeticDot({ className }: { className?: string }) {
   return (
     <span
       aria-hidden
-      data-documentation-dot
+      data-cosmetic-dot
       className={cn('inline-block size-1.5 shrink-0 rounded-full bg-muted-foreground', className)}
     />
   )
