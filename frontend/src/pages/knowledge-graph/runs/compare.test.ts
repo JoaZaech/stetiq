@@ -110,15 +110,30 @@ describe('differs', () => {
 })
 
 describe('runChartPoints', () => {
-  it('plots each run, by id, at its start time with its metrics and Conformance score', () => {
-    const points = runChartPoints([
-      run({ id: 'a', started_at: '2026-10-30T11:00:00Z', metrics: { recall: 0.8 }, conformance: { score: 0.5, mismatches: [] } }),
-      run({ id: 'b', started_at: '2026-10-30T12:00:00Z', metrics: { recall: 0.9 } }),
-    ])
-    expect(points).toEqual([
-      { x: Date.parse('2026-10-30T11:00:00Z'), id: 'a', metrics: { recall: 0.8, Conformance: 0.5 } },
-      { x: Date.parse('2026-10-30T12:00:00Z'), id: 'b', metrics: { recall: 0.9 } },
-    ])
+  it('plots each run, by id, at its start time with its run metrics and Conformance score apart', () => {
+    const points = runChartPoints(
+      [
+        run({ id: 'a', started_at: '2026-10-30T11:00:00Z', metrics: { recall: 0.8 }, conformance: { score: 0.5, mismatches: [] } }),
+        run({ id: 'b', started_at: '2026-10-30T12:00:00Z', metrics: { recall: 0.9 } }),
+      ],
+      [],
+    )
+    const a = Date.parse('2026-10-30T11:00:00Z')
+    const b = Date.parse('2026-10-30T12:00:00Z')
+    expect(points).toEqual({
+      'run-metric': [
+        { x: a, id: 'a', metrics: { recall: 0.8 } },
+        { x: b, id: 'b', metrics: { recall: 0.9 } },
+      ],
+      conformance: [
+        { x: a, id: 'a', metrics: { Conformance: 0.5 } },
+        { x: b, id: 'b', metrics: {} },
+      ],
+      evaluator: [
+        { x: a, id: 'a', metrics: {} },
+        { x: b, id: 'b', metrics: {} },
+      ],
+    })
   })
 
   it("adds each run's Evaluator results, keyed `<evaluator>/<metric>`, from the Knowledge Graph-wide list", () => {
@@ -133,11 +148,11 @@ describe('runChartPoints', () => {
         evaluation('observed_schema', { node_types: 3 }, { subject_id: 'a' }),
       ],
     )
-    expect(points).toEqual([
+    expect(points.evaluator).toEqual([
       {
         x: Date.parse('2026-10-30T11:00:00Z'),
         id: 'a',
-        metrics: { recall: 0.8, 'conformance/score': 0.5, 'observed_schema/node_types': 3 },
+        metrics: { 'conformance/score': 0.5, 'observed_schema/node_types': 3 },
       },
       { x: Date.parse('2026-10-30T12:00:00Z'), id: 'b', metrics: { 'observed_schema/node_types': 2 } },
     ])
@@ -151,7 +166,7 @@ describe('runChartPoints', () => {
         evaluation('review', { score: 0.6 }, { subject_id: 'a', parameters: { min_confidence: 0.8 } }),
       ],
     )
-    expect(points[0]?.metrics).toEqual({
+    expect(points.evaluator[0]?.metrics).toEqual({
       'review (min_confidence=0.5)/score': 0.9,
       'review (min_confidence=0.8)/score': 0.6,
     })
@@ -407,6 +422,29 @@ describe('runChartSeries', () => {
     })
   })
 
+  it('charts a run metric named like an Evaluator KPI or Conformance apart, never overwritten or judged', () => {
+    const clashing = run({
+      id: 'c',
+      started_at: '2026-10-30T13:00:00Z',
+      metrics: { [reviewKey.key]: 0.1, Conformance: 0.2 },
+      conformance: { score: 0.75, mismatches: [] },
+    })
+    const clashSeries = runChartSeries(
+      [clashing],
+      [evaluation('review', { score: 0.9 }, { subject_id: 'c', parameters: { min_confidence: 0.5, gold: 'v2' } })],
+      [],
+      [preview([outcome(conformanceGate, true), outcome(reviewGate, true)], 'c')],
+    )
+    const point = (kpi: object) => clashSeries.find((s) => JSON.stringify(s.kpi) === JSON.stringify(kpi))?.points
+    const x = at(clashing.started_at)
+    expect(point({ kind: 'run-metric', key: reviewKey.key })).toEqual([{ x, value: 0.1, id: 'c' }])
+    expect(point({ kind: 'run-metric', key: 'Conformance' })).toEqual([{ x, value: 0.2, id: 'c' }])
+    expect(point(reviewKey)).toEqual([{ x, value: 0.9, id: 'c', status: { passed: true, label: 'pass (preview)' } }])
+    expect(point({ kind: 'conformance' })).toEqual([
+      { x, value: 0.75, id: 'c', status: { passed: true, label: 'pass (preview)' } },
+    ])
+  })
+
   it('keeps an ungated KPI neutral: no bounds, no verdicts', () => {
     expect(byMetric('precision')).toEqual({
       metric: 'precision',
@@ -466,7 +504,7 @@ describe('kpiDrillDown', () => {
       value: 0.85,
       verdict: { verdict: 'ungated' },
       details: [],
-      tab: '',
+      tab: 'overview',
     })
     const gating = { preview: preview([outcome(reviewGate, false, ['No result of Evaluator'])]) }
     expect(kpiDrillDown(reviewKey, reviewed, [], gating)).toMatchObject({ value: null, verdict: { verdict: 'no-result' } })

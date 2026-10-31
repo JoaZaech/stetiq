@@ -48,6 +48,7 @@ export default function MetricChartGrid<S extends MetricSeries>({
   const shown = useMemo(() => filterMetricSeries(series, search), [series, search])
   // Every chart spans the same x range, so charts line up when read side by side.
   const domain = useMemo(() => xDomain(series), [series])
+  const keys = useMemo(() => chartKeys(series), [series])
   return (
     <section aria-labelledby={id} className="space-y-3">
       <h3 id={id} className="sr-only">
@@ -62,7 +63,7 @@ export default function MetricChartGrid<S extends MetricSeries>({
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {shown.map((s) => (
             <MetricChart
-              key={s.metric}
+              key={keys.get(s)}
               series={s}
               xAxis={xAxis}
               domain={domain}
@@ -202,9 +203,9 @@ function MetricChart({
   )
 }
 
-/** Pass and fail fills: the app's status colours (see `StatusLabel`). */
+/** Pass and fail fills: the app's status colours (the `success` and `destructive` tokens, as `StatusLabel`). */
 const STATUS_FILL = {
-  pass: 'fill-emerald-600 dark:fill-emerald-500',
+  pass: 'fill-success',
   fail: 'fill-destructive',
 } as const
 
@@ -266,6 +267,21 @@ function PointMark({
         />
       )}
     </g>
+  )
+}
+
+/**
+ * A React key per series: its metric, numbered when several series share a name (e.g. a
+ * run metric named like an Evaluator KPI), so the key holds while the search filters.
+ */
+function chartKeys<S extends MetricSeries>(series: readonly S[]): Map<S, string> {
+  const seen = new Map<string, number>()
+  return new Map(
+    series.map((s) => {
+      const n = seen.get(s.metric) ?? 0
+      seen.set(s.metric, n + 1)
+      return [s, n === 0 ? s.metric : `${s.metric}#${n}`]
+    }),
   )
 }
 

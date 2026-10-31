@@ -6,6 +6,7 @@ import { gateResultsQuery } from '@/api/gate-results'
 import { type ConstructionRun, useAllRunEvaluations, useRuns } from '@/api/runs'
 import { kgCompareUrl, knowledgeGraphSection } from '@/app/knowledge-graph-sections'
 import { ColumnPicker } from '@/components/ColumnPicker'
+import type MetricChartGridComponent from '@/components/MetricChartGrid'
 import { CompareToolbar } from '@/components/CompareToolbar'
 import { DataTable } from '@/components/DataTable'
 import { ErrorAlert } from '@/components/ErrorAlert'
@@ -24,7 +25,7 @@ import {
 } from '@/lib/metric-view-params'
 import { KnowledgeGraphSectionPage } from '../KnowledgeGraphSectionPage'
 import { useKnowledgeGraphName } from '../params'
-import { type Kpi, runChartSeries } from './compare'
+import { type Kpi, type RunChartSeries, runChartSeries } from './compare'
 import { GatePreviewNote } from './gate-verdicts'
 import { KpiSheet, type KpiSelection } from './kpi-sheet'
 import { useRunFilters } from './run-list-params'
@@ -168,8 +169,9 @@ function RunTable({
   )
 }
 
-// Recharts is large: load the chart grid only when the chart view is opened.
-const MetricChartGrid = lazy(() => import('@/components/MetricChartGrid'))
+// Recharts is large: load the chart grid only when the chart view is opened. `lazy` drops
+// the grid's series type parameter; restoring it hands `onPointClick` the typed series.
+const MetricChartGrid = lazy(() => import('@/components/MetricChartGrid')) as typeof MetricChartGridComponent
 
 const RUN_X_AXIS = {
   label: 'Started',
@@ -209,18 +211,13 @@ function RunCharts({
     <div className="space-y-3">
       {source !== undefined && <GatePreviewNote knowledgeGraph={name} source={source} />}
       <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-        <MetricChartGrid
+        <MetricChartGrid<RunChartSeries>
           series={series}
           xAxis={RUN_X_AXIS}
           search={search}
           onSearchChange={setSearch}
           onPointClick={
-            onPointClick &&
-            ((s, point) => {
-              // The lazy grid loses its series type: find the clicked chart's KPI by metric.
-              const kpi = series.find((x) => x.metric === s.metric)?.kpi
-              if (point.id !== undefined && kpi !== undefined) onPointClick(point.id, kpi)
-            })
+            onPointClick && ((s, point) => point.id !== undefined && onPointClick(point.id, s.kpi))
           }
         />
       </Suspense>

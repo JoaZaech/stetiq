@@ -99,6 +99,18 @@ test.describe('the KPI drill-down', () => {
     await expect(page).toHaveURL(new RegExp(`/runs/${String(regressed)}/evaluations$`))
   })
 
+  test('a gated KPI the run has no value for says "no result" once, as its value', async ({ page, stetiq }) => {
+    const { baseline, unreviewed } = stetiq.seeded
+    await page.goto(compareUrl(baseline, unreviewed))
+    await page.getByRole('button', { name: `review (min_confidence=0.5)/score of run ${short(unreviewed)}` }).click()
+
+    const sheet = page.getByRole('dialog', { name: 'review (min_confidence=0.5)/score' })
+    await expect(sheet.getByRole('definition').first()).toHaveText('no result')
+    const verdict = sheet.getByRole('region', { name: 'Verdict' })
+    await expect(verdict).toContainText(/preview.*judged against current Gates/)
+    await expect(verdict).not.toContainText('no result')
+  })
+
   test('Conformance opens with its recorded verdict and links to the Conformance tab; an ungated KPI opens with no verdict', async ({
     page,
     stetiq,

@@ -22,6 +22,18 @@ export function evaluatorLabel(evaluator: string, parameters: Readonly<Record<st
     : `${evaluator} (${params.map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(', ')})`
 }
 
+/**
+ * The `<evaluator>/<metric>` key that names one metric of one Evaluator configuration
+ * across subjects (columns, charts, a metric Gate's KPI), e.g. `coverage (min=1)/ratio`.
+ */
+export function evaluatorMetricKey(
+  evaluator: string,
+  parameters: Readonly<Record<string, unknown>>,
+  metric: string,
+): string {
+  return `${evaluatorLabel(evaluator, parameters)}/${metric}`
+}
+
 /** One row per metric, ordered by Evaluator then metric. */
 export function metricRows(results: readonly EvaluationResult[]): EvaluatorMetricRow[] {
   return [...results]
@@ -31,7 +43,7 @@ export function metricRows(results: readonly EvaluationResult[]): EvaluatorMetri
       return Object.entries(result.metrics)
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([metric, value]) => ({
-          key: `${evaluator}/${metric}`,
+          key: evaluatorMetricKey(result.evaluator, result.parameters, metric),
           evaluator,
           metric,
           value,

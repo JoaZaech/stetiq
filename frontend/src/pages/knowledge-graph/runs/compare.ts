@@ -4,7 +4,7 @@ import type { EvaluationResult } from '@/api/ontology-versions'
 import type { ConstructionRun } from '@/api/runs'
 import { formatMetric } from '@/lib/format'
 import { type MetricPoint, type MetricSeries, metricSeries } from '@/lib/metric-charts'
-import { evaluatorLabel, evaluatorMetrics } from '../versions/evaluator-metrics'
+import { evaluatorMetricKey, evaluatorMetrics } from '../versions/evaluator-metrics'
 
 /** A compared value; `null` where a run has none (e.g. a param it did not log). */
 export type ComparedValue = string | number | null
@@ -62,25 +62,30 @@ export function differs(values: readonly ComparedValue[]): boolean {
 export const CONFORMANCE_METRIC = 'Conformance'
 
 /**
- * Each run at its start time, with its metrics, Conformance score and Evaluator results
- * (keyed `<evaluator>/<metric>`, see `evaluatorMetrics`), for the run charts.
- * `evaluations` are the Knowledge Graph-wide run results; each joins its run by `subject_id`.
+ * Each run at its start time, for the run charts, with each kind of KPI apart (so a run
+ * metric named like an Evaluator KPI or Conformance is never mixed with it): its run
+ * metrics, its Conformance score and its Evaluator results (keyed `<evaluator>/<metric>`,
+ * see `evaluatorMetrics`). `evaluations` are the Knowledge Graph-wide run results; each
+ * joins its run by `subject_id`.
  */
 export function runChartPoints(
   runs: readonly ConstructionRun[],
-  evaluations: readonly EvaluationResult[] = [],
-): MetricPoint[] {
+  evaluations: readonly EvaluationResult[],
+): Record<Kpi['kind'], MetricPoint[]> {
   const byRun = new Map<string, EvaluationResult[]>()
   for (const result of evaluations) byRun.set(result.subject_id, [...(byRun.get(result.subject_id) ?? []), result])
-  return runs.map((run) => ({
+  const at = (run: ConstructionRun, metrics: Readonly<Record<string, number>>): MetricPoint => ({
     x: Date.parse(run.started_at),
     id: run.id,
-    metrics: {
-      ...run.metrics,
-      ...(run.conformance === null ? {} : { [CONFORMANCE_METRIC]: run.conformance.score }),
-      ...evaluatorMetrics(byRun.get(run.id) ?? []),
-    },
-  }))
+    metrics,
+  })
+  return {
+    'run-metric': runs.map((run) => at(run, run.metrics)),
+    conformance: runs.map((run) =>
+      at(run, run.conformance === null ? {} : { [CONFORMANCE_METRIC]: run.conformance.score }),
+    ),
+    evaluator: runs.map((run) => at(run, evaluatorMetrics(byRun.get(run.id) ?? []))),
+  }
 }
 
 /**
@@ -135,7 +140,7 @@ function covers(gate: GateOutcome['gate'], kpi: Kpi): boolean {
   if (kpi.kind === 'conformance') return gate.check === 'conformance'
   if (kpi.kind === 'run-metric' || gate.check !== 'metric') return false
   const parameters = (gate.parameters ?? {}) as Record<string, unknown>
-  return kpi.key === `${evaluatorLabel(String(gate.evaluator), parameters)}/${String(gate.metric)}`
+  return kpi.key === evaluatorMetricKey(String(gate.evaluator), parameters, String(gate.metric))
 }
 
 /** A run's `kpi` (its `value`, `null` when the run has none) judged by `gating`. */
@@ -161,8 +166,8 @@ export interface KpiDrillDown {
   verdict: Verdict
   /** For an Evaluator KPI, its Evaluator result's detail items about this metric. */
   details: EvaluationResult['details']
-  /** The run page tab the KPI comes from (`''` is the Overview). */
-  tab: 'evaluations' | 'conformance' | ''
+  /** The run page tab the KPI comes from. */
+  tab: 'overview' | 'evaluations' | 'conformance'
 }
 
 /**
@@ -185,16 +190,15 @@ export function kpiDrillDown(
   const details =
     kpi.kind !== 'evaluator'
       ? []
-      : evaluations.flatMap((result) => {
-          const evaluator = evaluatorLabel(result.evaluator, result.parameters)
-          return result.details.filter((d) => `${evaluator}/${d.metric}` === kpi.key)
-        })
+      : evaluations.flatMap((result) =>
+          result.details.filter((d) => evaluatorMetricKey(result.evaluator, result.parameters, d.metric) === kpi.key),
+        )
   return {
     name: kpiName(kpi),
     value,
     verdict: kpiVerdict(kpi, value, gating),
     details,
-    tab: kpi.kind === 'conformance' ? 'conformance' : kpi.kind === 'evaluator' ? 'evaluations' : '',
+    tab: kpi.kind === 'conformance' ? 'conformance' : kpi.kind === 'evaluator' ? 'evaluations' : 'overview',
   }
 }
 
@@ -221,6 +225,9 @@ export function kpiGateBounds(kpi: Kpi, outcomes: readonly GateOutcome[]): GateB
     })
 }
 
+/** The kinds of KPI, in the order same-named charts are listed. */
+const KPI_KINDS: readonly Kpi['kind'][] = ['run-metric', 'conformance', 'evaluator']
+
 /** A run chart's series with the KPI it charts. */
 export type RunChartSeries = MetricSeries & { kpi: Kpi }
 
@@ -236,17 +243,16 @@ export function runChartSeries(
   gateResults: readonly GateResult[],
   previews: readonly GatePreview[],
 ): RunChartSeries[] {
-  const evaluatorKeys = new Set(Object.keys(evaluatorMetrics(evaluations)))
   const gatings = new Map(runs.map((run) => [run.id, runGating(run.id, gateResults, previews)]))
   const definitions = previews[0]?.outcomes ?? []
-  return metricSeries(runChartPoints(runs, evaluations)).map((series): RunChartSeries => {
-    const kpi: Kpi =
-      series.metric === CONFORMANCE_METRIC
-        ? { kind: 'conformance' }
-        : {
-            kind: evaluatorKeys.has(series.metric) ? 'evaluator' : 'run-metric',
-            key: series.metric,
-          }
+  const points = runChartPoints(runs, evaluations)
+  const kpiSeries = KPI_KINDS.flatMap((kind) =>
+    metricSeries(points[kind]).map((series): { series: MetricSeries; kpi: Kpi } => ({
+      series,
+      kpi: kind === 'conformance' ? { kind } : { kind, key: series.metric },
+    })),
+  ).sort((a, b) => a.series.metric.localeCompare(b.series.metric))
+  return kpiSeries.map(({ series, kpi }): RunChartSeries => {
     const origins: VerdictOrigin[] = []
     const points = series.points.map((point) => {
       const gating = point.id === undefined ? undefined : gatings.get(point.id)

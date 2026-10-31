@@ -19,9 +19,9 @@ export interface KpiSelection {
 }
 
 const TAB_LABELS: Record<KpiDrillDown['tab'], string> = {
+  overview: 'Overview',
   evaluations: 'Evaluations',
   conformance: 'Conformance',
-  '': 'Overview',
 }
 
 /**
@@ -84,7 +84,6 @@ function DrillDown({ knowledgeGraph, runId, kpi }: { knowledgeGraph: string } & 
         ) : (
           <>
             <p className="flex items-center gap-2">
-              {verdict.verdict === 'no-result' && <NoResult />}
               <VerdictBadge verdict={verdict} />
             </p>
             <p className="text-muted-foreground">
@@ -125,7 +124,7 @@ function DrillDown({ knowledgeGraph, runId, kpi }: { knowledgeGraph: string } & 
         </Section>
       )}
       <Link
-        to={kgUrl(knowledgeGraph, 'runs', runId, ...(drill.tab ? [drill.tab] : []))}
+        to={kgUrl(knowledgeGraph, 'runs', runId, ...(drill.tab === 'overview' ? [] : [drill.tab]))}
         className="inline-block text-primary underline-offset-4 hover:underline"
       >
         Open the run’s {TAB_LABELS[drill.tab]} tab

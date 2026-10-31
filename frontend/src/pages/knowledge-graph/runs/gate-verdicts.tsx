@@ -51,7 +51,7 @@ export function KpiSummaryBar({ summary }: { summary: KpiSummary }) {
     summary.noResult > 0 ? `${summary.noResult} no result` : null,
   ].filter((p) => p !== null)
   const segments = [
-    { count: summary.pass, className: 'bg-emerald-600 dark:bg-emerald-500' },
+    { count: summary.pass, className: 'bg-success' },
     { count: summary.fail, className: 'bg-destructive' },
     { count: summary.noResult, className: 'bg-muted-foreground/40' },
   ]
