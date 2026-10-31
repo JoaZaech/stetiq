@@ -63,7 +63,11 @@ Ontology has no place for them (ADR 0001: only aggregates leave the Graph Source
 `trial-registry`, with `production` pointing at it, and the Evolution Mode is set to
 **strict** before anything is loaded. The data standards team's reference
 (`ontology/gold.yaml`) becomes a second Knowledge Graph, `trial-registry-gold`.
-`use-case.yaml` holds the safety monitor's eight Competency Questions: six are
+`use-case.yaml` names four Consumers: the safety signal agent that screens each export,
+the Data Safety Monitoring Board's quarterly review, clinical operations' site monitoring
+dashboard and the sponsor's trial portfolio report. Serious events per trial and per arm
+serve both the agent and the board; `consent-withdrawals` serves no Task yet. Their Tasks
+need eight Competency Questions: six are
 answerable by v1, `events-per-arm` needs `Arm`, `ASSIGNED_TO` and `EXPERIENCED`, which
 v1 lacks, and `consent-withdrawals` is unmapped (ratio 0.75).
 
@@ -112,7 +116,7 @@ date of birth.
 | `trials_evaluators.py` | `PiiFree` (Ontology Version) and `ConsentCoverage` (Construction Run), both named by Gates |
 | `trials_data.py` | The deterministic generator of the two committed exports |
 | `stetiq.yaml` | Knowledge Graph name, Entry Point, Drift thresholds and the eight Gates |
-| `use-case.yaml` | The safety monitor's Competency Questions |
+| `use-case.yaml` | The Consumers, their Tasks and the Competency Questions |
 | `ontology/` | `v1`, `v2`, `v3`, `gold` and the breaking `proposal-merge-sites` |
 
 The local graph database file does not run Cypher. It answers the fixed set of queries in
