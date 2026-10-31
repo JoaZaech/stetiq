@@ -11,16 +11,23 @@ export interface EvaluatorMetricRow {
   useCaseVersion: number | null
 }
 
+/**
+ * An Evaluator's name with its parameters (in key order) when it has any, e.g.
+ * `coverage (gold="v2", min=1)`: one name per configuration.
+ */
+export function evaluatorLabel(evaluator: string, parameters: Readonly<Record<string, unknown>>): string {
+  const params = Object.entries(parameters).sort(([a], [b]) => a.localeCompare(b))
+  return params.length === 0
+    ? evaluator
+    : `${evaluator} (${params.map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(', ')})`
+}
+
 /** One row per metric, ordered by Evaluator then metric. */
 export function metricRows(results: readonly EvaluationResult[]): EvaluatorMetricRow[] {
   return [...results]
     .sort((a, b) => a.evaluator.localeCompare(b.evaluator))
     .flatMap((result) => {
-      const params = Object.entries(result.parameters)
-      const evaluator =
-        params.length === 0
-          ? result.evaluator
-          : `${result.evaluator} (${params.map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(', ')})`
+      const evaluator = evaluatorLabel(result.evaluator, result.parameters)
       return Object.entries(result.metrics)
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([metric, value]) => ({
