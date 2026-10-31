@@ -3,6 +3,7 @@
  * matches.
  */
 import type { Ontology, OntologyProperty } from '@/api/ontology-versions'
+import type { OntologyComparison } from '../comparison/ontology-map-comparison'
 import { type ClassOrRelation, constraintsOf, superclassChain } from '../concepts'
 import { ontologyMap, type OntologyMap, type PatternLink } from './ontology-map'
 import { type MapPath, shortestPaths } from './ontology-map-paths'
@@ -76,6 +77,25 @@ export function focusOf(map: OntologyMap, selection: MapSelection | null): MapFo
     return paths && pathFocus(selection, paths)
   }
   return null
+}
+
+/**
+ * The classes and Pattern links a comparison changed, documentation-only ones included:
+ * every item not unchanged.
+ */
+export function changedOf({ changes }: Pick<OntologyComparison, 'changes'>): MapFocus {
+  const changed = (items: Record<string, { kind: string }>) =>
+    new Set(Object.keys(items).filter((key) => items[key].kind !== 'unchanged'))
+  return { classes: changed(changes.classes), links: changed(changes.links) }
+}
+
+/**
+ * What stays readable as context outside `focus`: the `changed` items it leaves out, so a
+ * selection never hides what a comparison changed. Only the rest fades fully.
+ */
+export function contextOf(focus: MapFocus, changed: MapFocus): MapFocus {
+  const outside = (items: Set<string>, focused: Set<string>) => new Set([...items].filter((key) => !focused.has(key)))
+  return { classes: outside(changed.classes, focus.classes), links: outside(changed.links, focus.links) }
 }
 
 /**
