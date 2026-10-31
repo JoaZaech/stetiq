@@ -32,7 +32,7 @@ interface ConsumerImpactPanelProps {
 /**
  * Loads and shows the Consumer impact of the Ontology Diff from version `base` to
  * `target`, judged against the latest Use Case Version; says so when there is no Use Case.
- * Beside the changes on the Compare page and the Changes tab.
+ * Beside the changes on the Compare page and the Changes tab, and in the Promote dialog.
  */
 export function ConsumerImpactPanel({ knowledgeGraph, base, target, className }: ConsumerImpactPanelProps) {
   const impact = useConsumerImpact(knowledgeGraph, base, target)
@@ -40,7 +40,7 @@ export function ConsumerImpactPanel({ knowledgeGraph, base, target, className }:
     return (
       <ImpactRegion className={className}>
         <p className="text-sm text-muted-foreground">
-          This Knowledge Graph has no Use Case, so there are no Consumers to judge this change against.
+          This Knowledge Graph has no Use Case, so no Consumers are declared to judge this change against.
         </p>
       </ImpactRegion>
     )
