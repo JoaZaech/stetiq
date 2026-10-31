@@ -61,12 +61,12 @@ test('documentation-only changes collapse to one line in the summary, and to a n
   const map = ontologyMap(page)
   const summary = summaryOf(page)
 
-  // Only HAS_TRIP's description changed: a collapsed section, which expands to its entry.
+  // Only HAS_TRIP's definition changed: a collapsed section, which expands to its entry.
   const heading = summary.getByRole('button', { name: 'Documentation-only 1' })
   await expect(heading).toHaveAttribute('aria-expanded', 'false')
   await expect(entry(summary, 'HAS_TRIP')).toBeHidden()
   await heading.click()
-  await expect(entry(summary, 'HAS_TRIP')).toContainText('description changed')
+  await expect(entry(summary, 'HAS_TRIP')).toContainText('definition changed')
   await expect(entry(summary, 'HAS_TRIP')).not.toContainText('(documentation-only)')
 
   // On the Map its link has no severity colour, only a dot: the v2 → v3 links are not all green.

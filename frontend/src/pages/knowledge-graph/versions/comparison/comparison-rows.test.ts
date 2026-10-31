@@ -54,7 +54,7 @@ describe('comparisonRows', () => {
       ['Stop.wheelchair_boarding', 'attribute', 'added', 'additive', 'Stop.wheelchair_boarding added'],
       ['Trip.bikes_allowed', 'attribute', 'added', 'additive', 'Trip.bikes_allowed added'],
       // Only a description differs: cosmetic, the least weighty.
-      ['HAS_TRIP', 'relation', 'changed', 'cosmetic', 'description changed'],
+      ['HAS_TRIP', 'relation', 'changed', 'cosmetic', 'definition changed'],
     ])
   })
 

@@ -20,13 +20,24 @@ flowchart TD
 
 A **Knowledge Graph** is a named, long-lived lineage of Ontology Versions, e.g. `customer-support-kg`. It is not the graph database itself: the database, or the part of it this Knowledge Graph lives in, is its **Graph Source**, which stetiq reads but never owns.
 
-The **Ontology** is the structure of the graph: its classes, relations, attributes, hierarchy and constraints, whatever formalism you write them in. Each class, relation or attribute is a **Concept**, identified by its name or IRI across versions. Renaming a Concept counts as removing one and adding another, unless you declare it as a replacement.
+The **Ontology** is the structure of the graph: its classes, relations, attributes, hierarchy and constraints, whatever formalism you write them in. Each class, relation or attribute is a **Concept**, identified across versions by its label (an attribute by its owner's label and its name). Renaming a Concept counts as removing one and adding another, unless you declare it as a replacement.
+
+Every Concept can carry a **Definition**: what it is and what it excludes, written as `definition` in the stetiq YAML (`description`, its older spelling, is still accepted). It can also list **Alternative Labels** (`alternativeLabels`): other names people use for it, such as synonyms or acronyms ("WO" for WorkOrder). An Alternative Label never identifies a Concept, so it may not be another Concept's label in the same section (another class, relation, or attribute of the same owner).
+
+```yaml
+node_types:
+  - label: WorkOrder
+    definition: A request to perform maintenance on one Machine
+    alternativeLabels: [WO]
+    properties:
+      - {name: status, type: STRING, definition: Where the work order is in its lifecycle}
+```
 
 An **Ontology Version** is an immutable snapshot of a Knowledge Graph's Ontology. Versions are numbered per Knowledge Graph (v1, v2…). Registering an Ontology that is identical to an existing version returns that version instead of creating a new one.
 
 You create a Knowledge Graph from its Declared Ontology (see [Getting started](./01-getting-started.md#create-a-knowledge-graph)); it becomes v1, and the `production` Alias points to it.
 
-The **Ontology Diff** between two Ontology Versions lists each change and classes it as *cosmetic* (only a description changed), *additive*, *deprecating* or *breaking*.
+The **Ontology Diff** between two Ontology Versions lists each change and classes it as *cosmetic* (only Definitions or Alternative Labels changed, never what data conforms), *additive*, *deprecating* or *breaking*.
 
 ## Construction Runs and Conformance
 

@@ -15,7 +15,7 @@ from stetiq.evaluation.framework import ratio
 class Documented(OntologyVersionEvaluator):
     """Every node type and relationship type should say what it means.
 
-    Metrics: `undocumented` (how many have no description) and `documented_ratio`.
+    Metrics: `undocumented` (how many have no Definition) and `documented_ratio`.
     One Detail per undocumented Concept.
     """
 
@@ -23,13 +23,13 @@ class Documented(OntologyVersionEvaluator):
 
     def evaluate(self, version) -> Evaluation:
         concepts = [*version.ontology.node_types, *version.ontology.relationship_types]
-        missing = [c.label for c in concepts if not c.description]
+        missing = [c.label for c in concepts if not c.definition]
         return Evaluation(
             metrics={
                 "undocumented": len(missing),
                 "documented_ratio": ratio(len(concepts) - len(missing), len(concepts)),
             },
-            details=[Detail(item=label, message="has no description") for label in missing],
+            details=[Detail(item=label, message="has no Definition") for label in missing],
         )
 
 

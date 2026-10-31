@@ -459,7 +459,7 @@ def test_the_diff_route_states_what_each_change_concerns(http, database_url):
             "concept_kind": "node_type",
             "kind": "changed",
             "classification": "cosmetic",
-            "detail": "description changed",
+            "detail": "definition changed",
         },
         {
             "concept": "Ticket.status",

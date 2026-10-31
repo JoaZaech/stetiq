@@ -28,7 +28,7 @@ class ChangeKind(StrEnum):
 
 class Classification(StrEnum):
     """Consumer impact, ordered from least to most severe. A cosmetic change touches only
-    documentation (a description), never what data conforms."""
+    documentation (a Definition or Alternative Labels), never what data conforms."""
 
     COSMETIC = "cosmetic"
     ADDITIVE = "additive"
@@ -176,16 +176,10 @@ def _diff_concepts(
             )
         else:
             changes += _diff_deprecation(kind, old[label], new[label])
-            if old[label].description != new[label].description:
-                changes.append(
-                    Change(
-                        label,
-                        kind,
-                        ChangeKind.CHANGED,
-                        Classification.COSMETIC,
-                        "description changed",
-                    )
-                )
+            changes += [
+                Change(label, kind, ChangeKind.CHANGED, Classification.COSMETIC, detail)
+                for detail in _documentation_changes(old[label], new[label])
+            ]
             changes += _diff_properties(kind, old[label], new[label])
             old_concept, new_concept = old[label], new[label]
             if isinstance(old_concept, NodeType) and isinstance(new_concept, NodeType):
@@ -193,6 +187,18 @@ def _diff_concepts(
             if kind == "relationship_type":
                 changes += _diff_patterns(label, base_ontology, target_ontology)
     return changes
+
+
+def _documentation_changes(
+    old: NodeType | RelationshipType | Property, new: NodeType | RelationshipType | Property
+) -> list[str]:
+    """What changed in a Concept's documentation, each cosmetic: it never changes what data conforms."""
+    details = []
+    if old.definition != new.definition:
+        details.append("definition changed")
+    if old.alternative_labels != new.alternative_labels:
+        details.append("alternative labels changed")
+    return details
 
 
 def _is_deprecated(c: NodeType | RelationshipType) -> bool:
@@ -349,9 +355,9 @@ def _diff_property(attribute: _Attribute, old: Property, new: Property) -> list[
     def change(classification: Classification, detail: str) -> Change:
         return attribute.change(ChangeKind.CHANGED, classification, detail)
 
-    changes: list[Change] = []
-    if old.description != new.description:
-        changes.append(change(Classification.COSMETIC, "description changed"))
+    changes = [
+        change(Classification.COSMETIC, detail) for detail in _documentation_changes(old, new)
+    ]
     if old.type != new.type:
         widening = (old.type, new.type) in WIDENING_TYPE_CHANGES
         changes.append(

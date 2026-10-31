@@ -3,9 +3,10 @@
     node_types:
       - Customer                      # bare label shorthand
       - label: Ticket
-        description: A support request
+        definition: A support request # optional; `description` is accepted as a synonym
+        alternativeLabels: [Case]     # optional; other names, never identifiers
         properties:
-          - {name: opened_at, type: DATE, required: true}
+          - {name: opened_at, type: DATE, required: true}  # also definition, alternativeLabels
         deprecated: true              # optional
         replacedBy: Case              # optional, a Concept of the same kind
         parent: Case                  # optional (node types only): superclass, single inheritance
@@ -18,7 +19,8 @@
       - {type: UNIQUENESS, node_type: Ticket, property_name: opened_at}
 
 `parse_yaml` validates and raises `OntologyValidationError` naming the
-offending path; `to_yaml` emits the canonical (sorted, defaults omitted) form.
+offending path; `to_yaml` emits the canonical (sorted, defaults omitted) form,
+spelling each Definition `definition`.
 """
 
 from __future__ import annotations
@@ -59,9 +61,11 @@ PROPERTY_TYPES = frozenset(
 _TOP_LEVEL_KEYS = {"node_types", "relationship_types", "patterns", "constraints"}
 _CONSTRAINT_KEYS = {"type", "node_type", "property_name"}
 CONSTRAINT_TYPES = frozenset({"UNIQUENESS"})
-_CONCEPT_KEYS = {"label", "description", "properties", "deprecated", "replacedBy"}
+# Every Concept's documentation; `description` is the older spelling of `definition`.
+_DOCUMENTATION_KEYS = {"definition", "description", "alternativeLabels"}
+_CONCEPT_KEYS = {"label", "properties", "deprecated", "replacedBy"} | _DOCUMENTATION_KEYS
 _NODE_TYPE_KEYS = _CONCEPT_KEYS | {"parent"}
-_PROPERTY_KEYS = {"name", "type", "description", "required"}
+_PROPERTY_KEYS = {"name", "type", "required"} | _DOCUMENTATION_KEYS
 
 
 def _fail(path: str, problem: str) -> OntologyValidationError:
@@ -94,6 +98,46 @@ def _label(path: str, value: Any) -> str:
     return value
 
 
+def _definition(path: str, raw: dict[str, Any]) -> str | None:
+    if "definition" in raw and "description" in raw:
+        raise _fail(
+            f"{path}.definition",
+            "give either definition or description (its older spelling), not both",
+        )
+    key = "definition" if "definition" in raw else "description"
+    return _optional_str(f"{path}.{key}", raw.get(key))
+
+
+def _alternative_labels(path: str, raw: dict[str, Any]) -> tuple[str, ...]:
+    path = f"{path}.alternativeLabels"
+    labels = raw.get("alternativeLabels") or []
+    if not isinstance(labels, list):
+        raise _fail(path, "must be a list of labels")
+    seen: list[str] = []
+    for label in labels:
+        if not isinstance(label, str) or not label.strip():
+            raise _fail(path, f"an Alternative Label must be a non-empty string, got {label!r}")
+        if label in seen:
+            raise _fail(path, f"Alternative Label {label!r} is given more than once")
+        seen.append(label)
+    return tuple(seen)
+
+
+def _check_alternative_labels(
+    owner: str, concepts: list[tuple[str, tuple[str, ...]]], section: str
+) -> None:
+    """No Alternative Label may be another Concept's label in the same section: a synonym
+    must never be mistaken for a different Concept."""
+    labels = {label for label, _ in concepts}
+    for label, alternatives in concepts:
+        for alternative in alternatives:
+            if alternative in labels and alternative != label:
+                raise _fail(
+                    f"{owner}{label}.alternativeLabels",
+                    f"{alternative!r} is the label of another Concept in {section}",
+                )
+
+
 def _parse_property(path: str, raw: Any) -> Property:
     if not isinstance(raw, dict):
         raise _fail(path, "must be a mapping with name and type")
@@ -110,8 +154,9 @@ def _parse_property(path: str, raw: Any) -> Property:
     return Property(
         name=name,
         type=ptype,
-        description=_optional_str(f"{path}.description", raw.get("description")),
+        definition=_definition(path, raw),
         required=_bool(f"{path}.required", raw.get("required", False)),
+        alternative_labels=_alternative_labels(path, raw),
     )
 
 
@@ -136,9 +181,13 @@ def _parse_concept(section: str, index: int, raw: Any) -> dict[str, Any]:
         if p.name in seen:
             raise _fail(f"{label}.{p.name}", "property is declared more than once")
         seen.add(p.name)
+    _check_alternative_labels(
+        f"{label}.", [(p.name, p.alternative_labels) for p in properties], f"{label}'s properties"
+    )
     concept = {
         "label": label,
-        "description": _optional_str(f"{label}.description", raw.get("description")),
+        "definition": _definition(label, raw),
+        "alternative_labels": _alternative_labels(label, raw),
         "properties": properties,
         "deprecated": _bool(f"{label}.deprecated", raw.get("deprecated", False)),
         "replaced_by": _optional_str(f"{label}.replacedBy", raw.get("replacedBy")),
@@ -175,6 +224,9 @@ def _parse_section(doc: dict[str, Any], section: str) -> list[dict[str, Any]]:
         if c["label"] in seen:
             raise _fail(c["label"], f"declared more than once in {section}")
         seen.add(c["label"])
+    _check_alternative_labels(
+        "", [(c["label"], c["alternative_labels"]) for c in concepts], section
+    )
     for c in concepts:
         target = c["replaced_by"]
         if target is not None and (target not in seen or target == c["label"]):
@@ -282,4 +334,8 @@ def parse_dict(doc: Any) -> Ontology:
 
 
 def to_yaml(ontology: Ontology) -> str:
-    return yaml.safe_dump(canonical.to_dict(ontology), sort_keys=False, allow_unicode=True)
+    return yaml.safe_dump(
+        canonical.to_dict(ontology, definition_key="definition"),
+        sort_keys=False,
+        allow_unicode=True,
+    )

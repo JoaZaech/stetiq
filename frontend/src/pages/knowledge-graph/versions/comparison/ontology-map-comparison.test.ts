@@ -301,7 +301,7 @@ describe('cosmetic changes', () => {
   it("follows the Diff's classification, not the two Ontologies: a description change it calls additive is not cosmetic", () => {
     const { changes } = compareOntologies(base, target, {
       classification: 'additive',
-      changes: [conceptChange('node_type', 'Stop', 'changed', 'additive', 'description changed')],
+      changes: [conceptChange('node_type', 'Stop', 'changed', 'additive', 'definition changed')],
     })
 
     expect(changes.classes.Stop).toEqual({ kind: 'modified', severity: 'additive' })
@@ -633,8 +633,8 @@ describe('summarizeChanges', () => {
       ['cosmetic', ['HAS_TRIP', 'Route']],
     ])
     expect(sections[1].concepts.map((c) => c.statements.map((s) => [s.text, s.level]))).toEqual([
-      [['description changed', null]],
-      [['description changed', null]],
+      [['definition changed', null]],
+      [['definition changed', null]],
     ])
   })
 
@@ -662,7 +662,7 @@ describe('summarizeChanges', () => {
       ['wheelchairBoarding', 'removed', null],
       [null, 'deprecated; replaced by Platform', 'deprecating'],
       ['wheelchair_boarding', 'added', 'additive'],
-      [null, 'description changed', 'cosmetic'],
+      [null, 'definition changed', 'cosmetic'],
     ])
     expect(sections.map((s) => [s.level, s.concepts.map((c) => c.label)])).toEqual([
       ['breaking', ['Stop', 'Trip']],
