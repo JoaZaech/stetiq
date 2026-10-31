@@ -32,6 +32,7 @@ from stetiq.use_case.concepts import (
     parse_concept_reference,
 )
 from stetiq.use_case.model import CompetencyQuestion, UseCase
+from stetiq.use_case.paths import PathIndex
 from stetiq.use_case.requirements import stated_requirements
 
 ANSWERABILITY_EVALUATOR = "structural_answerability"
@@ -52,30 +53,11 @@ class CompetencyQuestionMapper(Protocol):
     def map_question(self, question: CompetencyQuestion, ontology: Ontology) -> Sequence[str]: ...
 
 
-class _OntologyIndex:
+class _OntologyIndex(PathIndex):
     def __init__(self, ontology: Ontology) -> None:
-        self.ontology = ontology
+        super().__init__(ontology)
         self.nodes = {n.label: n for n in ontology.node_types}
         self.rels = {r.label: r for r in ontology.relationship_types}
-        self._children: dict[str, list[str]] = {}
-        for n in ontology.node_types:
-            if n.parent:
-                self._children.setdefault(n.parent, []).append(n.label)
-
-    def related(self, label: str) -> set[str]:
-        """The node type, its ancestors and its descendants."""
-        out = {label}
-        parent = self.nodes[label].parent if label in self.nodes else None
-        while parent and parent not in out:
-            out.add(parent)
-            parent = self.nodes[parent].parent if parent in self.nodes else None
-        stack = list(self._children.get(label, ()))
-        while stack:
-            child = stack.pop()
-            if child not in out:
-                out.add(child)
-                stack.extend(self._children.get(child, ()))
-        return out
 
     def missing(self, req: Requirement) -> list[Requirement]:
         """What `req` lacks in the Ontology: [] if satisfied, else the root causes."""
@@ -99,7 +81,7 @@ class _OntologyIndex:
                     if any(p.name == name for c in concepts for p in c.properties):
                         return []
                 return [req]
-            case PathRef(source, relationships, target, directed):
+            case PathRef(source, relationships, target):
                 parts: list[Requirement] = []
                 for end in (source, target):
                     if end is not None and end not in self.nodes:
@@ -108,25 +90,8 @@ class _OntologyIndex:
                     parts.append(RelationshipTypeRef(relationships))
                 if parts:
                     return parts
-                return [] if self._has_path(source, relationships, target, directed) else [req]
+                return [] if self.has_path(req) else [req]
         raise TypeError(f"not a requirement: {req!r}")
-
-    def _has_path(self, source, relationships, target, directed) -> bool:
-        sources = self.related(source) if source else None
-        targets = self.related(target) if target else None
-
-        def fits(s: str, r: str, t: str) -> bool:
-            return (
-                (not relationships or r in relationships)
-                and (sources is None or s in sources)
-                and (targets is None or t in targets)
-            )
-
-        return any(
-            fits(p.source, p.relationship, p.target)
-            or (not directed and fits(p.target, p.relationship, p.source))
-            for p in self.ontology.patterns
-        )
 
 
 class StructuralAnswerability(OntologyVersionEvaluator):
