@@ -33,7 +33,7 @@ import {
   patternId,
   type RelationRow,
 } from './concepts'
-import { MAP_VIEW_OPTIONS, MAP_VIEWS } from './map-view'
+import { MAP_VIEW_OPTIONS, MAP_VIEWS, useMapFiltersSlot } from './map-view'
 import { OntologyMap } from './map/OntologyMap'
 import { conceptRowId, selectedRowProps, type TableLinks, TableLinksContext } from './table/table-links'
 import { AttributeCountLink, ConceptLink, ShowOnMap } from './table/TableLinks'
@@ -51,6 +51,7 @@ export function OntologyTab() {
   const [view, setView] = useViewParam(MAP_VIEWS)
   const [params, setParams] = useSearchParams()
   const query = params.get('q') ?? ''
+  const [filters, setFilters] = useMapFiltersSlot()
 
   return (
     <div className="space-y-4">
@@ -61,10 +62,13 @@ export function OntologyTab() {
           value={query}
           onChange={(value) => setParams((p) => setOrDeleteParam(p, 'q', value), { replace: true })}
         />
-        <ViewToggle options={MAP_VIEW_OPTIONS} mode={view} onChange={setView} />
+        <div className="flex items-center gap-4">
+          {view === 'map' && <div ref={setFilters} className="flex items-center gap-4" />}
+          <ViewToggle options={MAP_VIEW_OPTIONS} mode={view} onChange={setView} />
+        </div>
       </div>
       {view === 'map' ? (
-        <OntologyMap ontology={version.ontology} query={query} />
+        <OntologyMap ontology={version.ontology} query={query} filtersIn={filters} />
       ) : (
         <OntologyTables ontology={version.ontology} />
       )}
