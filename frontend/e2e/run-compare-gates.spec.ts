@@ -70,6 +70,61 @@ test.describe('a gated Knowledge Graph', () => {
   })
 })
 
+test.describe('the KPI drill-down', () => {
+  // As above; the gated `review (min_confidence=0.5)` result has detail items about its
+  // `score` (`open-tickets`) and about a `confidence` metric, the other configuration
+  // one about its own `score` (`other-configuration`).
+  test.use({ seed: 'gates' })
+
+  test('a KPI cell opens a side sheet with the value, verdict, Gate reasons and detail items', async ({
+    page,
+    stetiq,
+  }) => {
+    const { baseline, regressed } = stetiq.seeded
+    await page.goto(compareUrl(baseline, regressed))
+    const review = page
+      .getByRole('table', { name: 'Evaluator results' })
+      .getByRole('row', { name: /^review \(min_confidence=0\.5\)\/score/ })
+    await review.getByRole('button', { name: `review (min_confidence=0.5)/score of run ${short(regressed)}` }).click()
+
+    const sheet = page.getByRole('dialog', { name: 'review (min_confidence=0.5)/score' })
+    await expect(sheet).toContainText(`Construction Run ${String(regressed)}`)
+    await expect(sheet.getByRole('definition').first()).toHaveText('0.6')
+    await expect(sheet.getByRole('region', { name: 'Verdict' })).toContainText(/fail\s*preview.*judged against current Gates/)
+    const reasons = sheet.getByRole('list', { name: 'review-score reasons' })
+    await expect(reasons.getByRole('listitem')).toHaveText(['review.score = 0.6 < min 0.8', 'open-tickets: no answer'])
+    const details = sheet.getByRole('list', { name: 'Detail items' })
+    await expect(details.getByRole('listitem')).toHaveText([/open-tickets\s*no answer/])
+    await sheet.getByRole('link', { name: 'Open the run’s Evaluations tab' }).click()
+    await expect(page).toHaveURL(new RegExp(`/runs/${String(regressed)}/evaluations$`))
+  })
+
+  test('Conformance opens with its recorded verdict and links to the Conformance tab; an ungated KPI opens with no verdict', async ({
+    page,
+    stetiq,
+  }) => {
+    const { baseline, regressed } = stetiq.seeded
+    await page.goto(compareUrl(baseline, regressed))
+    await page.getByRole('button', { name: `Conformance of run ${short(baseline)}` }).click()
+    const sheet = page.getByRole('dialog', { name: 'Conformance' })
+    await expect(sheet.getByRole('region', { name: 'Verdict' })).toContainText(/fail\s*recorded.*recorded Gate result/)
+    await expect(sheet.getByRole('list', { name: 'conformance-floor reasons' })).toContainText('Conformance 0.5455 < 0.6')
+    await expect(sheet.getByRole('link', { name: 'Open the run’s Conformance tab' })).toHaveAttribute(
+      'href',
+      new RegExp(`/runs/${String(baseline)}/conformance$`),
+    )
+    await page.keyboard.press('Escape')
+
+    await page.getByRole('button', { name: `review (min_confidence=0.8)/score of run ${short(regressed)}` }).click()
+    const ungated = page.getByRole('dialog', { name: 'review (min_confidence=0.8)/score' })
+    await expect(ungated.getByRole('definition').first()).toHaveText('0.5')
+    await expect(ungated.getByRole('region', { name: 'Verdict' })).toHaveText(/No Gate covers this KPI/)
+    await expect(ungated.getByRole('list', { name: 'Detail items' }).getByRole('listitem')).toHaveText([
+      /other-configuration/,
+    ])
+  })
+})
+
 test.describe('a Knowledge Graph never gated', () => {
   // `support` with two reviewed runs, `first` and `second`, and no Gate result.
   test.use({ seed: 'never_gated' })

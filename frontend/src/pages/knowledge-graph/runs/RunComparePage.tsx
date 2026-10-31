@@ -1,4 +1,4 @@
-import { useCallback, useId, useMemo, type ReactNode } from 'react'
+import { useCallback, useId, useMemo, useState, type ReactNode } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router'
 import { isNotFound } from '@/api/client'
@@ -31,6 +31,7 @@ import {
   runGating,
 } from './compare'
 import { GatePreviewNote, KpiSummaryBar, NeverGatedHint, NoResult, PassFail, VerdictBadge } from './gate-verdicts'
+import { KpiSheet, type KpiSelection } from './kpi-sheet'
 import { shortRunId } from './runs'
 
 const linkClass = 'text-primary underline-offset-4 hover:underline'
@@ -172,23 +173,40 @@ function Comparison({
     () => runs.map((run) => runGating(run.id, gateResults, gatePreviews)),
     [runs, gateResults, gatePreviews],
   )
+  const [selection, setSelection] = useState<KpiSelection | null>(null)
   const metric = (value: number | null) =>
     value === null ? none : <span className="tabular-nums">{formatMetric(value)}</span>
   const keyed = <V extends ComparedValue>(rows: ComparisonRow<V>[], show: (value: V) => ReactNode): Row[] =>
     rows.map((row) => ({ label: row.key, values: row.values, render: (i) => show(row.values[i]) }))
-  /** A KPI row: each value with its verdict, and the KPI's summary when it is gated. */
+  /**
+   * A KPI row: each value with its verdict, and the KPI's summary when it is gated. A cell
+   * with a value or a verdict is a button that opens the KPI drill-down.
+   */
   const kpiRow = (label: string, kpi: Kpi, values: (number | null)[]): Row => {
     const verdicts = values.map((value, i) => kpiVerdict(kpi, value, gatings[i]))
     return {
       label,
       values,
       summary: kpiSummary(verdicts),
-      render: (i) => (
-        <span className="inline-flex flex-wrap items-center gap-x-2">
-          {verdicts[i].verdict === 'no-result' ? <NoResult /> : metric(values[i])}
-          <VerdictBadge verdict={verdicts[i]} />
-        </span>
-      ),
+      render: (i) => {
+        const content = (
+          <>
+            {verdicts[i].verdict === 'no-result' ? <NoResult /> : metric(values[i])}
+            <VerdictBadge verdict={verdicts[i]} />
+          </>
+        )
+        if (values[i] === null && verdicts[i].verdict === 'ungated') return content
+        return (
+          <button
+            type="button"
+            aria-label={`${label} of run ${shortRunId(runs[i].id)}`}
+            className="inline-flex cursor-pointer flex-wrap items-center gap-x-2 rounded-sm text-left underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            onClick={() => setSelection({ runId: runs[i].id, kpi })}
+          >
+            {content}
+          </button>
+        )
+      },
     }
   }
   const gates = gateRows(gatings)
@@ -255,7 +273,7 @@ function Comparison({
       <ComparisonTable
         label="Metrics"
         runs={runs}
-        rows={keyed(comparison.metrics, metric)}
+        rows={comparison.metrics.map((row) => kpiRow(row.key, { kind: 'run-metric', key: row.key }, row.values))}
         diffOnly={diffOnly}
         empty="No metrics logged."
       />
@@ -275,6 +293,7 @@ function Comparison({
           diffOnly={diffOnly}
         />
       )}
+      <KpiSheet knowledgeGraph={runs[0].knowledge_graph} selection={selection} onClose={() => setSelection(null)} />
     </div>
   )
 }

@@ -26,6 +26,7 @@ import { KnowledgeGraphSectionPage } from '../KnowledgeGraphSectionPage'
 import { useKnowledgeGraphName } from '../params'
 import { type Kpi, runChartSeries } from './compare'
 import { GatePreviewNote } from './gate-verdicts'
+import { KpiSheet, type KpiSelection } from './kpi-sheet'
 import { useRunFilters } from './run-list-params'
 import { useRunTable } from './run-table'
 import {
@@ -71,6 +72,7 @@ function FilteredRuns({ runs, mode }: { runs: ConstructionRun[]; mode: ViewMode 
   // Durations of running runs and the time range are measured from when the list loaded.
   const [now] = useState(() => Date.now())
   const filtered = useMemo(() => filterRuns(runs, filters, now), [runs, filters, now])
+  const [selection, setSelection] = useState<KpiSelection | null>(null)
 
   const filterControls = (
     <>
@@ -109,7 +111,8 @@ function FilteredRuns({ runs, mode }: { runs: ConstructionRun[]; mode: ViewMode 
     return (
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-3">{filterControls}</div>
-        <RunCharts runs={filtered} />
+        <RunCharts runs={filtered} onPointClick={(runId, kpi) => setSelection({ runId, kpi })} />
+        <KpiSheet knowledgeGraph={runs[0].knowledge_graph} selection={selection} onClose={() => setSelection(null)} />
       </div>
     )
   }

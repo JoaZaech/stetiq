@@ -7,6 +7,7 @@ import {
   compareRuns,
   differs,
   gateRows,
+  kpiDrillDown,
   kpiGateBounds,
   kpiSummary,
   kpiVerdict,
@@ -415,5 +416,59 @@ describe('runChartSeries', () => {
         { x: at(b.started_at), value: 0.8, id: 'b' },
       ],
     })
+  })
+})
+
+describe('kpiDrillDown', () => {
+  const reviewed = run({ metrics: { precision: 0.85 }, conformance: { score: 0.5455, mismatches: [] } })
+  const review = evaluation('review', { score: 0.6 }, {
+    parameters: { min_confidence: 0.5, gold: 'v2' },
+    details: [
+      { item: 'CQ-open-tickets', message: 'no answer', metric: 'score' },
+      { item: 'Ticket', message: 'unrelated', metric: 'coverage' },
+    ],
+  })
+  const other = evaluation('review', { score: 0.5 }, {
+    parameters: { min_confidence: 0.8 },
+    details: [{ item: 'CQ-other-configuration', message: '', metric: 'score' }],
+  })
+  const reasons = ['review.score = 0.6 < min 0.8', 'CQ-open-tickets: no answer']
+
+  it("shows an Evaluator KPI's value, verdict with its Gate reasons, and its result's detail items for that metric only", () => {
+    const gating = { preview: preview([outcome(reviewGate, false, reasons), outcome(diffGate, true)]) }
+    expect(kpiDrillDown(reviewKey, reviewed, [other, review], gating)).toEqual({
+      name: 'review (gold="v2", min_confidence=0.5)/score',
+      value: 0.6,
+      verdict: { verdict: 'fail', origin: 'preview', outcomes: [outcome(reviewGate, false, reasons)] },
+      details: [{ item: 'CQ-open-tickets', message: 'no answer', metric: 'score' }],
+      tab: 'evaluations',
+    })
+  })
+
+  it("shows Conformance with its recorded verdict, linking to the run's Conformance tab", () => {
+    const gating = { recorded: recorded([outcome(conformanceGate, false, ['Conformance 0.5455 < 0.6'])]) }
+    expect(kpiDrillDown({ kind: 'conformance' }, reviewed, [review], gating)).toEqual({
+      name: 'Conformance',
+      value: 0.5455,
+      verdict: {
+        verdict: 'fail',
+        origin: 'recorded',
+        outcomes: [outcome(conformanceGate, false, ['Conformance 0.5455 < 0.6'])],
+      },
+      details: [],
+      tab: 'conformance',
+    })
+  })
+
+  it('shows an ungated run metric with no verdict, and a gated KPI the run has no value for as "no result"', () => {
+    expect(kpiDrillDown({ kind: 'run-metric', key: 'precision' }, reviewed, [], {})).toEqual({
+      name: 'precision',
+      value: 0.85,
+      verdict: { verdict: 'ungated' },
+      details: [],
+      tab: '',
+    })
+    const gating = { preview: preview([outcome(reviewGate, false, ['No result of Evaluator'])]) }
+    expect(kpiDrillDown(reviewKey, reviewed, [], gating)).toMatchObject({ value: null, verdict: { verdict: 'no-result' } })
   })
 })

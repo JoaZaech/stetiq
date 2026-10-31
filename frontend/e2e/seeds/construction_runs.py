@@ -32,20 +32,24 @@ def _runs_client(client: stetiq.Client) -> stetiq.Client:
 
 
 class RunReview(stetiq.ConstructionRunEvaluator):
-    """A custom run Evaluator with a `min_confidence` parameter, scoring a fixed `review/score`."""
+    """A custom run Evaluator with a `min_confidence` parameter, scoring a fixed `review/score`
+    and reporting `details`."""
 
     name = "review"
 
-    def __init__(self, *, min_confidence: float, score: float) -> None:
+    def __init__(
+        self, *, min_confidence: float, score: float, details: tuple[stetiq.Detail, ...] = ()
+    ) -> None:
         self._min_confidence = min_confidence
         self._score = score
+        self._details = details
 
     @property
     def parameters(self) -> dict[str, float]:
         return {"min_confidence": self._min_confidence}
 
     def evaluate(self, run: Any) -> stetiq.Evaluation:
-        return stetiq.Evaluation(metrics={"score": self._score})
+        return stetiq.Evaluation(metrics={"score": self._score}, details=self._details)
 
 
 REVIEWS = (RunReview(min_confidence=0.5, score=0.9), RunReview(min_confidence=0.8, score=0.6))

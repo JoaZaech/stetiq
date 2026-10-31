@@ -32,6 +32,13 @@ gates:
 """
 
 
+# The gated configuration's detail items: one about its `score`, one about another metric.
+REVIEW_DETAILS = (
+    stetiq.Detail("open-tickets", "no answer", metric="score"),
+    stetiq.Detail("Ticket", "low confidence", metric="confidence"),
+)
+
+
 def _graph(*, escalated: bool) -> stetiq.InMemoryGraphSource:
     """Ada and a Ticket; with `escalated`, a Ticket.priority and an `ESCALATED`
     relationship that SUPPORT_V1 lacks (Conformance 0.5455), else none (Conformance 0.75)."""
@@ -50,8 +57,12 @@ def _run(tracking_uri: str, *, escalated: bool, review: float | None, precision:
         client.evaluate_run(
             run.id,
             evaluators=(
-                RunReview(min_confidence=0.5, score=review),
-                RunReview(min_confidence=0.8, score=0.5),
+                RunReview(min_confidence=0.5, score=review, details=REVIEW_DETAILS),
+                RunReview(
+                    min_confidence=0.8,
+                    score=0.5,
+                    details=(stetiq.Detail("other-configuration", "", metric="score"),),
+                ),
             ),
         )
     return run.id
@@ -71,9 +82,12 @@ def gates(client: stetiq.Client) -> dict[str, Any]:
       the Observation before (count drop fails).
     - `improved`: plain graph (Conformance pass), review 0.95 (pass), every Gate passes.
 
-    Every reviewed run also has `review (min_confidence=0.8)/score` 0.5, which no Gate
-    covers, and each logs an ungated `precision` metric. The Ontology Diff Gate passes
-    for all (every run declares v1, the Contract Alias's version).
+    Each `review (min_confidence=0.5)` result has REVIEW_DETAILS (`open-tickets` about
+    `score`, `Ticket` about `confidence`). Every reviewed run also has
+    `review (min_confidence=0.8)/score` 0.5, which no Gate covers (one detail item,
+    `other-configuration`, about `score`), and each logs an ungated `precision` metric.
+    The Ontology Diff Gate passes for all (every run declares v1, the Contract Alias's
+    version).
     """
     client.create_knowledge_graph("support", ontology=SUPPORT_V1)
     client.bind_graph_source("support", GraphSourceScope(database="neo4j"))
