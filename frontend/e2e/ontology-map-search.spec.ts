@@ -58,11 +58,14 @@ test('picking a result selects it and centres the Map on it, by mouse or keyboar
   await expect.poll(() => offCentre(page, 'Bin')).toBeLessThan(4)
 
   // A relation's result selects its link.
+  await details(page).getByRole('button', { name: 'Results' }).click()
   await results(page).getByRole('button', { name: /^SHIPPED_FROM/ }).focus()
   await page.keyboard.press('Enter')
   await expect(details(page).getByRole('heading', { name: 'SHIPPED_FROM' })).toBeVisible()
 
   // Arrow keys move between results; Enter picks.
+  await details(page).getByRole('button', { name: 'Results' }).click()
+  await results(page).getByRole('button', { name: /^SHIPPED_FROM/ }).focus()
   await page.keyboard.press('ArrowUp')
   await page.keyboard.press('ArrowUp')
   await expect(results(page).getByRole('button', { name: /^Warehouse/ })).toBeFocused()

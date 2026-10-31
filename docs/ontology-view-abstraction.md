@@ -139,6 +139,32 @@ Decisions:
   - fit-to-view never zooms out below readable text
 - **Shipping.** PR #74 goes back to draft; this round lands as new sub-tickets of #62 on the same branch, and the Map merges only once it is right.
 
+## Round 3: screen space and legibility
+
+Feedback from the comparison Map (city-transit v2→v3, OPERATES selected): it looked cramped and disorganized. Findings, by Munzner's principles:
+
+- **Too many views side by side.** The change summary, canvas and details panel sat next to each other, and the summary and details both described the selected Concept. Summary entries put name, kind and badge on one line, so long names broke mid-word (`HA / S_S / TOP`).
+- **Repeated encoding.** Level was stated by a badge, again in each statement ("(documentation-only)") and twice more in details.
+- **Two channels, one legend.** Change kind (mark style) and severity (hue) shared one 8-item legend, which with the filters covered the top of the canvas.
+- **Focus hid the task.** Focus+context faded the changed Concepts (the breaking Trip and Stop) along with everything else.
+- **Wasted canvas.** One expanded class spread the whole layout by a single global factor; class names truncated; fit-to-view rendered node text at ~10px.
+
+Decisions (comparison Map first; the plain Map takes the shared parts):
+
+- **One side panel.** A single right-hand panel replaces the summary and details panes. It shows the change summary with nothing selected, a Concept's details or the shortest path once something is selected, with a "← All changes" back link. It collapses to a thin rail showing the headline counts. On the plain Map it appears only for a selection.
+- **Summary partitioned by level.** Sections Breaking, Deprecating, Additive, then collapsed Documentation-only, each heading in its severity colour once. An entry is the Concept's name on its own full-width line (wrapping at `_`, never mid-word), its kind in small text, then its statements. A statement names its level only when it differs from its section's. No per-entry badges.
+- **Documentation-only changes show their text.** Details show Before and After descriptions with a word-level diff. The summary entry previews the new description in one line. Both come from the two Ontologies the comparison already loads.
+- **Legend split by channel.** The severity key is the panel's headline counts, each drawn as its own swatch. Only a one-row change-kind key (added, removed, modified, unchanged) stays on the canvas, bottom-left by the zoom controls.
+- **Filters leave the canvas.** Hide deprecated and Hide subclass links move to the header row beside the Table / Map toggle.
+- **Changed Concepts stay as context.** Under focus, changed Concepts outside the neighbourhood stay readable (~60%, severity outline visible); only unchanged ones fade fully.
+- **Open on the changes.** A comparison Map first fits to its changed Concepts; fit-all stays one click away: Fit view frames the whole Map, without the text floor, which is for the first view.
+- **Text floor.** The first view never zooms out below 0.85 (node names ≥ ~12px); a Map too big for it is left to be panned.
+- **Class names are never truncated.** Class nodes grow to fit their name in monospace measurement, like link label pills; no ellipsis, no wrapping.
+- **Local overlap removal.** The global spread factor is replaced by ELK's SPOrE overlap removal after stress, which moves nodes only as far as needed to clear overlaps and keeps their order. Still one deterministic layout over the union network, so stable between versions.
+- **Search results in the same panel.** Search results are a state of the one panel, not a pane on the left. Picking a result opens its details, with "← Results" back.
+- **Validation.** On city-transit v2→v3: no Concept name breaks mid-word, in the panel or on the canvas; both breaking classes stay visible with OPERATES selected; the first view frames the changes at readable text size; a documentation-only change can be read without the Table.
+- **Shipping.** A spec, then four sub-tickets of #62: the single side panel (with search, path, collapse rail and count legend); the summary by level and the documentation-only diff; the canvas changes (filters, change-kind key, context fading, fit-to-changes, zoom floor); and the layout (sized class nodes, SPOrE).
+
 ## Later layers (out of v1)
 
 - Declared Ontology ↔ Observed Schema on the same union-network abstraction (Conformance, Drift, Pending Migration).

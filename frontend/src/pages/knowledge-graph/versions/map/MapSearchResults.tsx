@@ -1,9 +1,10 @@
 import { useId, type KeyboardEvent } from 'react'
 import type { ClassOrRelation } from '../concepts'
+import { MapSidePanel, type MapPanelNav } from './MapSidePanel'
 import type { SearchResults } from './ontology-map-search'
 
 /**
- * The Map's search results beside it: the Concepts the search names, then the other
+ * The Map's search results, in its panel: the Concepts the search names, then the other
  * Concepts it mentions, each with its reasons. Picking one (click, or Enter on it; the
  * arrow keys move between them) calls `onPick`; a result `canPick` rejects, such as one a
  * filter hides, is disabled.
@@ -13,19 +14,17 @@ export function MapSearchResults({
   results,
   canPick,
   onPick,
+  nav,
 }: {
   query: string
   results: SearchResults
   canPick: (result: ClassOrRelation) => boolean
   onPick: (result: ClassOrRelation) => void
+  nav: MapPanelNav
 }) {
   const empty = results.names.length === 0 && results.others.length === 0
   return (
-    <aside
-      aria-label="Search results"
-      className="w-72 shrink-0 space-y-4 overflow-y-auto border-r bg-background p-4 text-sm"
-      onKeyDown={moveFocus}
-    >
+    <MapSidePanel label="Search results" kind="Search" title={`“${query.trim()}”`} nav={nav} onKeyDown={moveFocus}>
       {empty ? (
         <p className="text-muted-foreground">Nothing matches “{query.trim()}”.</p>
       ) : (
@@ -34,7 +33,7 @@ export function MapSearchResults({
           <ResultGroup title="Other matches" results={results.others} canPick={canPick} onPick={onPick} />
         </>
       )}
-    </aside>
+    </MapSidePanel>
   )
 }
 

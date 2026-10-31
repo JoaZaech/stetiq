@@ -1,6 +1,5 @@
-import { ViewToggle } from '@/components/ViewToggle'
 import { useComparisonView } from './comparison-view'
-import { MAP_VIEW_OPTIONS } from '../map-view'
+import { useMapViewControls } from '../map-view-controls'
 import { OntologyComparisonMap } from './OntologyComparisonMap'
 import { OntologyComparisonTable } from './OntologyComparisonTable'
 import { useOntologyVersionTab } from '../version-context'
@@ -12,6 +11,7 @@ import { useOntologyVersionTab } from '../version-context'
 export function ChangesTab() {
   const version = useOntologyVersionTab()
   const [view, setView] = useComparisonView()
+  const { controls, filtersIn } = useMapViewControls(view, setView)
   if (version.number === 1) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -24,10 +24,15 @@ export function ChangesTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
         <p className="text-sm text-muted-foreground">Changes from v{base}</p>
-        <ViewToggle options={MAP_VIEW_OPTIONS} mode={view} onChange={setView} />
+        {controls}
       </div>
       {view === 'map' ? (
-        <OntologyComparisonMap knowledgeGraph={version.knowledge_graph} base={base} target={version.number} />
+        <OntologyComparisonMap
+          knowledgeGraph={version.knowledge_graph}
+          base={base}
+          target={version.number}
+          filtersIn={filtersIn}
+        />
       ) : (
         <OntologyComparisonTable knowledgeGraph={version.knowledge_graph} base={base} target={version.number} />
       )}

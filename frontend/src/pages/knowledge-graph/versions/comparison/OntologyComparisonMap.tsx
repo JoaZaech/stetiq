@@ -7,19 +7,22 @@ import { useOntologyComparison } from './use-ontology-comparison'
 
 /**
  * Loads versions `base` and `target` and their Ontology Diff, and draws them superimposed
- * on one Map: the Changes tab's Map, and the Compare page's for any two versions.
+ * on one Map: the Changes tab's Map, and the Compare page's for any two versions. Its
+ * filters go in `filtersIn` (`useMapViewControls`).
  */
 export function OntologyComparisonMap({
   knowledgeGraph,
   base,
   target,
+  filtersIn,
 }: {
   knowledgeGraph: string
   base: number
   target: number
+  filtersIn: HTMLElement | null
 }) {
   const { comparison, error } = useOntologyComparison(knowledgeGraph, base, target)
   if (error) return <ErrorAlert error={error} />
   if (!comparison) return <Skeleton className={cn(MAP_HEIGHT, 'w-full')} />
-  return <OntologyMap comparison={comparison} />
+  return <OntologyMap comparison={comparison} filtersIn={filtersIn} />
 }

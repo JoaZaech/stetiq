@@ -6,7 +6,6 @@ import type { Ontology } from '@/api/ontology-versions'
 import { ColumnPicker } from '@/components/ColumnPicker'
 import { DataTable, DataTableRowCount } from '@/components/DataTable'
 import { SearchInput } from '@/components/SearchInput'
-import { ViewToggle } from '@/components/ViewToggle'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { createDataTableColumnHelper, type DataTableFeatures, filterColumn, useDataTable } from '@/lib/data-table'
@@ -33,7 +32,8 @@ import {
   patternId,
   type RelationRow,
 } from './concepts'
-import { MAP_VIEW_OPTIONS, MAP_VIEWS } from './map-view'
+import { MAP_VIEWS } from './map-view'
+import { useMapViewControls } from './map-view-controls'
 import { OntologyMap } from './map/OntologyMap'
 import { conceptRowId, selectedRowProps, type TableLinks, TableLinksContext } from './table/table-links'
 import { AttributeCountLink, ConceptLink, ShowOnMap } from './table/TableLinks'
@@ -51,6 +51,7 @@ export function OntologyTab() {
   const [view, setView] = useViewParam(MAP_VIEWS)
   const [params, setParams] = useSearchParams()
   const query = params.get('q') ?? ''
+  const { controls, filtersIn } = useMapViewControls(view, setView)
 
   return (
     <div className="space-y-4">
@@ -61,10 +62,10 @@ export function OntologyTab() {
           value={query}
           onChange={(value) => setParams((p) => setOrDeleteParam(p, 'q', value), { replace: true })}
         />
-        <ViewToggle options={MAP_VIEW_OPTIONS} mode={view} onChange={setView} />
+        {controls}
       </div>
       {view === 'map' ? (
-        <OntologyMap ontology={version.ontology} query={query} />
+        <OntologyMap ontology={version.ontology} query={query} filtersIn={filtersIn} />
       ) : (
         <OntologyTables ontology={version.ontology} />
       )}

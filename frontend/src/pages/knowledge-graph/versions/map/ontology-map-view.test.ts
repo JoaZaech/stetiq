@@ -12,7 +12,7 @@ import {
   type DrawnMap,
   type MapInput,
 } from './ontology-map-view'
-import { HIERARCHY, ONTOLOGY, PARTIES } from './ontology-map.fixtures'
+import { HIERARCHY, ONTOLOGY, PARTIES, TRANSIT } from './ontology-map.fixtures'
 import { shortestPaths } from './ontology-map-paths'
 import { searchOntology } from './ontology-map-search'
 
@@ -67,19 +67,21 @@ describe('drawnMapOf', () => {
 
     expect(view.selection).toEqual({ kind: 'class', label: 'Customer' })
     expect(view.classes).toEqual({
-      Customer: { selected: true, match: false, faded: false },
-      Ticket: { selected: false, match: false, faded: false },
-      Product: { selected: false, match: false, faded: true },
+      Customer: { selected: true, match: false, context: false, faded: false },
+      Ticket: { selected: false, match: false, context: false, faded: false },
+      Product: { selected: false, match: false, context: false, faded: true },
     })
     expect(view.links['(Customer)-[OPENED]->(Ticket)']).toEqual({
       selected: false,
       match: false,
+      context: false,
       faded: false,
       focused: true,
     })
     expect(view.links['(Ticket)-[ABOUT]->(Product)']).toEqual({
       selected: false,
       match: false,
+      context: false,
       faded: true,
       focused: false,
     })
@@ -153,7 +155,7 @@ describe('drawnMapOf', () => {
       expect(view.paths?.map((p) => p.classes)).toEqual([['Customer', 'Ticket', 'Product']])
       // The path's two classes and every link along it are selected; the rest fades.
       expect(view.classes.Customer.selected && view.classes.Product.selected).toBe(true)
-      expect(view.classes.Ticket).toEqual({ selected: false, match: false, faded: false })
+      expect(view.classes.Ticket).toEqual({ selected: false, match: false, context: false, faded: false })
       expect(Object.keys(view.links).filter((id) => view.links[id].selected)).toEqual([
         '(Customer)-[FOLLOWS]->(Ticket)',
         '(Customer)-[OPENED]->(Ticket)',
@@ -180,16 +182,17 @@ describe('drawnMapOf', () => {
       expect(view.links['(Customer)-[OPENED]->(Ticket)']).toEqual({
         selected: false,
         match: true,
+        context: false,
         faded: false,
         focused: false,
       })
-      expect(view.classes.Customer).toEqual({ selected: false, match: false, faded: true })
+      expect(view.classes.Customer).toEqual({ selected: false, match: false, context: false, faded: true })
     })
 
     it('leaves fading to the selection when there is one', () => {
       const view = open(PARTIES, { kind: 'class', label: 'Customer' }, 'open')
 
-      expect(view.classes.Customer).toEqual({ selected: true, match: false, faded: false })
+      expect(view.classes.Customer).toEqual({ selected: true, match: false, context: false, faded: false })
       expect(view.links['(Customer)-[OPENED]->(Ticket)'].match).toBe(true)
     })
   })
@@ -218,6 +221,19 @@ describe('drawnMapOf', () => {
     expect(view.details).toMatchObject({ kind: 'class', label: 'Customer' })
   })
 
+  it("keeps a comparison's changes out of focus as context, and fades only the unchanged", () => {
+    const view = createDrawnMapOf()(
+      { comparison: TRANSIT, selected: { kind: 'relation', label: 'OPERATES' }, query: '' },
+      initialMapState(null),
+    )
+
+    expect(view.classes.Route).toMatchObject({ faded: false, context: false })
+    expect(view.classes.Trip).toMatchObject({ faded: false, context: true })
+    expect(view.classes.Agency).toMatchObject({ faded: false, context: false })
+    expect(view.links['(Route)-[HAS_TRIP]->(Trip)']).toMatchObject({ faded: false, context: true })
+    expect(view.links['(Trip)-[SERVES]->(Stop)']).toMatchObject({ faded: true, context: false })
+  })
+
   describe('centring', () => {
     it('opens centred on the selection, a relation on its link, and fits the view with none', () => {
       expect(open(ONTOLOGY, { kind: 'class', label: 'Ticket' })).toMatchObject({
@@ -228,7 +244,13 @@ describe('drawnMapOf', () => {
         kind: 'link',
         id: '(Ticket)-[ABOUT]->(Product)',
       })
-      expect(open(ONTOLOGY, null)).toMatchObject({ centreOn: null, fitView: true })
+      expect(open(ONTOLOGY, null)).toMatchObject({ centreOn: null, fitView: true, fitTo: null })
+    })
+
+    it("opens a comparison on its changes", () => {
+      const view = createDrawnMapOf()({ comparison: TRANSIT, selected: null, query: '' }, initialMapState(null))
+
+      expect(view).toMatchObject({ fitView: true, fitTo: ['Route', 'Stop', 'Trip'] })
     })
 
     it('lets go once something else is selected on the Map', () => {
@@ -278,6 +300,42 @@ describe('drawnMapOf', () => {
     it('Escape clears only a selection the Map shows', () => {
       expect(respondTo(open(ONTOLOGY, { kind: 'class', label: 'Ticket' }), { kind: 'escape' }).select).toBeNull()
       expect(respondTo(hidden, { kind: 'escape' })).not.toHaveProperty('select')
+    })
+  })
+
+  describe('the side panel', () => {
+    it("shows a comparison's change summary with nothing selected, and on a plain Map nothing", () => {
+      expect(compare(null).panel).toEqual({ kind: 'summary', returnTo: null })
+      expect(open(ONTOLOGY, null).panel).toBeNull()
+    })
+
+    it("shows a selection's details or shortest paths, back to the summary in a comparison", () => {
+      expect(compare({ kind: 'class', label: 'Ticket' }).panel).toEqual({ kind: 'details', back: 'changes' })
+      expect(compare({ kind: 'path', from: 'Agent', to: 'Customer' }).panel).toEqual({ kind: 'path', back: 'changes' })
+      // On a plain Map there is nothing to go back to: the panel closes.
+      expect(open(ONTOLOGY, { kind: 'class', label: 'Ticket' }).panel).toEqual({ kind: 'details', back: null })
+    })
+
+    it('goes back to the summary at the entry of the selection it leaves, by the back link or Escape', () => {
+      const ticket = compare({ kind: 'class', label: 'Ticket' })
+      const returned = { kind: 'summary', returnTo: { kind: 'class', label: 'Ticket' } }
+
+      expect(after(ticket, { kind: 'clear' }).panel).toEqual(returned)
+      expect(after(ticket, { kind: 'escape' }).panel).toEqual(returned)
+      // Selecting another Concept from there returns to its entry instead.
+      expect(
+        after(ticket, { kind: 'clear' }, { kind: 'click-class', label: 'Agent', shift: false }, { kind: 'clear' }).panel,
+      ).toEqual({ kind: 'summary', returnTo: { kind: 'class', label: 'Agent' } })
+    })
+
+    it("shows a search's results in place of the summary, and a result picked back to them", () => {
+      const searched = createDrawnMapOf()({ comparison: COMPARISON, selected: null, query: 'ticket' }, initialMapState(null))
+      expect(searched.panel).toEqual({ kind: 'results' })
+      expect(open(ONTOLOGY, null, 'ticket').panel).toEqual({ kind: 'results' })
+
+      const picked = after(searched, { kind: 'pick', result: { kind: 'class', label: 'Ticket' } })
+      expect(picked.panel).toEqual({ kind: 'details', back: 'results' })
+      expect(after(picked, { kind: 'clear' }).panel).toEqual({ kind: 'results' })
     })
   })
 

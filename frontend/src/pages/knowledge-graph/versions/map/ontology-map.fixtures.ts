@@ -1,5 +1,7 @@
 /** Ontologies the Ontology Map's tests share. */
 import type { Ontology } from '@/api/ontology-versions'
+import { compareOntologies } from '../comparison/ontology-map-comparison'
+import { attributeChange, conceptDescribed } from '../comparison/ontology-diff.fixtures'
 
 // Canonical form, as the server sends it: Concepts sorted by label.
 export const ONTOLOGY: Ontology = {
@@ -57,3 +59,44 @@ export const HIERARCHY: Ontology = {
     ['Customer', 'REPORTED', 'LegacyTicket'],
   ],
 }
+
+// City transit, as the `ontology_map_transit` seed has it: v3 renames Stop's and Trip's
+// attributes (each a breaking removal and an additive addition) and documents HAS_TRIP.
+const TRANSIT_V2: Ontology = {
+  node_types: [
+    { label: 'Agency' },
+    { label: 'Route' },
+    { label: 'Stop', properties: [{ name: 'wheelchairBoarding', type: 'INTEGER' }] },
+    { label: 'Trip', properties: [{ name: 'bikesAllowed', type: 'INTEGER' }] },
+  ],
+  relationship_types: [{ label: 'HAS_TRIP' }, { label: 'OPERATES' }, { label: 'SERVES' }],
+  patterns: [
+    ['Agency', 'OPERATES', 'Route'],
+    ['Route', 'HAS_TRIP', 'Trip'],
+    ['Trip', 'SERVES', 'Stop'],
+  ],
+}
+const TRANSIT_V3: Ontology = {
+  ...TRANSIT_V2,
+  node_types: [
+    { label: 'Agency' },
+    { label: 'Route' },
+    { label: 'Stop', properties: [{ name: 'wheelchair_boarding', type: 'INTEGER' }] },
+    { label: 'Trip', properties: [{ name: 'bikes_allowed', type: 'INTEGER' }] },
+  ],
+  relationship_types: [
+    { label: 'HAS_TRIP', description: 'The scheduled trips of a route' },
+    { label: 'OPERATES' },
+    { label: 'SERVES' },
+  ],
+}
+export const TRANSIT = compareOntologies(TRANSIT_V2, TRANSIT_V3, {
+  classification: 'breaking',
+  changes: [
+    attributeChange('node_type', 'Stop', 'wheelchairBoarding', 'removed', 'breaking'),
+    attributeChange('node_type', 'Stop', 'wheelchair_boarding', 'added', 'additive'),
+    attributeChange('node_type', 'Trip', 'bikesAllowed', 'removed', 'breaking'),
+    attributeChange('node_type', 'Trip', 'bikes_allowed', 'added', 'additive'),
+    conceptDescribed('relationship_type', 'HAS_TRIP'),
+  ],
+})

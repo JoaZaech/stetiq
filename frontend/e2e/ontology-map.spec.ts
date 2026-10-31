@@ -147,11 +147,11 @@ test('subclass links are drawn apart from Pattern links, and deprecated items fa
   const shape = (name: string) => group(name).locator(':scope > *').first()
   expect(await opacity(shape('LegacyTicket'))).toBeLessThan(1)
   expect(await struck(map.getByText('LegacyTicket', { exact: true }))).toBe(true)
-  expect(await opacity(group('(Customer)-[FILED]->(LegacyTicket)'))).toBeLessThan(1)
+  expect(await opacity(linkPath(map, '(Customer)-[FILED]->(LegacyTicket)'))).toBeLessThan(1)
   expect(await struck(map.getByText('FILED', { exact: true }))).toBe(true)
   expect(await opacity(shape('Ticket'))).toBe(1)
   expect(await struck(map.getByText('Ticket', { exact: true }))).toBe(false)
-  expect(await opacity(group('(Customer)-[OPENED]->(Ticket)'))).toBe(1)
+  expect(await opacity(linkPath(map, '(Customer)-[OPENED]->(Ticket)'))).toBe(1)
   expect(await struck(map.getByText('OPENED', { exact: true }))).toBe(false)
 })
 

@@ -1,9 +1,30 @@
-/** Where the Map centres: on the selection it opened on, or on a search result picked. */
+/**
+ * Where the Map centres: on the selection it opened on, or on a search result picked; and
+ * what it frames when it opens on none.
+ */
 import { type ConceptSelection, formatSelection } from '../concept-selection'
 import type { OntologyMap } from './ontology-map'
-import type { MapSelection } from './ontology-map-focus'
+import type { MapFocus, MapSelection } from './ontology-map-focus'
 import type { Point } from './ontology-map-layout'
 import { NODE_SIZE, type Size } from './ontology-map-sizes'
+
+/**
+ * The least zoom the Map's first view frames at, so a class's name stays readable (about
+ * 12px); a first view framing more is left to be panned. The Fit view control has no such
+ * floor: it frames the whole Map.
+ */
+export const FIRST_VIEW_MIN_ZOOM = 0.85
+
+/**
+ * The classes a Map opened on no selection first frames: those `changed` (`changedOf`), and
+ * the two classes of each changed link, sorted. Null, to frame the whole Map, when nothing
+ * changed.
+ */
+export function firstFramed(map: OntologyMap, changed: MapFocus): string[] | null {
+  const links = map.links.filter((l) => changed.links.has(l.id))
+  const classes = new Set([...changed.classes, ...links.flatMap((l) => [l.source, l.target])])
+  return classes.size > 0 ? [...classes].sort() : null
+}
 
 /**
  * The point to centre the Map on for `selection`: a class's centre, or the midpoint of

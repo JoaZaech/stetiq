@@ -4,12 +4,11 @@ import { useOntologyDiff } from '@/api/ontology-diff'
 import { kgUrl } from '@/app/knowledge-graph-sections'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { PageHeader } from '@/components/PageHeader'
-import { ViewToggle } from '@/components/ViewToggle'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { parseVersionNumber } from '@/lib/version-number'
 import { useComparedIds, useKnowledgeGraphName } from '../../params'
 import { useComparisonView } from './comparison-view'
-import { MAP_VIEW_OPTIONS } from '../map-view'
+import { useMapViewControls } from '../map-view-controls'
 import { OntologyComparisonMap } from './OntologyComparisonMap'
 import { OntologyComparisonTable } from './OntologyComparisonTable'
 
@@ -23,6 +22,7 @@ export function OntologyDiffPage() {
   const name = useKnowledgeGraphName()
   const ids = useComparedIds()
   const [view, setView] = useComparisonView()
+  const { controls, filtersIn } = useMapViewControls(view, setView)
   const [base, target] = ids.length === 2 ? ids.map(parseVersionNumber) : []
   const diff = useOntologyDiff(name, base ?? NaN, target ?? NaN)
 
@@ -44,12 +44,12 @@ export function OntologyDiffPage() {
             <VersionLink name={name} number={target} />.
           </>
         }
-        actions={<ViewToggle options={MAP_VIEW_OPTIONS} mode={view} onChange={setView} />}
+        actions={controls}
       />
       {diff.isError ? (
         <ErrorAlert error={diff.error} />
       ) : view === 'map' ? (
-        <OntologyComparisonMap knowledgeGraph={name} base={base} target={target} />
+        <OntologyComparisonMap knowledgeGraph={name} base={base} target={target} filtersIn={filtersIn} />
       ) : (
         <OntologyComparisonTable knowledgeGraph={name} base={base} target={target} />
       )}

@@ -2,7 +2,8 @@
  * What the Map draws, and how it answers the user: the Map's view state. It takes the
  * Ontology (or a comparison), the page's `?select=`, the Concept search, the Map's filters
  * and the user's gestures, and returns the selection, its focus, details and paths, the
- * search results, how each item is emphasized or faded, and whether to centre.
+ * search results, how each item is emphasized or faded, whether to centre, and what the
+ * one panel beside the Map shows.
  * `OntologyMap` renders the `DrawnMap` that `createDrawnMapOf`'s function computes and forwards gestures to
  * `respondTo`.
  */
@@ -11,9 +12,11 @@ import type { OntologyChange } from '@/api/ontology-diff'
 import { changesOf, type OntologyComparison, selectionOf } from '../comparison/ontology-map-comparison'
 import { type ConceptSelection, formatSelection, parseSelection } from '../concept-selection'
 import type { ClassOrRelation } from '../concepts'
-import { locatedSelection } from './ontology-map-centre'
+import { firstFramed, locatedSelection } from './ontology-map-centre'
 import { filterOntologyMap, ontologyMap, type MapFilters, type OntologyMap } from './ontology-map'
 import {
+  changedOf,
+  contextOf,
   detailsOf,
   focusOf,
   pathFocus,
@@ -31,12 +34,14 @@ import { type SearchResults, searchOntology } from './ontology-map-search'
 
 /**
  * How an item is drawn against the selection and the search: `selected` is the selection
- * itself, `match` a search match, and `faded` is out of the selection's focus or, with no
- * selection, not a match of an active search.
+ * itself, `match` a search match, `context` out of the selection's focus but changed in a
+ * comparison, so it stays readable, and `faded` is out of the focus and unchanged or, with
+ * no selection, not a match of an active search.
  */
 export type Emphasis = {
   selected: boolean
   match: boolean
+  context: boolean
   faded: boolean
 }
 
@@ -61,6 +66,8 @@ export interface MapState {
    * which the Map stays centred on while it lasts.
    */
   located: string | null
+  /** The selection last cleared, whose entry the change summary returns to (`MapPanel`'s `returnTo`). */
+  returnTo: MapSelection | null
 }
 
 /** The state of a Map opened on `selected`: unfiltered, and centred on `selected`. */
@@ -68,6 +75,7 @@ export const initialMapState = (selected: ConceptSelection | null): MapState => 
   filters: { hideDeprecated: false, hideSubclassLinks: false },
   preview: null,
   located: selected && formatSelection(selected),
+  returnTo: null,
 })
 
 /** What the Map draws. */
@@ -98,8 +106,46 @@ export interface DrawnMap {
   changes: OntologyChange[] | null
   /** What to centre on (`centreOf`): the selection, while it is still the one located. */
   centreOn: MapSelection | null
-  /** Whether to fit the whole Map in view: it opened on no selection. */
+  /** Whether to fit the Map in view: it opened on no selection. */
   fitView: boolean
+  /** The classes that fit frames (`firstFramed`): a comparison's changes; null for the whole Map. */
+  fitTo: string[] | null
+  /** What the one panel beside the Map shows; null for no panel. */
+  panel: MapPanel | null
+}
+
+/**
+ * What the one panel beside the Map shows: a comparison's change summary, the search's
+ * results, or the selection's details or shortest paths.
+ */
+export type MapPanel =
+  /** `returnTo`: the selection whose details it came back from, its entry scrolled to. */
+  | { kind: 'summary'; returnTo: MapSelection | null }
+  | { kind: 'results' }
+  /** `back`: where the panel's back link returns to; null for none, so the panel closes. */
+  | { kind: 'details' | 'path'; back: MapPanelBack | null }
+
+/** Where a selection's panel goes back to: the change summary or the search's results. */
+export type MapPanelBack = 'changes' | 'results'
+
+/**
+ * The panel beside the Map: the selection's `details` or `paths`, back to the search's
+ * results while there is a `query`, else to a comparison's change summary; with nothing
+ * selected, the results, else the summary, at the entry it `returnTo`s.
+ */
+function panelOf(
+  comparison: OntologyComparison | undefined,
+  query: string,
+  details: MapDetails | null,
+  paths: MapPath[] | null,
+  returnTo: MapSelection | null,
+): MapPanel | null {
+  const searching = query.trim() !== ''
+  const back = searching ? 'results' : comparison ? 'changes' : null
+  if (paths) return { kind: 'path', back }
+  if (details) return { kind: 'details', back }
+  if (searching) return { kind: 'results' }
+  return comparison ? { kind: 'summary', returnTo } : null
 }
 
 /** `f`, remembering its last result while its arguments stay the same. */
@@ -148,9 +194,16 @@ export function createDrawnMapOf(): (input: MapInput, state: MapState) => DrawnM
   const changesBehind = remember((comparison: OntologyComparison | undefined, selection: MapSelection | null) =>
     comparison ? changesOf(comparison, selection) : null,
   )
+  const changedIn = remember((comparison: OntologyComparison | undefined) => comparison && changedOf(comparison))
+  const fitToOf = remember((map: OntologyMap, changed: MapFocus | undefined) => changed ? firstFramed(map, changed) : null)
   const emphasisOf = remember(
-    (shown: OntologyMap, selection: MapSelection | null, focus: MapFocus | null, matches: MapFocus | null) =>
-      emphasize(shown, selection, focus, matches),
+    (
+      shown: OntologyMap,
+      selection: MapSelection | null,
+      focus: MapFocus | null,
+      matches: MapFocus | null,
+      changed: MapFocus | undefined,
+    ) => emphasize(shown, selection, focus, matches, changed),
   )
 
   return (input, state) => {
@@ -165,6 +218,8 @@ export function createDrawnMapOf(): (input: MapInput, state: MapState) => DrawnM
     const focus = focusOfPreview(reachable, state.preview, selectedFocus)
     const results = resultsOf(ontology, query)
     const matches = matchesOf(map, query, results)
+    const details = detailsOfSelection(ontology, selection, selectedFocus)
+    const changed = changedIn(comparison)
     return {
       input,
       state,
@@ -172,13 +227,15 @@ export function createDrawnMapOf(): (input: MapInput, state: MapState) => DrawnM
       shown,
       selection,
       focus,
-      details: detailsOfSelection(ontology, selection, selectedFocus),
+      details,
       paths,
       results,
-      ...emphasisOf(shown, selection, focus, matches),
+      ...emphasisOf(shown, selection, focus, matches, changed),
       changes: changesBehind(comparison, selection),
       centreOn: locatedSelection(state.located, selected, selection),
       fitView: state.located === null,
+      fitTo: fitToOf(map, changed),
+      panel: panelOf(comparison, query, details, paths, state.returnTo),
     }
   }
 }
@@ -214,7 +271,7 @@ export type MapGesture =
   | { kind: 'click-class'; label: string; shift: boolean }
   /** A click on a Pattern link. */
   | { kind: 'click-link'; id: string }
-  /** A click on the Map's background, or a details or path panel closed. */
+  /** A click on the Map's background, or a details or path panel closed or left by its back link. */
   | { kind: 'clear' }
   /** The Escape key. */
   | { kind: 'escape' }
@@ -250,9 +307,9 @@ export function respondTo(
     case 'click-link':
       return { state, select: { kind: 'link', id: gesture.id } }
     case 'clear':
-      return { state, select: null }
+      return { state: { ...state, returnTo: selection }, select: null }
     case 'escape':
-      return selection ? { state, select: null } : { state }
+      return selection ? { state: { ...state, returnTo: selection }, select: null } : { state }
     case 'pick': {
       // The Map stays centred on what is picked while it stays selected.
       const picked = pickOf(view, gesture.result)
@@ -269,18 +326,21 @@ export function respondTo(
 
 /**
  * How each shown item is drawn: the selection (a class, a link, or a path's two classes
- * and its links) selected, search matches matched, and what is out of the focus faded, or,
- * with no focus, what an active search does not match. A subclass link fades with either
- * of its classes.
+ * and its links) selected, search matches matched, what is out of the focus but `changed`
+ * in a comparison kept as context (`contextOf`), and the rest of what is out of the focus
+ * faded, or, with no focus, what an active search does not match. A subclass link fades
+ * with either of its classes.
  */
 function emphasize(
   shown: OntologyMap,
   selection: MapSelection | null,
   focus: MapFocus | null,
   matches: MapFocus | null,
+  changed: MapFocus | undefined,
 ): Pick<DrawnMap, 'classes' | 'links' | 'subclassLinks'> {
-  const faded = (key: string, focused?: Set<string>, matched?: Set<string>) =>
-    focused ? !focused.has(key) : matched ? !matched.has(key) : false
+  const context = focus && changed ? contextOf(focus, changed) : null
+  const faded = (key: string, focused?: Set<string>, kept?: Set<string>, matched?: Set<string>) =>
+    focused ? !focused.has(key) && !kept?.has(key) : matched ? !matched.has(key) : false
   const classes = Object.fromEntries(
     shown.nodes.map(({ label }): [string, Emphasis] => [
       label,
@@ -290,7 +350,8 @@ function emphasize(
             ? selection.label === label
             : selection?.kind === 'path' && (selection.from === label || selection.to === label),
         match: matches?.classes.has(label) ?? false,
-        faded: faded(label, focus?.classes, matches?.classes),
+        context: context?.classes.has(label) ?? false,
+        faded: faded(label, focus?.classes, context?.classes, matches?.classes),
       },
     ]),
   )
@@ -301,7 +362,8 @@ function emphasize(
         selected:
           selection?.kind === 'link' ? selection.id === id : selection?.kind === 'path' && (focus?.links.has(id) ?? false),
         match: matches?.links.has(id) ?? false,
-        faded: faded(id, focus?.links, matches?.links),
+        context: context?.links.has(id) ?? false,
+        faded: faded(id, focus?.links, context?.links, matches?.links),
         focused: focus?.links.has(id) ?? false,
       },
     ]),

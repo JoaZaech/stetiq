@@ -25,6 +25,12 @@ async function zoomUntil(map: Locator, button: 'Zoom In' | 'Zoom Out', done: (zo
 /** The least zoom at which link labels are readable (`READABLE_ZOOM`). */
 const READABLE_ZOOM = 0.7
 
+/** The least zoom the Map's first view frames at (`FIRST_VIEW_MIN_ZOOM`). */
+const FIRST_VIEW_MIN_ZOOM = 0.85
+
+/** The Map's least zoom (`OntologyMap`'s `minZoom`), which Fit view stops at. */
+const MAP_MIN_ZOOM = 0.2
+
 test.describe('on the Ontology tab', () => {
   test.use({ seed: 'ontology_map' })
 
@@ -133,12 +139,12 @@ test.describe('on the Ontology tab', () => {
 test.describe('an Ontology bigger than the Map', () => {
   test.use({ seed: 'ontology_map_large' })
 
-  test('opens, and fits to view, at the readable zoom, not smaller', async ({ page }) => {
+  test('opens at the zoom class names can be read at, and Fit view zooms out past that to frame all of it', async ({ page }) => {
     await page.goto('/ui/kg/support/versions/1/ontology')
     const map = ontologyMap(page)
     await expect(map.getByRole('group', { name: 'Class00', exact: true })).toBeAttached()
 
-    await expect.poll(() => zoom(map)).toBeCloseTo(READABLE_ZOOM, 2)
+    await expect.poll(() => zoom(map)).toBeCloseTo(FIRST_VIEW_MIN_ZOOM, 2)
     // Too big to fit: some classes lie outside the Map, to be panned to.
     const outside = await map.getByRole('group', { name: /^Class\d\d$/ }).evaluateAll((nodes, box) => {
       const { left, right, top, bottom } = box as DOMRect
@@ -149,9 +155,9 @@ test.describe('an Ontology bigger than the Map', () => {
     }, await map.evaluate((el) => el.getBoundingClientRect().toJSON()))
     expect(outside).toBe(true)
 
-    await zoomUntil(map, 'Zoom Out', (z) => z < READABLE_ZOOM / 2)
+    // Fit view zooms out past the first view's floor to frame the whole Map, as far as the
+    // Map's least zoom; this one is too big to fit even there.
     await map.getByRole('button', { name: 'Fit View' }).click()
-
-    await expect.poll(() => zoom(map)).toBeCloseTo(READABLE_ZOOM, 2)
+    await expect.poll(() => zoom(map)).toBeCloseTo(MAP_MIN_ZOOM, 2)
   })
 })
