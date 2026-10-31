@@ -20,7 +20,7 @@ import {
   type Node,
   type NodeProps,
 } from '@xyflow/react'
-import { CLASSIFICATION_LABEL, CLASSIFICATIONS, isCosmetic, type OntologyChange } from '@/api/ontology-diff'
+import { CLASSIFICATION_LABEL, type OntologyChange } from '@/api/ontology-diff'
 import type { Ontology } from '@/api/ontology-versions'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { ClassificationBadge } from '@/components/OntologyDiff'
@@ -95,6 +95,12 @@ const SUBCLASS_ARROWHEAD = 'ontology-map-subclass-arrowhead'
 /** Fit-to-view frames the whole Map, never zooming out so far that class names can no longer be read. */
 const FIT_VIEW_OPTIONS = { minZoom: FIT_MIN_ZOOM }
 
+/**
+ * How far the change-kind key sits from the canvas's left edge: past the zoom controls
+ * (React Flow's 15px margin and 26px buttons), with a gap.
+ */
+const KEY_LEFT = 15 + 26 + 8
+
 /** The dash of a removed link: a ghost of where it used to be. */
 const REMOVED_DASH = '6 4'
 
@@ -111,8 +117,8 @@ interface ChangeStyle {
   outlined: boolean
   /** A small neutral dot beside its label, in no severity's colour. */
   dot: boolean
-  /** The legend's swatch. */
-  swatch: string
+  /** Its swatch in the change-kind key; cosmetic has none, its key being the panel's documentation-only dot. */
+  swatch?: string
 }
 
 /**
@@ -160,7 +166,6 @@ const CHANGE_STYLE: Record<MapChangeKind, ChangeStyle> = {
     muted: false,
     outlined: false,
     dot: true,
-    swatch: 'flex items-center justify-center border bg-card',
   },
   unchanged: {
     node: 'bg-muted text-muted-foreground shadow-none',
@@ -180,7 +185,7 @@ const BACK_LABEL: Record<MapPanelBack, string> = { changes: 'All changes', resul
 /** How `change` is drawn, or nothing outside a comparison. */
 const changeStyle = (change?: MapChange): Partial<ChangeStyle> => (change ? CHANGE_STYLE[change.kind] : {})
 
-/** A change kind as the UI names it (the legend, `data-change`): cosmetic is "documentation-only", as its class is. */
+/** A change kind as the UI names it (the change-kind key, `data-change`): cosmetic is "documentation-only", as its class is. */
 const changeKindLabel = (kind: MapChangeKind): string => (kind === 'cosmetic' ? CLASSIFICATION_LABEL.cosmetic : kind)
 
 type OntologyMapProps = {
@@ -337,7 +342,7 @@ export function OntologyMap({ ontology, comparison, query = '', filtersIn }: Ont
         fitViewOptions={openingFit}
       >
         <Controls showInteractive={false} fitViewOptions={FIT_VIEW_OPTIONS} />
-        {comparison && <ComparisonLegend />}
+        {comparison && <ChangeKindKey />}
         <CentreOn point={centre} />
       </ReactFlow>
       {comparison && collapsed ? (
@@ -438,26 +443,24 @@ function ChangeDetails({ changes }: { changes: OntologyChange[] }) {
   )
 }
 
-/** A comparison's key to change kind (mark style) and severity (the Diff colours). */
-function ComparisonLegend() {
+/**
+ * A comparison's key to change kind (mark style), one row at the bottom-left beside the
+ * zoom controls. Severity's key is the panel's headline counts, not this.
+ */
+function ChangeKindKey() {
   return (
-    <Panel
-      position="top-left"
-      aria-label="Legend"
-      className="flex max-w-[45%] flex-wrap items-center gap-x-3 gap-y-1 rounded-md border bg-card px-3 py-2 text-xs shadow-xs"
-    >
-      {(Object.entries(CHANGE_STYLE) as [MapChangeKind, ChangeStyle][]).map(([kind, { swatch, dot }]) => (
-        <span key={kind} className="flex items-center gap-1">
-          <span aria-hidden className={cn('inline-block h-3 w-5 rounded-sm', swatch)}>
-            {dot && <CosmeticDot />}
-          </span>
-          {changeKindLabel(kind)}
-        </span>
-      ))}
-      {/* Cosmetic has no Diff colour: its key is the cosmetic mark above. */}
-      {CLASSIFICATIONS.filter((s) => !isCosmetic(s)).map((s) => (
-        <ClassificationBadge key={s} classification={s} />
-      ))}
+    <Panel position="bottom-left" role="region" aria-label="Change kind" style={{ marginLeft: KEY_LEFT }}>
+      <ul className="flex items-center gap-3 rounded-md border bg-card px-2 py-1 text-xs whitespace-nowrap shadow-xs">
+        {(Object.entries(CHANGE_STYLE) as [MapChangeKind, ChangeStyle][]).map(
+          ([kind, { swatch }]) =>
+            swatch && (
+              <li key={kind} className="flex items-center gap-1.5">
+                <span aria-hidden className={cn('inline-block h-3 w-5 rounded-sm', swatch)} />
+                {changeKindLabel(kind)}
+              </li>
+            ),
+        )}
+      </ul>
     </Panel>
   )
 }
