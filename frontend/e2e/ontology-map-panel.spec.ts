@@ -36,11 +36,11 @@ test('one panel on the right goes from the change summary to details and back to
   await expect(entry(summary, 'Stop').getByRole('button')).toHaveAttribute('aria-current', 'true')
   await expect(entry(summary, 'Stop')).toBeInViewport()
 
-  // A documentation-only link selected on the Map returns to its entry, its group opened.
+  // A documentation-only link selected on the Map returns to its entry, its section opened.
   await item(ontologyMap(page), '(Route)-[HAS_TRIP]->(Trip)').click()
   await expect(details.getByRole('heading', { name: 'HAS_TRIP' })).toBeVisible()
   await details.getByRole('button', { name: 'All changes' }).click()
-  await expect(summary.getByRole('button', { name: '1 documentation-only change' })).toHaveAttribute(
+  await expect(summary.getByRole('button', { name: 'Documentation-only 1' })).toHaveAttribute(
     'aria-expanded',
     'true',
   )

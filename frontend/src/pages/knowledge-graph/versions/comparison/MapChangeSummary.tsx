@@ -1,10 +1,8 @@
-import { type ComponentProps, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { type ComponentProps, Fragment, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, PanelRightOpen } from 'lucide-react'
-import { CLASSIFICATION_LABEL, isCosmetic } from '@/api/ontology-diff'
-import { ClassificationBadge } from '@/components/OntologyDiff'
+import { type Classification, CLASSIFICATION_LABEL, isCosmetic } from '@/api/ontology-diff'
 import { SeveritySwatch } from '@/components/SeveritySwatch'
 import { Button } from '@/components/ui/button'
-import { formatCount } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { CONCEPT_NOUN } from '../concepts'
 import type { PatternLink } from '../map/ontology-map'
@@ -18,12 +16,14 @@ import {
   selectionOf,
   summarizeChanges,
   summaryConceptOf,
+  type SummarySection,
 } from './ontology-map-comparison'
 import { SEVERITY } from '@/components/severity-style'
 
 /**
  * The change summary, in a comparison's Map panel while nothing is selected: a count per
- * level, then each changed Concept's changes, the most severe first. Linked with the Map
+ * level, then a section per level of the changed Concepts whose most severe change is at
+ * it, the most severe first, documentation-only collapsed. Linked with the Map
  * both ways: pointing at an entry previews its Concept's focus (`onPreview`), clicking
  * selects it (`onSelect`), and the entry of `returnTo`, the selection the panel came back
  * from, is highlighted and scrolled to. An entry selects what the Map selects for its
@@ -59,20 +59,9 @@ export function MapChangeSummary({
       ) : (
         <>
           <LevelCounts role="status" className="font-medium" counts={summary.counts} />
-          {summary.concepts.length > 0 && (
-            <ul aria-label="Changed Concepts" className="space-y-1">
-              {summary.concepts.map((c) => (
-                <SummaryEntry key={`${c.kind}:${c.label}`} concept={c} link={link} />
-              ))}
-            </ul>
-          )}
-          {summary.cosmetic.length > 0 && (
-            <CosmeticChanges
-              concepts={summary.cosmetic}
-              count={summary.counts.find((c) => isCosmetic(c.level))?.count ?? 0}
-              link={link}
-            />
-          )}
+          {summary.sections.map((section) => (
+            <LevelSection key={section.level} section={section} link={link} />
+          ))}
         </>
       )}
     </MapSidePanel>
@@ -133,35 +122,52 @@ export function LevelCounts({
 }
 
 /**
- * The cosmetic (documentation-only) changes, collapsed to one line that expands to their entries.
- * It opens by itself when the Map selects one of them.
+ * One level's section: its heading, in the level's colour with its count of Concepts, then
+ * their entries. The documentation-only one is collapsed to its heading, and opens by
+ * itself when the Map selects one of its Concepts.
  */
-function CosmeticChanges({ concepts, count, link }: { concepts: ConceptChanges[]; count: number; link: MapLink }) {
+function LevelSection({ section: { level, concepts }, link }: { section: SummarySection; link: MapLink }) {
   const id = useId()
+  const collapsible = isCosmetic(level)
   const [expanded, setExpanded] = useState(false)
-  const open = expanded || (link.current !== null && concepts.includes(link.current))
+  const open = !collapsible || expanded || (link.current !== null && concepts.includes(link.current))
   const Chevron = open ? ChevronDown : ChevronRight
+  const label = (
+    <>
+      <span id={`${id}-name`}>{headingOf(level)}</span> <span className="tabular-nums">{concepts.length}</span>
+    </>
+  )
   return (
-    <div className="space-y-1">
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={id}
-        onClick={() => setExpanded(!open)}
-        className="flex w-full items-center gap-1 rounded-md p-2 text-left text-muted-foreground hover:bg-muted"
-      >
-        <Chevron aria-hidden className="size-4 shrink-0" />
-        {formatCount(count, 'documentation-only change')}
-      </button>
-      <ul id={id} hidden={!open} aria-label="Documentation-only changes" className="space-y-1">
+    <section aria-labelledby={`${id}-name`} className="space-y-1">
+      <h4 className={cn('font-semibold', SEVERITY.text[level])}>
+        {collapsible ? (
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls={`${id}-entries`}
+            onClick={() => setExpanded(!open)}
+            className="flex w-full items-center gap-1 rounded-md py-1 text-left hover:bg-muted"
+          >
+            <Chevron aria-hidden className="size-4 shrink-0" />
+            {label}
+          </button>
+        ) : (
+          label
+        )}
+      </h4>
+      <ul id={`${id}-entries`} hidden={!open} className="space-y-1">
         {concepts.map((c) => (
           <SummaryEntry key={`${c.kind}:${c.label}`} concept={c} link={link} />
         ))}
       </ul>
-    </div>
+    </section>
   )
 }
 
+/** A level as a section heading names it, e.g. "Documentation-only". */
+const headingOf = (level: Classification) => CLASSIFICATION_LABEL[level].replace(/^./, (c) => c.toUpperCase())
+
+/** An entry: the Concept's name on its own full-width line, its kind, then its changes. */
 function SummaryEntry({ concept, link }: { concept: ConceptChanges; link: MapLink }) {
   const { onPreview, onSelect } = link
   const current = concept === link.current
@@ -186,11 +192,10 @@ function SummaryEntry({ concept, link }: { concept: ConceptChanges; link: MapLin
           current && 'border-foreground bg-muted',
         )}
       >
-        <span className="flex items-center gap-2">
-          <span className="font-semibold break-all">{concept.label}</span>
-          <span className="text-xs text-muted-foreground">{CONCEPT_NOUN[concept.kind]}</span>
-          <ClassificationBadge classification={concept.level} />
+        <span data-concept-name className="block font-semibold break-normal wrap-normal">
+          <BreakAtUnderscores name={concept.label} />
         </span>
+        <span className="block text-xs text-muted-foreground">{CONCEPT_NOUN[concept.kind]}</span>
         {concept.statements.map((s) => (
           <Statement key={`${s.change.concept}:${s.change.detail}`} statement={s} />
         ))}
@@ -199,7 +204,20 @@ function SummaryEntry({ concept, link }: { concept: ConceptChanges; link: MapLin
   )
 }
 
-/** One change in words, e.g. "attribute `wheelchairBoarding` removed (breaking)". */
+/** `name`, which may break after each `_` and nowhere else: `HAS_STOP_TIME` never wraps mid-word. */
+function BreakAtUnderscores({ name }: { name: string }) {
+  return name.split(/(?<=_)/).map((part, i) => (
+    <Fragment key={i}>
+      {i > 0 && <wbr />}
+      {part}
+    </Fragment>
+  ))
+}
+
+/**
+ * One change in words, e.g. "attribute `wheelchair_boarding` added (additive)", naming its
+ * level only when it differs from its section's.
+ */
 function Statement({ statement: { attribute, text, level } }: { statement: ChangeStatement }) {
   return (
     <span className="block text-xs">
@@ -208,7 +226,8 @@ function Statement({ statement: { attribute, text, level } }: { statement: Chang
           attribute <code className="font-mono">{attribute}</code>{' '}
         </>
       )}
-      {text} <span className="text-muted-foreground">({CLASSIFICATION_LABEL[level]})</span>
+      {text}
+      {level !== null && <span className="text-muted-foreground"> ({CLASSIFICATION_LABEL[level]})</span>}
     </span>
   )
 }
