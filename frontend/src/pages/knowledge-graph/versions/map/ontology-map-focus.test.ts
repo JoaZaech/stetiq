@@ -1,9 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import type { Ontology } from '@/api/ontology-versions'
 import { ontologyMap } from './ontology-map'
-import { detailsOf, focusOf, neighboursOf, relationSelection, searchMap } from './ontology-map-focus'
+import {
+  changedOf,
+  contextOf,
+  detailsOf,
+  focusOf,
+  neighboursOf,
+  relationSelection,
+  searchMap,
+} from './ontology-map-focus'
 import { searchOntology } from './ontology-map-search'
-import { HIERARCHY, ONTOLOGY, PARTIES } from './ontology-map.fixtures'
+import { HIERARCHY, ONTOLOGY, PARTIES, TRANSIT } from './ontology-map.fixtures'
 
 describe('neighboursOf', () => {
   it('finds the classes a class links to and the classes that link to it', () => {
@@ -179,5 +187,23 @@ describe('relationSelection', () => {
   it('stands for nothing when none of the links is the relation’s', () => {
     expect(relationSelection(links, 'UNKNOWN', () => true)).toBeNull()
     expect(relationSelection([], 'REPORTED', () => true)).toBeNull()
+  })
+})
+
+describe('contextOf', () => {
+  it('keeps the changed items out of focus as context, so only the unchanged ones fade', () => {
+    const focus = focusOf(TRANSIT.map, { kind: 'link', id: '(Agency)-[OPERATES]->(Route)' })!
+
+    // Trip and Stop broke, and HAS_TRIP is documentation-only; SERVES did not change.
+    expect(contextOf(focus, changedOf(TRANSIT))).toEqual({
+      classes: new Set(['Stop', 'Trip']),
+      links: new Set(['(Route)-[HAS_TRIP]->(Trip)']),
+    })
+  })
+
+  it('leaves out what is in focus', () => {
+    const focus = focusOf(TRANSIT.map, { kind: 'class', label: 'Trip' })!
+
+    expect(contextOf(focus, changedOf(TRANSIT))).toEqual({ classes: new Set(), links: new Set() })
   })
 })

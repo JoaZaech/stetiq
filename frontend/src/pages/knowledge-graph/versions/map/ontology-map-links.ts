@@ -8,8 +8,8 @@ import { labelSize, type Size } from './ontology-map-sizes'
 export type Box = Point & Size
 
 /**
- * The least zoom at which a link's label can be read. Fit-to-view never zooms out past
- * it, and below it only the labels that matter right now show (see `labelShown`).
+ * The least zoom at which a link's label can be read: below it only the labels that matter
+ * right now show (see `labelShown`). Fit-to-view stops above it, at `FIT_MIN_ZOOM`.
  */
 export const READABLE_ZOOM = 0.7
 
