@@ -199,6 +199,6 @@ test.describe('city transit, v2 → v3', () => {
     // SERVES did not change: it fades out of the focus.
     await expect
       .poll(() => linkPath(map, '(Trip)-[SERVES]->(Stop)').evaluate((el: SVGElement) => Number(el.style.opacity)))
-      .toBe(0.2)
+      .toBe(0.3)
   })
 })

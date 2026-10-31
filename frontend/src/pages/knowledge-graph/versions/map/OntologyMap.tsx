@@ -86,7 +86,7 @@ type PatternEdge = Edge<
   { relation: string; route: LinkRoute; deprecated: boolean } & LinkEmphasis & MapChangeData,
   'pattern'
 >
-type SubclassEdge = Edge<MapChangeData, 'subclass'>
+type SubclassEdge = Edge<{ faded: boolean } & MapChangeData, 'subclass'>
 
 const NODE_TYPES = { class: ClassNodeView }
 const EDGE_TYPES = { pattern: PatternEdgeView, subclass: SubclassEdgeView }
@@ -102,6 +102,19 @@ const KEY_LEFT = 15 + 26 + 8
 
 /** The dash of a removed link: a ghost of where it used to be. */
 const REMOVED_DASH = '6 4'
+
+/**
+ * The Map's opacity steps, one per reason a mark recedes, the strongest first: `faded` out
+ * of the focus; `context`, out of it but changed, so still readable; `muted`, unchanged in
+ * a comparison; `deprecated`.
+ */
+const OPACITY = { faded: 0.3, context: 0.6, muted: 0.4, deprecated: 0.5 } as const
+
+/** A mark's opacity: the step of the strongest of its `reasons` to recede (`OPACITY`); none for none. */
+function opacityOf(reasons: Partial<Record<keyof typeof OPACITY, boolean>>): number | undefined {
+  const reason = (Object.keys(OPACITY) as (keyof typeof OPACITY)[]).find((r) => reasons[r])
+  return reason && OPACITY[reason]
+}
 
 /** How one change kind is drawn on every mark. */
 interface ChangeStyle {
@@ -286,7 +299,6 @@ export function OntologyMap({ ontology, comparison, query = '', filtersIn }: Ont
         ...links[l.id],
       },
       ariaLabel: l.id,
-      className: cn(l.deprecated && 'opacity-50'),
       markerEnd: {
         type: MarkerType.ArrowClosed,
         color: severityStroke(comparison?.changes.links[l.id]?.severity ?? null) ?? 'var(--muted-foreground)',
@@ -297,9 +309,8 @@ export function OntologyMap({ ontology, comparison, query = '', filtersIn }: Ont
       type: 'subclass',
       source: l.child,
       target: l.parent,
-      data: { change: comparison?.changes.subclassLinks[l.id] },
+      data: { change: comparison?.changes.subclassLinks[l.id], ...subclassLinks[l.id] },
       ariaLabel: l.id,
-      className: cn(subclassLinks[l.id].faded && 'opacity-20'),
       markerEnd: SUBCLASS_ARROWHEAD,
     }))
     return { nodes, edges: [...subclassEdges, ...patternEdges] }
@@ -535,18 +546,16 @@ function ClassNodeView({ data }: NodeProps<ClassNode>) {
       data-severity={severity ?? undefined}
       className={cn(
         'flex size-full cursor-pointer flex-col items-center justify-center rounded-md border bg-card px-2 text-sm font-medium text-card-foreground shadow-xs transition-opacity',
-        // Deprecated: faded, with a struck-through label.
-        data.deprecated && 'opacity-50',
         // Change kind as mark style, severity in the Diff colours.
         style.node,
         severity && style.nodeSeverity?.map((part) => SEVERITY[part][severity]),
         // Search matches get a ring in the primary colour: diff-* hues are reserved for severity.
         data.match && 'ring-2 ring-primary ring-offset-2 ring-offset-background',
         data.selected && 'border-2 border-foreground',
-        // Changed but out of focus: readable as context, its severity still drawn.
-        data.context && 'opacity-60',
-        data.faded && 'opacity-30',
       )}
+      // Deprecated: faded, with a struck-through label. Changed but out of focus: readable
+      // as context, its severity still drawn.
+      style={{ opacity: opacityOf({ faded: data.faded, context: data.context, deprecated: data.deprecated }) }}
     >
       <span
         className={cn('flex shrink-0 items-center font-mono whitespace-nowrap', data.deprecated && 'line-through')}
@@ -614,7 +623,12 @@ function PatternEdgeView({ id, source, target, data, markerEnd }: EdgeProps<Patt
           stroke,
           strokeWidth: emphasized ? 2 : undefined,
           strokeDasharray: style.dashed ? REMOVED_DASH : undefined,
-          opacity: data.faded ? 0.2 : data.context ? 0.6 : style.muted ? 0.4 : undefined,
+          opacity: opacityOf({
+            faded: data.faded,
+            context: data.context,
+            muted: style.muted,
+            deprecated: data.deprecated,
+          }),
           cursor: 'pointer',
         }}
       />
@@ -633,12 +647,15 @@ function PatternEdgeView({ id, source, target, data, markerEnd }: EdgeProps<Patt
             style={{ left: label.x, top: label.y, width: label.width, height: label.height, fontSize: MONOSPACE_FONT_SIZE }}
           >
             <span
-              className={cn(
-                data.deprecated && 'line-through opacity-50',
-                style.muted && 'opacity-60',
-                data.context && 'opacity-60',
-                data.faded && 'opacity-30',
-              )}
+              className={cn(data.deprecated && 'line-through')}
+              style={{
+                opacity: opacityOf({
+                  faded: data.faded,
+                  context: data.context,
+                  muted: style.muted,
+                  deprecated: data.deprecated,
+                }),
+              }}
             >
               {data.relation}
             </span>
@@ -669,6 +686,7 @@ function SubclassEdgeView({ id, source, target, markerEnd, data }: EdgeProps<Sub
         strokeOpacity: style.muted ? 0.3 : 0.6,
         strokeWidth: 1,
         strokeDasharray: style.dashed ? REMOVED_DASH : undefined,
+        opacity: opacityOf({ faded: data?.faded }),
       }}
     />
   )
