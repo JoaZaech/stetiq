@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react'
 import {
   CLASSIFICATION_LABEL,
-  CLASSIFICATIONS,
   type Classification,
-  type OntologyChange,
+  compareSeverity,
+  MOST_SEVERE_FIRST,
   type OntologyDiff,
   useOntologyDiff,
 } from '@/api/ontology-diff'
@@ -19,9 +19,6 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
-
-/** Most severe first. */
-const MOST_SEVERE_FIRST = [...CLASSIFICATIONS].reverse()
 
 /** The Diff colours, used for nothing else in the app; cosmetic has none. */
 const CLASSIFICATION_STYLE: Record<Classification, string> = {
@@ -68,7 +65,7 @@ interface OntologyDiffViewProps {
  * deprecating or breaking (most severe first). A region named "Ontology Diff".
  */
 export function OntologyDiffView({ diff, base, target, caption }: OntologyDiffViewProps) {
-  const changes = bySeverity(diff.changes)
+  const changes = [...diff.changes].sort((a, b) => compareSeverity(b.classification, a.classification))
   return (
     <section aria-label="Ontology Diff" className="space-y-4">
       {caption && <p className="text-sm text-muted-foreground">{caption}</p>}
@@ -127,9 +124,4 @@ export function ClassificationBadge({ classification }: { classification: Classi
       {CLASSIFICATION_LABEL[classification]}
     </Badge>
   )
-}
-
-function bySeverity(changes: OntologyChange[]): OntologyChange[] {
-  const rank = (c: OntologyChange) => MOST_SEVERE_FIRST.indexOf(c.classification)
-  return [...changes].sort((a, b) => rank(a) - rank(b))
 }

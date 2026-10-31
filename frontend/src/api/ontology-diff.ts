@@ -10,6 +10,21 @@ export const CLASSIFICATIONS = ['cosmetic', 'additive', 'deprecating', 'breaking
 export type Classification = (typeof CLASSIFICATIONS)[number]
 
 /**
+ * What "more severe" means, everywhere: orders classifications from the least to the most
+ * severe, cosmetic first (a sort comparator). Sort with `(a, b) => compareSeverity(b, a)`
+ * for the most severe first.
+ */
+export const compareSeverity = (a: Classification, b: Classification): number =>
+  CLASSIFICATIONS.indexOf(a) - CLASSIFICATIONS.indexOf(b)
+
+/** The most severe of `classifications`, or null for none. */
+export const mostSevere = (classifications: Iterable<Classification>): Classification | null =>
+  [...classifications].reduce<Classification | null>((a, c) => (a === null || compareSeverity(c, a) > 0 ? c : a), null)
+
+/** Every classification, the most severe first. */
+export const MOST_SEVERE_FIRST: readonly Classification[] = [...CLASSIFICATIONS].sort((a, b) => compareSeverity(b, a))
+
+/**
  * How the UI names each classification. Cosmetic changes (only a description changed)
  * are "documentation-only" here, as the comparison has always called them.
  */

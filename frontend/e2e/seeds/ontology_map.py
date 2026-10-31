@@ -105,6 +105,28 @@ def ontology_map_patterns(client: stetiq.Client) -> dict[str, Any]:
     return {}
 
 
+# A relation whose first changed Pattern a filter hides: v2 adds OPENED from Agent to the
+# deprecated LegacyTicket and to Ticket, beside v1's unchanged (Customer)-[OPENED]->(Ticket).
+MAP_HIDDEN_PATTERN_V1 = """
+node_types: [Agent, Customer, {label: LegacyTicket, deprecated: true}, Ticket]
+relationship_types: [OPENED]
+patterns: [[Customer, OPENED, Ticket]]
+"""
+
+
+MAP_HIDDEN_PATTERN_V2 = MAP_HIDDEN_PATTERN_V1.replace(
+    "patterns: [[Customer, OPENED, Ticket]]",
+    "patterns: [[Agent, OPENED, LegacyTicket], [Agent, OPENED, Ticket], [Customer, OPENED, Ticket]]",
+)
+
+
+def ontology_map_hidden_pattern(client: stetiq.Client) -> dict[str, Any]:
+    """Knowledge Graph `support` with v1 = `MAP_HIDDEN_PATTERN_V1` and v2 = `MAP_HIDDEN_PATTERN_V2`."""
+    client.create_knowledge_graph("support", ontology=MAP_HIDDEN_PATTERN_V1)
+    client.register_ontology("support", MAP_HIDDEN_PATTERN_V2)
+    return {}
+
+
 # Changed attributes on the Ontology Map: v2 renames Stop.wheelchairBoarding to
 # wheelchair_boarding and makes Stop.name required; Stop.code and Route are untouched.
 MAP_ATTRIBUTES_V1 = """
@@ -275,6 +297,7 @@ def ontology_map_search(client: stetiq.Client) -> dict[str, Any]:
 SCENARIOS: tuple[Scenario, ...] = (
     ontology_map,
     ontology_map_patterns,
+    ontology_map_hidden_pattern,
     ontology_map_attributes,
     ontology_map_details,
     ontology_map_path,

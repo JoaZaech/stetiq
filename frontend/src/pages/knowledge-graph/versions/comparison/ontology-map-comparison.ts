@@ -1,16 +1,23 @@
-/** Two Ontology Versions superimposed on one Map, each item marked with how it changed. */
+/**
+ * The comparison of two Ontology Versions: everything the Map, its change summary and the
+ * comparison Table read from (base, target, Ontology Diff). The two versions superimposed
+ * on one Map, each item marked with how it changed; the change summary, a count per level
+ * and each changed Concept's changes in words; and where a Concept is on the Map.
+ */
 import {
-  CLASSIFICATIONS,
   type Classification,
+  compareSeverity,
+  MOST_SEVERE_FIRST,
+  mostSevere,
   type OntologyChange,
   type OntologyDiff,
   type OwnerKind,
 } from '@/api/ontology-diff'
 import type { Ontology } from '@/api/ontology-versions'
 import { codePointOrder } from '@/lib/compare'
-import { patternId } from '../concepts'
+import { type ClassOrRelation, CONCEPT_NOUN, patternId } from '../concepts'
 import { ontologyMap, type OntologyMap, type PatternLink } from '../map/ontology-map'
-import type { MapSelection } from '../map/ontology-map-focus'
+import { type MapSelection, relationSelection } from '../map/ontology-map-focus'
 
 /**
  * How an item of a comparison changed from the base to the target version: present in
@@ -68,13 +75,6 @@ export interface OntologyComparison {
   }
 }
 
-/** The most severe of `classifications`, or null for none. */
-const mostSevere = (classifications: Classification[]): Classification | null =>
-  classifications.reduce<Classification | null>(
-    (a, c) => (a === null || CLASSIFICATIONS.indexOf(c) > CLASSIFICATIONS.indexOf(a) ? c : a),
-    null,
-  )
-
 /** A comparison's Ontology Diff. */
 type ComparedOntologies = Pick<OntologyComparison, 'diff'>
 
@@ -83,7 +83,7 @@ type ComparedOntologies = Pick<OntologyComparison, 'diff'>
  * attributes, which the Diff records apart from their owner (an attribute change states
  * its owner and the owner's kind, so a class and a relation sharing a label stay apart).
  */
-export function changesOfConcept({ diff }: ComparedOntologies, kind: OwnerKind, label: string): OntologyChange[] {
+function changesOfConcept({ diff }: ComparedOntologies, kind: OwnerKind, label: string): OntologyChange[] {
   return diff.changes.filter((c) =>
     c.concept_kind === 'property'
       ? c.owner_kind === kind && c.owner === label
@@ -121,8 +121,15 @@ function mapChange(inBase: boolean, inTarget: boolean, changes: OntologyChange[]
   return { kind, severity }
 }
 
-/** The changes of `changes` that are not cosmetic. */
-const structural = (changes: OntologyChange[]) => changes.filter((c) => c.classification !== 'cosmetic')
+/**
+ * Whether `change` is cosmetic: documentation-only, as the UI names it. The Diff's
+ * classification decides it, once per change; everything here asks this.
+ */
+const cosmetic = (change: OntologyChange) => change.classification === 'cosmetic'
+
+/** The changes of `changes` that are not cosmetic, and those that are. */
+const structural = (changes: OntologyChange[]) => changes.filter((c) => !cosmetic(c))
+const cosmeticOnly = (changes: OntologyChange[]) => changes.filter(cosmetic)
 
 /**
  * The comparison from `base` to `target`. Whether an item is added or removed comes from
@@ -234,8 +241,133 @@ export function changesOf(comparison: OntologyComparison, selection: MapSelectio
 }
 
 /** Whether a comparison's link changed in any way, documentation-only included. */
-export const linkChanged = (comparison: OntologyComparison, link: PatternLink) =>
+const linkChanged = (comparison: OntologyComparison, link: PatternLink) =>
   comparison.changes.links[link.id]?.kind !== 'unchanged'
+
+/**
+ * What selecting a class or relation selects on a comparison's Map, given the Pattern
+ * links `shown`: a class itself, and a relation (relations are not nodes) its first shown
+ * changed link, else its first shown link; null when none of its links is shown. The
+ * change summary and the Map both select through this, so they agree whatever a filter hides.
+ */
+export function selectionOf(
+  comparison: OntologyComparison,
+  concept: ClassOrRelation,
+  shown: readonly PatternLink[],
+): MapSelection | null {
+  return concept.kind === 'class'
+    ? { kind: 'class', label: concept.label }
+    : relationSelection(shown, concept.label, (l) => linkChanged(comparison, l))
+}
+
+/** How many of the Diff's changes are at one level (a change's level is its classification). */
+export interface LevelCount {
+  level: Classification
+  count: number
+}
+
+/** One Diff change to a Concept, in words. */
+export interface ChangeStatement {
+  change: OntologyChange
+  level: Classification
+  /** The attribute it changed, or null for a change to the class or relation itself. */
+  attribute: string | null
+  /** What changed, e.g. "removed", "added, required", "class added", "description changed". */
+  text: string
+}
+
+/** One class's or relation's changes, as the change summary lists them. */
+export interface ConceptChanges {
+  kind: OwnerKind
+  label: string
+  /** Its most severe change's level. */
+  level: Classification
+  /** The most severe first, otherwise in the Diff's order. */
+  statements: ChangeStatement[]
+}
+
+/** A comparison's changes, summarized. */
+export interface ChangeSummary {
+  /** The headline: a count per level, the most severe first, leaving out levels with none. */
+  counts: LevelCount[]
+  /**
+   * Every changed class and relation with more than cosmetic changes, those changes only,
+   * the most severe first, equally severe ones by label.
+   */
+  concepts: ConceptChanges[]
+  /** The cosmetic changes, set apart: grouped the same way, by label. */
+  cosmetic: ConceptChanges[]
+}
+
+/**
+ * `change`, to the class or relation of `kind` or to one of its attributes, in words. A
+ * change to a Concept that is still there is its Diff detail, which never repeats the
+ * Concept.
+ */
+function statementOf(kind: OwnerKind, change: OntologyChange): ChangeStatement {
+  const level = change.classification
+  if (change.attribute !== undefined) {
+    const text =
+      change.kind === 'added'
+        ? change.required ? 'added, required' : 'added'
+        : change.kind === 'removed'
+          ? 'removed'
+          : change.detail
+    return { change, level, attribute: change.attribute, text }
+  }
+  const text = change.kind === 'added' || change.kind === 'removed' ? `${CONCEPT_NOUN[kind]} ${change.kind}` : change.detail
+  return { change, level, attribute: null, text }
+}
+
+/** The more severe first. */
+const bySeverity = <T extends { level: Classification }>(a: T, b: T) => compareSeverity(b.level, a.level)
+
+/** The change summary of the comparison's Ontology Diff. */
+export function summarizeChanges(comparison: OntologyComparison): ChangeSummary {
+  const levels = comparison.diff.changes.map((c) => c.classification)
+  const counts = MOST_SEVERE_FIRST.map((level) => ({ level, count: levels.filter((l) => l === level).length })).filter(
+    (c) => c.count > 0,
+  )
+  const owners: [OwnerKind, string][] = [
+    ...comparison.ontology.node_types.map((n): [OwnerKind, string] => ['node_type', n.label]),
+    ...comparison.ontology.relationship_types.map((r): [OwnerKind, string] => ['relationship_type', r.label]),
+  ]
+  // Each Concept's changes in two entries: its other changes, and its cosmetic ones.
+  const [concepts, cosmeticConcepts] = [structural, cosmeticOnly].map((pick) =>
+    owners.flatMap(([kind, label]): ConceptChanges[] => {
+      const statements = pick(changesOfConcept(comparison, kind, label))
+        .map((c) => statementOf(kind, c))
+        .sort(bySeverity)
+      return statements.length > 0 ? [{ kind, label, level: statements[0].level, statements }] : []
+    }),
+  )
+  const byLabel = (a: ConceptChanges, b: ConceptChanges) => codePointOrder(a.label, b.label) || codePointOrder(a.kind, b.kind)
+  return {
+    counts,
+    concepts: concepts.sort((a, b) => bySeverity(a, b) || byLabel(a, b)),
+    cosmetic: cosmeticConcepts.sort(byLabel),
+  }
+}
+
+/**
+ * The summary's entry for what is selected on the Map: a class's own, or a link's
+ * relation's, its cosmetic one when it has no other. Null when that has no
+ * changes, or for any other selection.
+ */
+export function summaryConceptOf(
+  comparison: OntologyComparison,
+  summary: ChangeSummary,
+  selection: MapSelection | null,
+): ConceptChanges | null {
+  const [kind, label] =
+    selection?.kind === 'class'
+      ? ['node_type', selection.label]
+      : selection?.kind === 'link'
+        ? ['relationship_type', comparison.map.links.find((l) => l.id === selection.id)?.relation]
+        : []
+  const of = (c: ConceptChanges) => c.kind === kind && c.label === label
+  return summary.concepts.find(of) ?? summary.cosmetic.find(of) ?? null
+}
 
 /** The items of `items` that `besides` has none of, by `key`. */
 function onlyIn<T>(items: T[], besides: T[], key: (item: T) => string): T[] {

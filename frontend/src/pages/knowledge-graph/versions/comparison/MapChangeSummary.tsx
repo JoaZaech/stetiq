@@ -5,36 +5,47 @@ import { ClassificationBadge } from '@/components/OntologyDiff'
 import { formatCount } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { CONCEPT_NOUN } from '../concepts'
-import type { OntologyComparison } from './ontology-map-comparison'
+import type { PatternLink } from '../map/ontology-map'
 import type { MapSelection } from '../map/ontology-map-focus'
 import {
-  summarizeChanges,
-  summaryConceptOf,
   type ChangeStatement,
   type ConceptChanges,
   type LevelCount,
-} from './ontology-map-summary'
+  type OntologyComparison,
+  selectionOf,
+  summarizeChanges,
+  summaryConceptOf,
+} from './ontology-map-comparison'
 import { SEVERITY } from './severity-style'
 
 /**
  * The change summary beside a comparison's Map: a count per level, then each changed
  * Concept's changes, the most severe first. Linked with the Map both ways: pointing at an
  * entry previews its Concept's focus (`onPreview`), clicking selects it (`onSelect`), and
- * the entry of the Map's `selection` is highlighted and scrolled to.
+ * the entry of the Map's `selection` is highlighted and scrolled to. An entry selects what
+ * the Map selects for its Concept, among the links `shown` (`selectionOf`).
  */
 export function MapChangeSummary({
   comparison,
+  shown,
   selection,
   onPreview,
   onSelect,
 }: {
   comparison: OntologyComparison
+  /** The Pattern links the Map shows. */
+  shown: readonly PatternLink[]
   selection: MapSelection | null
   onPreview: (selection: MapSelection | null) => void
   onSelect: (selection: MapSelection) => void
 }) {
   const summary = useMemo(() => summarizeChanges(comparison), [comparison])
-  const link: MapLink = { current: summaryConceptOf(comparison, summary, selection), onPreview, onSelect }
+  const link: MapLink = {
+    current: summaryConceptOf(comparison, summary, selection),
+    locate: ({ kind, label }) => selectionOf(comparison, { kind: CONCEPT_NOUN[kind], label }, shown),
+    onPreview,
+    onSelect,
+  }
   return (
     <aside aria-label="Change summary" className="w-72 shrink-0 space-y-3 overflow-y-auto border-r bg-background p-4 text-sm">
       <h3 className="font-semibold">Changes</h3>
@@ -64,11 +75,13 @@ export function MapChangeSummary({
 }
 
 /**
- * How the summary is linked with the Map: the entry of the Map's selection, and what
- * pointing at an entry (`onPreview`) and clicking it (`onSelect`) do.
+ * How the summary is linked with the Map: the entry of the Map's selection, where an
+ * entry's Concept is on the Map (null when not shown), and what pointing at an entry
+ * (`onPreview`) and clicking it (`onSelect`) do.
  */
 interface MapLink {
   current: ConceptChanges | null
+  locate: (concept: ConceptChanges) => MapSelection | null
   onPreview: (selection: MapSelection | null) => void
   onSelect: (selection: MapSelection) => void
 }
@@ -125,11 +138,11 @@ function DocumentationOnly({ concepts, count, link }: { concepts: ConceptChanges
 function SummaryEntry({ concept, link }: { concept: ConceptChanges; link: MapLink }) {
   const { onPreview, onSelect } = link
   const current = concept === link.current
+  const selection = link.locate(concept)
   const ref = useRef<HTMLLIElement>(null)
   useEffect(() => {
     if (current) ref.current?.scrollIntoView({ block: 'nearest' })
   }, [current])
-  const { selection } = concept
   return (
     <li ref={ref} aria-label={concept.label}>
       <button

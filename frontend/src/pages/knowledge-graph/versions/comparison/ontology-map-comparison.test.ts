@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { OntologyDiff } from '@/api/ontology-diff'
 import type { Ontology } from '@/api/ontology-versions'
-import { changesOf, compareOntologies } from './ontology-map-comparison'
+import {
+  changesOf,
+  compareOntologies,
+  selectionOf,
+  summarizeChanges,
+  summaryConceptOf,
+} from './ontology-map-comparison'
 import {
   attributeChange,
   attributeDescribed,
@@ -380,5 +386,256 @@ describe('changesOf', () => {
     ])
     expect(changesOf(comparison, { kind: 'link', id: '(Customer)-[OPENED]->(Ticket)' })).toEqual([])
     expect(changesOf(comparison, null)).toEqual([])
+  })
+})
+
+describe('selectionOf', () => {
+  // OPENED gains two Patterns beside its unchanged (Customer)-[OPENED]->(Ticket).
+  const base: Ontology = {
+    node_types: [{ label: 'Agent' }, { label: 'Customer' }, { label: 'LegacyTicket', deprecated: true }, { label: 'Ticket' }],
+    relationship_types: [{ label: 'OPENED' }],
+    patterns: [['Customer', 'OPENED', 'Ticket']],
+  }
+  const target: Ontology = {
+    ...base,
+    patterns: [
+      ['Agent', 'OPENED', 'LegacyTicket'],
+      ['Agent', 'OPENED', 'Ticket'],
+      ['Customer', 'OPENED', 'Ticket'],
+    ],
+  }
+  const comparison = compareOntologies(base, target, {
+    classification: 'additive',
+    changes: [
+      endpointChange(['Agent', 'OPENED', 'LegacyTicket'], 'added'),
+      endpointChange(['Agent', 'OPENED', 'Ticket'], 'added'),
+    ],
+  })
+  const opened = { kind: 'relation', label: 'OPENED' } as const
+  const shownWithout = (...ids: string[]) => comparison.map.links.filter((l) => !ids.includes(l.id))
+
+  it('selects a class as itself', () => {
+    expect(selectionOf(comparison, { kind: 'class', label: 'Agent' }, comparison.map.links)).toEqual({
+      kind: 'class',
+      label: 'Agent',
+    })
+  })
+
+  it('selects a relation as its first changed link among those the Map shows', () => {
+    expect(selectionOf(comparison, opened, comparison.map.links)).toEqual({
+      kind: 'link',
+      id: '(Agent)-[OPENED]->(LegacyTicket)',
+    })
+    // A filter hides the first: the next changed one, not the unchanged one.
+    expect(selectionOf(comparison, opened, shownWithout('(Agent)-[OPENED]->(LegacyTicket)').reverse())).toEqual({
+      kind: 'link',
+      id: '(Agent)-[OPENED]->(Ticket)',
+    })
+  })
+
+  it('selects a relation none of whose shown links changed as its first shown link, and nothing when none is shown', () => {
+    expect(
+      selectionOf(comparison, opened, shownWithout('(Agent)-[OPENED]->(LegacyTicket)', '(Agent)-[OPENED]->(Ticket)')),
+    ).toEqual({ kind: 'link', id: '(Customer)-[OPENED]->(Ticket)' })
+    expect(selectionOf(comparison, opened, [])).toBeNull()
+  })
+})
+
+// Canonical form, as the server sends it: a city transit network, v2 → v3.
+const TRANSIT_V2: Ontology = {
+  node_types: [
+    { label: 'Route' },
+    { label: 'Stop', properties: [{ name: 'wheelchairBoarding', type: 'INTEGER' }] },
+    { label: 'Trip', properties: [{ name: 'bikesAllowed', type: 'INTEGER' }] },
+  ],
+  relationship_types: [{ label: 'HAS_TRIP' }, { label: 'SERVES' }],
+  patterns: [
+    ['Route', 'HAS_TRIP', 'Trip'],
+    ['Trip', 'SERVES', 'Stop'],
+  ],
+}
+
+const TRANSIT_V3: Ontology = {
+  node_types: [
+    { label: 'Route' },
+    { label: 'Stop', properties: [{ name: 'wheelchair_boarding', type: 'INTEGER' }] },
+    { label: 'Trip', properties: [{ name: 'bikes_allowed', type: 'INTEGER' }] },
+  ],
+  relationship_types: [{ label: 'HAS_TRIP', description: 'The scheduled trips of a route' }, { label: 'SERVES' }],
+  patterns: [
+    ['Route', 'HAS_TRIP', 'Trip'],
+    ['Trip', 'SERVES', 'Stop'],
+  ],
+}
+
+// What the core's Ontology Diff reports from TRANSIT_V2 to TRANSIT_V3.
+const TRANSIT_DIFF: OntologyDiff = {
+  classification: 'breaking',
+  changes: [
+    attributeChange('node_type', 'Stop', 'wheelchairBoarding', 'removed', 'breaking'),
+    attributeChange('node_type', 'Stop', 'wheelchair_boarding', 'added', 'additive'),
+    attributeChange('node_type', 'Trip', 'bikesAllowed', 'removed', 'breaking'),
+    attributeChange('node_type', 'Trip', 'bikes_allowed', 'added', 'additive'),
+    conceptDescribed('relationship_type', 'HAS_TRIP'),
+  ],
+}
+
+describe('summarizeChanges', () => {
+  it("counts the Diff's changes per level, most severe first, leaving out levels with none", () => {
+    const { counts } = summarizeChanges(compareOntologies(TRANSIT_V2, TRANSIT_V3, TRANSIT_DIFF))
+
+    expect(counts).toEqual([
+      { level: 'breaking', count: 2 },
+      { level: 'additive', count: 2 },
+      // HAS_TRIP only gained a description.
+      { level: 'cosmetic', count: 1 },
+    ])
+  })
+
+  it('groups the changes by the class or relation they belong to, the most severe Concept first', () => {
+    const { concepts } = summarizeChanges(compareOntologies(TRANSIT_V2, TRANSIT_V3, TRANSIT_DIFF))
+
+    expect(concepts.map((c) => [c.kind, c.label, c.level])).toEqual([
+      // Equally severe Concepts in label order.
+      ['node_type', 'Stop', 'breaking'],
+      ['node_type', 'Trip', 'breaking'],
+    ])
+  })
+
+  it('sets the cosmetic changes apart, grouped by Concept', () => {
+    const described: Ontology = {
+      ...TRANSIT_V3,
+      node_types: TRANSIT_V3.node_types.map((n) =>
+        n.label === 'Stop'
+          ? { ...n, properties: [{ name: 'wheelchair_boarding', type: 'INTEGER', description: 'Step-free access' }] }
+          : n.label === 'Route'
+            ? { ...n, description: 'A line riders know by name' }
+            : n,
+      ),
+    }
+    const { counts, concepts, cosmetic } = summarizeChanges(
+      compareOntologies(TRANSIT_V2, described, {
+        classification: 'breaking',
+        changes: [conceptDescribed('node_type', 'Route'), ...TRANSIT_DIFF.changes],
+      }),
+    )
+
+    expect(counts.at(-1)).toEqual({ level: 'cosmetic', count: 2 })
+    expect(cosmetic.map((c) => [c.label, c.level, c.statements.map((s) => s.text)])).toEqual([
+      ['HAS_TRIP', 'cosmetic', ['description changed']],
+      ['Route', 'cosmetic', ['description changed']],
+    ])
+    // Stop's attribute was added with its description, so that change is not cosmetic.
+    expect(concepts.map((c) => c.label)).toEqual(['Stop', 'Trip'])
+  })
+
+  it("orders a Concept's changes most severe first, and says each in words", () => {
+    const deprecating: OntologyDiff = {
+      classification: 'breaking',
+      changes: [
+        ...TRANSIT_DIFF.changes,
+        conceptChange('node_type', 'Stop', 'deprecated', 'deprecating', 'deprecated; replaced by Platform'),
+      ],
+    }
+    const { concepts, cosmetic } = summarizeChanges(
+      compareOntologies(TRANSIT_V2, { ...TRANSIT_V3, node_types: TRANSIT_V3.node_types.map((n) => (n.label === 'Stop' ? { ...n, deprecated: true } : n)) }, deprecating),
+    )
+
+    expect(concepts[0].statements.map((s) => [s.attribute, s.text, s.level])).toEqual([
+      ['wheelchairBoarding', 'removed', 'breaking'],
+      [null, 'deprecated; replaced by Platform', 'deprecating'],
+      ['wheelchair_boarding', 'added', 'additive'],
+    ])
+    expect(cosmetic[0].statements.map((s) => [s.attribute, s.text])).toEqual([[null, 'description changed']])
+  })
+
+  it('says how each kind of change landed', () => {
+    const base: Ontology = {
+      node_types: [{ label: 'Route', properties: [{ name: 'id', type: 'STRING' }] }, { label: 'Trip' }],
+      relationship_types: [{ label: 'HAS_TRIP' }],
+      patterns: [['Route', 'HAS_TRIP', 'Trip']],
+    }
+    const target: Ontology = {
+      node_types: [
+        { label: 'Agency' },
+        { label: 'Route', properties: [{ name: 'id', type: 'STRING' }, { name: 'name', type: 'STRING', required: true }] },
+      ],
+      relationship_types: [{ label: 'OPERATES' }],
+      patterns: [['Agency', 'OPERATES', 'Route']],
+      constraints: [{ type: 'UNIQUENESS', node_type: 'Route', property_name: 'id' }],
+    }
+    const { concepts } = summarizeChanges(
+      compareOntologies(base, target, {
+        classification: 'breaking',
+        changes: [
+          conceptChange('node_type', 'Agency', 'added', 'additive'),
+          attributeChange('node_type', 'Route', 'name', 'added', 'breaking', { required: true }),
+          conceptChange('node_type', 'Trip', 'removed', 'breaking'),
+          conceptChange('relationship_type', 'HAS_TRIP', 'removed', 'breaking'),
+          conceptChange('relationship_type', 'OPERATES', 'added', 'additive'),
+          attributeChange('node_type', 'Route', 'id', 'changed', 'breaking', { detail: 'UNIQUENESS constraint added' }),
+        ],
+      }),
+    )
+    const said = Object.fromEntries(
+      concepts.map((c) => [c.label, c.statements.map((s) => (s.attribute ? `${s.attribute}: ${s.text}` : s.text))]),
+    )
+
+    expect(said).toEqual({
+      Agency: ['class added'],
+      Route: ['name: added, required', 'id: UNIQUENESS constraint added'],
+      Trip: ['class removed'],
+      HAS_TRIP: ['relation removed'],
+      OPERATES: ['relation added'],
+    })
+  })
+
+  it('says when nothing changed', () => {
+    const summary = summarizeChanges(compareOntologies(TRANSIT_V2, TRANSIT_V2, { classification: null, changes: [] }))
+
+    expect(summary).toEqual({ counts: [], concepts: [], cosmetic: [] })
+  })
+})
+
+describe("summarizeChanges: the Diff's wording", () => {
+  it('says an added attribute is required, and a change at its level, from the fields, whatever the detail says', () => {
+    const changes = [
+      ...TRANSIT_DIFF.changes,
+      attributeChange('node_type', 'Route', 'name', 'added', 'breaking', { required: true }),
+    ].map((c) => ({ ...c, detail: 'something changed' }))
+    const target: Ontology = {
+      ...TRANSIT_V3,
+      node_types: TRANSIT_V3.node_types.map((n) =>
+        n.label === 'Route' ? { ...n, properties: [{ name: 'name', type: 'STRING', required: true }] } : n,
+      ),
+    }
+
+    const { counts, concepts } = summarizeChanges(compareOntologies(TRANSIT_V2, target, { classification: 'breaking', changes }))
+
+    expect(counts).toEqual([
+      { level: 'breaking', count: 3 },
+      { level: 'additive', count: 2 },
+      { level: 'cosmetic', count: 1 },
+    ])
+    expect(concepts.find((c) => c.label === 'Route')?.statements.map((s) => [s.attribute, s.text])).toEqual([
+      ['name', 'added, required'],
+    ])
+  })
+})
+
+describe('linking the summary and the Map', () => {
+  it("finds the entry of a selected class, or of a selected link's relation", () => {
+    const comparison = compareOntologies(TRANSIT_V2, TRANSIT_V3, TRANSIT_DIFF)
+    const summary = summarizeChanges(comparison)
+    const labelOf = (selection: Parameters<typeof summaryConceptOf>[2]) =>
+      summaryConceptOf(comparison, summary, selection)?.label ?? null
+
+    expect(labelOf({ kind: 'class', label: 'Trip' })).toBe('Trip')
+    expect(labelOf({ kind: 'link', id: '(Route)-[HAS_TRIP]->(Trip)' })).toBe('HAS_TRIP')
+    // Unchanged: no entry.
+    expect(labelOf({ kind: 'class', label: 'Route' })).toBeNull()
+    expect(labelOf({ kind: 'link', id: '(Trip)-[SERVES]->(Stop)' })).toBeNull()
+    expect(labelOf({ kind: 'path', from: 'Route', to: 'Stop' })).toBeNull()
+    expect(labelOf(null)).toBeNull()
   })
 })
