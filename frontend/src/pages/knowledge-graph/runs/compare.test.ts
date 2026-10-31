@@ -3,7 +3,16 @@ import type { GatePreview } from '@/api/gate-previews'
 import type { GateResult } from '@/api/gate-results'
 import type { EvaluationResult } from '@/api/ontology-versions'
 import type { ConstructionRun } from '@/api/runs'
-import { compareRuns, differs, gateRows, kpiSummary, kpiVerdict, runChartPoints } from './compare'
+import {
+  compareRuns,
+  differs,
+  gateRows,
+  kpiGateBounds,
+  kpiSummary,
+  kpiVerdict,
+  runChartPoints,
+  runChartSeries,
+} from './compare'
 
 function run(overrides: Partial<ConstructionRun>): ConstructionRun {
   return {
@@ -100,14 +109,14 @@ describe('differs', () => {
 })
 
 describe('runChartPoints', () => {
-  it('plots each run at its start time with its metrics and Conformance score', () => {
+  it('plots each run, by id, at its start time with its metrics and Conformance score', () => {
     const points = runChartPoints([
-      run({ started_at: '2026-10-30T11:00:00Z', metrics: { recall: 0.8 }, conformance: { score: 0.5, mismatches: [] } }),
-      run({ started_at: '2026-10-30T12:00:00Z', metrics: { recall: 0.9 } }),
+      run({ id: 'a', started_at: '2026-10-30T11:00:00Z', metrics: { recall: 0.8 }, conformance: { score: 0.5, mismatches: [] } }),
+      run({ id: 'b', started_at: '2026-10-30T12:00:00Z', metrics: { recall: 0.9 } }),
     ])
     expect(points).toEqual([
-      { x: Date.parse('2026-10-30T11:00:00Z'), metrics: { recall: 0.8, Conformance: 0.5 } },
-      { x: Date.parse('2026-10-30T12:00:00Z'), metrics: { recall: 0.9 } },
+      { x: Date.parse('2026-10-30T11:00:00Z'), id: 'a', metrics: { recall: 0.8, Conformance: 0.5 } },
+      { x: Date.parse('2026-10-30T12:00:00Z'), id: 'b', metrics: { recall: 0.9 } },
     ])
   })
 
@@ -126,9 +135,10 @@ describe('runChartPoints', () => {
     expect(points).toEqual([
       {
         x: Date.parse('2026-10-30T11:00:00Z'),
+        id: 'a',
         metrics: { recall: 0.8, 'conformance/score': 0.5, 'observed_schema/node_types': 3 },
       },
-      { x: Date.parse('2026-10-30T12:00:00Z'), metrics: { 'observed_schema/node_types': 2 } },
+      { x: Date.parse('2026-10-30T12:00:00Z'), id: 'b', metrics: { 'observed_schema/node_types': 2 } },
     ])
   })
 
@@ -314,5 +324,96 @@ describe('gateRows', () => {
       { passed: false, origin: 'preview' },
       null,
     ])
+  })
+})
+
+describe('kpiGateBounds', () => {
+  const bandGate = { ...reviewGate, name: 'review-band', min: 0.5, max: 0.95 }
+  const outcomes = [
+    outcome(conformanceGate, true),
+    outcome(reviewGate, false),
+    outcome(bandGate, true),
+    outcome(diffGate, true),
+    outcome(dropGate, true),
+  ]
+
+  it("bounds Conformance by a conformance Gate's min_score", () => {
+    expect(kpiGateBounds({ kind: 'conformance' }, outcomes)).toEqual([
+      { gate: 'conformance-floor', bound: 'min', value: 0.6 },
+    ])
+  })
+
+  it("bounds an Evaluator metric by each covering metric Gate's min and max", () => {
+    expect(kpiGateBounds(reviewKey, outcomes)).toEqual([
+      { gate: 'review-score', bound: 'min', value: 0.8 },
+      { gate: 'review-band', bound: 'min', value: 0.5 },
+      { gate: 'review-band', bound: 'max', value: 0.95 },
+    ])
+  })
+
+  it('bounds nothing no Gate covers: another parameter configuration, or a run metric', () => {
+    expect(kpiGateBounds({ kind: 'evaluator', key: 'review (min_confidence=0.8)/score' }, outcomes)).toEqual([])
+    expect(kpiGateBounds({ kind: 'run-metric', key: 'precision' }, outcomes)).toEqual([])
+  })
+})
+
+describe('runChartSeries', () => {
+  const a = run({
+    id: 'a',
+    started_at: '2026-10-30T11:00:00Z',
+    metrics: { precision: 0.9 },
+    conformance: { score: 0.5, mismatches: [] },
+  })
+  const b = run({
+    id: 'b',
+    started_at: '2026-10-30T12:00:00Z',
+    metrics: { precision: 0.8 },
+    conformance: { score: 0.75, mismatches: [] },
+  })
+  const evaluations = [
+    evaluation('review', { score: 0.6 }, { subject_id: 'b', parameters: { min_confidence: 0.5, gold: 'v2' } }),
+  ]
+  const previews = [
+    preview([outcome(conformanceGate, false), outcome(reviewGate, false), outcome(diffGate, true)], 'a'),
+    preview([outcome(conformanceGate, true), outcome(reviewGate, false), outcome(diffGate, true)], 'b'),
+  ]
+  // CI recorded a pass for `a`, which wins over its failing preview.
+  const gateResults = [recorded([outcome(conformanceGate, true), outcome(reviewGate, false)], 'a')]
+  const series = runChartSeries([a, b], evaluations, gateResults, previews)
+  const byMetric = (metric: string) => series.find((s) => s.metric === metric)
+  const at = (iso: string) => Date.parse(iso)
+
+  it("draws a gated KPI's Gate bounds and judges each point as the compare page does, recorded over preview", () => {
+    expect(byMetric('Conformance')).toEqual({
+      metric: 'Conformance',
+      kpi: { kind: 'conformance' },
+      references: [{ name: 'conformance-floor', label: 'min 0.6', value: 0.6 }],
+      points: [
+        { x: at(a.started_at), value: 0.5, id: 'a', status: { passed: true, label: 'pass (recorded)' } },
+        { x: at(b.started_at), value: 0.75, id: 'b', status: { passed: true, label: 'pass (preview)' } },
+      ],
+      note: 'Verdicts: 1 recorded, 1 preview',
+    })
+  })
+
+  it('leaves out a run without a value, and says when every verdict is a preview', () => {
+    expect(byMetric(reviewKey.key)).toEqual({
+      metric: reviewKey.key,
+      kpi: reviewKey,
+      references: [{ name: 'review-score', label: 'min 0.8', value: 0.8 }],
+      points: [{ x: at(b.started_at), value: 0.6, id: 'b', status: { passed: false, label: 'fail (preview)' } }],
+      note: 'Verdicts: preview',
+    })
+  })
+
+  it('keeps an ungated KPI neutral: no bounds, no verdicts', () => {
+    expect(byMetric('precision')).toEqual({
+      metric: 'precision',
+      kpi: { kind: 'run-metric', key: 'precision' },
+      points: [
+        { x: at(a.started_at), value: 0.9, id: 'a' },
+        { x: at(b.started_at), value: 0.8, id: 'b' },
+      ],
+    })
   })
 })
