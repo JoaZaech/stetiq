@@ -14,6 +14,7 @@ import {
   type ChangeStatement,
   type ConceptChanges,
   type LevelCount,
+  descriptionPreviewOf,
   type OntologyComparison,
   selectionOf,
   summarizeChanges,
@@ -71,6 +72,7 @@ export function MapChangeSummary({
               concepts={summary.cosmetic}
               count={summary.counts.find((c) => isCosmetic(c.level))?.count ?? 0}
               link={link}
+              previewOf={(c) => descriptionPreviewOf(comparison, c)}
             />
           )}
         </>
@@ -134,9 +136,20 @@ export function LevelCounts({
 
 /**
  * The cosmetic (documentation-only) changes, collapsed to one line that expands to their entries.
- * It opens by itself when the Map selects one of them.
+ * It opens by itself when the Map selects one of them. Each entry previews its new
+ * description (`previewOf`).
  */
-function CosmeticChanges({ concepts, count, link }: { concepts: ConceptChanges[]; count: number; link: MapLink }) {
+function CosmeticChanges({
+  concepts,
+  count,
+  link,
+  previewOf,
+}: {
+  concepts: ConceptChanges[]
+  count: number
+  link: MapLink
+  previewOf: (concept: ConceptChanges) => string | null
+}) {
   const id = useId()
   const [expanded, setExpanded] = useState(false)
   const open = expanded || (link.current !== null && concepts.includes(link.current))
@@ -155,14 +168,23 @@ function CosmeticChanges({ concepts, count, link }: { concepts: ConceptChanges[]
       </button>
       <ul id={id} hidden={!open} aria-label="Documentation-only changes" className="space-y-1">
         {concepts.map((c) => (
-          <SummaryEntry key={`${c.kind}:${c.label}`} concept={c} link={link} />
+          <SummaryEntry key={`${c.kind}:${c.label}`} concept={c} link={link} preview={previewOf(c)} />
         ))}
       </ul>
     </div>
   )
 }
 
-function SummaryEntry({ concept, link }: { concept: ConceptChanges; link: MapLink }) {
+/** One changed Concept's entry; `preview`, a documentation-only one's new description, on one line. */
+function SummaryEntry({
+  concept,
+  link,
+  preview = null,
+}: {
+  concept: ConceptChanges
+  link: MapLink
+  preview?: string | null
+}) {
   const { onPreview, onSelect } = link
   const current = concept === link.current
   const selection = link.locate(concept)
@@ -194,6 +216,11 @@ function SummaryEntry({ concept, link }: { concept: ConceptChanges; link: MapLin
         {concept.statements.map((s) => (
           <Statement key={`${s.change.concept}:${s.change.detail}`} statement={s} />
         ))}
+        {preview && (
+          <span title={preview} className="block truncate text-xs text-muted-foreground">
+            {preview}
+          </span>
+        )}
       </button>
     </li>
   )

@@ -394,6 +394,18 @@ export function summaryConceptOf(
   return summary.concepts.find(of) ?? summary.cosmetic.find(of) ?? null
 }
 
+/**
+ * The new description a documentation-only entry of the summary previews: its Concept's
+ * own, else its first changed attribute's. Null when that description was removed.
+ */
+export function descriptionPreviewOf(
+  comparison: Pick<OntologyComparison, 'base' | 'target'>,
+  concept: ConceptChanges,
+): string | null {
+  const statement = concept.statements.find((s) => s.attribute === null) ?? concept.statements[0]
+  return descriptionChangeOf(comparison, statement.change)?.after || null
+}
+
 /** The items of `items` that `besides` has none of, by `key`. */
 function onlyIn<T>(items: T[], besides: T[], key: (item: T) => string): T[] {
   const keys = new Set(besides.map(key))

@@ -28,7 +28,7 @@ test('the Changes tab lists the changes as a grid, documentation-only ones hidde
   await expect(row(changes(page), 'Stop.wheelchairBoarding')).toHaveText(/attribute.*removed.*breaking/)
   await expect(page.getByText('4 changes', { exact: true })).toBeVisible()
 
-  // HAS_TRIP only gained a description: hidden, but counted, and one click away.
+  // Only HAS_TRIP's description changed: hidden, but counted, and one click away.
   await expect(page.getByText('1 documentation-only change hidden')).toBeVisible()
   await page.getByRole('button', { name: 'Show documentation-only changes' }).click()
   await expect(page).toHaveURL(/changes\.docs=1/)

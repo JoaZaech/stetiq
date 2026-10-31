@@ -228,7 +228,8 @@ def ontology_map_large(client: stetiq.Client) -> dict[str, Any]:
 
 
 # Like examples/transit-network-kg: v2 (a Candidate's) takes the feed's camelCase columns,
-# v3 renames them to snake_case (two breaking removals, two additions) and documents HAS_TRIP.
+# v3 renames them to snake_case (two breaking removals, two additions) and rewords HAS_TRIP's
+# description.
 MAP_TRANSIT_V2 = """
 node_types:
   - {label: Agency}
@@ -237,7 +238,7 @@ node_types:
     properties: [{name: wheelchairBoarding, type: INTEGER}]
   - label: Trip
     properties: [{name: bikesAllowed, type: INTEGER}]
-relationship_types: [HAS_TRIP, OPERATES, SERVES]
+relationship_types: [{label: HAS_TRIP, description: The trips run on a route}, OPERATES, SERVES]
 patterns:
   - [Agency, OPERATES, Route]
   - [Route, HAS_TRIP, Trip]
@@ -248,10 +249,7 @@ patterns:
 MAP_TRANSIT_V3 = (
     MAP_TRANSIT_V2.replace("wheelchairBoarding", "wheelchair_boarding")
     .replace("bikesAllowed", "bikes_allowed")
-    .replace(
-        "relationship_types: [HAS_TRIP,",
-        "relationship_types: [{label: HAS_TRIP, description: The scheduled trips of a route},",
-    )
+    .replace("The trips run on a route", "The scheduled trips of a route")
 )
 
 
