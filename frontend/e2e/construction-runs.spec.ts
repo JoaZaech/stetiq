@@ -193,6 +193,46 @@ test.describe('with Construction Runs', () => {
   })
 })
 
+test.describe('with Gates', () => {
+  // `support`, gated by conformance-floor (>= 0.6) and review-score (`review
+  // (min_confidence=0.5)/score` >= 0.8): `baseline` (recorded: Conformance fail, review 0.9
+  // pass), then previews of `regressed` (Conformance fail, review 0.6 fail), `unreviewed`
+  // (Conformance pass, no review result) and `improved` (both pass).
+  test.use({ seed: 'gates' })
+
+  test('the chart view draws each Gate bound and colours points by their verdict, recorded or previewed', async ({
+    page,
+  }) => {
+    await page.goto('/ui/kg/support/runs?view=chart')
+    const grid = page.getByRole('region', { name: 'Metric charts' })
+    await expect(page.getByRole('note', { name: 'Gate Preview source' })).toContainText('judged against current Gates')
+
+    const conformance = grid.getByRole('figure', { name: 'Conformance', exact: true })
+    await expect(conformance.getByRole('list', { name: 'Bounds' })).toHaveText('conformance-floor: min 0.6')
+    await expect(conformance.locator('.recharts-reference-line')).toHaveCount(1)
+    await expect(conformance.getByRole('note')).toHaveText('Verdicts: 1 recorded, 3 preview')
+    await expect(conformance.getByRole('img', { name: /0\.5455, fail \(recorded\)$/ })).toHaveCount(1)
+    await expect(conformance.getByRole('img', { name: /0\.5455, fail \(preview\)$/ })).toHaveCount(1)
+    await expect(conformance.getByRole('img', { name: /0\.75, pass \(preview\)$/ })).toHaveCount(2)
+
+    // `unreviewed` has no review result, so no point.
+    const review = grid.getByRole('figure', { name: 'review (min_confidence=0.5)/score' })
+    await expect(review.getByRole('list', { name: 'Bounds' })).toHaveText('review-score: min 0.8')
+    await expect(review.getByRole('img', { name: /, (pass|fail) \((recorded|preview)\)$/ })).toHaveCount(3)
+    await expect(review.getByRole('img', { name: /0\.6, fail \(preview\)$/ })).toBeVisible()
+    await expect(review.getByRole('img', { name: /0\.95, pass \(preview\)$/ })).toBeVisible()
+
+    // No Gate covers `precision` or the other review configuration: neutral points, no bound.
+    for (const name of ['precision', 'review (min_confidence=0.8)/score']) {
+      const ungated = grid.getByRole('figure', { name, exact: true })
+      await expect(ungated.getByRole('img', { name: /^.+: \d/ }).first()).toBeVisible()
+      await expect(ungated.getByRole('img', { name: /pass|fail/ })).toHaveCount(0)
+      await expect(ungated.getByRole('list', { name: 'Bounds' })).toHaveCount(0)
+      await expect(ungated.locator('.recharts-reference-line')).toHaveCount(0)
+    }
+  })
+})
+
 test.describe('with a token that can read one Knowledge Graph', () => {
   test.use({ mode: 'server', seed: 'construction_runs_reader' })
 
