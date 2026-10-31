@@ -35,6 +35,7 @@ from stetiq.tracking import (
     Alias,
     ConstructionRun,
     EvaluationResult,
+    GatePreview,
     GateResult,
     KnowledgeGraph,
     KnowledgeGraphSummary,
@@ -415,6 +416,14 @@ class Client:
         """Every recorded Gate evaluation of the Knowledge Graph, oldest first, each with
         the Gate definitions it used."""
         return self._service.list_gate_results(knowledge_graph)
+
+    def preview_gates(self, knowledge_graph: str) -> list[GatePreview]:
+        """A Gate Preview for every Construction Run of the Knowledge Graph, in run order:
+        the Gate definitions of its latest Gate result about a run (else about any
+        subject) evaluated against each run, as `evaluate_gates(run=...)` would, but
+        recording nothing (ADR 0007). Runs with a recorded Gate result get one too; a
+        reader lets the recorded result win. Empty if the Knowledge Graph was never gated."""
+        return self._service.preview_gates(knowledge_graph)
 
     # --- Aliases and Promotion ------------------------------------------------------
 

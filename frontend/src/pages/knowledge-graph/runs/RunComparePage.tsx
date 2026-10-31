@@ -1,7 +1,9 @@
-import { useCallback, useId, useMemo, type ReactNode } from 'react'
-import { useQueries } from '@tanstack/react-query'
+import { useCallback, useId, useMemo, useState, type ReactNode } from 'react'
+import { useQueries, useQuery } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router'
 import { isNotFound } from '@/api/client'
+import { type GatePreview, gatePreviewsQuery } from '@/api/gate-previews'
+import { type GateResult, gateResultsQuery } from '@/api/gate-results'
 import type { EvaluationResult } from '@/api/ontology-versions'
 import { type ConstructionRun, runEvaluationsQuery, runQuery } from '@/api/runs'
 import { kgUrl } from '@/app/knowledge-graph-sections'
@@ -16,7 +18,20 @@ import { formatDateTime, formatMetric } from '@/lib/format'
 import { setOrDeleteParam } from '@/lib/search-params'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { useComparedIds, useKnowledgeGraphName } from '../params'
-import { type ComparedValue, type ComparisonRow, compareRuns, differs } from './compare'
+import {
+  type ComparedValue,
+  type ComparisonRow,
+  type Kpi,
+  type KpiSummary,
+  compareRuns,
+  differs,
+  gateRows,
+  kpiSummary,
+  kpiVerdict,
+  runGating,
+} from './compare'
+import { GatePreviewNote, KpiSummaryBar, NeverGatedHint, NoResult, PassFail, VerdictBadge } from './gate-verdicts'
+import { KpiSheet, type KpiSelection } from './kpi-sheet'
 import { shortRunId } from './runs'
 
 const linkClass = 'text-primary underline-offset-4 hover:underline'
@@ -50,6 +65,8 @@ export function RunComparePage() {
     queries: ids.map((id) => runEvaluationsQuery(name, id)),
     combine: (queries) => queries,
   })
+  const gateResults = useQuery(gateResultsQuery(name))
+  const gatePreviews = useQuery(gatePreviewsQuery(name))
 
   const header = (
     <PageHeader
@@ -89,7 +106,7 @@ export function RunComparePage() {
       </>
     )
   }
-  const failed = [...runs, ...evaluations].find((q) => q.isError)
+  const failed = [...runs, ...evaluations, gateResults, gatePreviews].find((q) => q.isError)
   if (failed) {
     return (
       <>
@@ -100,7 +117,12 @@ export function RunComparePage() {
   }
   const loadedRuns = runs.map((q) => q.data)
   const loadedEvaluations = evaluations.map((q) => q.data)
-  if (loadedRuns.some((r) => r === undefined) || loadedEvaluations.some((e) => e === undefined)) {
+  if (
+    loadedRuns.some((r) => r === undefined) ||
+    loadedEvaluations.some((e) => e === undefined) ||
+    gateResults.data === undefined ||
+    gatePreviews.data === undefined
+  ) {
     return (
       <>
         {header}
@@ -114,33 +136,100 @@ export function RunComparePage() {
       <Comparison
         runs={loadedRuns as ConstructionRun[]}
         evaluations={loadedEvaluations as EvaluationResult[][]}
+        gateResults={gateResults.data}
+        gatePreviews={gatePreviews.data}
         diffOnly={diffOnly}
       />
     </>
   )
 }
 
-/** One compared row: what it is, the runs' values (to tell if they differ), and how to show one. */
+/**
+ * One compared row: what it is, the runs' values (to tell if they differ), how to show
+ * one, and for a gated KPI how the runs fare on it.
+ */
 interface Row {
   label: string
   values: readonly ComparedValue[]
   render: (i: number) => ReactNode
+  summary?: KpiSummary | null
 }
 
 function Comparison({
   runs,
   evaluations,
+  gateResults,
+  gatePreviews,
   diffOnly,
 }: {
   runs: ConstructionRun[]
   evaluations: EvaluationResult[][]
+  gateResults: GateResult[]
+  gatePreviews: GatePreview[]
   diffOnly: boolean
 }) {
   const comparison = useMemo(() => compareRuns(runs, evaluations), [runs, evaluations])
+  const gatings = useMemo(
+    () => runs.map((run) => runGating(run.id, gateResults, gatePreviews)),
+    [runs, gateResults, gatePreviews],
+  )
+  const [selection, setSelection] = useState<KpiSelection | null>(null)
   const metric = (value: number | null) =>
     value === null ? none : <span className="tabular-nums">{formatMetric(value)}</span>
   const keyed = <V extends ComparedValue>(rows: ComparisonRow<V>[], show: (value: V) => ReactNode): Row[] =>
     rows.map((row) => ({ label: row.key, values: row.values, render: (i) => show(row.values[i]) }))
+  /**
+   * A KPI row: each value with its verdict, and the KPI's summary when it is gated. A cell
+   * with a value or a verdict is a button that opens the KPI drill-down.
+   */
+  const kpiRow = (label: string, kpi: Kpi, values: (number | null)[]): Row => {
+    const verdicts = values.map((value, i) => kpiVerdict(kpi, value, gatings[i]))
+    return {
+      label,
+      values,
+      summary: kpiSummary(verdicts),
+      render: (i) => {
+        const content = (
+          <>
+            {verdicts[i].verdict === 'no-result' ? <NoResult /> : metric(values[i])}
+            <VerdictBadge verdict={verdicts[i]} />
+          </>
+        )
+        if (values[i] === null && verdicts[i].verdict === 'ungated') return content
+        return (
+          <button
+            type="button"
+            aria-label={`${label} of run ${shortRunId(runs[i].id)}`}
+            className="inline-flex cursor-pointer flex-wrap items-center gap-x-2 rounded-sm text-left underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            onClick={() => setSelection({ runId: runs[i].id, kpi })}
+          >
+            {content}
+          </button>
+        )
+      },
+    }
+  }
+  const gates = gateRows(gatings)
+  const gateCells = gates.gates.map(
+    (gate): Row => ({
+      label: gate.name,
+      values: gate.cells.map((c) => (c === null ? null : String(c.passed))),
+      render: (i) => {
+        const cell = gate.cells[i]
+        return cell === null ? none : <PassFail passed={cell.passed} origin={cell.origin} />
+      },
+    }),
+  )
+  const allPassed: Row = {
+    label: 'All Gates passed',
+    values: [],
+    render: (i) => {
+      const cell = gates.overall[i]
+      return cell === null ? none : <PassFail passed={cell.passed} origin={cell.origin} />
+    },
+  }
+  const source = gatePreviews[0]?.source
+  const neverGated = gatePreviews.length === 0 && gateResults.length === 0
 
   const version = (number: number | null) =>
     number === null ? (
@@ -163,11 +252,16 @@ function Comparison({
       render: (i) => version(comparison.declaredOntology[i]),
     },
     { label: 'Candidate', values: comparison.candidate, render: (i) => version(comparison.candidate[i]) },
-    { label: 'Conformance', values: comparison.conformance, render: (i) => metric(comparison.conformance[i]) },
+    kpiRow('Conformance', { kind: 'conformance' }, comparison.conformance),
   ]
 
   return (
     <div className="space-y-6">
+      {neverGated ? (
+        <NeverGatedHint />
+      ) : (
+        source !== undefined && <GatePreviewNote knowledgeGraph={runs[0].knowledge_graph} source={source} />
+      )}
       <ComparisonTable label="Runs" runs={runs} rows={overview} diffOnly={diffOnly} />
       <ComparisonTable
         label="Params"
@@ -179,17 +273,27 @@ function Comparison({
       <ComparisonTable
         label="Metrics"
         runs={runs}
-        rows={keyed(comparison.metrics, metric)}
+        rows={comparison.metrics.map((row) => kpiRow(row.key, { kind: 'run-metric', key: row.key }, row.values))}
         diffOnly={diffOnly}
         empty="No metrics logged."
       />
       <ComparisonTable
         label="Evaluator results"
         runs={runs}
-        rows={keyed(comparison.evaluations, metric)}
+        rows={comparison.evaluations.map((row) => kpiRow(row.key, { kind: 'evaluator', key: row.key }, row.values))}
         diffOnly={diffOnly}
         empty="No Evaluator results."
       />
+      {gateCells.length > 0 && (
+        <ComparisonTable
+          label="Gates"
+          runs={runs}
+          rows={gateCells}
+          pinned={allPassed}
+          diffOnly={diffOnly}
+        />
+      )}
+      <KpiSheet knowledgeGraph={runs[0].knowledge_graph} selection={selection} onClose={() => setSelection(null)} />
     </div>
   )
 }
@@ -198,19 +302,23 @@ function ComparisonTable({
   label,
   runs,
   rows,
+  pinned,
   diffOnly,
   empty,
 }: {
   label: string
   runs: ConstructionRun[]
   rows: Row[]
+  /** A last row that "Show diff only" never hides. */
+  pinned?: Row
   diffOnly: boolean
   /** Shown when no run has any row. */
   empty?: string
 }) {
   const headingId = useId()
-  const shown = diffOnly ? rows.filter((row) => differs(row.values)) : rows
-  const message = rows.length === 0 ? (empty ?? null) : shown.length === 0 ? 'No differences.' : null
+  const shown = [...(diffOnly ? rows.filter((row) => differs(row.values)) : rows), ...(pinned ? [pinned] : [])]
+  const message =
+    rows.length === 0 ? (empty ?? null) : shown.length === 0 ? 'No differences.' : null
   return (
     <section aria-labelledby={headingId} className="space-y-2">
       <h2 id={headingId} className="text-sm font-semibold">
@@ -243,6 +351,7 @@ function ComparisonTable({
               <TableRow key={row.label}>
                 <TableHead scope="row" className="font-medium">
                   {row.label}
+                  {row.summary && <KpiSummaryBar summary={row.summary} />}
                 </TableHead>
                 {runs.map((run, i) => (
                   <TableCell key={run.id}>{row.render(i)}</TableCell>

@@ -23,6 +23,8 @@ from stetiq.tracking.entities import (
     ConstructionRun,
     DriftEvent,
     EvaluationResult,
+    GatePreview,
+    GatePreviewSource,
     GateResult,
     KnowledgeGraph,
     KnowledgeGraphSummary,
@@ -88,6 +90,10 @@ DRIFT_EVENT = DriftEvent(
         DriftFinding(DriftKind.UNDECLARED, "Invoice", "node_type"),
     ),
     thresholds=DriftThresholds(max_count_drop=0.5, max_count_increase=2.0),
+)
+
+GATE_PREVIEW_SOURCE = GatePreviewSource(
+    subject_kind="ontology_version", subject_id="2", evaluated_at=LATER
 )
 
 SAMPLES: dict[type, Any] = {
@@ -157,6 +163,15 @@ SAMPLES: dict[type, Any] = {
         ontology_version=2,
         outcomes=(GateOutcome(ConformanceGate("conformant", 0.8), False, ("0.5 < 0.8",)),),
         evaluated_at=AT,
+    ),
+    GatePreviewSource: GATE_PREVIEW_SOURCE,
+    GatePreview: GatePreview(
+        knowledge_graph="support",
+        subject_kind="construction_run",
+        subject_id="run-2",
+        ontology_version=3,
+        outcomes=(GateOutcome(ConformanceGate("conformant", 0.8), True, ("0.9 >= 0.8",)),),
+        source=GATE_PREVIEW_SOURCE,
     ),
     Detail: DETAIL,
     Evaluation: Evaluation(metrics={"score": 1.0}, details=(DETAIL,)),

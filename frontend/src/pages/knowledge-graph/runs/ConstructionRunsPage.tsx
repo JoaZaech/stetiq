@@ -1,8 +1,12 @@
+import { useQuery } from '@tanstack/react-query'
 import { lazy, type ReactNode, Suspense, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { type ConstructionRun, useRuns } from '@/api/runs'
+import { useGatePreviews } from '@/api/gate-previews'
+import { gateResultsQuery } from '@/api/gate-results'
+import { type ConstructionRun, useAllRunEvaluations, useRuns } from '@/api/runs'
 import { kgCompareUrl, knowledgeGraphSection } from '@/app/knowledge-graph-sections'
 import { ColumnPicker } from '@/components/ColumnPicker'
+import type MetricChartGridComponent from '@/components/MetricChartGrid'
 import { CompareToolbar } from '@/components/CompareToolbar'
 import { DataTable } from '@/components/DataTable'
 import { ErrorAlert } from '@/components/ErrorAlert'
@@ -11,7 +15,6 @@ import { ViewModeToggle } from '@/components/ViewModeToggle'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { formatDateTime } from '@/lib/format'
-import { metricSeries } from '@/lib/metric-charts'
 import {
   metricColumnId,
   paramColumnId,
@@ -22,7 +25,9 @@ import {
 } from '@/lib/metric-view-params'
 import { KnowledgeGraphSectionPage } from '../KnowledgeGraphSectionPage'
 import { useKnowledgeGraphName } from '../params'
-import { runChartPoints } from './compare'
+import { type Kpi, type RunChartSeries, runChartSeries } from './compare'
+import { GatePreviewNote } from './gate-verdicts'
+import { KpiSheet, type KpiSelection } from './kpi-sheet'
 import { useRunFilters } from './run-list-params'
 import { useRunTable } from './run-table'
 import {
@@ -41,7 +46,8 @@ const statusFilterLabel = (status: RunStatusFilter) =>
 
 /**
  * `/kg/:name/runs`: the Knowledge Graph's Construction Runs, newest first, as a table
- * (select runs to compare them) or as one chart per run metric and Conformance.
+ * (select runs to compare them) or as one chart per run metric, Conformance and Evaluator
+ * result metric.
  */
 export function ConstructionRunsPage() {
   const [mode, setMode] = useViewMode()
@@ -67,6 +73,7 @@ function FilteredRuns({ runs, mode }: { runs: ConstructionRun[]; mode: ViewMode 
   // Durations of running runs and the time range are measured from when the list loaded.
   const [now] = useState(() => Date.now())
   const filtered = useMemo(() => filterRuns(runs, filters, now), [runs, filters, now])
+  const [selection, setSelection] = useState<KpiSelection | null>(null)
 
   const filterControls = (
     <>
@@ -105,7 +112,8 @@ function FilteredRuns({ runs, mode }: { runs: ConstructionRun[]; mode: ViewMode 
     return (
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-3">{filterControls}</div>
-        <RunCharts runs={filtered} />
+        <RunCharts runs={filtered} onPointClick={(runId, kpi) => setSelection({ runId, kpi })} />
+        <KpiSheet knowledgeGraph={runs[0].knowledge_graph} selection={selection} onClose={() => setSelection(null)} />
       </div>
     )
   }
@@ -161,8 +169,9 @@ function RunTable({
   )
 }
 
-// Recharts is large: load the chart grid only when the chart view is opened.
-const MetricChartGrid = lazy(() => import('@/components/MetricChartGrid'))
+// Recharts is large: load the chart grid only when the chart view is opened. `lazy` drops
+// the grid's series type parameter; restoring it hands `onPointClick` the typed series.
+const MetricChartGrid = lazy(() => import('@/components/MetricChartGrid')) as typeof MetricChartGridComponent
 
 const RUN_X_AXIS = {
   label: 'Started',
@@ -170,14 +179,49 @@ const RUN_X_AXIS = {
   scale: 'time',
 } as const
 
-/** One chart per run metric, plus Conformance, over the runs' start times. */
-function RunCharts({ runs }: { runs: ConstructionRun[] }) {
+/**
+ * One chart per run metric, Conformance and Evaluator result metric (one per Evaluator
+ * parameter configuration), over the runs' start times. A gated KPI's chart draws its Gate
+ * bounds and colours each point pass or fail by the compare page's verdict.
+ * `onPointClick` is called with the clicked point's run and the chart's KPI.
+ */
+function RunCharts({
+  runs,
+  onPointClick,
+}: {
+  runs: ConstructionRun[]
+  onPointClick?: (runId: string, kpi: Kpi) => void
+}) {
+  const name = useKnowledgeGraphName()
+  const evaluations = useAllRunEvaluations(name)
+  const gateResults = useQuery(gateResultsQuery(name))
+  const gatePreviews = useGatePreviews(name)
   const [search, setSearch] = useChartSearch()
-  const series = useMemo(() => metricSeries(runChartPoints(runs)), [runs])
+  const series = useMemo(
+    () => runChartSeries(runs, evaluations.data ?? [], gateResults.data ?? [], gatePreviews.data ?? []),
+    [runs, evaluations.data, gateResults.data, gatePreviews.data],
+  )
+  const failed = [evaluations, gateResults, gatePreviews].find((q) => q.isError)
+  if (failed) return <ErrorAlert error={failed.error} />
+  if (evaluations.isPending || gateResults.isPending || gatePreviews.isPending) {
+    return <Skeleton className="h-64 w-full" />
+  }
+  const source = gatePreviews.data?.[0]?.source
   return (
-    <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-      <MetricChartGrid series={series} xAxis={RUN_X_AXIS} search={search} onSearchChange={setSearch} />
-    </Suspense>
+    <div className="space-y-3">
+      {source !== undefined && <GatePreviewNote knowledgeGraph={name} source={source} />}
+      <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+        <MetricChartGrid<RunChartSeries>
+          series={series}
+          xAxis={RUN_X_AXIS}
+          search={search}
+          onSearchChange={setSearch}
+          onPointClick={
+            onPointClick && ((s, point) => point.id !== undefined && onPointClick(point.id, s.kpi))
+          }
+        />
+      </Suspense>
+    </div>
   )
 }
 

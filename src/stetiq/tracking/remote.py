@@ -22,6 +22,7 @@ from stetiq.tracking.entities import (
     DriftEvent,
     EvaluationResult,
     EvolutionMode,
+    GatePreview,
     GateResult,
     KnowledgeGraph,
     KnowledgeGraphSummary,
@@ -332,3 +333,7 @@ class RemoteTrackingService:
     def list_gate_results(self, knowledge_graph: str) -> list[GateResult]:
         data = self._call("GET", self._kg_path(knowledge_graph) + "/gate-results")
         return [codec.gate_result_from_json(r) for r in data]
+
+    def preview_gates(self, knowledge_graph: str) -> list[GatePreview]:
+        data = self._call("GET", self._kg_path(knowledge_graph) + "/gate-previews")
+        return [codec.gate_preview_from_json(p) for p in data]

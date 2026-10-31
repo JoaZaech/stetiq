@@ -266,9 +266,12 @@ If an Evaluator raises, the SDK raises `EvaluatorError`; the version or run it w
 client.evaluate_gates("support", "stetiq.yaml", version=3)  # Gates from your repo config
 client.set_alias("support", "production", 3)                # Promotion (or rollback)
 client.list_promotions("support")                           # the audit log
+client.preview_gates("support")                             # Gate Previews of every run
 ```
 
 `evaluate_gates` sends the Gate definitions to the tracking service, which computes and records the outcome. It gates the latest Ontology Version by default, `version=N`, or a Construction Run with `run=ID`; passing both `version` and `run` raises `ConflictingArgumentsError`. Gates never block a Promotion, but the audit log records whether the version's latest Gate result passed. Gates are written in [`stetiq.yaml`](./06-stetiq-yaml.md).
+
+`preview_gates` judges every Construction Run with the Gates you used last, without recording anything. It returns one `GatePreview` per run, oldest first: the outcome `evaluate_gates(run=ID)` would give, using the Gate definitions of the most recent Gate result about a Construction Run (or, if no run was ever gated, about any subject). Each preview's `source` names that Gate result (`subject_kind`, `subject_id`, `evaluated_at`). A Knowledge Graph that was never gated gets an empty list. Runs that have a recorded Gate result get a preview too; when both exist, the recorded result is the one that counts. Previews never reach the Promotion audit log, and they can disagree with what CI would decide today if your Gates changed since that Gate result. Gate Previews are available through the SDK, the REST API and the web UI only: there is no CLI command for them.
 
 ## Errors
 

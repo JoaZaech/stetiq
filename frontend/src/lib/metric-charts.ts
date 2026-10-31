@@ -4,16 +4,40 @@
  * number, the run charts the run start time (epoch milliseconds).
  */
 
-/** Whatever is plotted along the x-axis, with the metrics it has. */
+/** Whatever is plotted along the x-axis (`id` names it, e.g. a run id), with the metrics it has. */
 export interface MetricPoint {
   x: number
+  id?: string
   metrics: Readonly<Record<string, number>>
 }
 
-/** One chart's line: a metric's values, ordered along the x-axis. */
+/**
+ * One plotted value. `status`, when the value is judged (e.g. by a Gate), colours the
+ * point pass or fail; `label` says the same in text (e.g. "fail (preview)").
+ */
+export interface ChartPoint {
+  x: number
+  value: number
+  id?: string
+  status?: { passed: boolean; label: string }
+}
+
+/** A dashed horizontal line at `value`, e.g. a Gate's bound: `label` "min 0.6", `name` the Gate. */
+export interface ReferenceLine {
+  name: string
+  label: string
+  value: number
+}
+
+/**
+ * One chart's line: a metric's values, ordered along the x-axis, with any reference lines
+ * and a `note` shown in text under the title (e.g. where the points' verdicts came from).
+ */
 export interface MetricSeries {
   metric: string
-  points: { x: number; value: number }[]
+  points: ChartPoint[]
+  references?: ReferenceLine[]
+  note?: string
 }
 
 /**
@@ -27,13 +51,14 @@ export function metricSeries(points: readonly MetricPoint[]): MetricSeries[] {
     metric,
     points: ordered.flatMap((p) => {
       const value = p.metrics[metric]
-      return value === undefined ? [] : [{ x: p.x, value }]
+      if (value === undefined) return []
+      return [p.id === undefined ? { x: p.x, value } : { x: p.x, value, id: p.id }]
     }),
   }))
 }
 
 /** The series whose metric name contains `search` (case-insensitive); all for a blank one. */
-export function filterMetricSeries(series: readonly MetricSeries[], search: string): MetricSeries[] {
+export function filterMetricSeries<S extends MetricSeries>(series: readonly S[], search: string): S[] {
   const needle = search.trim().toLowerCase()
   return needle === '' ? [...series] : series.filter((s) => s.metric.toLowerCase().includes(needle))
 }

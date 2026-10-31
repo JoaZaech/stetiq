@@ -64,6 +64,8 @@ from stetiq.tracking.entities import (
     DriftEvent,
     EvaluationResult,
     EvolutionMode,
+    GatePreview,
+    GatePreviewSource,
     GateResult,
     KnowledgeGraph,
     KnowledgeGraphSummary,
@@ -282,6 +284,12 @@ class TrackingService(Protocol):
 
     def list_gate_results(self, knowledge_graph: str) -> list[GateResult]:
         """Every recorded Gate evaluation, oldest first."""
+        ...
+
+    def preview_gates(self, knowledge_graph: str) -> list[GatePreview]:
+        """A Gate Preview for every Construction Run, in run order: the Gate definitions
+        of the latest Gate result about a run (else about any subject) evaluated against
+        each run. Records nothing. Empty if the Knowledge Graph was never gated."""
         ...
 
 
@@ -861,31 +869,41 @@ class LocalTrackingService:
         if not gates:
             raise GateConfigError("No Gates to evaluate")
         with self._store.transaction():
-            subject_kind: SubjectKind
-            if run is not None:
-                subject = self.get_run(run)
-                if subject.knowledge_graph != knowledge_graph:
-                    raise NotFoundError(
-                        f"Knowledge Graph {knowledge_graph!r} has no Construction Run {run!r}"
-                    )
-                number = subject.candidate_version or subject.ontology_version
-                subject_kind, subject_id = "construction_run", run
-            else:
-                versions = self.list_ontology_versions(knowledge_graph)
-                number = versions[-1].number if version is None else version
-                subject = self._latest_run_standing_for(knowledge_graph, number)
-                subject_kind, subject_id = "ontology_version", str(number)
-            inputs = self._gate_inputs(knowledge_graph, number, subject)
+            subject_kind, subject_id, inputs = self._gate_subject(
+                knowledge_graph, version=version, run=run
+            )
             result = GateResult(
                 knowledge_graph=knowledge_graph,
                 subject_kind=subject_kind,
                 subject_id=subject_id,
-                ontology_version=number,
+                ontology_version=inputs.ontology_version,
                 outcomes=run_gates(gates, inputs),
                 evaluated_at=_now(),
             )
             self._store.add_gate_result(result)
             return result
+
+    def _gate_subject(
+        self, knowledge_graph: str, *, version: int | None, run: str | None
+    ) -> tuple[SubjectKind, str, GateInputs]:
+        """The subject (a run, else a version, by default the latest) a Gate evaluation
+        is about, and its Gate inputs. Reads only: recording is the caller's choice."""
+        if run is not None:
+            subject = self.get_run(run)
+            if subject.knowledge_graph != knowledge_graph:
+                raise NotFoundError(
+                    f"Knowledge Graph {knowledge_graph!r} has no Construction Run {run!r}"
+                )
+            number = subject.candidate_version or subject.ontology_version
+            return "construction_run", run, self._gate_inputs(knowledge_graph, number, subject)
+        if version is None:
+            version = self.list_ontology_versions(knowledge_graph)[-1].number
+        standing = self._latest_run_standing_for(knowledge_graph, version)
+        return (
+            "ontology_version",
+            str(version),
+            self._gate_inputs(knowledge_graph, version, standing),
+        )
 
     def _latest_run_standing_for(
         self, knowledge_graph: str, version: int
@@ -927,6 +945,32 @@ class LocalTrackingService:
     def list_gate_results(self, knowledge_graph: str) -> list[GateResult]:
         self.get_knowledge_graph(knowledge_graph)
         return self._store.list_gate_results(knowledge_graph)
+
+    def preview_gates(self, knowledge_graph: str) -> list[GatePreview]:
+        with self._store.transaction():
+            results = self.list_gate_results(knowledge_graph)
+            if not results:
+                return []
+            run_results = [r for r in results if r.subject_kind == "construction_run"]
+            source = (run_results or results)[-1]
+            previews = []
+            for run in self._store.list_runs(knowledge_graph):
+                _, _, inputs = self._gate_subject(knowledge_graph, version=None, run=run.id)
+                previews.append(
+                    GatePreview(
+                        knowledge_graph=knowledge_graph,
+                        subject_kind="construction_run",
+                        subject_id=run.id,
+                        ontology_version=inputs.ontology_version,
+                        outcomes=run_gates(source.gates, inputs),
+                        source=GatePreviewSource(
+                            subject_kind=source.subject_kind,
+                            subject_id=source.subject_id,
+                            evaluated_at=source.evaluated_at,
+                        ),
+                    )
+                )
+            return previews
 
     def _latest_gate_verdict(self, knowledge_graph: str, version: int) -> str | None:
         """ "passed"/"failed" for the version's latest Gate result; None if never gated."""

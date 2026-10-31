@@ -4,7 +4,7 @@ import { CircleCheck, CircleX, LoaderCircle, TriangleAlert } from 'lucide-react'
 export type StatusTone = 'success' | 'failure' | 'error' | 'running'
 
 const TONES = {
-  success: { Icon: CircleCheck, className: 'text-emerald-600 dark:text-emerald-500' },
+  success: { Icon: CircleCheck, className: 'text-success' },
   failure: { Icon: CircleX, className: 'text-destructive' },
   error: { Icon: TriangleAlert, className: 'text-destructive' },
   running: { Icon: LoaderCircle, className: 'text-primary' },
