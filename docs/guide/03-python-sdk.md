@@ -80,6 +80,15 @@ from pathlib import Path
 kg = client.create_knowledge_graph("support", ontology=Path("support.yaml"))
 ```
 
+Name the Knowledge Graph's Steward (who watches its Drift and keeps its Definitions and Competency Questions current) and its Authority (who decides changes to its Ontology). Both are free strings for display and routing, for example to send Drift to the right person; they grant no permission, and setting them needs `edit`. A name you leave out stays as it is, and an empty string clears it.
+
+```python
+client.set_knowledge_graph_governance("support", steward="Ada", authority="Support ops board")
+kg = client.get_knowledge_graph("support")
+print(kg.steward, kg.authority)
+client.set_knowledge_graph_governance("support", steward="")  # clears the Steward only
+```
+
 Register a changed Ontology by hand. Registering content identical to an existing version returns that version instead of creating a new one.
 
 ```python

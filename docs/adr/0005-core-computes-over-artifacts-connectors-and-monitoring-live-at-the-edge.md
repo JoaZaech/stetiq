@@ -1,0 +1,10 @@
+# The core computes over artifacts; graph database connectors, construction and monitoring live at the edge
+
+stetiq is the evaluation point in upstream pipeline → stetiq → knowledge graph → Consumers. Its core is the registry of Ontology Versions and Aliases, the Use Case, Evaluation and its results, and the Drift, Pending Migration and Adoption computations. Every one of these works over artifacts the core holds or receives: Ontology Versions, Use Case Versions, Ontology Diffs and Observed Schemas. The core never opens a connection to a graph database. Graph Source adapters run in the user's process and hand the core only an Observed Schema. The Neo4j adapter ships as a reference, and anyone can write another or push an Observed Schema directly. Construction stays a black box behind the Construction Entry Point. Monitoring means the user's scheduler (cron, Airflow, CI) calling `stetiq observe` and routing the Drift events, and is not a stetiq component. We gave up the smoother setup of server-owned connectors so that the core takes on no database drivers, credentials or network reach, and so that adding a database never means changing the core.
+
+## Consequences
+
+- When an Ontology Version is promoted, stetiq's output is the Ontology Diff, classed additive, deprecating or breaking. The user migrates the graph with their own tooling; stetiq neither migrates data nor generates database migration scripts (see ADR 0001).
+- Drift that the Ontology Diff, from the last version the Graph Source conformed to up to the current contract, explains is a Pending Migration until a grace period ends. The core judges the grace period from timestamps at each Observation, so it needs no clock or scheduler of its own.
+- The Use Case is core rather than optional input. It defines what the Knowledge Graph is for, and without it there is nothing to judge an Ontology against and no basis for improving the user's extraction over time (issues #58, #59).
+- A server-side connector API would reverse this decision; it is not to be added casually.

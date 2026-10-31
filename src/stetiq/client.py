@@ -192,6 +192,14 @@ class Client:
         """Replace the Knowledge Graph's markdown description; None or blank clears it."""
         return self._service.set_knowledge_graph_description(name, description)
 
+    def set_knowledge_graph_governance(
+        self, name: str, *, steward: str | None = None, authority: str | None = None
+    ) -> KnowledgeGraph:
+        """Name the Knowledge Graph's Steward and Authority. A name left out stays as it
+        is; an empty string clears it. The names are for display and routing only and
+        grant no permission; setting them needs `edit`."""
+        return self._service.set_knowledge_graph_governance(name, steward, authority)
+
     def list_knowledge_graphs(self) -> list[KnowledgeGraphSummary]:
         """All Knowledge Graphs by name, each with a summary of its state (in server
         mode: those the API token can read)."""
