@@ -82,6 +82,10 @@ _Avoid_: Revision, release, graph version
 The structural difference between two Ontology Versions, with each change classed as cosmetic (only Definitions or Alternative Labels change), additive, deprecating or breaking.
 _Avoid_: Changeset, delta
 
+**Consumer impact**:
+Which Consumers an Ontology Diff hits, followed from each changed Concept through the Competency Questions that need it to their Tasks: **affected** by a breaking change, **will be affected** by a deprecating one, and **unknown** when a question states neither a Concept mapping nor a query; a Task or Consumer takes its most severe level.
+_Avoid_: Blast radius, downstream impact
+
 **Graph Source**:
 A scope within an external graph database (a database, optionally narrowed by label or namespace) bound to one Knowledge Graph, which stetiq reads but never owns.
 _Avoid_: Graph store, backend
