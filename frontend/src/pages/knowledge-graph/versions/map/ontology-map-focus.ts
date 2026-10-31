@@ -72,11 +72,19 @@ export function focusOf(map: OntologyMap, selection: MapSelection | null): MapFo
     return { classes: new Set([link.source, link.target]), links: new Set([link.id]) }
   }
   if (selection?.kind === 'path') {
-    const { from, to } = selection
-    if (!map.nodes.some((n) => n.label === from) || !map.nodes.some((n) => n.label === to)) return null
-    return pathFocus(selection, shortestPaths(map, from, to))
+    const paths = pathsBetween(map, selection)
+    return paths && pathFocus(selection, paths)
   }
   return null
+}
+
+/**
+ * The shortest paths in `map` between a path selection's two classes (none when nothing
+ * joins them); null when `map` lacks either class.
+ */
+export function pathsBetween(map: OntologyMap, { from, to }: { from: string; to: string }): MapPath[] | null {
+  if (!map.nodes.some((n) => n.label === from) || !map.nodes.some((n) => n.label === to)) return null
+  return shortestPaths(map, from, to)
 }
 
 /**

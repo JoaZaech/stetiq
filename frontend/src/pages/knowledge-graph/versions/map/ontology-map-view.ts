@@ -17,13 +17,14 @@ import {
   detailsOf,
   focusOf,
   pathFocus,
+  pathsBetween,
   relationSelection,
   searchMap,
   type MapDetails,
   type MapFocus,
   type MapSelection,
 } from './ontology-map-focus'
-import { type MapPath, shortestPaths } from './ontology-map-paths'
+import type { MapPath } from './ontology-map-paths'
 import { type SearchResults, searchOntology } from './ontology-map-search'
 
 // Emphasis types are aliases, not interfaces: React Flow's node and edge data must be indexable.
@@ -127,12 +128,9 @@ export function createDrawMap(): (input: MapInput, state: MapState) => DrawnMap 
   const selectionFor = remember((value: string | null, shown: OntologyMap, comparison: OntologyComparison | undefined) =>
     mapSelectionOf(parseSelection(value), shown, comparison),
   )
-  const pathsOf = remember((reachable: OntologyMap, selection: MapSelection | null) => {
-    if (selection?.kind !== 'path') return null
-    const { from, to } = selection
-    if (!reachable.nodes.some((n) => n.label === from) || !reachable.nodes.some((n) => n.label === to)) return null
-    return shortestPaths(reachable, from, to)
-  })
+  const pathsOf = remember((reachable: OntologyMap, selection: MapSelection | null) =>
+    selection?.kind === 'path' ? pathsBetween(reachable, selection) : null,
+  )
   const selectedFocusOf = remember(
     (reachable: OntologyMap, selection: MapSelection | null, paths: MapPath[] | null) =>
       selection?.kind === 'path' ? paths && pathFocus(selection, paths) : focusOf(reachable, selection),
