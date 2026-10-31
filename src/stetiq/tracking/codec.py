@@ -335,13 +335,15 @@ def drift_thresholds_to_json(t: DriftThresholds) -> dict[str, Any]:
     return t.to_dict()
 
 
-def drift_thresholds_from_json(d: dict[str, Any] | None) -> DriftThresholds | None:
-    """None means "not given": the tracking service applies the default."""
+def requested_drift_thresholds_from_json(d: dict[str, Any] | None) -> DriftThresholds | None:
+    """Thresholds a request asks for. None means "not given": the tracking service
+    applies the default."""
     return None if d is None else DriftThresholds.from_dict(d)
 
 
-def drift_event_thresholds_from_json(d: dict[str, Any] | None) -> DriftThresholds:
-    """The thresholds a Drift event was judged with; none recorded means no thresholds."""
+def recorded_drift_thresholds_from_json(d: dict[str, Any] | None) -> DriftThresholds:
+    """The thresholds a Drift event was judged with. None means none were recorded, so
+    every check was off."""
     return DriftThresholds.from_dict(d or {})
 
 
@@ -377,7 +379,7 @@ def drift_event_from_json(d: dict[str, Any]) -> DriftEvent:
         ontology_version=d["ontology_version"],
         detected_at=datetime.fromisoformat(d["detected_at"]),
         findings=drift_findings_from_json(d["findings"]),
-        thresholds=drift_event_thresholds_from_json(d.get("thresholds")),
+        thresholds=recorded_drift_thresholds_from_json(d.get("thresholds")),
     )
 
 

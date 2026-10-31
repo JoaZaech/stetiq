@@ -714,7 +714,9 @@ class SqlStore:
                 ontology_version=r["ontology_version"],
                 detected_at=datetime.fromisoformat(r["detected_at"]),
                 findings=codec.drift_findings_from_json(json.loads(r["findings_json"])),
-                thresholds=codec.drift_event_thresholds_from_json(json.loads(r["thresholds_json"])),
+                thresholds=codec.recorded_drift_thresholds_from_json(
+                    json.loads(r["thresholds_json"])
+                ),
             )
             for r in rows
         ]

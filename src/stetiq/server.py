@@ -328,7 +328,7 @@ def create_app(
             codec.graph_source_scope_from_json(scope),
             codec.observed_schema_from_json(observed_schema),
         )
-        thresholds = codec.drift_thresholds_from_json(drift_thresholds)
+        thresholds = codec.requested_drift_thresholds_from_json(drift_thresholds)
         return codec.observation_outcome_to_json(
             tracking.record_observation(name, observation, thresholds)
         )
