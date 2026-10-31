@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import dataclasses
 import getpass
 import os
 import subprocess
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 from stetiq.drift import DriftThresholds
 from stetiq.entry_point import EntryPoint, EntryPointError, placeholder_values
@@ -28,6 +30,7 @@ from stetiq.evaluation.llm_mapping import question_mapper_from_env
 from stetiq.evaluation.run import CompetencyQuestionExecution, RunSubject, ScopedGraphSource
 from stetiq.gates import GatesInput, load_gates
 from stetiq.graph_source import GraphSource, GraphSourceScope, graph_source_from_env
+from stetiq.impact import UseCaseImpact, consumer_impact
 from stetiq.ontology import Ontology, parse_yaml
 from stetiq.ontology.diff import OntologyDiff, diff_ontologies
 from stetiq.ontology.yaml_format import to_yaml
@@ -128,13 +131,20 @@ def _evaluation_key(evaluator: str, parameters: Mapping[str, object]) -> str:
 # A Use Case given to the SDK: Use Case YAML text, a path to a YAML file, a `UseCase`,
 # or just its Competency Questions.
 UseCaseInput = (
-    str | os.PathLike[str] | UseCase | list[CompetencyQuestion] | tuple[CompetencyQuestion, ...]
+    str
+    | os.PathLike[str]
+    | dict[str, Any]
+    | UseCase
+    | list[CompetencyQuestion]
+    | tuple[CompetencyQuestion, ...]
 )
 
 
 def _to_use_case(use_case: UseCaseInput) -> UseCase:
     if isinstance(use_case, UseCase):
         return use_case
+    if isinstance(use_case, dict):
+        return parse_use_case_dict(use_case)
     if isinstance(use_case, (list, tuple)):
         return UseCase(competency_questions=tuple(use_case))
     if isinstance(use_case, os.PathLike):
@@ -325,11 +335,33 @@ class Client:
         `base` defaults to the Contract Alias's version and `target` to the latest
         Candidate (else the latest version), so a bare call answers "what would
         promoting the newest Candidate change"."""
+        return diff_ontologies(*self._diff_ends(knowledge_graph, base, target))
+
+    def consumer_impact(
+        self,
+        knowledge_graph: str,
+        base: int | None = None,
+        target: int | None = None,
+        *,
+        use_case_version: int | None = None,
+    ) -> UseCaseImpact:
+        """Which Consumers, Tasks and Competency Questions of a Use Case Version (default
+        the latest) the Ontology Diff from `base` to `target` hits: breaking changes make
+        them affected, deprecating ones will-be-affected, and a question only a question
+        mapper could map is unknown. Versions default as in `diff_ontology_versions`.
+        Raises `NoUseCaseError` when the Knowledge Graph has no Use Case."""
+        use_case = self.get_use_case_version(knowledge_graph, use_case_version).use_case
+        old, new = self._diff_ends(knowledge_graph, base, target)
+        return consumer_impact(diff_ontologies(old, new), use_case, old)
+
+    def _diff_ends(
+        self, knowledge_graph: str, base: int | None, target: int | None
+    ) -> tuple[Ontology, Ontology]:
         if base is None:
             base = self.get_contract_version(knowledge_graph).number
         if target is None:
             target = self.latest_candidate(knowledge_graph).number
-        return diff_ontologies(
+        return (
             self.get_ontology_version(knowledge_graph, base).ontology,
             self.get_ontology_version(knowledge_graph, target).ontology,
         )
@@ -368,9 +400,8 @@ class Client:
         # The service rejects a question whose id the Use Case already has.
         return self._service.register_use_case(
             knowledge_graph,
-            UseCase(
-                competency_questions=(*current.competency_questions, question),
-                description=current.description,
+            dataclasses.replace(
+                current, competency_questions=(*current.competency_questions, question)
             ),
         )
 

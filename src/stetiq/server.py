@@ -30,6 +30,7 @@ from stetiq.errors import NotFoundError, PermissionDeniedError, StetiqError
 from stetiq.evaluation.answerability import CompetencyQuestionMapper
 from stetiq.evaluation.framework import SubjectKind
 from stetiq.gates import parse_gates
+from stetiq.impact import consumer_impact
 from stetiq.ontology import parse_dict
 from stetiq.ontology.diff import diff_ontologies
 from stetiq.tracking import LocalTrackingService, SqlStore, TrackingService, codec, wire
@@ -247,6 +248,19 @@ def create_app(
                 tracking.get_ontology_version(name, base).ontology,
                 tracking.get_ontology_version(name, target).ontology,
             )
+        )
+
+    @api.get("/knowledge-graphs/{name}/consumer-impact")
+    def consumer_impact_of_diff(
+        name: str, base: int, target: int, use_case_version: int | None = None
+    ) -> dict[str, Any]:
+        # The same pure function `Client.consumer_impact` composes; the service resolves
+        # the latest Use Case Version and raises NoUseCaseError without one.
+        use_case = tracking.get_use_case_version(name, use_case_version).use_case
+        old = tracking.get_ontology_version(name, base).ontology
+        new = tracking.get_ontology_version(name, target).ontology
+        return wire.use_case_impact_to_json(
+            consumer_impact(diff_ontologies(old, new), use_case, old)
         )
 
     # --- Graph Sources -------------------------------------------------------------

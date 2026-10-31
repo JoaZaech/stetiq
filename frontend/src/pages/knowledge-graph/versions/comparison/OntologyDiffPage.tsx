@@ -2,6 +2,7 @@ import { Link } from 'react-router'
 import { isNotFound } from '@/api/client'
 import { useOntologyDiff } from '@/api/ontology-diff'
 import { kgUrl } from '@/app/knowledge-graph-sections'
+import { ConsumerImpactPanel } from '@/components/ConsumerImpact'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { PageHeader } from '@/components/PageHeader'
 import { NotFoundPage } from '@/pages/NotFoundPage'
@@ -46,6 +47,7 @@ export function OntologyDiffPage() {
         }
         actions={controls}
       />
+      {!diff.isError && <ConsumerImpactPanel knowledgeGraph={name} base={base} target={target} className="mb-4" />}
       {diff.isError ? (
         <ErrorAlert error={diff.error} />
       ) : view === 'map' ? (

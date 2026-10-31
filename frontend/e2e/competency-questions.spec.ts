@@ -197,7 +197,7 @@ test('invalid input is shown on its field and nothing is saved', async ({ page }
 
   await expect(id).toHaveAttribute('aria-invalid', 'true')
   await expect(id).toHaveAccessibleDescription(
-    /Another Competency Question already has the id customer-names\./,
+    /The Competency Question customer-names already has this id\./,
   )
   await expect(expected).toHaveAccessibleDescription(/Not valid JSON/)
   await expect(concepts).toHaveAccessibleDescription(/Not a Concept reference: "Customer\."/)

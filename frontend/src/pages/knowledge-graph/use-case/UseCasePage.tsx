@@ -1,9 +1,11 @@
-import { useCallback, useId, useState, type ReactNode } from 'react'
+import { useCallback, useId, useMemo, useState, type ReactNode } from 'react'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import {
   useUseCaseVersions,
   type CompetencyQuestion,
+  type Consumer,
   type SavedUseCase,
+  type Task,
   type UseCase,
   type UseCaseVersion,
 } from '@/api/use-cases'
@@ -17,9 +19,17 @@ import { KnowledgeGraphSectionPage } from '../KnowledgeGraphSectionPage'
 import { useKnowledgeGraphName } from '../params'
 import { CompetencyQuestionDialog } from './CompetencyQuestionDialog'
 import { CompetencyQuestionsTable } from './CompetencyQuestionsTable'
+import { ConfirmRemoveDialog, TaskList } from './ConfirmRemoveDialog'
+import { ConsumerCards } from './ConsumerCards'
+import { ConsumerDialog } from './ConsumerDialog'
+import { withoutConsumer, withoutTask } from './consumer-form'
+import { DraftWithAiPlanned } from './planned'
 import { RemoveCompetencyQuestionDialog } from './RemoveCompetencyQuestionDialog'
+import { questionsServingNoTask } from './readiness'
 import { savedMessage } from './saved-message'
 import { StructuralAnswerability } from './StructuralAnswerability'
+import { TaskDialog } from './TaskDialog'
+import { TaskReadiness } from './TaskReadiness'
 import { UseCaseVersionsTable } from './UseCaseVersionsTable'
 
 const SECTION = knowledgeGraphSection('use-case')
@@ -28,11 +38,11 @@ const SECTION = knowledgeGraphSection('use-case')
 const NO_USE_CASE: UseCase = { competency_questions: [] }
 
 /**
- * `/kg/:name/use-case`: the latest Use Case Version (description and Competency
- * Questions), then every Use Case Version, to compare.
+ * `/kg/:name/use-case`: the latest Use Case Version (description, Competency Questions,
+ * and its Consumers with their Tasks), then every Use Case Version, to compare.
  *
- * Editors add, edit and remove Competency Questions here; each save sends the complete
- * edited Use Case and registers a new Use Case Version.
+ * Editors add, edit and remove Competency Questions, Consumers and their Tasks here; each
+ * save sends the complete edited Use Case and registers a new Use Case Version.
  */
 export function UseCasePage() {
   const name = useKnowledgeGraphName()
@@ -73,6 +83,7 @@ export function UseCasePage() {
           {latest ? (
             <>
               <LatestVersion name={name} version={latest} onSaved={setSaved} />
+              <Consumers name={name} version={latest} onSaved={setSaved} />
               <StructuralAnswerability knowledgeGraph={name} useCaseVersion={latest.number} />
               <Panel title="Use Case Versions">
                 <UseCaseVersionsTable name={name} versions={versions.data} />
@@ -143,6 +154,7 @@ function LatestVersion({ name, version, onSaved }: LatestVersionProps) {
     ),
     [name, useCase, onSaved],
   )
+  const servingNoTask = useMemo(() => questionsServingNoTask(useCase), [useCase])
   return (
     <Panel title={`Use Case Version ${version.number}`}>
       <p className="text-xs text-muted-foreground">
@@ -151,18 +163,171 @@ function LatestVersion({ name, version, onSaved }: LatestVersionProps) {
       <p className="text-sm">
         {useCase.description ?? <span className="text-muted-foreground">No description</span>}
       </p>
-      <CompetencyQuestionsTable questions={useCase.competency_questions} rowActions={rowActions} />
+      <CompetencyQuestionsTable
+        questions={useCase.competency_questions}
+        rowActions={rowActions}
+        servingNoTask={servingNoTask}
+      />
     </Panel>
   )
 }
 
-function Panel({ title, children }: { title: string; children: ReactNode }) {
+interface ConsumersProps {
+  name: string
+  version: UseCaseVersion
+  onSaved: (saved: SavedUseCase) => void
+}
+
+/** The latest Use Case Version's Consumer cards, with their Tasks' readiness and edit controls. */
+function Consumers({ name, version, onSaved }: ConsumersProps) {
+  const useCase = version.use_case
+  const consumerActions = useCallback(
+    (consumer: Consumer) => (
+      <>
+        <NeedsEditAccess knowledgeGraph={name}>
+          {(disabled) => (
+            <TaskDialog
+              knowledgeGraph={name}
+              useCase={useCase}
+              consumer={consumer}
+              onSaved={onSaved}
+              trigger={
+                <Button variant="ghost" size="icon-sm" disabled={disabled} aria-label={`Add Task to ${consumer.id}`}>
+                  <Plus />
+                </Button>
+              }
+            />
+          )}
+        </NeedsEditAccess>
+        <NeedsEditAccess knowledgeGraph={name}>
+          {(disabled) => (
+            <ConsumerDialog
+              knowledgeGraph={name}
+              useCase={useCase}
+              consumer={consumer}
+              onSaved={onSaved}
+              trigger={
+                <Button variant="ghost" size="icon-sm" disabled={disabled} aria-label={`Edit Consumer ${consumer.id}`}>
+                  <Pencil />
+                </Button>
+              }
+            />
+          )}
+        </NeedsEditAccess>
+        <NeedsEditAccess knowledgeGraph={name}>
+          {(disabled) => (
+            <ConfirmRemoveDialog
+              knowledgeGraph={name}
+              title={`Remove ${consumer.name}?`}
+              description={
+                consumer.tasks?.length
+                  ? 'It will not be in the new Use Case Version, and neither will its Tasks. The Competency Questions stay.'
+                  : 'It will not be in the new Use Case Version. The Competency Questions stay.'
+              }
+              next={() => withoutConsumer(useCase, consumer.id)}
+              onSaved={onSaved}
+              trigger={
+                <Button variant="ghost" size="icon-sm" disabled={disabled} aria-label={`Remove Consumer ${consumer.id}`}>
+                  <Trash2 />
+                </Button>
+              }
+            >
+              {consumer.tasks?.length ? <TaskList label="Tasks removed with it" tasks={consumer.tasks} /> : null}
+            </ConfirmRemoveDialog>
+          )}
+        </NeedsEditAccess>
+      </>
+    ),
+    [name, useCase, onSaved],
+  )
+  const taskActions = useCallback(
+    (task: Task, consumer: Consumer) => (
+      <>
+        <NeedsEditAccess knowledgeGraph={name}>
+          {(disabled) => (
+            <TaskDialog
+              knowledgeGraph={name}
+              useCase={useCase}
+              consumer={consumer}
+              task={task}
+              onSaved={onSaved}
+              trigger={
+                <Button variant="ghost" size="icon-xs" disabled={disabled} aria-label={`Edit Task ${task.id}`}>
+                  <Pencil />
+                </Button>
+              }
+            />
+          )}
+        </NeedsEditAccess>
+        <NeedsEditAccess knowledgeGraph={name}>
+          {(disabled) => (
+            <ConfirmRemoveDialog
+              knowledgeGraph={name}
+              title={`Remove ${task.id}?`}
+              description={`“${task.description}” will not be in the new Use Case Version. The Competency Questions it needs stay.`}
+              next={() => withoutTask(useCase, task.id)}
+              onSaved={onSaved}
+              trigger={
+                <Button variant="ghost" size="icon-xs" disabled={disabled} aria-label={`Remove Task ${task.id}`}>
+                  <Trash2 />
+                </Button>
+              }
+            />
+          )}
+        </NeedsEditAccess>
+      </>
+    ),
+    [name, useCase, onSaved],
+  )
+  return (
+    <Panel
+      title="Consumers"
+      actions={
+        <NeedsEditAccess knowledgeGraph={name}>
+          {(disabled) => (
+            <ConsumerDialog
+              knowledgeGraph={name}
+              useCase={useCase}
+              onSaved={onSaved}
+              trigger={
+                <Button variant="outline" size="sm" disabled={disabled}>
+                  <Plus />
+                  Add Consumer
+                </Button>
+              }
+            />
+          )}
+        </NeedsEditAccess>
+      }
+    >
+      <DraftWithAiPlanned />
+      <ConsumerCards
+        useCase={useCase}
+        taskStatus={(task) => <TaskReadiness knowledgeGraph={name} useCaseVersion={version.number} task={task} />}
+        consumerActions={consumerActions}
+        taskActions={taskActions}
+      />
+    </Panel>
+  )
+}
+
+interface PanelProps {
+  title: string
+  /** Controls beside the title. */
+  actions?: ReactNode
+  children: ReactNode
+}
+
+function Panel({ title, actions, children }: PanelProps) {
   const id = useId()
   return (
     <section aria-labelledby={id} className="min-w-0 space-y-3">
-      <h3 id={id} className="text-sm font-semibold">
-        {title}
-      </h3>
+      <div className="flex items-center justify-between gap-2">
+        <h3 id={id} className="text-sm font-semibold">
+          {title}
+        </h3>
+        {actions}
+      </div>
       {children}
     </section>
   )

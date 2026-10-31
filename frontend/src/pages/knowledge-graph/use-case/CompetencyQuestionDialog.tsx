@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { ApiError } from '@/api/client'
 import { useSaveUseCase, type CompetencyQuestion, type SavedUseCase, type UseCase } from '@/api/use-cases'
 import { ErrorAlert } from '@/components/ErrorAlert'
@@ -14,8 +14,8 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Field } from './form-field'
 import {
   draftOf,
   EMPTY_DRAFT,
@@ -84,10 +84,7 @@ export function CompetencyQuestionDialog({
           noValidate
           onSubmit={(event) => {
             event.preventDefault()
-            const otherIds = useCase.competency_questions
-              .map((q) => q.id)
-              .filter((id) => id !== question?.id)
-            const invalid = validateDraft(draft, otherIds)
+            const invalid = validateDraft(draft, useCase, question?.id)
             setErrors(invalid)
             if (Object.keys(invalid).length) return
             saving.mutate(withQuestion(useCase, questionOf(draft)), {
@@ -143,50 +140,5 @@ export function CompetencyQuestionDialog({
         </form>
       </DialogContent>
     </Dialog>
-  )
-}
-
-interface ControlProps {
-  id: string
-  value: string
-  onChange: (event: { target: { value: string } }) => void
-  'aria-invalid': boolean | undefined
-  'aria-describedby': string | undefined
-}
-
-interface FieldProps {
-  label: string
-  hint?: string
-  value: string
-  error: string | undefined
-  onChange: (value: string) => void
-  children: (props: ControlProps) => ReactNode
-}
-
-/** A labelled form control with its hint and, when invalid, its error message. */
-function Field({ label, hint, value, error, onChange, children }: FieldProps) {
-  const id = useId()
-  const described = [hint && `${id}-hint`, error && `${id}-error`].filter(Boolean).join(' ')
-  return (
-    <div className="grid gap-1.5">
-      <Label htmlFor={id}>{label}</Label>
-      {children({
-        id,
-        value,
-        onChange: (event) => onChange(event.target.value),
-        'aria-invalid': error ? true : undefined,
-        'aria-describedby': described || undefined,
-      })}
-      {hint && (
-        <p id={`${id}-hint`} className="text-xs text-muted-foreground">
-          {hint}
-        </p>
-      )}
-      {error && (
-        <p id={`${id}-error`} className="text-xs text-destructive">
-          {error}
-        </p>
-      )}
-    </div>
   )
 }

@@ -1,4 +1,5 @@
-"""The Use Case model: a set of Competency Questions, versioned independently of the Ontology."""
+"""The Use Case model: Consumers, their Tasks and the Competency Questions those Tasks need,
+versioned independently of the Ontology."""
 
 from __future__ import annotations
 
@@ -29,9 +30,45 @@ class CompetencyQuestion:
 
 
 @dataclass(frozen=True)
+class Task:
+    """A piece of work one Consumer performs with the Knowledge Graph.
+
+    - `id`: stable identifier, unique among all Tasks of the Use Case.
+    - `description`: what the work is.
+    - `competency_questions`: the ids of the Competency Questions it needs answered.
+    """
+
+    id: str
+    description: str
+    competency_questions: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class Consumer:
+    """Anyone or anything that uses the Knowledge Graph downstream.
+
+    - `id`: stable identifier across Use Case Versions, unique among the Consumers.
+    - `name`: what people call it.
+    - `kind`: optional free text (an application, an agent, a dashboard, a team, ...).
+    - `contact`: optional name of whom to ask about it.
+    - `description`: optional free text.
+    - `tasks`: what it does with the Knowledge Graph. A Consumer depends on Concepts only
+      through its Tasks' Competency Questions.
+    """
+
+    id: str
+    name: str
+    tasks: tuple[Task, ...] = ()
+    kind: str | None = None
+    contact: str | None = None
+    description: str | None = None
+
+
+@dataclass(frozen=True)
 class UseCase:
     competency_questions: tuple[CompetencyQuestion, ...]
     description: str | None = None
+    consumers: tuple[Consumer, ...] = ()
 
     def competency_question(self, id: str) -> CompetencyQuestion:
         for q in self.competency_questions:

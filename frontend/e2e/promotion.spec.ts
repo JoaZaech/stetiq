@@ -115,3 +115,68 @@ test.describe('the Promote dialog (stetiq ui)', () => {
     await expect(rows.nth(1)).toHaveText(/production.*v1.*v2.*e2e.*Passed/)
   })
 })
+
+test.describe('the Promote dialog’s Consumer impact (stetiq ui)', () => {
+  test.use({ seed: 'support_consumer_impact' })
+
+  test('lists the Consumers and Tasks the move affects and will affect, and still lets you promote', async ({
+    page,
+  }) => {
+    await page.goto('/ui/kg/support/versions/4')
+    await page.getByRole('button', { name: 'Promote' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Promote v4' })
+    await dialog.getByRole('radio', { name: 'staging' }).check()
+
+    // The impact of the Diff from v2 (where staging points now) to v4.
+    const impact = dialog.getByRole('region', { name: 'Consumer impact' })
+    const affected = impact.getByRole('region', { name: 'Affected', exact: true })
+    const bot = affected.getByRole('listitem', { name: 'Triage bot' })
+    await expect(bot.getByRole('list', { name: 'Tasks of Triage bot hit' }).locator(':scope > li')).toHaveText([
+      /Route a new ticket by its age.*route-ticket/,
+      /Assign the ticket to an agent.*assign-agent.*\(will be affected\)/,
+    ])
+    const later = impact.getByRole('region', { name: 'Will be affected' })
+    await expect(later.getByRole('listitem', { name: 'Workload dashboard' })).toContainText('Chart each agent')
+    await expect(impact.getByText('CRM sync')).toHaveCount(0)
+
+    // Impact informs the Promotion; it never blocks it.
+    await dialog.getByRole('button', { name: 'Promote to staging' }).click()
+    await expect(dialog).toBeHidden()
+    await page.getByRole('link', { name: 'Promotions' }).click()
+    const rows = page.getByRole('table', { name: 'Promotions' }).getByRole('row')
+    await expect(rows.nth(1)).toHaveText(/staging.*v2.*v4.*e2e/)
+  })
+
+  test('says plainly when the move hits no Consumer', async ({ page }) => {
+    await page.goto('/ui/kg/support/versions/2')
+    await page.getByRole('button', { name: 'Promote' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Promote v2' })
+    await dialog.getByRole('radio', { name: 'production' }).check()
+
+    // v1 -> v2 only adds, so no Consumer, Task or question is hit.
+    await expect(dialog.getByRole('region', { name: 'Consumer impact' })).toHaveText(
+      /Consumer impact\s*No Consumer, Task or Competency Question is hit\./,
+    )
+    await dialog.getByRole('checkbox', { name: 'Switch Construction Runs and Drift to v2' }).check()
+    await dialog.getByRole('button', { name: 'Promote to production' }).click()
+    await expect(dialog).toBeHidden()
+  })
+})
+
+test.describe('the Promote dialog without a Use Case (stetiq ui)', () => {
+  test.use({ seed: 'ontology_map' })
+
+  test('says no Consumers are declared, and still lets you promote', async ({ page }) => {
+    await page.goto('/ui/kg/support/versions/2')
+    await page.getByRole('button', { name: 'Promote' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Promote v2' })
+    await dialog.getByRole('radio', { name: 'production' }).check()
+
+    await expect(dialog.getByRole('region', { name: 'Consumer impact' })).toContainText(
+      'This Knowledge Graph has no Use Case, so no Consumers are declared',
+    )
+    await dialog.getByRole('checkbox', { name: 'Switch Construction Runs and Drift to v2' }).check()
+    await dialog.getByRole('button', { name: 'Promote to production' }).click()
+    await expect(dialog).toBeHidden()
+  })
+})

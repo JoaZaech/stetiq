@@ -1,4 +1,6 @@
-import type { CompetencyQuestion, UseCase } from '@/api/use-cases'
+import type { CompetencyQuestion, Task, UseCase } from '@/api/use-cases'
+import { mapTasks } from './consumer-form'
+import { checkId } from './element-ids'
 
 /** The Competency Question form's fields, as typed (all text). */
 export interface QuestionDraft {
@@ -80,14 +82,14 @@ export function isConceptReference(text: string): boolean {
 
 /**
  * The form's errors, per field, before anything is sent: a missing id or question, an
- * id another question in the Use Case has (`otherIds`), an expected answer that is not
- * JSON, malformed Concept references. Empty when the draft can be saved.
+ * id another question, a Consumer or a Task of `useCase` already has, an expected answer
+ * that is not JSON, malformed Concept references. `own` is the id of the question being
+ * edited. Empty when the draft can be saved.
  */
-export function validateDraft(draft: QuestionDraft, otherIds: readonly string[]): DraftErrors {
+export function validateDraft(draft: QuestionDraft, useCase: UseCase, own?: string): DraftErrors {
   const errors: DraftErrors = {}
-  const id = draft.id.trim()
-  if (!id) errors.id = 'Needs an id.'
-  else if (otherIds.includes(id)) errors.id = `Another Competency Question already has the id ${id}.`
+  const id = checkId(draft.id.trim(), useCase, own)
+  if (id) errors.id = id
   if (!draft.question.trim()) errors.question = 'Needs the question in natural language.'
   if (draft.expected_answer.trim()) {
     try {
@@ -107,14 +109,28 @@ const SERVER_FIELD_RE = /^[^:]*?\.(id|question|query|expected_answer|concepts): 
 
 /**
  * The form field a server Use Case validation error is about (`<path>.<field>: ...`, or
- * `<id>: duplicate competency question id`); undefined when it is about the whole Use Case.
+ * or an id another element has: `<id>: duplicate competency question id`,
+ * `<id>: <kind> id is already a <kind> id`); undefined when it is about the whole Use Case.
  */
 export function serverErrorField(message: string): DraftField | undefined {
-  if (/: duplicate competency question id$/.test(message)) return 'id'
+  if (/: (duplicate competency question id|[a-z ]+ id is already a [a-z ]+ id)$/.test(message)) return 'id'
   return SERVER_FIELD_RE.exec(message)?.[1] as DraftField | undefined
 }
 
-/** `useCase` without the question `id`. */
+/** The Tasks of `useCase` that need the question `id`, in Consumer order. */
+export function tasksNeeding(useCase: UseCase, id: string): Task[] {
+  return (useCase.consumers ?? []).flatMap((c) =>
+    (c.tasks ?? []).filter((t) => t.competency_questions?.includes(id)),
+  )
+}
+
+/** `useCase` without the question `id`, which every Task that needed it loses. */
 export function withoutQuestion(useCase: UseCase, id: string): UseCase {
-  return { ...useCase, competency_questions: useCase.competency_questions.filter((q) => q.id !== id) }
+  const rest = { ...useCase, competency_questions: useCase.competency_questions.filter((q) => q.id !== id) }
+  return mapTasks(rest, (task) => {
+    if (!task.competency_questions?.includes(id)) return task
+    const { competency_questions, ...bare } = task
+    const needs = competency_questions.filter((q) => q !== id)
+    return needs.length ? { ...bare, competency_questions: needs } : bare
+  })
 }

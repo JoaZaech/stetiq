@@ -1,4 +1,11 @@
-# What the maintenance lead needs the Knowledge Graph to answer.
+# Who uses the plant Knowledge Graph, what they do with it, and the questions that work
+# needs answered.
+#
+# Three Consumers read the graph: the maintenance assistant (an agent that triages new
+# breakdowns for the shift), the downtime dashboard on the shop floor, and the
+# reliability engineers' weekly review. root-causes serves two Tasks, so a change that
+# breaks it reaches both the assistant and the review. repeat-faults serves no Task yet:
+# the reliability team asked for it, but nothing reads it until it is mapped.
 #
 # A question with a `query` is executed against the graph at the end of every
 # Construction Run (competency_question_execution). Every question is also judged
@@ -45,3 +52,37 @@ competency_questions:
     query: >-
       MATCH (w:WorkOrder)
       RETURN w.kind AS kind, sum(w.downtime_minutes) AS downtime_minutes
+consumers:
+  - id: maintenance-assistant
+    name: Maintenance assistant
+    kind: agent
+    contact: Priya Natarajan
+    description: Triages each new breakdown for the shift lead and chases open follow-ups.
+    tasks:
+      - id: triage-breakdown
+        description: Say where a broken-down machine sits, what caused it last time, and who fixed it
+        competency_questions: [root-causes, breakdown-technicians, line-for-order]
+      - id: chase-follow-ups
+        description: Remind each technician of the follow-ups they still own
+        competency_questions: [open-follow-ups]
+  - id: downtime-dashboard
+    name: Downtime dashboard
+    kind: dashboard
+    contact: Priya Natarajan
+    description: The shop-floor screen the morning stand-up starts from.
+    tasks:
+      - id: machine-league
+        description: Rank machines by work orders and show what breakdowns cost against preventive work
+        competency_questions: [orders-per-machine, downtime-by-kind]
+      - id: starvation-risk
+        description: Show which machines starve when Press-02 stops
+        competency_questions: [downstream-of-press]
+  - id: reliability-team
+    name: Reliability engineering
+    kind: team
+    contact: Tomasz Wieczorek
+    description: Decides which machines get a preventive-maintenance overhaul.
+    tasks:
+      - id: weekly-reliability-review
+        description: Review the worst machines and their root causes every Monday
+        competency_questions: [root-causes, orders-per-machine]

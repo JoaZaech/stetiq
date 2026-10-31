@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pytest
 
+import stetiq
+
 EXAMPLE_DIR = Path(__file__).resolve().parent.parent / "examples" / "transit-network-kg"
 MODULE_NAME = "example_transit_network_kg_demo"
 KG = "city-transit"
@@ -51,6 +53,41 @@ def test_act_1_declares_the_knowledge_graph_and_judges_the_use_case_against_v1(d
     assert demo.step("evolution-strict").output == "strict"
 
 
+def consumers_of(use_case_version):
+    return {
+        c.id: (c.name, c.kind, {t.id: set(t.competency_questions) for t in c.tasks})
+        for c in use_case_version.use_case.consumers
+    }
+
+
+def test_act_1_registers_the_consumers_and_the_tasks_they_need_answered(demo):
+    # stops-on-route and accessible-stops each serve two Tasks; average-dwell-time none.
+    latest = stetiq.Client(demo.tracking_uri).get_use_case_version(KG)
+    assert latest.number == 1
+    assert consumers_of(latest) == {
+        "journey-planner": (
+            "Journey planner",
+            "application",
+            {"plan-journey": {"stops-on-route", "transfers-at-stop", "accessible-stops"}},
+        ),
+        "timetable-team": (
+            "Timetable team",
+            "team",
+            {"publish-timetable": {"trips-per-service", "stops-on-route"}},
+        ),
+        "step-free-report": (
+            "Step-free access report",
+            "report",
+            {"audit-step-free-stops": {"accessible-stops"}},
+        ),
+        "operations-dashboard": (
+            "Operations dashboard",
+            "dashboard",
+            {"depots-and-zones": {"depot-of-route", "stops-per-zone"}},
+        ),
+    }
+
+
 def test_act_2_strict_evolution_mode_fails_the_run_and_the_cli_exits_1(demo):
     strict = demo.step("run-strict")
     assert strict.exit_code == 1
@@ -76,8 +113,9 @@ def test_act_2_evolving_mode_yields_candidate_v2_as_an_additive_diff(demo):
     assert "Candidate: Ontology Version 2" in evolving.output
     diff = demo.step("diff-1-2")
     assert diff.exit_code == 0
-    assert diff.lines[-1] == "Overall: additive"
-    assert [line.split()[2] for line in diff.lines[:-1]] == [
+    # Additive changes hit no Consumer.
+    assert diff.lines[-2:] == ["Overall: additive", "Consumer impact: none"]
+    assert [line.split()[2] for line in diff.lines[:-2]] == [
         "Stop.wheelchairBoarding",
         "Trip.bikesAllowed",
         "PARENT_STATION",
@@ -98,7 +136,7 @@ def test_act_2_naming_conventions_flag_the_feed_spelling_in_v2_and_nothing_in_v3
     v3 = demo.step("evaluate-v3")
     assert v3.metrics("naming_conventions") == {"checked": 46, "compliance": 1, "violations": 0}
     assert v3.metrics("structural_answerability")["answerable_ratio"] == pytest.approx(6 / 7)
-    assert demo.step("diff-1-3").lines[-1] == "Overall: additive"
+    assert demo.step("diff-1-3").lines[-2:] == ["Overall: additive", "Consumer impact: none"]
 
 
 def test_act_3_gates_reject_the_candidate_pass_v3_and_ci_promotes_production(demo):
