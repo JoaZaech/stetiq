@@ -28,11 +28,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { useConceptSelection } from '../concept-selection'
-import { MapChangeSummary } from '../comparison/MapChangeSummary'
+import { MapChangeSummary, MapChangesRail } from '../comparison/MapChangeSummary'
+import { CosmeticDot } from '@/components/SeveritySwatch'
 import { MapDetailsPanel } from './MapDetailsPanel'
 import { MAP_HEIGHT } from '../map-view'
 import { MapPathPanel } from './MapPathPanel'
 import { MapSearchResults } from './MapSearchResults'
+import type { MapPanelNav } from './MapSidePanel'
 import type { LinkRoute } from './ontology-map'
 import {
   type AttributeChange,
@@ -60,6 +62,7 @@ import {
   type Emphasis,
   type LinkEmphasis,
   type MapGesture,
+  type MapPanelBack,
 } from './ontology-map-view'
 import { SEVERITY, severityStroke } from '@/components/severity-style'
 
@@ -170,16 +173,8 @@ const CHANGE_STYLE: Record<MapChangeKind, ChangeStyle> = {
   },
 }
 
-/** A cosmetic change's mark: small, round and neutral. */
-function CosmeticDot({ className }: { className?: string }) {
-  return (
-    <span
-      aria-hidden
-      data-documentation-dot
-      className={cn('inline-block size-1.5 shrink-0 rounded-full bg-muted-foreground', className)}
-    />
-  )
-}
+/** What a panel's back link says, by where it goes back to. */
+const BACK_LABEL: Record<MapPanelBack, string> = { changes: 'All changes', results: 'Results' }
 
 /** How `change` is drawn, or nothing outside a comparison. */
 const changeStyle = (change?: MapChange): Partial<ChangeStyle> => (change ? CHANGE_STYLE[change.kind] : {})
@@ -197,18 +192,22 @@ type OntologyMapProps = { query?: string } & (
  * Selecting a class or link focuses its neighbourhood and opens its details; the selection
  * is the page's `?select=` (`useConceptSelection`), shared with the Table, and the Map
  * opens centred on it. `query`, the Concept search, highlights the Concepts it names and
- * lists its results beside the Map, where picking one selects it and centres the Map on it.
+ * lists its results, where picking one selects it and centres the Map on it.
  *
  * Given a `comparison` instead, it draws both versions superimposed: change kind as mark
  * style (added solid, removed a dashed ghost, modified ringed, unchanged muted), severity
  * in the Diff colours, and a selection's Diff changes in its details.
+ *
+ * Details, paths, results and a comparison's change summary share one panel on the
+ * Map's right (`DrawnMap.panel`); a comparison's collapses to a rail of its counts.
  */
 export function OntologyMap({ ontology, comparison, query = '' }: OntologyMapProps) {
   const [selected, setSelection] = useConceptSelection()
   const drawnMapOf = useMemo(() => createDrawnMapOf(), [])
   const [state, setState] = useState(() => initialMapState(selected))
+  const [collapsed, setCollapsed] = useState(false)
   const view = drawnMapOf(comparison ? { comparison, selected, query } : { ontology: ontology!, selected, query }, state)
-  const { map, shown, selection, details, paths, results, classes, links, subclassLinks } = view
+  const { map, shown, selection, details, paths, results, classes, links, subclassLinks, panel } = view
   /** Answers `gesture` as the view says: its next state, and the page's next selection. */
   const respond = (gesture: MapGesture) => {
     const { state: next, select } = respondTo(view, gesture)
@@ -301,27 +300,19 @@ export function OntologyMap({ ontology, comparison, query = '' }: OntologyMapPro
     [layout.data, sizes, map, view.centreOn],
   )
 
+  // The summary and results only collapse; a selection's panel goes back to them, or
+  // closes when there is none. Both clear the selection, so the panel shows what it came from.
+  const listNav: MapPanelNav = { onCollapse: comparison && (() => setCollapsed(true)) }
+  const clear = () => respond({ kind: 'clear' })
+  const selectionNav: MapPanelNav = {
+    ...listNav,
+    ...(panel && 'back' in panel && panel.back ? { back: { label: BACK_LABEL[panel.back], onBack: clear } } : { onClose: clear }),
+  }
+
   if (layout.error) return <ErrorAlert error={layout.error} title="The Map could not be laid out" />
   if (!elements) return <Skeleton className={cn(MAP_HEIGHT, 'w-full')} />
   return (
     <div className={cn('flex overflow-hidden rounded-md border', MAP_HEIGHT)}>
-      {comparison && (
-        <MapChangeSummary
-          comparison={comparison}
-          shown={shown.links}
-          selection={selection}
-          onPreview={(preview) => respond({ kind: 'preview', selection: preview })}
-          onSelect={(concept) => respond({ kind: 'select', concept })}
-        />
-      )}
-      {query.trim() !== '' && (
-        <MapSearchResults
-          query={query}
-          results={results}
-          canPick={(r) => canPick(view, r)}
-          onPick={(r) => respond({ kind: 'pick', result: r })}
-        />
-      )}
       <ReactFlow
         aria-label="Ontology Map"
         className="min-w-0 flex-1"
@@ -358,16 +349,41 @@ export function OntologyMap({ ontology, comparison, query = '' }: OntologyMapPro
         {comparison && <ComparisonLegend />}
         <CentreOn point={centre} />
       </ReactFlow>
-      {details && (
-        <MapDetailsPanel details={details} onClose={() => respond({ kind: 'clear' })}>
-          {view.changes && <ChangeDetails changes={view.changes} />}
-          {details.kind === 'class' && (
-            <p className="text-xs text-muted-foreground">Shift-click another class for the shortest path to it.</p>
+      {comparison && collapsed ? (
+        <MapChangesRail comparison={comparison} onExpand={() => setCollapsed(false)} />
+      ) : (
+        <>
+          {panel?.kind === 'summary' && comparison && (
+            <MapChangeSummary
+              comparison={comparison}
+              shown={shown.links}
+              returnTo={panel.returnTo}
+              onPreview={(preview) => respond({ kind: 'preview', selection: preview })}
+              onSelect={(concept) => respond({ kind: 'select', concept })}
+              nav={listNav}
+            />
           )}
-        </MapDetailsPanel>
-      )}
-      {paths && selection?.kind === 'path' && (
-        <MapPathPanel from={selection.from} to={selection.to} paths={paths} onClose={() => respond({ kind: 'clear' })} />
+          {panel?.kind === 'results' && (
+            <MapSearchResults
+              query={query}
+              results={results}
+              canPick={(r) => canPick(view, r)}
+              onPick={(r) => respond({ kind: 'pick', result: r })}
+              nav={listNav}
+            />
+          )}
+          {panel?.kind === 'details' && details && (
+            <MapDetailsPanel details={details} nav={selectionNav}>
+              {view.changes && <ChangeDetails changes={view.changes} />}
+              {details.kind === 'class' && (
+                <p className="text-xs text-muted-foreground">Shift-click another class for the shortest path to it.</p>
+              )}
+            </MapDetailsPanel>
+          )}
+          {panel?.kind === 'path' && paths && selection?.kind === 'path' && (
+            <MapPathPanel from={selection.from} to={selection.to} paths={paths} nav={selectionNav} />
+          )}
+        </>
       )}
       <SubclassArrowhead />
     </div>

@@ -8,7 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { MapSidePanel } from './MapSidePanel'
+import { MapSidePanel, type MapPanelNav } from './MapSidePanel'
 import type { DetailProperty, MapDetails } from './ontology-map-focus'
 
 /**
@@ -18,11 +18,11 @@ import type { DetailProperty, MapDetails } from './ontology-map-focus'
  */
 export function MapDetailsPanel({
   details,
-  onClose,
+  nav,
   children,
 }: {
   details: MapDetails
-  onClose: () => void
+  nav: MapPanelNav
   children?: ReactNode
 }) {
   return (
@@ -44,7 +44,7 @@ export function MapDetailsPanel({
           <div className="mt-1 font-mono text-xs break-all text-muted-foreground">{details.id}</div>
         )
       }
-      onClose={onClose}
+      nav={nav}
     >
       {details.description && <p className="text-muted-foreground">{details.description}</p>}
 

@@ -1,12 +1,15 @@
 import { type ComponentProps, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, PanelRightOpen } from 'lucide-react'
 import { CLASSIFICATION_LABEL, isCosmetic } from '@/api/ontology-diff'
 import { ClassificationBadge } from '@/components/OntologyDiff'
+import { SeveritySwatch } from '@/components/SeveritySwatch'
+import { Button } from '@/components/ui/button'
 import { formatCount } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { CONCEPT_NOUN } from '../concepts'
 import type { PatternLink } from '../map/ontology-map'
 import type { MapSelection } from '../map/ontology-map-focus'
+import { MapSidePanel, type MapPanelNav } from '../map/MapSidePanel'
 import {
   type ChangeStatement,
   type ConceptChanges,
@@ -19,36 +22,38 @@ import {
 import { SEVERITY } from '@/components/severity-style'
 
 /**
- * The change summary beside a comparison's Map: a count per level, then each changed
- * Concept's changes, the most severe first. Linked with the Map both ways: pointing at an
- * entry previews its Concept's focus (`onPreview`), clicking selects it (`onSelect`), and
- * the entry of the Map's `selection` is highlighted and scrolled to. An entry selects what
- * the Map selects for its Concept, among the links `shown` (`selectionOf`).
+ * The change summary, in a comparison's Map panel while nothing is selected: a count per
+ * level, then each changed Concept's changes, the most severe first. Linked with the Map
+ * both ways: pointing at an entry previews its Concept's focus (`onPreview`), clicking
+ * selects it (`onSelect`), and the entry of `returnTo`, the selection the panel came back
+ * from, is highlighted and scrolled to. An entry selects what the Map selects for its
+ * Concept, among the links `shown` (`selectionOf`).
  */
 export function MapChangeSummary({
   comparison,
   shown,
-  selection,
+  returnTo,
   onPreview,
   onSelect,
+  nav,
 }: {
   comparison: OntologyComparison
   /** The Pattern links the Map shows. */
   shown: readonly PatternLink[]
-  selection: MapSelection | null
+  returnTo: MapSelection | null
   onPreview: (selection: MapSelection | null) => void
   onSelect: (selection: MapSelection) => void
+  nav: MapPanelNav
 }) {
   const summary = useMemo(() => summarizeChanges(comparison), [comparison])
   const link: MapLink = {
-    current: summaryConceptOf(comparison, summary, selection),
+    current: summaryConceptOf(comparison, summary, returnTo),
     locate: ({ kind, label }) => selectionOf(comparison, { kind: CONCEPT_NOUN[kind], label }, shown),
     onPreview,
     onSelect,
   }
   return (
-    <aside aria-label="Change summary" className="w-72 shrink-0 space-y-3 overflow-y-auto border-r bg-background p-4 text-sm">
-      <h3 className="font-semibold">Changes</h3>
+    <MapSidePanel label="Change summary" title="Changes" nav={nav}>
       {comparison.diff.changes.length === 0 ? (
         <p className="text-muted-foreground">No changes between the two versions.</p>
       ) : (
@@ -70,6 +75,19 @@ export function MapChangeSummary({
           )}
         </>
       )}
+    </MapSidePanel>
+  )
+}
+
+/** The change summary collapsed to a thin rail: its headline counts, and a button to expand it. */
+export function MapChangesRail({ comparison, onExpand }: { comparison: OntologyComparison; onExpand: () => void }) {
+  const { counts } = useMemo(() => summarizeChanges(comparison), [comparison])
+  return (
+    <aside aria-label="Changes collapsed" className="flex w-14 shrink-0 flex-col items-center gap-4 border-l bg-background py-3 text-sm">
+      <Button variant="ghost" size="icon-sm" aria-label="Expand panel" onClick={onExpand}>
+        <PanelRightOpen aria-hidden />
+      </Button>
+      <LevelCounts role="status" stacked counts={counts} className="font-medium" />
     </aside>
   )
 }
@@ -88,16 +106,25 @@ interface MapLink {
 
 /**
  * The headline: a count per level, the weightiest first, each in its own colour (the Diff
- * colours for severity, none for cosmetic changes, which the Diff colours are not for).
+ * colours for severity, none for cosmetic changes, which the Diff colours are not for)
+ * after its swatch, so the counts are the severity key. `stacked`, one count per line,
+ * each level named only to screen readers and on hover, as on the collapsed rail.
  */
-export function LevelCounts({ counts, ...props }: { counts: LevelCount[] } & ComponentProps<'p'>) {
+export function LevelCounts({
+  counts,
+  stacked = false,
+  className,
+  ...props
+}: { counts: LevelCount[]; stacked?: boolean } & ComponentProps<'p'>) {
   return (
-    <p {...props}>
+    <p className={cn(stacked ? 'flex flex-col items-center gap-3' : 'flex flex-wrap items-center gap-x-1.5', className)} {...props}>
       {counts.map(({ level, count }, i) => (
-        <span key={level}>
-          {i > 0 && ' · '}
+        <span key={level} className="flex items-center gap-1" title={stacked ? CLASSIFICATION_LABEL[level] : undefined}>
+          {!stacked && i > 0 && ' · '}
+          <SeveritySwatch level={level} />
           <span className={SEVERITY.text[level]}>
-            {count} {CLASSIFICATION_LABEL[level]}
+            {count}
+            <span className={cn(stacked && 'sr-only')}> {CLASSIFICATION_LABEL[level]}</span>
           </span>
         </span>
       ))}
