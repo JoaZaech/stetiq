@@ -160,3 +160,40 @@ def test_a_breaking_proposal_is_rejected_by_the_gates_but_never_promoted(demo):
     assert any("WorkOrder" in reason and "breaking" in reason for reason in diff_gate.reasons)
     assert demo.priya.get_contract_version(KG).number == 3
     assert demo.priya.get_evolution_mode(KG) == "evolving"
+
+
+def consumers_of(use_case_version):
+    return {
+        c.id: (c.name, c.kind, {t.id: set(t.competency_questions) for t in c.tasks})
+        for c in use_case_version.use_case.consumers
+    }
+
+
+def test_the_use_case_names_the_consumers_and_the_tasks_they_need_answered(demo):
+    # The latest Use Case Version: parts-suppliers, added later, keeps the Consumers and
+    # serves no Task yet, nor does repeat-faults; root-causes serves two Tasks.
+    latest = demo.priya.get_use_case_version(KG)
+    assert latest.number == 2
+    assert consumers_of(latest) == {
+        "maintenance-assistant": (
+            "Maintenance assistant",
+            "agent",
+            {
+                "triage-breakdown": {"root-causes", "breakdown-technicians", "line-for-order"},
+                "chase-follow-ups": {"open-follow-ups"},
+            },
+        ),
+        "downtime-dashboard": (
+            "Downtime dashboard",
+            "dashboard",
+            {
+                "machine-league": {"orders-per-machine", "downtime-by-kind"},
+                "starvation-risk": {"downstream-of-press"},
+            },
+        ),
+        "reliability-team": (
+            "Reliability engineering",
+            "team",
+            {"weekly-reliability-review": {"root-causes", "orders-per-machine"}},
+        ),
+    }

@@ -65,8 +65,11 @@ purpose) and `events-team` (edit on a different Knowledge Graph). The custom Eva
 the SDK process, and only its aggregates reach the server.
 
 **2. Declare.** `ontology/v1.yaml` becomes Ontology Version 1, `production` points at it,
-and the Graph Source scope `database=scholar` is bound. `use-case.yaml` holds five
-Competency Questions (Use Case Version 1), all answerable by v1. The library's token
+and the Graph Source scope `database=scholar` is bound. `use-case.yaml` (Use Case Version
+1) names three Consumers: the research portal's researcher profiles, the annual funder
+report and an agent that drafts impact case studies. Papers per author and per grant each
+serve two Tasks; `venues-by-year` serves none. Their Tasks need five Competency Questions,
+all answerable by v1. The library's token
 lists Ontology Versions but `register_ontology` is a `PermissionDeniedError` naming the
 token, the user and the missing `edit`.
 

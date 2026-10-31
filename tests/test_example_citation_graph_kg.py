@@ -134,6 +134,38 @@ def test_each_use_case_version_is_judged_against_the_latest_ontology_version(dem
     assert statuses["most-cited-paper"] == "answerable"
 
 
+def consumers_of(use_case_version):
+    return {
+        c.id: (c.name, c.kind, {t.id: set(t.competency_questions) for t in c.tasks})
+        for c in use_case_version.use_case.consumers
+    }
+
+
+def test_the_use_case_names_the_consumers_and_the_tasks_they_need_answered(demo):
+    # The two questions added later keep the Consumers of Use Case Version 1 and serve no
+    # Task yet, nor does venues-by-year; papers-per-author and grant-funded-papers each
+    # serve two Tasks.
+    expected = {
+        "research-portal": (
+            "Research portal",
+            "dashboard",
+            {"researcher-profiles": {"papers-per-author", "co-authorship-pairs"}},
+        ),
+        "funder-report": (
+            "Annual funder report",
+            "report",
+            {"report-grant-output": {"grant-funded-papers", "papers-per-author"}},
+        ),
+        "impact-assistant": (
+            "Impact case assistant",
+            "agent",
+            {"draft-impact-case": {"most-cited-paper", "grant-funded-papers"}},
+        ),
+    }
+    for number in (1, 2, 3):
+        assert consumers_of(demo.office.get_use_case_version(KG, number)) == expected
+
+
 def test_full_conformance_is_not_enough_until_the_loader_merges_by_orcid(demo):
     client = demo.office
     diff = client.diff_ontology_versions(KG, 1, 3)
