@@ -271,7 +271,44 @@ def _diff_patterns(label: str, base: Ontology, target: Ontology) -> list[Change]
         )
         for p in sorted(old - new)
     ]
+    # Patterns compare by endpoints only, so look each kept one up on both sides.
+    old_by_endpoints, new_by_endpoints = {p: p for p in old}, {p: p for p in new}
+    for p in sorted(old & new):
+        changes += _diff_cardinality(label, old_by_endpoints[p], new_by_endpoints[p])
     return changes
+
+
+def _diff_cardinality(label: str, old: Pattern, new: Pattern) -> list[Change]:
+    """Per bound: adding or tightening one may reject existing data (breaking); loosening or
+    removing one only relaxes (additive). A min tightens upwards, a max downwards."""
+    changes: list[Change] = []
+    for direction in ("out", "in"):
+        for end in ("min", "max"):
+            before = getattr(old, f"{end}_{direction}")
+            after = getattr(new, f"{end}_{direction}")
+            if before == after:
+                continue
+            if after is None:
+                tightened = False
+            elif before is None:
+                tightened = True
+            else:
+                tightened = after > before if end == "min" else after < before
+            changes.append(
+                Change(
+                    label,
+                    "relationship_type",
+                    ChangeKind.CHANGED,
+                    Classification.BREAKING if tightened else Classification.ADDITIVE,
+                    f"{new} {direction} {end} {_bound(before)} -> {_bound(after)}",
+                    pattern=new.endpoints,
+                )
+            )
+    return changes
+
+
+def _bound(value: int | None) -> str:
+    return "(none)" if value is None else str(value)
 
 
 # Property type changes that only widen the set of accepted values (every old value

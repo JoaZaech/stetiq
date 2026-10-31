@@ -298,6 +298,67 @@ def test_adding_a_constraint_is_breaking_and_dropping_one_is_additive(client):
     assert attributes(client.diff_ontologies(unique, plain)) == [("Customer", "node_type", "email")]
 
 
+def _performed_on(cardinality: str | None) -> str:
+    pattern = "{source: WorkOrder, relationship: PERFORMED_ON, target: Machine"
+    pattern += f", cardinality: {cardinality}}}" if cardinality else "}"
+    return (
+        "node_types: [WorkOrder, Machine]\nrelationship_types: [PERFORMED_ON]\n"
+        f"patterns:\n  - {pattern}\n"
+    )
+
+
+def test_adding_a_cardinality_bound_is_breaking_and_removing_one_is_additive(client):
+    unbounded = _performed_on(None)
+    exactly_one = _performed_on("{out: {min: 1, max: 1}}")
+
+    added = client.diff_ontologies(unbounded, exactly_one)
+    removed = client.diff_ontologies(exactly_one, unbounded)
+
+    assert summary(added) == [
+        ("PERFORMED_ON", "changed", "breaking"),
+        ("PERFORMED_ON", "changed", "breaking"),
+    ]
+    assert {c.pattern for c in added.changes} == {Pattern("WorkOrder", "PERFORMED_ON", "Machine")}
+    assert summary(removed) == [
+        ("PERFORMED_ON", "changed", "additive"),
+        ("PERFORMED_ON", "changed", "additive"),
+    ]
+
+
+def test_tightening_a_cardinality_bound_is_breaking_and_loosening_one_is_additive(client):
+    loose = _performed_on("{in: {min: 1, max: 5}}")
+    tight = _performed_on("{in: {min: 2, max: 3}}")
+    shifted = _performed_on("{in: {min: 0, max: 3}}")
+
+    assert summary(client.diff_ontologies(loose, tight)) == [
+        ("PERFORMED_ON", "changed", "breaking"),
+        ("PERFORMED_ON", "changed", "breaking"),
+    ]
+    assert summary(client.diff_ontologies(tight, loose)) == [
+        ("PERFORMED_ON", "changed", "additive"),
+        ("PERFORMED_ON", "changed", "additive"),
+    ]
+    assert summary(client.diff_ontologies(tight, shifted)) == [
+        ("PERFORMED_ON", "changed", "additive")
+    ]
+
+
+def test_a_cardinality_change_between_versions_says_which_bound_changed(client):
+    client.create_knowledge_graph(KG, ontology=_performed_on("{out: {max: 2}}"))
+    v2 = client.register_ontology(KG, _performed_on("{out: {max: 1}, in: {min: 1}}"))
+
+    d = client.diff_ontology_versions(KG, 1, v2.number)
+
+    assert summary(d) == [
+        ("PERFORMED_ON", "changed", "breaking"),
+        ("PERFORMED_ON", "changed", "breaking"),
+    ]
+    assert [c.detail for c in d.changes] == [
+        "(WorkOrder)-[PERFORMED_ON]->(Machine) out max 2 -> 1",
+        "(WorkOrder)-[PERFORMED_ON]->(Machine) in min (none) -> 1",
+    ]
+
+
 def _with_node_type(label: str) -> str:
     return BASE.replace("  - Agent\n", f"  - Agent\n  - {label}\n")
 

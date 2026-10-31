@@ -7,6 +7,7 @@ from stetiq.config import load_config
 from stetiq.drift import thresholds_from_config
 from stetiq.entry_point import EntryPoint
 from stetiq.gates import parse_gates
+from stetiq.ontology import parse_yaml
 
 EXAMPLES = [
     body
@@ -32,3 +33,11 @@ def test_example_config_parses_with_the_real_loaders(example, tmp_path):
         EntryPoint.from_config(config)
     thresholds_from_config(config)
     parse_gates(config.get("gates"))
+
+
+def test_the_page_documents_cardinality_with_an_ontology_that_parses():
+    (example,) = [body for body in EXAMPLES if "cardinality:" in body]
+
+    (pattern,) = parse_yaml(example).patterns
+
+    assert (pattern.min_out, pattern.max_out) == (1, 1)

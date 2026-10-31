@@ -186,6 +186,53 @@ def test_constraints_round_trip_through_fetch(client, kg, support_ontology):
     assert (again.number, again.content_hash) == (2, v2.content_hash)
 
 
+def test_cardinality_round_trips_through_fetch(client, kg):
+    v2 = client.register_ontology(
+        kg.name,
+        """
+node_types: [WorkOrder, Machine]
+relationship_types: [PERFORMED_ON]
+patterns:
+  - source: WorkOrder
+    relationship: PERFORMED_ON
+    target: Machine
+    cardinality: {out: {min: 1, max: 1}, in: {min: 0}}
+""",
+    )
+
+    fetched = yaml.safe_load(client.get_ontology_yaml(kg.name, v2.number))
+    (pattern,) = client.get_ontology_version(kg.name, v2.number).ontology.patterns
+
+    assert fetched["patterns"] == [
+        {
+            "source": "WorkOrder",
+            "relationship": "PERFORMED_ON",
+            "target": "Machine",
+            "cardinality": {"out": {"min": 1, "max": 1}, "in": {"min": 0}},
+        }
+    ]
+    assert (pattern.min_out, pattern.max_out, pattern.min_in, pattern.max_in) == (1, 1, 0, None)
+    again = client.register_ontology(kg.name, client.get_ontology_yaml(kg.name, v2.number))
+    assert (again.number, again.content_hash) == (v2.number, v2.content_hash)
+
+
+def test_a_cardinality_is_part_of_the_ontology_version(client, kg):
+    plain = "node_types: [A, B]\nrelationship_types: [R]\npatterns: [[A, R, B]]\n"
+    bounded = (
+        "node_types: [A, B]\nrelationship_types: [R]\npatterns:\n"
+        "  - {source: A, relationship: R, target: B, cardinality: {in: {max: 3}}}\n"
+    )
+
+    v_plain = client.register_ontology(kg.name, plain)
+    v_bounded = client.register_ontology(kg.name, bounded)
+
+    assert v_bounded.number == v_plain.number + 1
+    assert v_bounded.content_hash != v_plain.content_hash
+    assert yaml.safe_load(client.get_ontology_yaml(kg.name, v_plain.number))["patterns"] == [
+        ["A", "R", "B"]
+    ]
+
+
 def test_deprecating_a_concept_creates_a_new_version(client, kg, support_ontology):
     deprecated = support_ontology.replace(
         "  - label: Ticket\n", "  - label: Ticket\n    deprecated: true\n"
