@@ -7,6 +7,7 @@
 import {
   type Classification,
   compareSeverity,
+  isCosmetic,
   MOST_SEVERE_FIRST,
   mostSevere,
   type OntologyChange,
@@ -121,11 +122,8 @@ function mapChange(inBase: boolean, inTarget: boolean, changes: OntologyChange[]
   return { kind, severity }
 }
 
-/**
- * Whether `change` is cosmetic: documentation-only, as the UI names it. The Diff's
- * classification decides it, once per change; everything here asks this.
- */
-const cosmetic = (change: OntologyChange) => change.classification === 'cosmetic'
+/** Whether `change` is cosmetic: its Diff classification decides it (`isCosmetic`). */
+const cosmetic = (change: OntologyChange) => isCosmetic(change.classification)
 
 /** The changes of `changes` that are not cosmetic, and those that are. */
 const structural = (changes: OntologyChange[]) => changes.filter((c) => !cosmetic(c))

@@ -2,7 +2,7 @@
  * How severity is drawn wherever a Diff is shown (the comparison, the Diff view and its
  * badges): the Diff colours, which nothing else uses.
  */
-import type { Classification } from '@/api/ontology-diff'
+import { type Classification, isCosmetic } from '@/api/ontology-diff'
 
 /**
  * Severity's channel: the Diff colours as Tailwind classes, for each part of a mark.
@@ -37,4 +37,4 @@ export const SEVERITY: Record<'border' | 'fill' | 'ring' | 'text', Record<Classi
 
 /** A severity's Diff colour as an SVG stroke, or null for none (cosmetic has none). */
 export const severityStroke = (severity: Classification | null) =>
-  severity && severity !== 'cosmetic' ? `var(--diff-${severity})` : null
+  severity && !isCosmetic(severity) ? `var(--diff-${severity})` : null

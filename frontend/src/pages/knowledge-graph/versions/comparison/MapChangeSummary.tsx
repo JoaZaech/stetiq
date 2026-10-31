@@ -1,6 +1,6 @@
 import { type ComponentProps, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { CLASSIFICATION_LABEL } from '@/api/ontology-diff'
+import { CLASSIFICATION_LABEL, isCosmetic } from '@/api/ontology-diff'
 import { ClassificationBadge } from '@/components/OntologyDiff'
 import { formatCount } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -64,7 +64,7 @@ export function MapChangeSummary({
           {summary.cosmetic.length > 0 && (
             <DocumentationOnly
               concepts={summary.cosmetic}
-              count={summary.counts.find((c) => c.level === 'cosmetic')?.count ?? 0}
+              count={summary.counts.find((c) => isCosmetic(c.level))?.count ?? 0}
               link={link}
             />
           )}

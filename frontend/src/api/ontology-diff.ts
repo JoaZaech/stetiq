@@ -10,6 +10,12 @@ export const CLASSIFICATIONS = ['cosmetic', 'additive', 'deprecating', 'breaking
 export type Classification = (typeof CLASSIFICATIONS)[number]
 
 /**
+ * Whether `classification` is cosmetic (documentation-only, as the UI names it). Every
+ * check for the cosmetic class asks this.
+ */
+export const isCosmetic = (classification: Classification): boolean => classification === 'cosmetic'
+
+/**
  * What "more severe" means, everywhere: orders classifications from the least to the most
  * severe, cosmetic first (a sort comparator). Sort with `(a, b) => compareSeverity(b, a)`
  * for the most severe first.

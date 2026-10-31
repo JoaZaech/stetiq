@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useSearchParams } from 'react-router'
-import { CLASSIFICATION_LABEL, compareSeverity } from '@/api/ontology-diff'
+import { CLASSIFICATION_LABEL, compareSeverity, isCosmetic } from '@/api/ontology-diff'
 import { ClassificationBadge } from '@/components/OntologyDiff'
 import { DataTable, DataTableRowCount } from '@/components/DataTable'
 import { ErrorAlert } from '@/components/ErrorAlert'
@@ -87,9 +87,9 @@ function ComparisonGrid({ comparison, base, target }: { comparison: OntologyComp
   const counts = useMemo(() => summarizeChanges(comparison).counts, [comparison])
   const [params, setParams] = useSearchParams()
   const showDocumentation = params.get(DOCUMENTATION_PARAM) === '1'
-  const documentationOnly = all.filter((r) => r.level === 'cosmetic').length
+  const documentationOnly = all.filter((r) => isCosmetic(r.level)).length
   const rows = useMemo(
-    () => (showDocumentation ? all : all.filter((r) => r.level !== 'cosmetic')),
+    () => (showDocumentation ? all : all.filter((r) => !isCosmetic(r.level))),
     [all, showDocumentation],
   )
   const grid = useDataTableParams(CHANGES_GRID)

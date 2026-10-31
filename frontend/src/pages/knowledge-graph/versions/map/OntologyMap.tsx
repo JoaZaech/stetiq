@@ -19,7 +19,7 @@ import {
   type Node,
   type NodeProps,
 } from '@xyflow/react'
-import { CLASSIFICATIONS, type OntologyChange } from '@/api/ontology-diff'
+import { CLASSIFICATIONS, isCosmetic, type OntologyChange } from '@/api/ontology-diff'
 import type { Ontology } from '@/api/ontology-versions'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { ClassificationBadge } from '@/components/OntologyDiff'
@@ -412,7 +412,7 @@ function ComparisonLegend() {
         </span>
       ))}
       {/* Cosmetic has no Diff colour: its key is the documentation-only mark above. */}
-      {CLASSIFICATIONS.filter((s) => s !== 'cosmetic').map((s) => (
+      {CLASSIFICATIONS.filter((s) => !isCosmetic(s)).map((s) => (
         <ClassificationBadge key={s} classification={s} />
       ))}
     </Panel>
