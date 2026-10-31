@@ -123,3 +123,28 @@ def test_previewing_records_nothing(client, bound_kg, graph_source):
 
     assert client.list_gate_results(bound_kg) == before
     assert client.list_promotions(bound_kg)[-1].gate_result == "passed"
+
+
+ALL_CQS_ANSWERABLE = """
+gates:
+  - name: all-cqs-answerable
+    check: metric
+    evaluator: competency_questions
+    metric: unanswerable
+    max: 0
+"""
+
+
+def test_a_missing_evaluator_result_fails_the_metric_gate_with_a_reason(
+    client, bound_kg, graph_source
+):
+    seed_conforming_graph(graph_source)
+    run = run_once(client, bound_kg)
+    client.evaluate_gates(bound_kg, ALL_CQS_ANSWERABLE, run=run.id)
+
+    [preview] = client.preview_gates(bound_kg)
+
+    assert not preview.passed
+    [outcome] = preview.failed
+    assert outcome.gate.name == "all-cqs-answerable"
+    assert "No result of Evaluator 'competency_questions'" in outcome.reasons[0]
