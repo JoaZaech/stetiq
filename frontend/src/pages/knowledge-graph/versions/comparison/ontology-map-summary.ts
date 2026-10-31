@@ -4,14 +4,14 @@
  */
 import { CLASSIFICATIONS, type Classification, type OntologyChange, type OwnerKind } from '@/api/ontology-diff'
 import { codePointOrder } from '@/lib/compare'
-import { attributeReference, CONCEPT_NOUN } from './concepts'
+import { attributeReference, CONCEPT_NOUN } from '../concepts'
 import {
   changesOfConcept,
   isDocumentationOnly,
   linkChanged,
   type OntologyComparison,
 } from './ontology-map-comparison'
-import { type MapSelection, relationSelection } from './ontology-map-focus'
+import { type MapSelection, relationSelection } from '../map/ontology-map-focus'
 
 /**
  * How much a change weighs in a comparison: documentation-only when only a description

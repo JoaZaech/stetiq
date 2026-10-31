@@ -1,6 +1,6 @@
 /** How the Map draws a Pattern link and its relation label, and when the label shows. */
 import type { PatternLink } from './ontology-map'
-import type { MapChange } from './ontology-map-comparison'
+import type { MapChange } from '../comparison/ontology-map-comparison'
 import type { Point } from './ontology-map-layout'
 import { labelSize, type Size } from './ontology-map-sizes'
 

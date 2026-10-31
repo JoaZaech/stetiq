@@ -12,7 +12,7 @@
  * are drawn, and when the label shows) and `ontology-map-centre` (where the Map centres).
  */
 import type { Ontology } from '@/api/ontology-versions'
-import { patternId } from './concepts'
+import { patternId } from '../concepts'
 
 export interface MapNode {
   /** The class label, also the node's key. */

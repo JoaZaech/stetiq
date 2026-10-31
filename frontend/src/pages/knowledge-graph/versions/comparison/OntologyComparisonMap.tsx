@@ -1,8 +1,8 @@
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
-import { MAP_HEIGHT } from './map-view'
-import { OntologyMap } from './OntologyMap'
+import { MAP_HEIGHT } from '../map-view'
+import { OntologyMap } from '../map/OntologyMap'
 import { useOntologyComparison } from './use-ontology-comparison'
 
 /**

@@ -40,6 +40,8 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Quiet by default: a green run is dots and one summary line; failures keep tracebacks.
+addopts = "-q"
 markers = [
     "postgres: needs a Postgres database (set STETIQ_TEST_POSTGRES_URL)",
     "neo4j: needs Docker (throwaway Neo4j testcontainer); skipped when Docker is unavailable",

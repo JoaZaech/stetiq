@@ -1,5 +1,5 @@
 import { useViewParam } from '@/lib/view-param'
-import { MAP_VIEWS } from './map-view'
+import { MAP_VIEWS } from '../map-view'
 
 /**
  * The Table / Map toggle shared by the Changes tab and the Compare page: Map by default

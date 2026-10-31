@@ -3,8 +3,8 @@ import { LocateFixed } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { formatCount } from '@/lib/format'
-import { formatSelection, SELECT_PARAM } from './concept-selection'
-import type { ClassOrRelation } from './concepts'
+import { formatSelection, SELECT_PARAM } from '../concept-selection'
+import type { ClassOrRelation } from '../concepts'
 import { attributeGroupId, useTableLinks } from './table-links'
 
 /** A plain click, which the Table handles; any other (e.g. to open a new tab) the browser does. */

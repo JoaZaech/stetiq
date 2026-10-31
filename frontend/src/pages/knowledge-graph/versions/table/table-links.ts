@@ -1,6 +1,6 @@
 import { createContext, use } from 'react'
-import type { ConceptSelection } from './concept-selection'
-import type { ClassOrRelation } from './concepts'
+import type { ConceptSelection } from '../concept-selection'
+import type { ClassOrRelation } from '../concepts'
 
 /** What the Ontology Table's links do (see `OntologyTables`). */
 export interface TableLinks {

@@ -7,7 +7,13 @@ export default defineConfig({
   globalSetup: './e2e/global-setup.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
+  // Locally, `dot` keeps a green run to a few lines and still prints each failure
+  // in full; STETIQ_E2E_LIST=1 brings back one line per test.
+  reporter: process.env.CI
+    ? [['github'], ['html', { open: 'never' }]]
+    : process.env.STETIQ_E2E_LIST
+      ? 'list'
+      : 'dot',
   use: {
     trace: 'retain-on-failure',
   },
