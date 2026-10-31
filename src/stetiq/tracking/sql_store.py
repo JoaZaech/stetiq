@@ -47,12 +47,10 @@ from sqlalchemy.pool import StaticPool
 
 from stetiq import use_case as use_case_format
 from stetiq.conformance import Conformance
-from stetiq.drift import DriftFinding, DriftThresholds
 from stetiq.errors import KnowledgeGraphAlreadyExistsError
-from stetiq.evaluation.framework import Detail
-from stetiq.gates import outcome_from_dict, outcome_to_dict
-from stetiq.graph_source import GraphSourceScope, ObservedSchema
+from stetiq.graph_source import GraphSourceScope
 from stetiq.ontology import canonical_json, from_canonical_json
+from stetiq.tracking import codec
 from stetiq.tracking.entities import (
     Alias,
     ConstructionRun,
@@ -486,14 +484,16 @@ class SqlStore:
                 delete(graph_sources).where(graph_sources.c.knowledge_graph == knowledge_graph)
             )
             conn.execute(
-                insert(graph_sources).values(knowledge_graph=knowledge_graph, **scope.to_dict())
+                insert(graph_sources).values(
+                    knowledge_graph=knowledge_graph, **codec.graph_source_scope_to_json(scope)
+                )
             )
 
     def get_graph_source(self, knowledge_graph: str) -> GraphSourceScope | None:
         query = select(graph_sources).where(graph_sources.c.knowledge_graph == knowledge_graph)
         with self._connection() as conn:
             row = conn.execute(query).mappings().first()
-        return None if row is None else GraphSourceScope.from_dict(dict(row))
+        return None if row is None else codec.graph_source_scope_from_json(dict(row))
 
     # --- Construction Runs ----------------------------------------------------------
 
@@ -530,7 +530,9 @@ class SqlStore:
                 for c in conn.execute(
                     select(run_conformance).where(run_conformance.c.run_id.in_(ids))
                 ):
-                    conformance[c.run_id] = Conformance.from_dict(json.loads(c.conformance_json))
+                    conformance[c.run_id] = codec.conformance_from_json(
+                        json.loads(c.conformance_json)
+                    )
                 for c in conn.execute(
                     select(run_candidates).where(run_candidates.c.run_id.in_(ids))
                 ):
@@ -596,7 +598,9 @@ class SqlStore:
                 insert(run_conformance).values(
                     run_id=run_id,
                     score=conformance.score,
-                    conformance_json=json.dumps(conformance.to_dict(), sort_keys=True),
+                    conformance_json=json.dumps(
+                        codec.conformance_to_json(conformance), sort_keys=True
+                    ),
                 )
             )
 
@@ -636,8 +640,12 @@ class SqlStore:
                     knowledge_graph=observation.knowledge_graph,
                     run_id=observation.run_id,
                     observed_at=observation.observed_at.isoformat(),
-                    scope_json=json.dumps(observation.scope.to_dict(), sort_keys=True),
-                    schema_json=json.dumps(observation.schema.to_dict(), sort_keys=True),
+                    scope_json=json.dumps(
+                        codec.graph_source_scope_to_json(observation.scope), sort_keys=True
+                    ),
+                    schema_json=json.dumps(
+                        codec.observed_schema_to_json(observation.schema), sort_keys=True
+                    ),
                 )
             )
 
@@ -653,9 +661,9 @@ class SqlStore:
             Observation(
                 id=r["id"],
                 knowledge_graph=r["knowledge_graph"],
-                scope=GraphSourceScope.from_dict(json.loads(r["scope_json"])),
+                scope=codec.graph_source_scope_from_json(json.loads(r["scope_json"])),
                 observed_at=datetime.fromisoformat(r["observed_at"]),
-                schema=ObservedSchema.from_dict(json.loads(r["schema_json"])),
+                schema=codec.observed_schema_from_json(json.loads(r["schema_json"])),
                 run_id=r["run_id"],
             )
             for r in rows
@@ -681,8 +689,10 @@ class SqlStore:
                     contract_alias=event.contract_alias,
                     ontology_version=event.ontology_version,
                     detected_at=event.detected_at.isoformat(),
-                    thresholds_json=json.dumps(event.thresholds.to_dict(), sort_keys=True),
-                    findings_json=json.dumps([f.to_dict() for f in event.findings]),
+                    thresholds_json=json.dumps(
+                        codec.drift_thresholds_to_json(event.thresholds), sort_keys=True
+                    ),
+                    findings_json=json.dumps(codec.drift_findings_to_json(event.findings)),
                 )
             )
 
@@ -703,8 +713,10 @@ class SqlStore:
                 contract_alias=r["contract_alias"],
                 ontology_version=r["ontology_version"],
                 detected_at=datetime.fromisoformat(r["detected_at"]),
-                findings=tuple(DriftFinding.from_dict(f) for f in json.loads(r["findings_json"])),
-                thresholds=DriftThresholds.from_dict(json.loads(r["thresholds_json"])),
+                findings=codec.drift_findings_from_json(json.loads(r["findings_json"])),
+                thresholds=codec.recorded_drift_thresholds_from_json(
+                    json.loads(r["thresholds_json"])
+                ),
             )
             for r in rows
         ]
@@ -811,13 +823,7 @@ class SqlStore:
                     subject_id=result.subject_id,
                     evaluator=result.evaluator,
                     metrics_json=json.dumps(result.metrics, sort_keys=True),
-                    details_json=json.dumps(
-                        [
-                            {"item": d.item, "message": d.message, "metric": d.metric}
-                            | ({} if d.data is None else {"data": dict(d.data)})
-                            for d in result.details
-                        ]
-                    ),
+                    details_json=json.dumps(codec.details_to_json(result.details)),
                     created_at=result.created_at.isoformat(),
                     parameters_json=json.dumps(result.parameters, sort_keys=True),
                     use_case_version=result.use_case_version,
@@ -878,7 +884,7 @@ class SqlStore:
                     subject_id=result.subject_id,
                     ontology_version=result.ontology_version,
                     passed=int(result.passed),
-                    outcomes_json=json.dumps([outcome_to_dict(o) for o in result.outcomes]),
+                    outcomes_json=json.dumps(codec.gate_outcomes_to_json(result.outcomes)),
                     evaluated_at=result.evaluated_at.isoformat(),
                 )
             )
@@ -897,7 +903,7 @@ class SqlStore:
                 subject_kind=r["subject_kind"],
                 subject_id=r["subject_id"],
                 ontology_version=r["ontology_version"],
-                outcomes=tuple(outcome_from_dict(o) for o in json.loads(r["outcomes_json"])),
+                outcomes=codec.gate_outcomes_from_json(json.loads(r["outcomes_json"])),
                 evaluated_at=datetime.fromisoformat(r["evaluated_at"]),
             )
             for r in rows
@@ -938,7 +944,7 @@ def _evaluation_from_row(row) -> EvaluationResult:
         subject_id=row["subject_id"],
         evaluator=row["evaluator"],
         metrics=json.loads(row["metrics_json"]),
-        details=tuple(Detail(**d) for d in json.loads(row["details_json"])),
+        details=codec.details_from_json(json.loads(row["details_json"])),
         created_at=datetime.fromisoformat(row["created_at"]),
         parameters=json.loads(row["parameters_json"]),
         use_case_version=row["use_case_version"],

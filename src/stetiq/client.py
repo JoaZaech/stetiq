@@ -14,7 +14,7 @@ from stetiq.entry_point import EntryPoint, EntryPointError, placeholder_values
 from stetiq.errors import (
     EvaluatorError,
     GraphSourceUnavailableError,
-    UseCaseValidationError,
+    NoUseCaseError,
 )
 from stetiq.evaluation.framework import (
     ConstructionRunEvaluator,
@@ -49,7 +49,7 @@ from stetiq.tracking import (
     UseCaseVersion,
 )
 from stetiq.tracking.entities import DriftEvent, EvolutionMode, ObservationOutcome
-from stetiq.tracking.service import RESERVED_EVALUATOR_NAMES
+from stetiq.tracking.service import check_not_built_in
 from stetiq.use_case import (
     CompetencyQuestion,
     UseCase,
@@ -247,13 +247,11 @@ class Client:
         Results are stored as the newest per Evaluator (and parameters); returns
         the latest of all.
         """
-        reserved = RESERVED_EVALUATOR_NAMES
         for evaluator in evaluators:
             check_evaluator(evaluator)
             if not isinstance(evaluator, OntologyVersionEvaluator):
                 raise EvaluatorError(f"{evaluator.name!r} is not an OntologyVersionEvaluator")
-            if evaluator.name in reserved:
-                raise EvaluatorError(f"An Evaluator named {evaluator.name!r} is already registered")
+            check_not_built_in(evaluator.name)
         self._service.evaluate_ontology_version(knowledge_graph, version, use_case_version)
         extra = list(evaluators)
         if self._evaluators or extra:
@@ -271,8 +269,8 @@ class Client:
         Run this client starts and on `evaluate_run()`, in this process.
         """
         check_evaluator(evaluator)
-        taken = RESERVED_EVALUATOR_NAMES | set(self._evaluators)
-        if evaluator.name in taken:
+        check_not_built_in(evaluator.name)
+        if evaluator.name in self._evaluators:
             raise EvaluatorError(f"An Evaluator named {evaluator.name!r} is already registered")
         self._evaluators[evaluator.name] = evaluator
 
@@ -362,12 +360,11 @@ class Client:
         """Add a Competency Question to the latest Use Case, creating a new Use Case version
         (version 1 if the Knowledge Graph has no Use Case yet)."""
         question = _to_question(question)
-        versions = self._service.list_use_case_versions(knowledge_graph)
-        current = versions[-1].use_case if versions else UseCase(competency_questions=())
-        if any(q.id == question.id for q in current.competency_questions):
-            raise UseCaseValidationError(
-                f"{question.id}: the Use Case already has a Competency Question with this id"
-            )
+        try:
+            current = self._service.get_use_case_version(knowledge_graph).use_case
+        except NoUseCaseError:
+            current = UseCase(competency_questions=())
+        # The service rejects a question whose id the Use Case already has.
         return self._service.register_use_case(
             knowledge_graph,
             UseCase(
@@ -379,7 +376,10 @@ class Client:
     def list_use_case_versions(self, knowledge_graph: str) -> list[UseCaseVersion]:
         return self._service.list_use_case_versions(knowledge_graph)
 
-    def get_use_case_version(self, knowledge_graph: str, number: int) -> UseCaseVersion:
+    def get_use_case_version(
+        self, knowledge_graph: str, number: int | None = None
+    ) -> UseCaseVersion:
+        """Use Case version `number`, by default the latest (NoUseCaseError if there is none)."""
         return self._service.get_use_case_version(knowledge_graph, number)
 
     # --- Gates ----------------------------------------------------------------------
@@ -407,8 +407,6 @@ class Client:
         - that run's run-level Evaluator results, for `metric` Gates naming an
           Evaluator the version has no result of.
         """
-        if version is not None and run is not None:
-            raise ValueError("evaluate_gates takes version or run, not both")
         return self._service.evaluate_gates(
             knowledge_graph, load_gates(gates), version=version, run=run
         )
@@ -452,9 +450,7 @@ class Client:
 
     def get_contract_version(self, knowledge_graph: str) -> OntologyVersion:
         """The Ontology Version the Contract Alias points to."""
-        return self.get_ontology_version_by_alias(
-            knowledge_graph, self.get_contract_alias(knowledge_graph)
-        )
+        return self._service.get_contract_version(knowledge_graph)
 
     # --- Graph Sources --------------------------------------------------------------
 
@@ -489,14 +485,9 @@ class Client:
 
         Use the result as a context manager: leaving the block ends the run (which
         observes the Graph Source); an exception inside it marks the run failed."""
-        if ontology_version is not None and alias is not None:
-            raise ValueError("start_run takes ontology_version or alias, not both")
         graph_source = self._require_graph_source()
-        if ontology_version is None:
-            alias = alias or self.get_contract_alias(knowledge_graph)
-            ontology_version = self.get_alias(knowledge_graph, alias).version
-        run = self._service.start_run(knowledge_graph, ontology_version)
-        declared = self._service.get_ontology_version(knowledge_graph, ontology_version)
+        run = self._service.start_run(knowledge_graph, ontology_version, alias=alias)
+        declared = self._service.get_ontology_version(knowledge_graph, run.ontology_version)
         return ActiveRun(
             self._service,
             graph_source,
@@ -591,8 +582,7 @@ class Client:
             check_evaluator(evaluator)
             if not isinstance(evaluator, ConstructionRunEvaluator):
                 raise EvaluatorError(f"{evaluator.name!r} is not a ConstructionRunEvaluator")
-            if evaluator.name in RESERVED_EVALUATOR_NAMES:
-                raise EvaluatorError(f"An Evaluator named {evaluator.name!r} is already registered")
+            check_not_built_in(evaluator.name)
         self._service.evaluate_construction_run(run_id)
         self._evaluate_run_sdk_side(
             self.get_run(run_id),
@@ -623,11 +613,10 @@ class Client:
             observation=observation,
             graph_source=ScopedGraphSource(graph_source, observation.scope),
         )
-        if use_case_version is None:
-            versions = self._service.list_use_case_versions(run.knowledge_graph)
-            use_case = versions[-1] if versions else None
-        else:
+        try:
             use_case = self._service.get_use_case_version(run.knowledge_graph, use_case_version)
+        except NoUseCaseError:
+            use_case = None
         if use_case is not None:
             execution = CompetencyQuestionExecution(use_case.use_case)
             self._service.record_evaluation(

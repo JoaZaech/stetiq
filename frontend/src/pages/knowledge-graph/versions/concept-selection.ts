@@ -12,7 +12,7 @@ import { useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router'
 import type { Ontology } from '@/api/ontology-versions'
 import { setOrDeleteParam } from '@/lib/search-params'
-import { type ClassOrRelation, patternId } from './concepts'
+import { type ClassOrRelation, relationOfPattern } from './concepts'
 import type { MapSelection } from './map/ontology-map-focus'
 
 /** What is selected: anything the Map selects, or a relation as a whole (from the Table). */
@@ -70,8 +70,8 @@ export function selectedRows(ontology: Ontology, selection: ConceptSelection | n
   else if (selection?.kind === 'relation') relations.add(selection.label)
   else if (selection?.kind === 'path') [selection.from, selection.to].forEach((c) => classes.add(c))
   else if (selection?.kind === 'link') {
-    const pattern = ontology.patterns.find((p) => patternId(p) === selection.id)
-    if (pattern) relations.add(pattern[1])
+    const relation = relationOfPattern(ontology, selection.id)
+    if (relation !== undefined) relations.add(relation)
   }
   return { classes, relations }
 }

@@ -95,7 +95,7 @@ client.get_ontology_yaml("support", 2)          # stetiq YAML text
 client.get_ontology_version_by_alias("support", "production")
 ```
 
-Compare two versions with an Ontology Diff. Each change is classified as additive, deprecating or breaking. Without version numbers, it compares the Contract Alias's version with the latest Candidate. `diff_ontologies` compares two Ontologies that need not be registered, such as two files in your repository.
+Compare two versions with an Ontology Diff. Each change is classified as cosmetic (only a description changed), additive, deprecating or breaking. `detail` says what changed in words; to act on a change in code, read its fields instead: `owner`, `owner_kind` and `attribute` for a change to an attribute, `required` for an added attribute, and `pattern` for an added or removed endpoint Pattern (each `None` when it doesn't apply). Without version numbers, it compares the Contract Alias's version with the latest Candidate. `diff_ontologies` compares two Ontologies that need not be registered, such as two files in your repository.
 
 ```python
 diff = client.diff_ontology_versions("support", 1, 2)
@@ -149,7 +149,7 @@ with client.start_run("support") as run:
     run.log_metrics({"documents": 1200, "cost_usd": 3.20})
 ```
 
-- **Declared Ontology.** By default the run consumes the Ontology Version the Contract Alias points to. Pass `ontology_version=3` or `alias="staging"` (not both) to choose another. `run.declared_ontology` is that Ontology, and `run.ontology_version` its number.
+- **Declared Ontology.** By default the run consumes the Ontology Version the Contract Alias points to. Pass `ontology_version=3` or `alias="staging"` to choose another; passing both raises `ConflictingArgumentsError`. `run.declared_ontology` is that Ontology, and `run.ontology_version` its number.
 - **Params and metrics.** `log_param`/`log_params` store strings; `log_metric`/`log_metrics` store numbers. Logging a key again replaces its value.
 - **Ending the run.** When the block ends, the SDK observes the whole bound Graph Source scope and stores the Observed Schema. The tracking service then measures Conformance to the Declared Ontology and applies the Knowledge Graph's Evolution Mode. If the Observation itself fails, the run is marked failed.
 - **Failing the run.** An exception inside the block marks the run failed, observes nothing, and is raised again. Call `run.fail()` to fail it yourself, or `run.end()` to end it early.
@@ -211,7 +211,7 @@ client.add_competency_question(
 )
 ```
 
-`add_competency_question` adds one question to the latest Use Case Version and registers the result as a new one. Every new Ontology Version is judged against the latest Use Case (`structural_answerability`: does the Ontology have the Concepts each question needs?). At the end of a Construction Run, the SDK also executes the questions that have a `query` against your Graph Source (`competency_question_execution`). Their rows are judged and then dropped: only the result leaves your process.
+`add_competency_question` adds one question to the latest Use Case Version and registers the result as a new one. `client.get_use_case_version("support")` without a number returns the latest Use Case Version, and raises `NoUseCaseError` (a `NotFoundError`) when there is none. Every new Ontology Version is judged against the latest Use Case (`structural_answerability`: does the Ontology have the Concepts each question needs?). At the end of a Construction Run, the SDK also executes the questions that have a `query` against your Graph Source (`competency_question_execution`). Their rows are judged and then dropped: only the result leaves your process.
 
 ## Evaluators
 
@@ -268,7 +268,7 @@ client.set_alias("support", "production", 3)                # Promotion (or roll
 client.list_promotions("support")                           # the audit log
 ```
 
-`evaluate_gates` sends the Gate definitions to the tracking service, which computes and records the outcome. Gates never block a Promotion, but the audit log records whether the version's latest Gate result passed. Gates are written in [`stetiq.yaml`](./06-stetiq-yaml.md).
+`evaluate_gates` sends the Gate definitions to the tracking service, which computes and records the outcome. It gates the latest Ontology Version by default, `version=N`, or a Construction Run with `run=ID`; passing both `version` and `run` raises `ConflictingArgumentsError`. Gates never block a Promotion, but the audit log records whether the version's latest Gate result passed. Gates are written in [`stetiq.yaml`](./06-stetiq-yaml.md).
 
 ## Errors
 

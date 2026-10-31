@@ -280,6 +280,32 @@ def test_malformed_use_cases_are_rejected_naming_the_element(client, kg, use_cas
     assert client.list_use_case_versions(kg.name) == []
 
 
+@pytest.mark.parametrize(
+    "questions, message",
+    [
+        (
+            (CompetencyQuestion("a", "x"), CompetencyQuestion("a", "y")),
+            "a: duplicate competency question id",
+        ),
+        (
+            (CompetencyQuestion("a", "x", expected_answer={1, 2}),),
+            "a.expected_answer: must be a JSON value (strings, numbers, lists, mappings)",
+        ),
+        (
+            (CompetencyQuestion(None, "x"), CompetencyQuestion("b", "y")),  # type: ignore[arg-type]
+            "competency question.id: needs a non-empty string id",
+        ),
+    ],
+)
+def test_a_malformed_use_case_model_is_rejected_with_the_same_message_in_every_mode(
+    client, kg, questions, message
+):
+    with pytest.raises(stetiq.UseCaseValidationError) as raised:
+        client.register_use_case(kg.name, stetiq.UseCase(competency_questions=questions))
+
+    assert str(raised.value) == message
+
+
 def test_adding_a_question_with_an_existing_id_is_rejected(client, kg):
     client.register_use_case(kg.name, USE_CASE)
 
@@ -287,6 +313,18 @@ def test_adding_a_question_with_an_existing_id_is_rejected(client, kg):
         client.add_competency_question(
             kg.name, CompetencyQuestion(id="customer-names", question="Again?")
         )
+
+
+def test_without_a_number_the_latest_use_case_version_is_returned(client, kg):
+    with pytest.raises(stetiq.NoUseCaseError) as raised:
+        client.get_use_case_version(kg.name)
+    assert str(raised.value) == "Knowledge Graph 'customer-support-kg' has no Use Case"
+    assert isinstance(raised.value, stetiq.NotFoundError)
+
+    client.register_use_case(kg.name, USE_CASE)
+    client.add_competency_question(kg.name, CompetencyQuestion(id="extra", question="More?"))
+
+    assert client.get_use_case_version(kg.name).number == 2
 
 
 def test_a_use_case_needs_an_existing_knowledge_graph(client):

@@ -15,7 +15,7 @@ from stetiq.auth import TokenRegistry
 from stetiq.cli import app
 from stetiq.graph_source import InMemoryGraphSource
 from stetiq.server import create_app
-from stetiq.tracking import wire
+from stetiq.tracking import codec
 
 SHELL = "<!doctype html><title>stetiq</title><div id=root></div>"
 
@@ -327,7 +327,7 @@ def test_the_knowledge_graph_list_shows_only_readable_ones_with_their_summary(
 
 
 def test_a_knowledge_graph_list_item_without_summary_fields_still_parses():
-    listed = wire.knowledge_graph_summary_from_json(
+    listed = codec.knowledge_graph_summary_from_json(
         {"name": "support", "created_at": "2026-01-02T03:04:05"}
     )
 
@@ -427,6 +427,70 @@ def test_the_diff_route_returns_the_classified_changes_between_two_versions(
     }
 
 
+def test_the_diff_route_states_what_each_change_concerns(http, database_url):
+    """The UI reads an attribute's owner, a required addition and an endpoint Pattern from
+    fields, never from `detail`; a change with nothing to state leaves the fields out."""
+    sdk = stetiq.Client(database_url)
+    sdk.create_knowledge_graph(
+        "support",
+        ontology="node_types: [Customer, Ticket]\n"
+        "relationship_types: [OPENED]\n"
+        "patterns: [[Customer, OPENED, Ticket]]\n",
+    )
+    sdk.register_ontology(
+        "support",
+        "node_types:\n"
+        "  - {label: Customer, description: Who opens tickets}\n"
+        "  - {label: Ticket, properties: [{name: status, type: STRING, required: true}]}\n"
+        "relationship_types: [OPENED]\n"
+        "patterns: [[Ticket, OPENED, Ticket]]\n",
+    )
+
+    r = http.get(
+        "/api/v1/knowledge-graphs/support/ontology-diff",
+        params={"base": 1, "target": 2},
+        headers=bearer(database_url, {"support": "read"}),
+    )
+
+    assert r.status_code == 200, r.text
+    assert r.json()["changes"] == [
+        {
+            "concept": "Customer",
+            "concept_kind": "node_type",
+            "kind": "changed",
+            "classification": "cosmetic",
+            "detail": "description changed",
+        },
+        {
+            "concept": "Ticket.status",
+            "concept_kind": "property",
+            "kind": "added",
+            "classification": "breaking",
+            "detail": "required property Ticket.status added",
+            "owner": "Ticket",
+            "owner_kind": "node_type",
+            "attribute": "status",
+            "required": True,
+        },
+        {
+            "concept": "OPENED",
+            "concept_kind": "relationship_type",
+            "kind": "changed",
+            "classification": "additive",
+            "detail": "endpoint pattern (Ticket)-[OPENED]->(Ticket) added",
+            "pattern": ["Ticket", "OPENED", "Ticket"],
+        },
+        {
+            "concept": "OPENED",
+            "concept_kind": "relationship_type",
+            "kind": "changed",
+            "classification": "breaking",
+            "detail": "endpoint pattern (Customer)-[OPENED]->(Ticket) removed",
+            "pattern": ["Customer", "OPENED", "Ticket"],
+        },
+    ]
+
+
 def test_the_version_list_says_which_versions_are_candidates(http, database_url, two_versions):
     sdk = stetiq.Client(database_url)
     sdk.register_ontology("support", "node_types:\n  - label: Invoice\n")
@@ -450,7 +514,7 @@ def test_a_version_payload_without_the_candidate_flag_still_parses(http, databas
     ).json()
 
     assert "candidate" not in payload
-    assert wire.ontology_version_from_json(payload) == sdk.get_ontology_version("support", 1)
+    assert codec.ontology_version_from_json(payload) == sdk.get_ontology_version("support", 1)
 
 
 def diff(http, kg, base, target, headers):

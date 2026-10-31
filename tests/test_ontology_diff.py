@@ -3,6 +3,7 @@
 import pytest
 
 from stetiq import OntologyDiff
+from stetiq.ontology.model import Pattern
 
 KG = "customer-support-kg"
 
@@ -39,10 +40,24 @@ def summary(d: OntologyDiff) -> list[tuple[str, str, str]]:
     return [(c.concept, c.kind, c.classification) for c in d.changes]
 
 
+def attributes(d: OntologyDiff) -> list[tuple[str | None, str | None, str | None]]:
+    """Each change's attribute as the Diff states it: owner, owner kind, attribute name."""
+    return [(c.owner, c.owner_kind, c.attribute) for c in d.changes]
+
+
+def concerns_the_concept_itself(d: OntologyDiff) -> bool:
+    """Whether every change is to a node or relationship type itself: no attribute, no Pattern."""
+    return all(
+        (c.owner, c.owner_kind, c.attribute, c.required, c.pattern) == (None,) * 5
+        for c in d.changes
+    )
+
+
 def test_adding_a_concept_is_additive(diff):
     d = diff(BASE.replace("  - Agent", "  - Agent\n  - Product"))
 
     assert summary(d) == [("Product", "added", "additive")]
+    assert concerns_the_concept_itself(d)
     assert d.classification == "additive"
     assert not d.is_breaking
 
@@ -55,6 +70,7 @@ def test_removing_a_concept_is_breaking(diff):
     )
 
     assert summary(d) == [("ASSIGNED", "added", "additive"), ("HANDLES", "removed", "breaking")]
+    assert concerns_the_concept_itself(d)
     assert d.classification == "breaking"
     assert d.is_breaking
     assert [c.concept for c in d.breaking] == ["HANDLES"]
@@ -70,8 +86,9 @@ def test_narrowing_a_relations_endpoint_patterns_is_breaking(diff):
 
     assert summary(d) == [("OPENED", "changed", "additive"), ("OPENED", "changed", "breaking")]
     widened, narrowed = d.changes
-    assert "(Agent)-[OPENED]->(Ticket)" in widened.detail
-    assert "(Customer)-[OPENED]->(Ticket)" in narrowed.detail
+    assert widened.pattern == Pattern("Agent", "OPENED", "Ticket")
+    assert narrowed.pattern == Pattern("Customer", "OPENED", "Ticket")
+    assert (widened.owner, widened.attribute, widened.required) == (None, None, None)
 
 
 def test_narrowing_a_propertys_type_is_breaking(diff):
@@ -79,7 +96,20 @@ def test_narrowing_a_propertys_type_is_breaking(diff):
 
     assert summary(d) == [("Ticket.priority", "changed", "breaking")]
     assert d.changes[0].concept_kind == "property"
+    assert attributes(d) == [("Ticket", "node_type", "priority")]
     assert "FLOAT -> INTEGER" in d.changes[0].detail
+
+
+def test_a_relations_attribute_change_names_the_relation_as_its_owner(client):
+    # A node type and a relationship type share the label Ticket: only the relation's attribute changes.
+    node = "node_types: [{label: Ticket, properties: [{name: at, type: DATE}]}]\n"
+    d = client.diff_ontologies(
+        node + "relationship_types: [{label: Ticket, properties: [{name: at, type: DATE}]}]\n",
+        node + "relationship_types: [{label: Ticket, properties: [{name: at, type: STRING}]}]\n",
+    )
+
+    assert summary(d) == [("Ticket.at", "changed", "breaking")]
+    assert attributes(d) == [("Ticket", "relationship_type", "at")]
 
 
 def test_widening_a_propertys_type_is_additive(client):
@@ -88,6 +118,7 @@ def test_widening_a_propertys_type_is_additive(client):
     )
 
     assert summary(d) == [("Ticket.priority", "changed", "additive")]
+    assert attributes(d) == [("Ticket", "node_type", "priority")]
 
 
 def test_adding_an_optional_property_is_additive_but_a_required_one_is_breaking(diff):
@@ -104,12 +135,16 @@ def test_adding_an_optional_property_is_additive_but_a_required_one_is_breaking(
         ("Ticket.channel", "added", "additive"),
         ("Ticket.status", "added", "breaking"),
     ]
+    assert attributes(d) == [("Ticket", "node_type", "channel"), ("Ticket", "node_type", "status")]
+    assert [c.required for c in d.changes] == [False, True]
 
 
 def test_removing_a_property_is_breaking(diff):
     d = diff(BASE.replace("      - {name: priority, type: FLOAT}\n", ""))
 
     assert summary(d) == [("Ticket.priority", "removed", "breaking")]
+    assert attributes(d) == [("Ticket", "node_type", "priority")]
+    assert d.changes[0].required is None
 
 
 def test_making_a_property_required_is_breaking_and_optional_is_additive(diff):
@@ -123,12 +158,17 @@ def test_making_a_property_required_is_breaking_and_optional_is_additive(diff):
         ("Customer.name", "changed", "additive"),
         ("Ticket.opened_at", "changed", "breaking"),
     ]
+    assert attributes(d) == [
+        ("Customer", "node_type", "name"),
+        ("Ticket", "node_type", "opened_at"),
+    ]
 
 
 def test_marking_a_concept_deprecated_is_deprecating(diff):
     d = diff(BASE.replace("  - Agent", "  - {label: Agent, deprecated: true}"))
 
     assert summary(d) == [("Agent", "deprecated", "deprecating")]
+    assert concerns_the_concept_itself(d)
     assert d.classification == "deprecating"
     assert not d.is_breaking
 
@@ -145,8 +185,28 @@ def test_a_rename_declared_via_replaced_by_is_deprecating(diff):
         ("HANDLES", "deprecated", "deprecating"),
         ("RESOLVES", "added", "additive"),
     ]
-    assert "replaced by RESOLVES" in d.changes[0].detail
+    # A change to a Concept says what changed, beside the Concept it names: no repeat of it.
+    assert d.changes[0].detail == "deprecated; replaced by RESOLVES"
     assert d.classification == "deprecating"
+    assert concerns_the_concept_itself(d)
+
+
+def test_undeprecating_is_additive_and_changing_a_replacement_is_deprecating(client):
+    deprecated = "node_types: [{label: Agent, deprecated: true}]\n"
+    replaced = "node_types: [{label: Agent, replacedBy: Staff}, Staff, Worker]\n"
+    retargeted = "node_types: [{label: Agent, replacedBy: Worker}, Staff, Worker]\n"
+
+    undeprecated = client.diff_ontologies(deprecated, "node_types: [Agent]\n")
+    changed = client.diff_ontologies(replaced, retargeted)
+
+    assert summary(undeprecated) == [("Agent", "changed", "additive")]
+    assert summary(changed) == [("Agent", "deprecated", "deprecating")]
+    assert [undeprecated.changes[0].detail, changed.changes[0].detail] == [
+        "no longer deprecated",
+        "replacement changed Staff -> Worker",
+    ]
+    assert concerns_the_concept_itself(undeprecated)
+    assert concerns_the_concept_itself(changed)
 
 
 def test_an_undeclared_rename_is_a_removal_plus_an_addition(diff):
@@ -175,7 +235,7 @@ def test_diffing_an_unknown_version_is_not_found(client):
         client.diff_ontology_versions(KG, 1, 7)
 
 
-def test_changing_a_description_is_additive(diff):
+def test_changing_only_a_description_is_cosmetic(diff):
     d = diff(
         BASE.replace(
             "  - label: Ticket\n", "  - label: Ticket\n    description: A support request\n"
@@ -186,9 +246,23 @@ def test_changing_a_description_is_additive(diff):
     )
 
     assert summary(d) == [
-        ("Ticket", "changed", "additive"),
-        ("Ticket.opened_at", "changed", "additive"),
+        ("Ticket", "changed", "cosmetic"),
+        ("Ticket.opened_at", "changed", "cosmetic"),
     ]
+    assert attributes(d) == [(None, None, None), ("Ticket", "node_type", "opened_at")]
+    assert d.classification == "cosmetic"
+    assert d.cosmetic == d.changes
+
+
+def test_a_cosmetic_change_ranks_below_an_additive_one(diff):
+    d = diff(
+        BASE.replace(
+            "  - label: Ticket\n", "  - label: Ticket\n    description: A support request\n"
+        ).replace("  - Agent", "  - Agent\n  - Product")
+    )
+
+    assert summary(d) == [("Product", "added", "additive"), ("Ticket", "changed", "cosmetic")]
+    assert d.classification == "additive"
 
 
 def test_giving_a_root_node_type_a_parent_is_additive_but_moving_it_is_breaking(client):
@@ -205,6 +279,7 @@ def test_giving_a_root_node_type_a_parent_is_additive_but_moving_it_is_breaking(
     assert summary(client.diff_ontologies(under_party, flat)) == [
         ("Customer", "changed", "breaking")
     ]
+    assert concerns_the_concept_itself(client.diff_ontologies(under_party, moved))
 
 
 def test_adding_a_constraint_is_breaking_and_dropping_one_is_additive(client):
@@ -216,9 +291,11 @@ def test_adding_a_constraint_is_breaking_and_dropping_one_is_additive(client):
     assert summary(client.diff_ontologies(plain, unique)) == [
         ("Customer.email", "changed", "breaking")
     ]
+    assert attributes(client.diff_ontologies(plain, unique)) == [("Customer", "node_type", "email")]
     assert summary(client.diff_ontologies(unique, plain)) == [
         ("Customer.email", "changed", "additive")
     ]
+    assert attributes(client.diff_ontologies(unique, plain)) == [("Customer", "node_type", "email")]
 
 
 def _with_node_type(label: str) -> str:

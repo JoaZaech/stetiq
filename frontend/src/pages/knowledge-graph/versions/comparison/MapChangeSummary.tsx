@@ -1,54 +1,51 @@
 import { type ComponentProps, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
+import { CLASSIFICATION_LABEL, isCosmetic } from '@/api/ontology-diff'
 import { ClassificationBadge } from '@/components/OntologyDiff'
-import { Badge } from '@/components/ui/badge'
 import { formatCount } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { CONCEPT_NOUN } from '../concepts'
-import type { OntologyComparison } from './ontology-map-comparison'
+import type { PatternLink } from '../map/ontology-map'
 import type { MapSelection } from '../map/ontology-map-focus'
 import {
-  summarizeChanges,
-  summaryConceptOf,
-  type ChangeLevel,
   type ChangeStatement,
   type ConceptChanges,
   type LevelCount,
-} from './ontology-map-summary'
-import { SEVERITY } from './severity-style'
-
-/** Each level's colour: the Diff colours for severity, none for documentation-only. */
-const LEVEL_TEXT: Record<ChangeLevel, string> = { 'documentation-only': 'text-muted-foreground', ...SEVERITY.text }
-
-/** A change's level as a badge: a severity's in its Diff colour, documentation-only's neutral. */
-export function ChangeLevelBadge({ level }: { level: ChangeLevel }) {
-  if (level !== 'documentation-only') return <ClassificationBadge classification={level} />
-  return (
-    <Badge variant="outline" className="text-muted-foreground">
-      {level}
-    </Badge>
-  )
-}
+  type OntologyComparison,
+  selectionOf,
+  summarizeChanges,
+  summaryConceptOf,
+} from './ontology-map-comparison'
+import { SEVERITY } from '@/components/severity-style'
 
 /**
  * The change summary beside a comparison's Map: a count per level, then each changed
  * Concept's changes, the most severe first. Linked with the Map both ways: pointing at an
  * entry previews its Concept's focus (`onPreview`), clicking selects it (`onSelect`), and
- * the entry of the Map's `selection` is highlighted and scrolled to.
+ * the entry of the Map's `selection` is highlighted and scrolled to. An entry selects what
+ * the Map selects for its Concept, among the links `shown` (`selectionOf`).
  */
 export function MapChangeSummary({
   comparison,
+  shown,
   selection,
   onPreview,
   onSelect,
 }: {
   comparison: OntologyComparison
+  /** The Pattern links the Map shows. */
+  shown: readonly PatternLink[]
   selection: MapSelection | null
   onPreview: (selection: MapSelection | null) => void
   onSelect: (selection: MapSelection) => void
 }) {
   const summary = useMemo(() => summarizeChanges(comparison), [comparison])
-  const link: MapLink = { current: summaryConceptOf(comparison, summary, selection), onPreview, onSelect }
+  const link: MapLink = {
+    current: summaryConceptOf(comparison, summary, selection),
+    locate: ({ kind, label }) => selectionOf(comparison, { kind: CONCEPT_NOUN[kind], label }, shown),
+    onPreview,
+    onSelect,
+  }
   return (
     <aside aria-label="Change summary" className="w-72 shrink-0 space-y-3 overflow-y-auto border-r bg-background p-4 text-sm">
       <h3 className="font-semibold">Changes</h3>
@@ -64,10 +61,10 @@ export function MapChangeSummary({
               ))}
             </ul>
           )}
-          {summary.documentationOnly.length > 0 && (
-            <DocumentationOnly
-              concepts={summary.documentationOnly}
-              count={summary.counts.find((c) => c.level === 'documentation-only')?.count ?? 0}
+          {summary.cosmetic.length > 0 && (
+            <CosmeticChanges
+              concepts={summary.cosmetic}
+              count={summary.counts.find((c) => isCosmetic(c.level))?.count ?? 0}
               link={link}
             />
           )}
@@ -78,18 +75,20 @@ export function MapChangeSummary({
 }
 
 /**
- * How the summary is linked with the Map: the entry of the Map's selection, and what
- * pointing at an entry (`onPreview`) and clicking it (`onSelect`) do.
+ * How the summary is linked with the Map: the entry of the Map's selection, where an
+ * entry's Concept is on the Map (null when not shown), and what pointing at an entry
+ * (`onPreview`) and clicking it (`onSelect`) do.
  */
 interface MapLink {
   current: ConceptChanges | null
+  locate: (concept: ConceptChanges) => MapSelection | null
   onPreview: (selection: MapSelection | null) => void
   onSelect: (selection: MapSelection) => void
 }
 
 /**
  * The headline: a count per level, the weightiest first, each in its own colour (the Diff
- * colours for severity, none for documentation-only, which the Diff colours are not for).
+ * colours for severity, none for cosmetic changes, which the Diff colours are not for).
  */
 export function LevelCounts({ counts, ...props }: { counts: LevelCount[] } & ComponentProps<'p'>) {
   return (
@@ -97,8 +96,8 @@ export function LevelCounts({ counts, ...props }: { counts: LevelCount[] } & Com
       {counts.map(({ level, count }, i) => (
         <span key={level}>
           {i > 0 && ' · '}
-          <span className={LEVEL_TEXT[level]}>
-            {count} {level}
+          <span className={SEVERITY.text[level]}>
+            {count} {CLASSIFICATION_LABEL[level]}
           </span>
         </span>
       ))}
@@ -107,10 +106,10 @@ export function LevelCounts({ counts, ...props }: { counts: LevelCount[] } & Com
 }
 
 /**
- * The documentation-only changes, collapsed to one line that expands to their entries.
+ * The cosmetic (documentation-only) changes, collapsed to one line that expands to their entries.
  * It opens by itself when the Map selects one of them.
  */
-function DocumentationOnly({ concepts, count, link }: { concepts: ConceptChanges[]; count: number; link: MapLink }) {
+function CosmeticChanges({ concepts, count, link }: { concepts: ConceptChanges[]; count: number; link: MapLink }) {
   const id = useId()
   const [expanded, setExpanded] = useState(false)
   const open = expanded || (link.current !== null && concepts.includes(link.current))
@@ -139,11 +138,11 @@ function DocumentationOnly({ concepts, count, link }: { concepts: ConceptChanges
 function SummaryEntry({ concept, link }: { concept: ConceptChanges; link: MapLink }) {
   const { onPreview, onSelect } = link
   const current = concept === link.current
+  const selection = link.locate(concept)
   const ref = useRef<HTMLLIElement>(null)
   useEffect(() => {
     if (current) ref.current?.scrollIntoView({ block: 'nearest' })
   }, [current])
-  const { selection } = concept
   return (
     <li ref={ref} aria-label={concept.label}>
       <button
@@ -163,7 +162,7 @@ function SummaryEntry({ concept, link }: { concept: ConceptChanges; link: MapLin
         <span className="flex items-center gap-2">
           <span className="font-semibold break-all">{concept.label}</span>
           <span className="text-xs text-muted-foreground">{CONCEPT_NOUN[concept.kind]}</span>
-          <ChangeLevelBadge level={concept.level} />
+          <ClassificationBadge classification={concept.level} />
         </span>
         {concept.statements.map((s) => (
           <Statement key={`${s.change.concept}:${s.change.detail}`} statement={s} />
@@ -182,7 +181,7 @@ function Statement({ statement: { attribute, text, level } }: { statement: Chang
           attribute <code className="font-mono">{attribute}</code>{' '}
         </>
       )}
-      {text} <span className="text-muted-foreground">({level})</span>
+      {text} <span className="text-muted-foreground">({CLASSIFICATION_LABEL[level]})</span>
     </span>
   )
 }

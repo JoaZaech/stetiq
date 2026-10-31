@@ -25,8 +25,8 @@ describe('labelShown', () => {
     expect(labelShown(zoom, { focused: false, change: { kind: 'modified', severity: 'deprecating' } })).toBe(true)
   })
 
-  it('below the readable zoom, hides a documentation-only link\'s label as an unchanged one\'s', () => {
-    const change = { kind: 'documentation-only', severity: null } as const
+  it('below the readable zoom, hides a cosmetically changed link\'s label as an unchanged one\'s', () => {
+    const change = { kind: 'cosmetic', severity: null } as const
 
     expect(labelShown(READABLE_ZOOM / 2, { focused: false, change })).toBe(false)
     expect(labelShown(READABLE_ZOOM / 2, { focused: true, change })).toBe(true)

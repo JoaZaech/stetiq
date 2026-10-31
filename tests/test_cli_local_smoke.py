@@ -1,4 +1,4 @@
-"""CLI smoke tests for the SDK capabilities CI uses without Python glue: Knowledge
+"""Local-mode CLI smoke tests for the SDK capabilities CI uses without Python glue: Knowledge
 Graph listing, Graph Source binding, Evolution Mode, runs and their evaluations,
 Observations, Gate results and Competency Questions."""
 

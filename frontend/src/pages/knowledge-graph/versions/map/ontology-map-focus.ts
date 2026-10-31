@@ -5,8 +5,8 @@
 import type { Ontology, OntologyProperty } from '@/api/ontology-versions'
 import { type ClassOrRelation, constraintsOf, superclassChain } from '../concepts'
 import { ontologyMap, type OntologyMap, type PatternLink } from './ontology-map'
-import { shortestPaths } from './ontology-map-paths'
-import { searchOntology } from './ontology-map-search'
+import { type MapPath, shortestPaths } from './ontology-map-paths'
+import type { SearchResults } from './ontology-map-search'
 
 /** The classes and links next to one class, each sorted. */
 export interface Neighbourhood {
@@ -72,16 +72,32 @@ export function focusOf(map: OntologyMap, selection: MapSelection | null): MapFo
     return { classes: new Set([link.source, link.target]), links: new Set([link.id]) }
   }
   if (selection?.kind === 'path') {
-    const { from, to } = selection
-    if (!map.nodes.some((n) => n.label === from) || !map.nodes.some((n) => n.label === to)) return null
-    const paths = shortestPaths(map, from, to)
-    const steps = paths.flatMap((p) => p.steps)
-    return {
-      classes: new Set([from, to, ...paths.flatMap((p) => p.classes), ...steps.flatMap((s) => s.ancestors)]),
-      links: new Set(steps.flatMap((s) => s.links)),
-    }
+    const paths = pathsBetween(map, selection)
+    return paths && pathFocus(selection, paths)
   }
   return null
+}
+
+/**
+ * The shortest paths in `map` between a path selection's two classes (none when nothing
+ * joins them); null when `map` lacks either class.
+ */
+export function pathsBetween(map: OntologyMap, { from, to }: { from: string; to: string }): MapPath[] | null {
+  if (!map.nodes.some((n) => n.label === from) || !map.nodes.some((n) => n.label === to)) return null
+  return shortestPaths(map, from, to)
+}
+
+/**
+ * What stays in focus for the shortest `paths` between two classes, as `shortestPaths`
+ * finds them: the two classes, every class and link along a path, and the superclasses a
+ * step climbs to reach an inherited Pattern.
+ */
+export function pathFocus({ from, to }: { from: string; to: string }, paths: readonly MapPath[]): MapFocus {
+  const steps = paths.flatMap((p) => p.steps)
+  return {
+    classes: new Set([from, to, ...paths.flatMap((p) => p.classes), ...steps.flatMap((s) => s.ancestors)]),
+    links: new Set(steps.flatMap((s) => s.links)),
+  }
 }
 
 /** A property as the details panel lists it. */
@@ -173,21 +189,17 @@ export function detailsOf(ontology: Ontology, selection: MapSelection | null): M
 }
 
 /**
- * The classes and links the Concept search `query` names: a class by its name, and a link
- * by its relation's. Concepts it only mentions are listed by `searchOntology`, not
- * highlighted. Null for an empty search, which matches nothing in particular.
+ * The classes and links of `map` that the Concept search `query` names, read from its
+ * `results` (`searchOntology`): a class by its name, and a link by its relation's.
+ * Concepts it only mentions are listed, not highlighted. Null for an empty search, which
+ * matches nothing in particular.
  */
-export function searchMap(ontology: Ontology, query: string): MapFocus | null {
+export function searchMap(map: OntologyMap, query: string, { names }: SearchResults): MapFocus | null {
   if (query.trim() === '') return null
-  const { names } = searchOntology(ontology, query)
   const named = (kind: ClassOrRelation['kind']) => new Set(names.filter((r) => r.kind === kind).map((r) => r.label))
   const relations = named('relation')
   return {
     classes: named('class'),
-    links: new Set(
-      ontologyMap(ontology)
-        .links.filter((l) => relations.has(l.relation))
-        .map((l) => l.id),
-    ),
+    links: new Set(map.links.filter((l) => relations.has(l.relation)).map((l) => l.id)),
   }
 }

@@ -354,7 +354,7 @@ def ontology_diff(
     ] = None,
     tracking_uri: TrackingUri = None,
 ) -> None:
-    """Show the Ontology Diff from version BASE to TARGET, each change additive, deprecating or breaking."""
+    """Show the Ontology Diff from version BASE to TARGET, each change cosmetic, additive, deprecating or breaking."""
     try:
         d = _client(tracking_uri).diff_ontology_versions(knowledge_graph, base, target)
     except StetiqError as e:
@@ -439,7 +439,10 @@ def use_case_get(knowledge_graph: str, version: int, tracking_uri: TrackingUri =
 Actor = Annotated[
     str | None,
     typer.Option(
-        "--actor", envvar="STETIQ_ACTOR", help="Who the audit log records (default: OS user)"
+        "--actor",
+        envvar="STETIQ_ACTOR",
+        help="Who the audit log records (default: OS user). Ignored in remote mode: "
+        "the server records the API Token's user.",
     ),
 ]
 
@@ -778,8 +781,6 @@ def gate(
     """Evaluate the config file's Gates for an Ontology Version or a run; record the result
     on the server. Exit codes: 0 all Gates passed, 3 a Gate failed, 1 error (bad config...)."""
     try:
-        if version is not None and run is not None:
-            raise GateConfigError("give --version or --run, not both")
         try:
             settings = load_config(config)
         except (OSError, ValueError, yaml.YAMLError) as e:
@@ -788,8 +789,6 @@ def gate(
         if not knowledge_graph:
             raise GateConfigError(f"No Knowledge Graph given and none set in {config}")
         gates = parse_gates(settings.get("gates"))
-        if not gates:
-            raise GateConfigError(f"{config} defines no Gates")
         result = _client(tracking_uri).evaluate_gates(
             knowledge_graph, gates, version=version, run=run
         )

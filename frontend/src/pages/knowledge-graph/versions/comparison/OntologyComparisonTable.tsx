@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useSearchParams } from 'react-router'
+import { CLASSIFICATION_LABEL, compareSeverity, isCosmetic } from '@/api/ontology-diff'
 import { ClassificationBadge } from '@/components/OntologyDiff'
 import { DataTable, DataTableRowCount } from '@/components/DataTable'
 import { ErrorAlert } from '@/components/ErrorAlert'
@@ -12,15 +13,14 @@ import { formatCount } from '@/lib/format'
 import { setOrDeleteParam } from '@/lib/search-params'
 import { type ComparisonRow, comparisonRows } from './comparison-rows'
 import { isSelectedRow, selectedRows, useConceptSelection, useShowOnMap } from '../concept-selection'
-import { ChangeLevelBadge, LevelCounts } from './MapChangeSummary'
-import type { OntologyComparison } from './ontology-map-comparison'
-import { compareLevels, summarizeChanges } from './ontology-map-summary'
+import { LevelCounts } from './MapChangeSummary'
+import { type OntologyComparison, summarizeChanges } from './ontology-map-comparison'
 import { selectedRowProps, type TableLinks, TableLinksContext } from '../table/table-links'
 import { ShowOnMap } from '../table/TableLinks'
 import { useOntologyComparison } from './use-ontology-comparison'
 
-/** Shows the documentation-only changes, which the grid leaves out by default. */
-const DOCUMENTATION_PARAM = 'changes.docs'
+/** Shows the cosmetic (documentation-only) changes, which the grid leaves out by default. */
+const COSMETIC_PARAM = 'changes.docs'
 
 const column = createDataTableColumnHelper<ComparisonRow>()
 
@@ -32,19 +32,21 @@ const columns = column.columns([
   }),
   column.accessor('conceptKind', { header: 'Concept kind', ...filterColumn('values') }),
   column.accessor('change', { header: 'Change', ...filterColumn('values') }),
-  column.accessor('level', {
+  // Filtered and searched by the UI's name for the level (cosmetic is "documentation-only").
+  column.accessor((r) => CLASSIFICATION_LABEL[r.level], {
+    id: 'level',
     header: 'Severity',
     ...filterColumn('values'),
     // The weightiest first when sorted descending, as the rows come.
-    sortFn: (a, b) => compareLevels(a.original.level, b.original.level),
+    sortFn: (a, b) => compareSeverity(a.original.level, b.original.level),
     sortDescFirst: true,
-    cell: ({ getValue }) => <ChangeLevelBadge level={getValue()} />,
+    cell: ({ row }) => <ClassificationBadge classification={row.original.level} />,
   }),
   column.accessor('detail', { header: 'Detail', ...filterColumn('text'), enableSorting: false }),
   column.display({
     id: 'map',
     header: '',
-    cell: ({ row }) => row.original.owner && <ShowOnMap concept={row.original.owner} />,
+    cell: ({ row }) => <ShowOnMap concept={row.original.owner} />,
   }),
 ])
 
@@ -84,11 +86,11 @@ function ComparisonGrid({ comparison, base, target }: { comparison: OntologyComp
   const all = useMemo(() => comparisonRows(comparison), [comparison])
   const counts = useMemo(() => summarizeChanges(comparison).counts, [comparison])
   const [params, setParams] = useSearchParams()
-  const showDocumentation = params.get(DOCUMENTATION_PARAM) === '1'
-  const documentationOnly = all.filter((r) => r.level === 'documentation-only').length
+  const showCosmetic = params.get(COSMETIC_PARAM) === '1'
+  const cosmeticCount = all.filter((r) => isCosmetic(r.level)).length
   const rows = useMemo(
-    () => (showDocumentation ? all : all.filter((r) => r.level !== 'documentation-only')),
-    [all, showDocumentation],
+    () => (showCosmetic ? all : all.filter((r) => !isCosmetic(r.level))),
+    [all, showCosmetic],
   )
   const grid = useDataTableParams(CHANGES_GRID)
   const table = useDataTable({
@@ -108,8 +110,8 @@ function ComparisonGrid({ comparison, base, target }: { comparison: OntologyComp
     }),
     [setSelection, showOnMap],
   )
-  const setShowDocumentation = (show: boolean) =>
-    setParams((p) => setOrDeleteParam(p, DOCUMENTATION_PARAM, show ? '1' : null), { replace: true })
+  const setShowCosmetic = (show: boolean) =>
+    setParams((p) => setOrDeleteParam(p, COSMETIC_PARAM, show ? '1' : null), { replace: true })
 
   return (
     <section aria-label="Ontology Diff" className="space-y-4">
@@ -133,16 +135,16 @@ function ComparisonGrid({ comparison, base, target }: { comparison: OntologyComp
               onChange={table.setGlobalFilter}
             />
             <div className="flex items-center gap-3">
-              {documentationOnly > 0 && (
+              {cosmeticCount > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  {!showDocumentation && `${formatCount(documentationOnly, 'documentation-only change')} hidden`}
+                  {!showCosmetic && `${formatCount(cosmeticCount, 'documentation-only change')} hidden`}
                   <Button
                     variant="link"
                     size="sm"
                     className="h-auto px-1.5 text-xs"
-                    onClick={() => setShowDocumentation(!showDocumentation)}
+                    onClick={() => setShowCosmetic(!showCosmetic)}
                   >
-                    {showDocumentation ? 'Hide documentation-only changes' : 'Show documentation-only changes'}
+                    {showCosmetic ? 'Hide documentation-only changes' : 'Show documentation-only changes'}
                   </Button>
                 </p>
               )}
@@ -153,9 +155,7 @@ function ComparisonGrid({ comparison, base, target }: { comparison: OntologyComp
             table={table}
             label="Changes"
             empty="No changes match."
-            rowProps={({ original: { owner } }) =>
-              selectedRowProps(owner !== null && isSelectedRow(highlighted, owner))
-            }
+            rowProps={({ original: { owner } }) => selectedRowProps(isSelectedRow(highlighted, owner))}
           />
         </TableLinksContext>
       )}

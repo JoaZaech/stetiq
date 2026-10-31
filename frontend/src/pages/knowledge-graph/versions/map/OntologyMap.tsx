@@ -1,5 +1,5 @@
 import '@xyflow/react/dist/style.css'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   BaseEdge,
@@ -19,7 +19,7 @@ import {
   type Node,
   type NodeProps,
 } from '@xyflow/react'
-import { CLASSIFICATIONS } from '@/api/ontology-diff'
+import { CLASSIFICATION_LABEL, CLASSIFICATIONS, isCosmetic, type OntologyChange } from '@/api/ontology-diff'
 import type { Ontology } from '@/api/ontology-versions'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { ClassificationBadge } from '@/components/OntologyDiff'
@@ -27,24 +27,20 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
-import { type ConceptSelection, formatSelection, useConceptSelection } from '../concept-selection'
-import type { ClassOrRelation } from '../concepts'
-import { ChangeLevelBadge, MapChangeSummary } from '../comparison/MapChangeSummary'
+import { useConceptSelection } from '../concept-selection'
+import { MapChangeSummary } from '../comparison/MapChangeSummary'
 import { MapDetailsPanel } from './MapDetailsPanel'
 import { MAP_HEIGHT } from '../map-view'
 import { MapPathPanel } from './MapPathPanel'
 import { MapSearchResults } from './MapSearchResults'
-import { filterOntologyMap, ontologyMap, type LinkRoute, type MapFilters } from './ontology-map'
+import type { LinkRoute } from './ontology-map'
 import {
-  changesOf,
-  linkChanged,
   type AttributeChange,
   type MapChange,
   type MapChangeKind,
   type OntologyComparison,
 } from '../comparison/ontology-map-comparison'
-import { centreOf, locatedSelection } from './ontology-map-centre'
-import { detailsOf, focusOf, relationSelection, searchMap, type MapSelection } from './ontology-map-focus'
+import { centreOf } from './ontology-map-centre'
 import { layoutOntologyMap, type Point } from './ontology-map-layout'
 import { labelShown, linkShape, READABLE_ZOOM, straightPath, type Box } from './ontology-map-links'
 import {
@@ -55,21 +51,16 @@ import {
   MONOSPACE_FONT_SIZE,
   NODE_SIZE,
 } from './ontology-map-sizes'
-import { shortestPaths } from './ontology-map-paths'
-import { searchOntology } from './ontology-map-search'
-import { levelOf } from '../comparison/ontology-map-summary'
-import { SEVERITY, severityStroke } from '../comparison/severity-style'
-
-/**
- * How an item is drawn against the selection and the search: `selected` is the selection
- * itself, `match` a search match, and `faded` is out of the selection's focus or, with no
- * selection, not a match of an active search.
- */
-type Emphasis = {
-  selected: boolean
-  match: boolean
-  faded: boolean
-}
+import {
+  canPick,
+  createDrawnMapOf,
+  initialMapState,
+  respondTo,
+  type Emphasis,
+  type LinkEmphasis,
+  type MapGesture,
+} from './ontology-map-view'
+import { SEVERITY, severityStroke } from '@/components/severity-style'
 
 /** An item's data for how it changed, set on a comparison's Map only. */
 type MapChangeData = { change?: MapChange }
@@ -84,9 +75,8 @@ type ClassNode = Node<
     MapChangeData,
   'class'
 >
-/** `focused`: in the selection's focus, so its label shows at any zoom. */
 type PatternEdge = Edge<
-  { relation: string; route: LinkRoute; deprecated: boolean; focused: boolean } & Emphasis & MapChangeData,
+  { relation: string; route: LinkRoute; deprecated: boolean } & LinkEmphasis & MapChangeData,
   'pattern'
 >
 type SubclassEdge = Edge<MapChangeData, 'subclass'>
@@ -122,7 +112,8 @@ interface ChangeStyle {
 
 /**
  * Change kind's channel, mark style: added solid, removed a dashed ghost, modified ringed,
- * documentation-only a neutral dot on an otherwise plain mark, unchanged muted.
+ * cosmetic (only cosmetic changes) a neutral dot on an otherwise plain mark,
+ * unchanged muted.
  */
 const CHANGE_STYLE: Record<MapChangeKind, ChangeStyle> = {
   added: {
@@ -156,7 +147,7 @@ const CHANGE_STYLE: Record<MapChangeKind, ChangeStyle> = {
     swatch: 'border ring-2 ring-foreground ring-offset-1 ring-offset-card',
   },
   // Nearly unchanged: no severity hue and no emphasis, only the dot.
-  'documentation-only': {
+  cosmetic: {
     node: 'text-muted-foreground shadow-none',
     nodeSeverity: [],
     dashed: false,
@@ -178,8 +169,8 @@ const CHANGE_STYLE: Record<MapChangeKind, ChangeStyle> = {
   },
 }
 
-/** A documentation-only change's mark: small, round and neutral. */
-function DocumentationDot({ className }: { className?: string }) {
+/** A cosmetic change's mark: small, round and neutral. */
+function CosmeticDot({ className }: { className?: string }) {
   return (
     <span
       aria-hidden
@@ -191,6 +182,9 @@ function DocumentationDot({ className }: { className?: string }) {
 
 /** How `change` is drawn, or nothing outside a comparison. */
 const changeStyle = (change?: MapChange): Partial<ChangeStyle> => (change ? CHANGE_STYLE[change.kind] : {})
+
+/** A change kind as the UI names it (the legend, `data-change`): cosmetic is "documentation-only", as its class is. */
+const changeKindLabel = (kind: MapChangeKind): string => (kind === 'cosmetic' ? CLASSIFICATION_LABEL.cosmetic : kind)
 
 type OntologyMapProps = { query?: string } & (
   | { ontology: Ontology; comparison?: never }
@@ -208,64 +202,28 @@ type OntologyMapProps = { query?: string } & (
  * style (added solid, removed a dashed ghost, modified ringed, unchanged muted), severity
  * in the Diff colours, and a selection's Diff changes in its details.
  */
-export function OntologyMap({ ontology: single, comparison, query = '' }: OntologyMapProps) {
-  const ontology = comparison?.ontology ?? single!
-  const map = useMemo(() => comparison?.map ?? ontologyMap(ontology), [comparison, ontology])
-  const [filters, setFilters] = useState<MapFilters>({ hideDeprecated: false, hideSubclassLinks: false })
-  const shown = useMemo(() => filterOntologyMap(map, filters), [map, filters])
+export function OntologyMap({ ontology, comparison, query = '' }: OntologyMapProps) {
   const [selected, setSelection] = useConceptSelection()
-  // What the change summary points at: its focus shows, without selecting it.
-  const [preview, setPreview] = useState<MapSelection | null>(null)
-  // Focus is over what is shown, so a selection a filter hides is no selection. Hiding
-  // subclass links only declutters: a path through an inherited Pattern still counts.
-  const reachable = useMemo(
-    () => (filters.hideSubclassLinks ? filterOntologyMap(map, { ...filters, hideSubclassLinks: false }) : shown),
-    [map, filters, shown],
-  )
-  /**
-   * What selecting `concept` selects on the Map: a class, or a relation as one of its
-   * shown links, in a comparison its first changed one as the change summary has it;
-   * null when none is shown.
-   */
-  const selectionFor = useCallback(
-    (concept: ConceptSelection | null): MapSelection | null =>
-      concept?.kind === 'relation'
-        ? relationSelection(shown.links, concept.label, (l) => comparison !== undefined && linkChanged(comparison, l))
-        : concept,
-    [shown, comparison],
-  )
-  const selection = useMemo(() => selectionFor(selected), [selectionFor, selected])
-  const selectedFocus = useMemo(() => focusOf(reachable, selection), [reachable, selection])
-  const focus = useMemo(
-    () => (preview ? focusOf(reachable, preview) : selectedFocus),
-    [preview, reachable, selectedFocus],
-  )
-  const paths = useMemo(
-    () =>
-      selectedFocus && selection?.kind === 'path' ? shortestPaths(reachable, selection.from, selection.to) : null,
-    [selectedFocus, reachable, selection],
-  )
-  const matches = useMemo(() => searchMap(ontology, query), [ontology, query])
-  const results = useMemo(() => searchOntology(ontology, query), [ontology, query])
-  // The selection the Map opened on or a search result picked (as a `?select=` value),
-  // which the Map stays centred on while it lasts.
-  const [located, setLocated] = useState(() => (selected ? formatSelection(selected) : null))
-  /** What picking `result` selects; null when it is not shown. */
-  const pick = ({ kind, label }: ClassOrRelation): ConceptSelection | null => {
-    if (kind === 'relation') return selectionFor({ kind, label }) && { kind, label }
-    return shown.nodes.some((n) => n.label === label) ? { kind, label } : null
+  const drawnMapOf = useMemo(() => createDrawnMapOf(), [])
+  const [state, setState] = useState(() => initialMapState(selected))
+  const view = drawnMapOf(comparison ? { comparison, selected, query } : { ontology: ontology!, selected, query }, state)
+  const { map, shown, selection, details, paths, results, classes, links, subclassLinks } = view
+  /** Answers `gesture` as the view says: its next state, and the page's next selection. */
+  const respond = (gesture: MapGesture) => {
+    const { state: next, select } = respondTo(view, gesture)
+    if (next !== state) setState(next)
+    if (select !== undefined) setSelection(select)
   }
-  const details = useMemo(
-    () => (selectedFocus ? detailsOf(ontology, selection) : null),
-    [selectedFocus, ontology, selection],
-  )
-
+  // The Escape listener, kept for the Map's life, answers with the latest view.
+  const respondLatest = useRef(respond)
   useEffect(() => {
-    if (!selection) return
-    const clear = (e: KeyboardEvent) => e.key === 'Escape' && setSelection(null)
-    document.addEventListener('keydown', clear)
-    return () => document.removeEventListener('keydown', clear)
-  }, [selection, setSelection])
+    respondLatest.current = respond
+  })
+  useEffect(() => {
+    const escape = (e: KeyboardEvent) => e.key === 'Escape' && respondLatest.current({ kind: 'escape' })
+    document.addEventListener('keydown', escape)
+    return () => document.removeEventListener('keydown', escape)
+  }, [])
   // A comparison's changed classes grow to list their changed attributes.
   const sizes = useMemo(() => classSizes(comparison?.changes.attributes), [comparison])
   // The whole Map is laid out, and filters only hide, so nothing moves when one changes.
@@ -278,26 +236,6 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
   const elements = useMemo(() => {
     if (!layout.data) return null
     const positions = layout.data
-    const faded = (key: string, focused?: Set<string>, matched?: Set<string>) =>
-      focused ? !focused.has(key) : matched ? !matched.has(key) : false
-    const classEmphasis = (label: string): Emphasis => ({
-      // The selected class, or either end of a path.
-      selected:
-        selection?.kind === 'class'
-          ? selection.label === label
-          : selection?.kind === 'path' && (selection.from === label || selection.to === label),
-      match: matches?.classes.has(label) ?? false,
-      faded: faded(label, focus?.classes, matches?.classes),
-    })
-    const linkEmphasis = (id: string): Emphasis => ({
-      // The selected link, or any link along a path.
-      selected:
-        selection?.kind === 'link'
-          ? selection.id === id
-          : selection?.kind === 'path' && (focus?.links.has(id) ?? false),
-      match: matches?.links.has(id) ?? false,
-      faded: faded(id, focus?.links, matches?.links),
-    })
     const nodes: ClassNode[] = shown.nodes.map((n) => ({
       id: n.label,
       type: 'class',
@@ -307,7 +245,7 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
         deprecated: n.deprecated,
         change: comparison?.changes.classes[n.label],
         attributes: comparison?.changes.attributes[n.label],
-        ...classEmphasis(n.label),
+        ...classes[n.label],
       },
       ariaLabel: n.label,
       ...(sizes[n.label] ?? NODE_SIZE),
@@ -321,9 +259,8 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
         relation: l.relation,
         route: l.route,
         deprecated: l.deprecated,
-        focused: focus?.links.has(l.id) ?? false,
         change: comparison?.changes.links[l.id],
-        ...linkEmphasis(l.id),
+        ...links[l.id],
       },
       ariaLabel: l.id,
       className: cn(l.deprecated && 'opacity-50'),
@@ -339,18 +276,15 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
       target: l.parent,
       data: { change: comparison?.changes.subclassLinks[l.id] },
       ariaLabel: l.id,
-      // A subclass link fades with either of its classes.
-      className: cn(
-        (classEmphasis(l.child).faded || classEmphasis(l.parent).faded) && 'opacity-20',
-      ),
+      className: cn(subclassLinks[l.id].faded && 'opacity-20'),
       markerEnd: SUBCLASS_ARROWHEAD,
     }))
     return { nodes, edges: [...subclassEdges, ...patternEdges] }
-  }, [layout.data, sizes, shown, focus, matches, selection, comparison])
+  }, [layout.data, sizes, shown, classes, links, subclassLinks, comparison])
 
   const centre = useMemo(
-    () => (layout.data ? centreOf(map, layout.data, sizes, locatedSelection(located, selected, selection)) : null),
-    [layout.data, sizes, located, selected, selection, map],
+    () => (layout.data ? centreOf(map, layout.data, sizes, view.centreOn) : null),
+    [layout.data, sizes, map, view.centreOn],
   )
 
   if (layout.error) return <ErrorAlert error={layout.error} title="The Map could not be laid out" />
@@ -360,21 +294,18 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
       {comparison && (
         <MapChangeSummary
           comparison={comparison}
+          shown={shown.links}
           selection={selection}
-          onPreview={setPreview}
-          onSelect={setSelection}
+          onPreview={(preview) => respond({ kind: 'preview', selection: preview })}
+          onSelect={(concept) => respond({ kind: 'select', concept })}
         />
       )}
       {query.trim() !== '' && (
         <MapSearchResults
           query={query}
           results={results}
-          canPick={(r) => pick(r) !== null}
-          onPick={(r) => {
-            const picked = pick(r)
-            setSelection(picked)
-            setLocated(picked && formatSelection(picked))
-          }}
+          canPick={(r) => canPick(view, r)}
+          onPick={(r) => respond({ kind: 'pick', result: r })}
         />
       )}
       <ReactFlow
@@ -388,19 +319,11 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
         nodesConnectable={false}
         // The Map keeps its own selection (focus and details), not React Flow's.
         elementsSelectable={false}
-        // Shift-clicking a second class asks for the shortest paths from the first.
-        onNodeClick={(event, node) =>
-          setSelection(
-            event.shiftKey && selection?.kind === 'class' && selection.label !== node.id
-              ? { kind: 'path', from: selection.label, to: node.id }
-              : { kind: 'class', label: node.id },
-          )
-        }
-        onEdgeClick={(_, edge) => edge.type === 'pattern' && setSelection({ kind: 'link', id: edge.id })}
-        onPaneClick={() => setSelection(null)}
+        onNodeClick={(event, node) => respond({ kind: 'click-class', label: node.id, shift: event.shiftKey })}
+        onEdgeClick={(_, edge) => edge.type === 'pattern' && respond({ kind: 'click-link', id: edge.id })}
+        onPaneClick={() => respond({ kind: 'clear' })}
         minZoom={0.2}
-        // Opening on a selection centres on it instead.
-        fitView={located === null}
+        fitView={view.fitView}
         fitViewOptions={FIT_VIEW_OPTIONS}
       >
         <Controls showInteractive={false} fitViewOptions={FIT_VIEW_OPTIONS} />
@@ -408,29 +331,29 @@ export function OntologyMap({ ontology: single, comparison, query = '' }: Ontolo
           <FilterSwitch
             id="map-hide-deprecated"
             label="Hide deprecated"
-            checked={filters.hideDeprecated}
-            onCheckedChange={(hideDeprecated) => setFilters({ ...filters, hideDeprecated })}
+            checked={state.filters.hideDeprecated}
+            onCheckedChange={(hideDeprecated) => respond({ kind: 'filter', filters: { hideDeprecated } })}
           />
           <FilterSwitch
             id="map-hide-subclass-links"
             label="Hide subclass links"
-            checked={filters.hideSubclassLinks}
-            onCheckedChange={(hideSubclassLinks) => setFilters({ ...filters, hideSubclassLinks })}
+            checked={state.filters.hideSubclassLinks}
+            onCheckedChange={(hideSubclassLinks) => respond({ kind: 'filter', filters: { hideSubclassLinks } })}
           />
         </Panel>
         {comparison && <ComparisonLegend />}
         <CentreOn point={centre} />
       </ReactFlow>
       {details && (
-        <MapDetailsPanel details={details} onClose={() => setSelection(null)}>
-          {comparison && <ChangeDetails comparison={comparison} selection={selection} />}
+        <MapDetailsPanel details={details} onClose={() => respond({ kind: 'clear' })}>
+          {view.changes && <ChangeDetails changes={view.changes} />}
           {details.kind === 'class' && (
             <p className="text-xs text-muted-foreground">Shift-click another class for the shortest path to it.</p>
           )}
         </MapDetailsPanel>
       )}
       {paths && selection?.kind === 'path' && (
-        <MapPathPanel from={selection.from} to={selection.to} paths={paths} onClose={() => setSelection(null)} />
+        <MapPathPanel from={selection.from} to={selection.to} paths={paths} onClose={() => respond({ kind: 'clear' })} />
       )}
       <SubclassArrowhead />
     </div>
@@ -452,14 +375,7 @@ function CentreOn({ point }: { point: Point | null }) {
 }
 
 /** A comparison's details section: the Ontology Diff's changes behind the selection. */
-function ChangeDetails({
-  comparison,
-  selection,
-}: {
-  comparison: OntologyComparison
-  selection: MapSelection | null
-}) {
-  const changes = changesOf(comparison, selection)
+function ChangeDetails({ changes }: { changes: OntologyChange[] }) {
   return (
     <section className="space-y-1">
       <h4 className="text-xs font-semibold">Changes</h4>
@@ -470,7 +386,7 @@ function ChangeDetails({
           {changes.map((c) => (
             <li key={`${c.concept}:${c.detail}`} className="space-y-1">
               <div className="flex items-center gap-2">
-                <ChangeLevelBadge level={levelOf(comparison, c)} />
+                <ClassificationBadge classification={c.classification} />
                 <span className="text-xs text-muted-foreground">{c.kind}</span>
               </div>
               <div className="text-xs">{c.detail}</div>
@@ -490,15 +406,16 @@ function ComparisonLegend() {
       aria-label="Legend"
       className="flex max-w-[45%] flex-wrap items-center gap-x-3 gap-y-1 rounded-md border bg-card px-3 py-2 text-xs shadow-xs"
     >
-      {Object.entries(CHANGE_STYLE).map(([kind, { swatch, dot }]) => (
+      {(Object.entries(CHANGE_STYLE) as [MapChangeKind, ChangeStyle][]).map(([kind, { swatch, dot }]) => (
         <span key={kind} className="flex items-center gap-1">
           <span aria-hidden className={cn('inline-block h-3 w-5 rounded-sm', swatch)}>
-            {dot && <DocumentationDot />}
+            {dot && <CosmeticDot />}
           </span>
-          {kind}
+          {changeKindLabel(kind)}
         </span>
       ))}
-      {CLASSIFICATIONS.map((s) => (
+      {/* Cosmetic has no Diff colour: its key is the cosmetic mark above. */}
+      {CLASSIFICATIONS.filter((s) => !isCosmetic(s)).map((s) => (
         <ClassificationBadge key={s} classification={s} />
       ))}
     </Panel>
@@ -553,7 +470,7 @@ function ClassNodeView({ data }: NodeProps<ClassNode>) {
       data-selected={data.selected || undefined}
       data-match={data.match || undefined}
       data-faded={data.faded || undefined}
-      data-change={data.change?.kind}
+      data-change={data.change && changeKindLabel(data.change.kind)}
       data-severity={severity ?? undefined}
       className={cn(
         'flex size-full cursor-pointer flex-col items-center justify-center rounded-md border bg-card px-2 text-sm font-medium text-card-foreground shadow-xs transition-opacity',
@@ -573,7 +490,7 @@ function ClassNodeView({ data }: NodeProps<ClassNode>) {
         style={{ height: NODE_SIZE.height - 2 }}
       >
         {data.label}
-        {style.dot && <DocumentationDot className="ml-1.5" />}
+        {style.dot && <CosmeticDot className="ml-1.5" />}
       </span>
       {data.attributes && data.attributes.length > 0 && <ChangedAttributes attributes={data.attributes} />}
       {/* React Flow attaches links to handles; links are drawn centre to centre, so these stay hidden. */}
@@ -628,7 +545,7 @@ function PatternEdgeView({ id, source, target, data, markerEnd }: EdgeProps<Patt
         path={path}
         markerEnd={markerEnd}
         interactionWidth={16}
-        data-change={data.change?.kind}
+        data-change={data.change && changeKindLabel(data.change.kind)}
         data-severity={severity ?? undefined}
         style={{
           stroke,
@@ -662,7 +579,7 @@ function PatternEdgeView({ id, source, target, data, markerEnd }: EdgeProps<Patt
               {data.relation}
             </span>
             {/* On the pill's corner, so the label keeps the size the layout made room for. */}
-            {style.dot && <DocumentationDot className="absolute -top-0.5 -right-0.5" />}
+            {style.dot && <CosmeticDot className="absolute -top-0.5 -right-0.5" />}
           </div>
         </ViewportPortal>
       )}

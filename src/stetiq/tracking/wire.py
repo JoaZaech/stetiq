@@ -1,94 +1,21 @@
-"""JSON wire format shared by the stetiq server and `RemoteTrackingService`.
+"""HTTP transport for the stetiq server and `RemoteTrackingService`.
 
-Entities travel as plain JSON objects; Ontologies as their canonical dict form
-(`ontology.to_dict`), which the server re-validates with `parse_dict`.
+Entities travel in the JSON form `stetiq.tracking.codec` gives them; this module holds
+what only the wire needs: the API prefix, who-am-I, the Ontology Diff and errors.
 Errors travel as `{"error": {"type": <StetiqError subclass name>, "message": ...}}`
 and are re-raised client-side as the same class, so both modes raise identically.
 """
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from stetiq import errors
-from stetiq import use_case as use_case_format
 from stetiq.auth import ApiToken
-from stetiq.conformance import Conformance
-from stetiq.drift import DriftFinding, DriftThresholds
-from stetiq.evaluation.framework import Detail, Evaluation
-from stetiq.gates import outcome_from_dict, outcome_to_dict
-from stetiq.graph_source import GraphSourceScope, ObservedSchema
-from stetiq.ontology import from_dict, to_dict
-from stetiq.ontology.diff import OntologyDiff
-from stetiq.tracking.entities import (
-    Alias,
-    ConstructionRun,
-    DriftEvent,
-    EvaluationResult,
-    GateResult,
-    KnowledgeGraph,
-    KnowledgeGraphSummary,
-    Observation,
-    ObservationOutcome,
-    OntologyVersion,
-    Promotion,
-    UseCaseVersion,
-)
+from stetiq.ontology.canonical import pattern_to_list
+from stetiq.ontology.diff import Change, OntologyDiff
 
 API_PREFIX = "/api/v1"
-
-# HTTP status per error class; anything unlisted is 400.
-ERROR_STATUS: dict[type[errors.StetiqError], int] = {
-    errors.NotFoundError: 404,
-    errors.KnowledgeGraphAlreadyExistsError: 409,
-    errors.OntologyValidationError: 422,
-    errors.MissingDeclaredOntologyError: 422,
-    errors.EvaluatorError: 422,
-}
-
-
-def _dt(value: str | None) -> datetime | None:
-    return None if value is None else datetime.fromisoformat(value)
-
-
-def _iso(value: datetime | None) -> str | None:
-    return None if value is None else value.isoformat()
-
-
-def knowledge_graph_to_json(kg: KnowledgeGraph) -> dict[str, Any]:
-    return {"name": kg.name, "created_at": kg.created_at.isoformat(), "description": kg.description}
-
-
-def knowledge_graph_from_json(d: dict[str, Any]) -> KnowledgeGraph:
-    # The description is optional: older servers do not send it.
-    return KnowledgeGraph(
-        name=d["name"],
-        created_at=datetime.fromisoformat(d["created_at"]),
-        description=d.get("description"),
-    )
-
-
-def knowledge_graph_summary_to_json(s: KnowledgeGraphSummary) -> dict[str, Any]:
-    """A list item: the Knowledge Graph's own fields with the summary fields beside them."""
-    return {
-        **knowledge_graph_to_json(s.knowledge_graph),
-        "contract_version": s.contract_version,
-        "latest_version": s.latest_version,
-        "last_run_status": s.last_run_status,
-        "last_modified_at": _iso(s.last_modified_at),
-    }
-
-
-def knowledge_graph_summary_from_json(d: dict[str, Any]) -> KnowledgeGraphSummary:
-    # The summary fields are optional: older servers do not send them.
-    return KnowledgeGraphSummary(
-        knowledge_graph=knowledge_graph_from_json(d),
-        contract_version=d.get("contract_version"),
-        latest_version=d.get("latest_version"),
-        last_run_status=d.get("last_run_status"),
-        last_modified_at=_dt(d.get("last_modified_at")),
-    )
 
 
 def whoami_to_json(token: ApiToken, *, local: bool) -> dict[str, Any]:
@@ -100,101 +27,61 @@ def whoami_to_json(token: ApiToken, *, local: bool) -> dict[str, Any]:
     }
 
 
-def ontology_version_to_json(
-    v: OntologyVersion, *, candidate: bool | None = None
-) -> dict[str, Any]:
-    """`candidate` is only sent by the version list (older servers never send it)."""
-    out = {
-        "knowledge_graph": v.knowledge_graph,
-        "number": v.number,
-        "content_hash": v.content_hash,
-        "origin": v.origin,
-        "created_at": v.created_at.isoformat(),
-        "ontology": to_dict(v.ontology),
-    }
-    if candidate is not None:
-        out["candidate"] = candidate
-    return out
-
-
-def ontology_version_from_json(d: dict[str, Any]) -> OntologyVersion:
-    return OntologyVersion(
-        knowledge_graph=d["knowledge_graph"],
-        number=d["number"],
-        content_hash=d["content_hash"],
-        origin=d["origin"],
-        created_at=datetime.fromisoformat(d["created_at"]),
-        ontology=from_dict(d["ontology"]),
-    )
-
-
 def ontology_diff_to_json(d: OntologyDiff) -> dict[str, Any]:
     """`classification` is the most severe change's, or None when nothing changed."""
     return {
         "classification": d.classification and str(d.classification),
-        "changes": [
-            {
-                "concept": c.concept,
-                "concept_kind": c.concept_kind,
-                "kind": str(c.kind),
-                "classification": str(c.classification),
-                "detail": c.detail,
-            }
-            for c in d.changes
-        ],
+        "changes": [_change_to_json(c) for c in d.changes],
     }
 
 
-def _detail_to_json(d: Detail) -> dict[str, Any]:
-    out: dict[str, Any] = {"item": d.item, "message": d.message, "metric": d.metric}
-    if d.data is not None:
-        out["data"] = dict(d.data)
+def _change_to_json(c: Change) -> dict[str, Any]:
+    """What a change concerns (an attribute and its owner, whether an added attribute is
+    required, an endpoint Pattern) only when it concerns one; a reader takes a missing
+    field as None."""
+    out: dict[str, Any] = {
+        "concept": c.concept,
+        "concept_kind": c.concept_kind,
+        "kind": str(c.kind),
+        "classification": str(c.classification),
+        "detail": c.detail,
+    }
+    facts = {
+        "owner": c.owner,
+        "owner_kind": c.owner_kind,
+        "attribute": c.attribute,
+        "required": c.required,
+        "pattern": c.pattern and pattern_to_list(c.pattern),
+    }
+    out.update({k: v for k, v in facts.items() if v is not None})
     return out
 
 
-def _detail_from_json(d: dict[str, Any]) -> Detail:
-    return Detail(
-        item=d["item"], message=d.get("message", ""), metric=d.get("metric"), data=d.get("data")
-    )
+# --- Errors ------------------------------------------------------------------------------
+
+# HTTP status per error class. An error takes the status of its most specific class listed
+# here (the first one in its MRO); anything else is 400.
+ERROR_STATUS: dict[type[errors.StetiqError], int] = {
+    errors.AuthenticationError: 401,
+    errors.PermissionDeniedError: 403,
+    errors.NotFoundError: 404,
+    errors.KnowledgeGraphAlreadyExistsError: 409,
+    errors.GraphSourceNotBoundError: 409,
+    errors.RunNotActiveError: 409,
+    errors.OntologyValidationError: 422,
+    errors.MissingDeclaredOntologyError: 422,
+    errors.EvaluatorError: 422,
+    errors.InvalidEvolutionModeError: 422,
+    errors.ConflictingArgumentsError: 422,
+    errors.UseCaseValidationError: 422,
+    errors.InvalidAliasNameError: 422,
+    errors.InvalidDriftConfigError: 422,
+    errors.GateConfigError: 422,
+}
 
 
-def evaluation_to_json(e: Evaluation) -> dict[str, Any]:
-    return {"metrics": dict(e.metrics), "details": [_detail_to_json(d) for d in e.details]}
-
-
-def evaluation_from_json(d: dict[str, Any]) -> Evaluation:
-    return Evaluation(
-        metrics=dict(d["metrics"]),
-        details=tuple(_detail_from_json(x) for x in d.get("details", [])),
-    )
-
-
-def evaluation_result_to_json(r: EvaluationResult) -> dict[str, Any]:
-    return {
-        "knowledge_graph": r.knowledge_graph,
-        "subject_kind": r.subject_kind,
-        "subject_id": r.subject_id,
-        "evaluator": r.evaluator,
-        "metrics": r.metrics,
-        "details": [_detail_to_json(d) for d in r.details],
-        "created_at": r.created_at.isoformat(),
-        "parameters": dict(r.parameters),
-        "use_case_version": r.use_case_version,
-    }
-
-
-def evaluation_result_from_json(d: dict[str, Any]) -> EvaluationResult:
-    return EvaluationResult(
-        knowledge_graph=d["knowledge_graph"],
-        subject_kind=d["subject_kind"],
-        subject_id=d["subject_id"],
-        evaluator=d["evaluator"],
-        metrics=dict(d["metrics"]),
-        details=tuple(_detail_from_json(x) for x in d["details"]),
-        created_at=datetime.fromisoformat(d["created_at"]),
-        parameters=dict(d.get("parameters", {})),
-        use_case_version=d.get("use_case_version"),
-    )
+def error_status(e: errors.StetiqError) -> int:
+    return next((ERROR_STATUS[c] for c in type(e).__mro__ if c in ERROR_STATUS), 400)
 
 
 def error_to_json(e: errors.StetiqError) -> dict[str, Any]:
@@ -202,252 +89,9 @@ def error_to_json(e: errors.StetiqError) -> dict[str, Any]:
 
 
 def error_from_json(d: dict[str, Any]) -> errors.StetiqError:
+    """Every error class lives in `stetiq.errors` (tests/test_wire_errors.py checks it);
+    an unknown name comes back as a plain `StetiqError`."""
     cls = getattr(errors, d["error"]["type"], None)
     if not (isinstance(cls, type) and issubclass(cls, errors.StetiqError)):
         cls = errors.StetiqError
     return cls(d["error"]["message"])
-
-
-# --- Graph Sources, Construction Runs, Observations -------------------------------------
-
-ERROR_STATUS[errors.GraphSourceNotBoundError] = 409
-
-
-def graph_source_scope_to_json(scope: GraphSourceScope) -> dict[str, Any]:
-    return scope.to_dict()
-
-
-def graph_source_scope_from_json(d: dict[str, Any]) -> GraphSourceScope:
-    return GraphSourceScope.from_dict(d)
-
-
-ERROR_STATUS[errors.RunNotActiveError] = 409
-
-
-ERROR_STATUS[errors.InvalidEvolutionModeError] = 422
-
-
-def run_to_json(run: ConstructionRun) -> dict[str, Any]:
-    return {
-        "id": run.id,
-        "knowledge_graph": run.knowledge_graph,
-        "ontology_version": run.ontology_version,
-        "status": run.status,
-        "started_at": run.started_at.isoformat(),
-        "ended_at": _iso(run.ended_at),
-        "params": dict(run.params),
-        "metrics": dict(run.metrics),
-        "observation_id": run.observation_id,
-        "conformance": None if run.conformance is None else run.conformance.to_dict(),
-        "candidate_version": run.candidate_version,
-    }
-
-
-def run_from_json(d: dict[str, Any]) -> ConstructionRun:
-    return ConstructionRun(
-        id=d["id"],
-        knowledge_graph=d["knowledge_graph"],
-        ontology_version=d["ontology_version"],
-        status=d["status"],
-        started_at=datetime.fromisoformat(d["started_at"]),
-        ended_at=_dt(d["ended_at"]),
-        params=dict(d["params"]),
-        metrics={k: float(v) for k, v in d["metrics"].items()},
-        observation_id=d["observation_id"],
-        conformance=None
-        if d.get("conformance") is None
-        else Conformance.from_dict(d["conformance"]),
-        candidate_version=d.get("candidate_version"),
-    )
-
-
-def observed_schema_to_json(schema: ObservedSchema) -> dict[str, Any]:
-    return schema.to_dict()
-
-
-def observed_schema_from_json(d: dict[str, Any]) -> ObservedSchema:
-    return ObservedSchema.from_dict(d)
-
-
-def observation_to_json(obs: Observation) -> dict[str, Any]:
-    return {
-        "id": obs.id,
-        "knowledge_graph": obs.knowledge_graph,
-        "run_id": obs.run_id,
-        "observed_at": obs.observed_at.isoformat(),
-        "scope": graph_source_scope_to_json(obs.scope),
-        "schema": observed_schema_to_json(obs.schema),
-    }
-
-
-def observation_from_json(d: dict[str, Any]) -> Observation:
-    return Observation(
-        id=d["id"],
-        knowledge_graph=d["knowledge_graph"],
-        run_id=d["run_id"],
-        observed_at=datetime.fromisoformat(d["observed_at"]),
-        scope=graph_source_scope_from_json(d["scope"]),
-        schema=observed_schema_from_json(d["schema"]),
-    )
-
-
-# --- Use Cases ---------------------------------------------------------------------------
-
-ERROR_STATUS[errors.UseCaseValidationError] = 422
-
-
-def use_case_version_to_json(v: UseCaseVersion) -> dict[str, Any]:
-    return {
-        "knowledge_graph": v.knowledge_graph,
-        "number": v.number,
-        "content_hash": v.content_hash,
-        "created_at": v.created_at.isoformat(),
-        "use_case": use_case_format.to_dict(v.use_case),
-    }
-
-
-def use_case_version_from_json(d: dict[str, Any]) -> UseCaseVersion:
-    return UseCaseVersion(
-        knowledge_graph=d["knowledge_graph"],
-        number=d["number"],
-        content_hash=d["content_hash"],
-        created_at=datetime.fromisoformat(d["created_at"]),
-        use_case=use_case_format.from_dict(d["use_case"]),
-    )
-
-
-# --- Aliases and Promotion ---------------------------------------------------------------
-
-ERROR_STATUS[errors.InvalidAliasNameError] = 422
-
-
-def alias_to_json(alias: Alias) -> dict[str, Any]:
-    return {
-        "knowledge_graph": alias.knowledge_graph,
-        "name": alias.name,
-        "version": alias.version,
-        "updated_at": alias.updated_at.isoformat(),
-    }
-
-
-def alias_from_json(d: dict[str, Any]) -> Alias:
-    return Alias(
-        knowledge_graph=d["knowledge_graph"],
-        name=d["name"],
-        version=d["version"],
-        updated_at=datetime.fromisoformat(d["updated_at"]),
-    )
-
-
-def promotion_to_json(p: Promotion) -> dict[str, Any]:
-    return {
-        "knowledge_graph": p.knowledge_graph,
-        "alias": p.alias,
-        "from_version": p.from_version,
-        "to_version": p.to_version,
-        "actor": p.actor,
-        "promoted_at": p.promoted_at.isoformat(),
-        "gate_result": p.gate_result,
-    }
-
-
-def promotion_from_json(d: dict[str, Any]) -> Promotion:
-    return Promotion(
-        knowledge_graph=d["knowledge_graph"],
-        alias=d["alias"],
-        from_version=d["from_version"],
-        to_version=d["to_version"],
-        actor=d["actor"],
-        promoted_at=datetime.fromisoformat(d["promoted_at"]),
-        gate_result=d["gate_result"],
-    )
-
-
-# --- Drift -------------------------------------------------------------------------------
-
-ERROR_STATUS[errors.InvalidDriftConfigError] = 422
-
-
-def drift_thresholds_to_json(t: DriftThresholds) -> dict[str, Any]:
-    return t.to_dict()
-
-
-def drift_thresholds_from_json(d: dict[str, Any] | None) -> DriftThresholds:
-    return DriftThresholds() if d is None else DriftThresholds.from_dict(d)
-
-
-def drift_event_to_json(e: DriftEvent) -> dict[str, Any]:
-    return {
-        "id": e.id,
-        "knowledge_graph": e.knowledge_graph,
-        "observation_id": e.observation_id,
-        "previous_observation_id": e.previous_observation_id,
-        "contract_alias": e.contract_alias,
-        "ontology_version": e.ontology_version,
-        "detected_at": e.detected_at.isoformat(),
-        "findings": [f.to_dict() for f in e.findings],
-        "thresholds": e.thresholds.to_dict(),
-    }
-
-
-def drift_event_from_json(d: dict[str, Any]) -> DriftEvent:
-    return DriftEvent(
-        id=d["id"],
-        knowledge_graph=d["knowledge_graph"],
-        observation_id=d["observation_id"],
-        previous_observation_id=d["previous_observation_id"],
-        contract_alias=d["contract_alias"],
-        ontology_version=d["ontology_version"],
-        detected_at=datetime.fromisoformat(d["detected_at"]),
-        findings=tuple(DriftFinding.from_dict(f) for f in d["findings"]),
-        thresholds=drift_thresholds_from_json(d.get("thresholds")),
-    )
-
-
-def observation_outcome_to_json(o: ObservationOutcome) -> dict[str, Any]:
-    return {
-        "observation": observation_to_json(o.observation),
-        "drift_event": None if o.drift is None else drift_event_to_json(o.drift),
-    }
-
-
-def observation_outcome_from_json(d: dict[str, Any]) -> ObservationOutcome:
-    drift = d.get("drift_event")
-    return ObservationOutcome(
-        observation=observation_from_json(d["observation"]),
-        drift=None if drift is None else drift_event_from_json(drift),
-    )
-
-
-# --- API-token authentication ------------------------------------------------------------
-
-ERROR_STATUS[errors.AuthenticationError] = 401
-ERROR_STATUS[errors.PermissionDeniedError] = 403
-
-
-# --- Gates -------------------------------------------------------------------------------
-
-ERROR_STATUS[errors.GateConfigError] = 422
-
-
-def gate_result_to_json(r: GateResult) -> dict[str, Any]:
-    return {
-        "knowledge_graph": r.knowledge_graph,
-        "subject_kind": r.subject_kind,
-        "subject_id": r.subject_id,
-        "ontology_version": r.ontology_version,
-        "passed": r.passed,
-        "outcomes": [outcome_to_dict(o) for o in r.outcomes],
-        "evaluated_at": r.evaluated_at.isoformat(),
-    }
-
-
-def gate_result_from_json(d: dict[str, Any]) -> GateResult:
-    return GateResult(
-        knowledge_graph=d["knowledge_graph"],
-        subject_kind=d["subject_kind"],
-        subject_id=d["subject_id"],
-        ontology_version=d["ontology_version"],
-        outcomes=tuple(outcome_from_dict(o) for o in d["outcomes"]),
-        evaluated_at=datetime.fromisoformat(d["evaluated_at"]),
-    )

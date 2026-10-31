@@ -21,12 +21,6 @@ export interface ClassOrRelation {
   label: string
 }
 
-/** An attribute's Concept, `<owner>.<attribute>` as the Diff names it, split into the two. */
-export function attributeReference(concept: string): { owner: string; attribute: string } {
-  const dot = concept.indexOf('.')
-  return { owner: concept.slice(0, dot), attribute: concept.slice(dot + 1) }
-}
-
 /** A class Concept, placed in the hierarchy: `depth` 0 has no (known) superclass. */
 export interface ClassRow {
   label: string
@@ -74,6 +68,10 @@ export type Pattern = Ontology['patterns'][number]
 /** A Pattern as `(Source)-[REL]->(Target)`, the syntax of `Pattern.__str__`. */
 export const patternId = ([source, relation, target]: Pattern) =>
   `(${source})-[${relation}]->(${target})`
+
+/** The relation of the Pattern whose id (`patternId`) is `id`; undefined when `ontology` has none. */
+export const relationOfPattern = (ontology: Ontology, id: string): string | undefined =>
+  ontology.patterns.find((p) => patternId(p) === id)?.[1]
 
 /** The constraints declared on class `label`, or only those on its attribute `name`. */
 export const constraintsOn = (ontology: Ontology, label: string, name?: string) =>

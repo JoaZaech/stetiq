@@ -18,6 +18,10 @@ class NotFoundError(StetiqError):
     pass
 
 
+class NoUseCaseError(NotFoundError):
+    """The Knowledge Graph has no Use Case version yet, so there is no latest one."""
+
+
 class EvaluatorError(StetiqError):
     """An Evaluator is malformed, failed, or returned an invalid Evaluation."""
 
@@ -32,6 +36,11 @@ class GraphSourceUnavailableError(StetiqError):
 
 class InvalidEvolutionModeError(StetiqError, ValueError):
     """An Evolution Mode other than "strict" or "evolving"."""
+
+
+class ConflictingArgumentsError(StetiqError, ValueError):
+    """Two arguments that exclude each other were both given (e.g. a run's
+    `ontology_version` and `alias`)."""
 
 
 class RunNotActiveError(StetiqError):
@@ -64,3 +73,11 @@ class PermissionDeniedError(StetiqError):
 
 class GateConfigError(StetiqError, ValueError):
     """The Gates in the repo config file are malformed; the message names the Gate."""
+
+
+class InvalidEntryPointError(StetiqError, ValueError):
+    """The repo config has no usable `entry_point` section."""
+
+
+class EntryPointError(StetiqError):
+    """The Construction Entry Point could not be started (e.g. command not found)."""

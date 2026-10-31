@@ -66,8 +66,10 @@ def test_an_unknown_alias_cannot_be_fetched(client, support_kg):
 
 @pytest.mark.parametrize("name", ["", "has space", "a/b"])
 def test_alias_names_are_validated(client, support_kg, name):
-    with pytest.raises(stetiq.InvalidAliasNameError):
+    with pytest.raises(stetiq.InvalidAliasNameError) as raised:
         client.set_alias(support_kg, name, 1)
+
+    assert str(raised.value) == f"Alias name {name!r} must be letters, digits, '_', '-' or '.'"
 
 
 def test_aliases_persist_across_clients(client_factory, support_ontology):
@@ -133,8 +135,12 @@ def test_a_run_can_consume_another_alias_instead_of_the_contract(client, support
 def test_a_run_takes_a_version_or_an_alias_not_both(client, support_kg):
     client.bind_graph_source(support_kg, stetiq.GraphSourceScope(database="neo4j"))
 
-    with pytest.raises(ValueError):
+    with pytest.raises(stetiq.ConflictingArgumentsError) as raised:
         client.start_run(support_kg, ontology_version=1, alias="production")
+
+    assert str(raised.value) == "A run consumes an ontology_version or an alias, not both"
+    assert isinstance(raised.value, ValueError)  # as before it was a StetiqError
+    assert client.list_runs(support_kg) == []
 
 
 def test_every_alias_move_is_audit_logged_with_actor_time_and_versions(

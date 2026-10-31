@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Ontology } from '@/api/ontology-versions'
 import { ontologyMap } from './ontology-map'
 import { detailsOf, focusOf, neighboursOf, relationSelection, searchMap } from './ontology-map-focus'
+import { searchOntology } from './ontology-map-search'
 import { HIERARCHY, ONTOLOGY, PARTIES } from './ontology-map.fixtures'
 
 describe('neighboursOf', () => {
@@ -137,19 +138,21 @@ describe('detailsOf', () => {
 })
 
 describe('searchMap', () => {
+  const search = (query: string) => searchMap(ontologyMap(PARTIES), query, searchOntology(PARTIES, query))
+
   it('matches the classes and links the search names, not those it only mentions', () => {
     // "open" names the OPENED relation and is only in Customer's description.
-    expect(searchMap(PARTIES, ' OPEN ')).toEqual({
+    expect(search(' OPEN ')).toEqual({
       classes: new Set(),
       links: new Set(['(Customer)-[OPENED]->(Ticket)']),
     })
-    expect(searchMap(PARTIES, 'customer')).toEqual({ classes: new Set(['Customer', 'VipCustomer']), links: new Set() })
+    expect(search('customer')).toEqual({ classes: new Set(['Customer', 'VipCustomer']), links: new Set() })
     // "tier" is only a VipCustomer attribute.
-    expect(searchMap(PARTIES, 'tier')).toEqual({ classes: new Set(), links: new Set() })
+    expect(search('tier')).toEqual({ classes: new Set(), links: new Set() })
   })
 
   it('matches nothing in particular for an empty search', () => {
-    expect(searchMap(PARTIES, '  ')).toBeNull()
+    expect(search('  ')).toBeNull()
   })
 })
 

@@ -71,6 +71,23 @@ def test_a_breaking_version_fails_the_diff_gate_naming_the_breaking_changes(clie
     assert any("OPENED" in reason and "breaking" in reason for reason in outcome.reasons)
 
 
+def test_a_cosmetic_only_diff_gate_lets_description_changes_through_and_nothing_else(
+    client, support_kg
+):
+    only_cosmetic = NO_BREAKING.replace(
+        "max_classification: deprecating", "max_classification: cosmetic"
+    )
+    redescribed = client.register_ontology(  # v4: v1 with Ticket described differently
+        support_kg, WITH_AGENT.replace("A support request", "A customer's request")
+    )
+    client.set_alias(support_kg, "production", 2)
+
+    assert client.evaluate_gates(support_kg, only_cosmetic, version=redescribed.number).passed
+    assert client.evaluate_gates(support_kg, NO_BREAKING, version=redescribed.number).passed
+    [outcome] = client.evaluate_gates(support_kg, only_cosmetic, version=3).failed
+    assert any("OPENED" in reason and "breaking" in reason for reason in outcome.reasons)
+
+
 def test_every_gate_evaluation_is_recorded_on_the_server_with_the_gate_definition_used(
     client_factory, support_ontology
 ):
@@ -390,7 +407,7 @@ def test_without_a_version_the_latest_version_is_gated(client, support_kg):
         ("gates: [{check: conformance, min_score: 0.9, typo: 1}]", "unknown key(s) typo"),
         (
             "gates: [{check: ontology_diff, max_classification: awful}]",
-            "additive, deprecating or breaking",
+            "cosmetic, additive, deprecating or breaking",
         ),
         ("gates: [{check: metric, evaluator: x, metric: y}]", "'min' and/or 'max'"),
         (
@@ -406,3 +423,18 @@ def test_malformed_gates_are_rejected_naming_the_problem(client, support_kg, con
 
     assert message in str(raised.value)
     assert client.list_gate_results(support_kg) == []
+
+
+def test_gates_are_evaluated_for_a_version_or_a_run_not_both(client, support_kg):
+    with pytest.raises(stetiq.ConflictingArgumentsError) as raised:
+        client.evaluate_gates(support_kg, NO_BREAKING, version=2, run="any-run")
+
+    assert str(raised.value) == "Gates are evaluated for a version or a run, not both"
+    assert client.list_gate_results(support_kg) == []
+
+
+def test_a_config_without_gates_is_refused(client, support_kg):
+    with pytest.raises(stetiq.GateConfigError) as raised:
+        client.evaluate_gates(support_kg, "gates: []")
+
+    assert str(raised.value) == "No Gates to evaluate"

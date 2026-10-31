@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react'
 import {
-  CLASSIFICATIONS,
+  CLASSIFICATION_LABEL,
   type Classification,
-  type OntologyChange,
+  compareSeverity,
+  MOST_SEVERE_FIRST,
   type OntologyDiff,
   useOntologyDiff,
 } from '@/api/ontology-diff'
@@ -18,16 +19,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
-
-/** Most severe first. */
-const MOST_SEVERE_FIRST = [...CLASSIFICATIONS].reverse()
-
-/** The Diff colours, used for nothing else in the app. */
-const CLASSIFICATION_STYLE: Record<Classification, string> = {
-  additive: 'border-diff-additive/40 bg-diff-additive/10 text-diff-additive',
-  deprecating: 'border-diff-deprecating/40 bg-diff-deprecating/10 text-diff-deprecating',
-  breaking: 'border-diff-breaking/40 bg-diff-breaking/10 text-diff-breaking',
-}
+import { SEVERITY } from './severity-style'
 
 interface OntologyDiffPanelProps {
   knowledgeGraph: string
@@ -62,11 +54,11 @@ interface OntologyDiffViewProps {
 
 /**
  * An Ontology Diff that is already loaded: the overall classification, a count per
- * classification, and every change labelled additive, deprecating or breaking (most
- * severe first). A region named "Ontology Diff".
+ * classification, and every change labelled documentation-only (cosmetic), additive,
+ * deprecating or breaking (most severe first). A region named "Ontology Diff".
  */
 export function OntologyDiffView({ diff, base, target, caption }: OntologyDiffViewProps) {
-  const changes = bySeverity(diff.changes)
+  const changes = [...diff.changes].sort((a, b) => compareSeverity(b.classification, a.classification))
   return (
     <section aria-label="Ontology Diff" className="space-y-4">
       {caption && <p className="text-sm text-muted-foreground">{caption}</p>}
@@ -86,7 +78,7 @@ export function OntologyDiffView({ diff, base, target, caption }: OntologyDiffVi
                 n: changes.filter((x) => x.classification === c).length,
               }))
                 .filter(({ n }) => n > 0)
-                .map(({ c, n }) => `${n} ${c}`)
+                .map(({ c, n }) => `${n} ${CLASSIFICATION_LABEL[c]}`)
                 .join(' · ')}
             </p>
           </div>
@@ -118,16 +110,14 @@ export function OntologyDiffView({ diff, base, target, caption }: OntologyDiffVi
   )
 }
 
-/** A change's (or a whole Diff's) classification, in its Diff colour. */
+/** A change's (or a whole Diff's) classification, in its Diff colour (cosmetic's neutral). */
 export function ClassificationBadge({ classification }: { classification: Classification }) {
   return (
-    <Badge variant="outline" className={cn(CLASSIFICATION_STYLE[classification])}>
-      {classification}
+    <Badge
+      variant="outline"
+      className={cn(SEVERITY.border[classification], SEVERITY.fill[classification], SEVERITY.text[classification])}
+    >
+      {CLASSIFICATION_LABEL[classification]}
     </Badge>
   )
-}
-
-function bySeverity(changes: OntologyChange[]): OntologyChange[] {
-  const rank = (c: OntologyChange) => MOST_SEVERE_FIRST.indexOf(c.classification)
-  return [...changes].sort((a, b) => rank(a) - rank(b))
 }
