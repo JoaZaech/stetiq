@@ -66,8 +66,8 @@ export interface MapState {
    * which the Map stays centred on while it lasts.
    */
   located: string | null
-  /** The selection last cleared, whose entry the change summary returns to. */
-  cleared: MapSelection | null
+  /** The selection last cleared, whose entry the change summary returns to (`MapPanel`'s `returnTo`). */
+  returnTo: MapSelection | null
 }
 
 /** The state of a Map opened on `selected`: unfiltered, and centred on `selected`. */
@@ -75,7 +75,7 @@ export const initialMapState = (selected: ConceptSelection | null): MapState => 
   filters: { hideDeprecated: false, hideSubclassLinks: false },
   preview: null,
   located: selected && formatSelection(selected),
-  cleared: null,
+  returnTo: null,
 })
 
 /** What the Map draws. */
@@ -131,21 +131,21 @@ export type MapPanelBack = 'changes' | 'results'
 /**
  * The panel beside the Map: the selection's `details` or `paths`, back to the search's
  * results while there is a `query`, else to a comparison's change summary; with nothing
- * selected, the results, else the summary, at the entry of the selection last `cleared`.
+ * selected, the results, else the summary, at the entry it `returnTo`s.
  */
 function panelOf(
   comparison: OntologyComparison | undefined,
   query: string,
   details: MapDetails | null,
   paths: MapPath[] | null,
-  cleared: MapSelection | null,
+  returnTo: MapSelection | null,
 ): MapPanel | null {
   const searching = query.trim() !== ''
   const back = searching ? 'results' : comparison ? 'changes' : null
   if (paths) return { kind: 'path', back }
   if (details) return { kind: 'details', back }
   if (searching) return { kind: 'results' }
-  return comparison ? { kind: 'summary', returnTo: cleared } : null
+  return comparison ? { kind: 'summary', returnTo } : null
 }
 
 /** `f`, remembering its last result while its arguments stay the same. */
@@ -235,7 +235,7 @@ export function createDrawnMapOf(): (input: MapInput, state: MapState) => DrawnM
       centreOn: locatedSelection(state.located, selected, selection),
       fitView: state.located === null,
       fitTo: fitToOf(map, changed),
-      panel: panelOf(comparison, query, details, paths, state.cleared),
+      panel: panelOf(comparison, query, details, paths, state.returnTo),
     }
   }
 }
@@ -307,9 +307,9 @@ export function respondTo(
     case 'click-link':
       return { state, select: { kind: 'link', id: gesture.id } }
     case 'clear':
-      return { state: { ...state, cleared: selection }, select: null }
+      return { state: { ...state, returnTo: selection }, select: null }
     case 'escape':
-      return selection ? { state: { ...state, cleared: selection }, select: null } : { state }
+      return selection ? { state: { ...state, returnTo: selection }, select: null } : { state }
     case 'pick': {
       // The Map stays centred on what is picked while it stays selected.
       const picked = pickOf(view, gesture.result)

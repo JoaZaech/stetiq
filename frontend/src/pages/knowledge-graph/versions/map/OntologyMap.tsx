@@ -330,10 +330,10 @@ export function OntologyMap({ ontology, comparison, query = '', filtersIn }: Ont
 
   // The summary and results only collapse; a selection's panel goes back to them, or
   // closes when there is none. Both clear the selection, so the panel shows what it came from.
-  const listNav: MapPanelNav = { onCollapse: comparison && (() => setCollapsed(true)) }
+  const collapseNav: MapPanelNav = { onCollapse: comparison && (() => setCollapsed(true)) }
   const clear = () => respond({ kind: 'clear' })
-  const selectionNav: MapPanelNav = {
-    ...listNav,
+  const backOrCloseNav: MapPanelNav = {
+    ...collapseNav,
     ...(panel && 'back' in panel && panel.back ? { back: { label: BACK_LABEL[panel.back], onBack: clear } } : { onClose: clear }),
   }
 
@@ -374,7 +374,7 @@ export function OntologyMap({ ontology, comparison, query = '', filtersIn }: Ont
               returnTo={panel.returnTo}
               onPreview={(preview) => respond({ kind: 'preview', selection: preview })}
               onSelect={(concept) => respond({ kind: 'select', concept })}
-              nav={listNav}
+              nav={collapseNav}
             />
           )}
           {panel?.kind === 'results' && (
@@ -383,11 +383,11 @@ export function OntologyMap({ ontology, comparison, query = '', filtersIn }: Ont
               results={results}
               canPick={(r) => canPick(view, r)}
               onPick={(r) => respond({ kind: 'pick', result: r })}
-              nav={listNav}
+              nav={collapseNav}
             />
           )}
           {panel?.kind === 'details' && details && (
-            <MapDetailsPanel details={details} nav={selectionNav}>
+            <MapDetailsPanel details={details} nav={backOrCloseNav}>
               {view.changes && comparison && <ChangeDetails comparison={comparison} changes={view.changes} />}
               {details.kind === 'class' && (
                 <p className="text-xs text-muted-foreground">Shift-click another class for the shortest path to it.</p>
@@ -395,7 +395,7 @@ export function OntologyMap({ ontology, comparison, query = '', filtersIn }: Ont
             </MapDetailsPanel>
           )}
           {panel?.kind === 'path' && paths && selection?.kind === 'path' && (
-            <MapPathPanel from={selection.from} to={selection.to} paths={paths} nav={selectionNav} />
+            <MapPathPanel from={selection.from} to={selection.to} paths={paths} nav={backOrCloseNav} />
           )}
         </>
       )}
