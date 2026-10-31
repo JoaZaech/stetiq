@@ -23,6 +23,7 @@ MODULES = tuple(
     for name in (
         "auth",
         "construction_runs",
+        "gates",
         "knowledge_graphs",
         "observations",
         "ontology_map",
