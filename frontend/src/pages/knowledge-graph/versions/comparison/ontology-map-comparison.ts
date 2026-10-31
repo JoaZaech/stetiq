@@ -15,7 +15,7 @@ import {
 } from '@/api/ontology-diff'
 import type { Ontology } from '@/api/ontology-versions'
 import { codePointOrder } from '@/lib/compare'
-import { type ClassOrRelation, CONCEPT_NOUN, patternId } from '../concepts'
+import { type ClassOrRelation, CONCEPT_NOUN, patternId, relationOfPattern } from '../concepts'
 import { ontologyMap, type OntologyMap, type PatternLink } from '../map/ontology-map'
 import { type MapSelection, relationSelection } from '../map/ontology-map-focus'
 
@@ -96,7 +96,7 @@ function changesOfConcept({ diff }: ComparedOntologies, kind: OwnerKind, label: 
  * an endpoint change belongs to the one link whose Pattern it states, any other change
  * to every link of the relation.
  */
-function changesOfLink(compared: ComparedOntologies, link: PatternLink): OntologyChange[] {
+function changesOfLink(compared: ComparedOntologies, link: Pick<PatternLink, 'id' | 'relation'>): OntologyChange[] {
   return changesOfConcept(compared, 'relationship_type', link.relation).filter(
     (c) => c.concept_kind !== 'relationship_type' || c.pattern === undefined || patternId(c.pattern) === link.id,
   )
@@ -234,8 +234,8 @@ function attributeChanges(changes: OntologyChange[]): AttributeChange[] {
 export function changesOf(comparison: OntologyComparison, selection: MapSelection | null): OntologyChange[] {
   if (selection?.kind === 'class') return changesOfConcept(comparison, 'node_type', selection.label)
   if (selection?.kind === 'link') {
-    const link = comparison.map.links.find((l) => l.id === selection.id)
-    return link ? changesOfLink(comparison, link) : []
+    const relation = relationOfPattern(comparison.ontology, selection.id)
+    return relation === undefined ? [] : changesOfLink(comparison, { id: selection.id, relation })
   }
   return []
 }
@@ -363,7 +363,7 @@ export function summaryConceptOf(
     selection?.kind === 'class'
       ? ['node_type', selection.label]
       : selection?.kind === 'link'
-        ? ['relationship_type', comparison.map.links.find((l) => l.id === selection.id)?.relation]
+        ? ['relationship_type', relationOfPattern(comparison.ontology, selection.id)]
         : []
   const of = (c: ConceptChanges) => c.kind === kind && c.label === label
   return summary.concepts.find(of) ?? summary.cosmetic.find(of) ?? null

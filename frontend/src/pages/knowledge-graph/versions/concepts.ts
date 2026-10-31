@@ -69,6 +69,10 @@ export type Pattern = Ontology['patterns'][number]
 export const patternId = ([source, relation, target]: Pattern) =>
   `(${source})-[${relation}]->(${target})`
 
+/** The relation of the Pattern whose id (`patternId`) is `id`; undefined when `ontology` has none. */
+export const relationOfPattern = (ontology: Ontology, id: string): string | undefined =>
+  ontology.patterns.find((p) => patternId(p) === id)?.[1]
+
 /** The constraints declared on class `label`, or only those on its attribute `name`. */
 export const constraintsOn = (ontology: Ontology, label: string, name?: string) =>
   (ontology.constraints ?? []).filter(
