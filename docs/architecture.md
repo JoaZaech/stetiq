@@ -1,6 +1,6 @@
 # Architecture notes for coding agents
 
-Conventions, reasons and gotchas that the code does not state outright. Terms are from `GLOSSARY.md`. Read the code for signatures and route lists.
+Conventions, reasons and gotchas that the code does not state outright. Terms are from `GLOSSARY.md`. Read the code for signatures and route lists. Each `##`/`###` section stands alone, so a brief can cite one (e.g. *Frontend › Map*, *Testing › End-to-end*) instead of the whole file.
 
 ## Layering
 
@@ -42,8 +42,7 @@ API Tokens are described in `auth.py` and ADR 0002. A router-level dependency, `
 - **Actor.** Any server-side audit entry records `request.state.token.user` and ignores whatever actor the body carries. `set_alias` still accepts an optional body `actor` for wire compatibility and drops it; the web UI sends none. In local mode, `Client.actor` is recorded instead (the argument, then `$STETIQ_ACTOR`, then the OS user).
 - **Local mode (`stetiq ui`).** `create_app(local_actor=…)` turns authentication off: `authorize` still runs, but over a synthetic token for `local_actor` with `{"*": "edit"}`, so the rules above and the actor recording work unchanged. `stetiq ui` resolves the tracking URI like every CLI command, refuses an `http(s)://` one, and refuses a non-loopback `--host` unless `--no-auth` is passed.
 - **Web UI sign-in.** `POST /auth/sign-in` (outside `/api/v1`, so `authorize` does not run) checks a pasted API Token and sets two cookies, both `SameSite=Strict`, `Path=/`, and `Secure` over https: the HttpOnly `stetiq_token` and a readable `stetiq_csrf`. `POST /auth/sign-out` deletes both. `authenticate` takes the Bearer header first and the cookie otherwise, so the permission rules above apply unchanged. A cookie-authenticated request that is not GET/HEAD must also send `X-CSRF-Token` equal to the `stetiq_csrf` cookie (double-submit, `auth.check_csrf`), or it gets a 403; Bearer requests are exempt, because other sites cannot make a browser send that header. Under `stetiq ui` there is nothing to sign in to, and sign-in returns 400.
-- **Web UI.** `/ui` (`ui.py`) serves the React build from `stetiq/_frontend` (ADR 0003) and does no auth: the app is just another `/api/v1` client. Any `/ui` path that is not a built file returns `index.html`, so deep links work. Pages are registered in `frontend/src/app/router.tsx`; browser tests use the harness in `frontend/e2e/fixtures.ts`. A release must run `npm run build` in `frontend/` before `uv build`: the wheel only ships what is in `src/stetiq/_frontend` (gitignored), and `tests/test_packaging.py` fails under `CI` when it is missing.
-- **User guide.** The Markdown files in `docs/guide/` are bundled into the web UI at build time (ADR 0004) and shown at `/ui/help/:page`. `frontend/src/pages/help/guide-index.ts` orders them by number prefix and takes each page's slug from its filename and its title from its first `#` heading, so a new page is just a new numbered file. Link between pages with relative `.md` links (`./04-cli.md#tracking-uri`): they work on GitHub, and the app turns them into Help routes. Draw a diagram with a fenced ` ```mermaid ` block: GitHub renders it too, and the app draws it in the current theme with Mermaid (loaded only on pages that have one, strict security level, so no HTML labels or click handlers), showing the source and the parse error if it does not parse. `GuideMarkdown` renders them; the `Markdown` component is for user-written descriptions only. Help sits outside the signed-in pages in `router.tsx` and reads no `/api/v1` data, so it works signed out in server mode; `AppLayout` (the shell it shares with them) must not request session data on its own either. The one exception is the user opening the sidebar's Knowledge Graph switcher: that explicit action loads the Knowledge Graph list, so in server mode it may send a signed-out reader to sign-in.
+- **Web UI.** `/ui` (`ui.py`) serves the React build from `stetiq/_frontend` (ADR 0003) and does no auth: the app is just another `/api/v1` client. Any `/ui` path that is not a built file returns `index.html`, so deep links work. Pages, the release build and the user guide are under *Frontend*.
 
 ## Where code runs
 
@@ -93,6 +92,40 @@ Exit codes are a contract with CI and schedulers:
 - `stetiq observe`: **0** means no Drift, **3** means Drift (`DRIFT_EXIT_CODE`), **1** means an error. A missing *default* `./stetiq.yaml` counts as an empty config. A missing `--config` file is an error.
 - `stetiq run`: **1** whenever the run's status is not `finished`, which includes a strict Evolution Mode failure. The SDK never raises in that case, so callers must check `status`.
 - Every other command exits 1 on a `StetiqError`. Typer usage errors exit 2.
+
+## Frontend
+
+The web UI is a React app in `frontend/` (ADR 0003), served at `/ui` (see *Server auth › Web UI*). It reaches the server only through `/api/v1`.
+
+| Folder | Holds |
+|---|---|
+| `src/app/` | the shell: `router.tsx` (every page is registered here), `AppLayout`, the sidebar and Knowledge Graph switcher, breadcrumbs |
+| `src/api/` | one module per `/api/v1` resource, plus `client.ts` and `session.ts` |
+| `src/components/` | shared components (`components/ui/` is the shadcn base) |
+| `src/lib/`, `src/hooks/`, `src/theme/` | framework-free helpers, React hooks, the theme |
+| `src/pages/<area>/` | one folder per page area: `home`, `knowledge-graphs`, `knowledge-graph`, `settings`, `sign-in`, `help` |
+| `src/pages/knowledge-graph/versions/` | the Ontology Version pages; the Map, Table and Comparison have their own folders, below |
+| `e2e/` | the Playwright specs, harness and seeds (see *Testing › End-to-end*) |
+
+### Map
+
+The Ontology Map, a node-link view of an Ontology Version. See [`versions/map/README.md`](../frontend/src/pages/knowledge-graph/versions/map/README.md).
+
+### Table
+
+The Ontology tab's Table view and its links to the Map. See [`versions/table/README.md`](../frontend/src/pages/knowledge-graph/versions/table/README.md).
+
+### Comparison
+
+Comparing two Ontology Versions, as a Map or a Table. See [`versions/comparison/README.md`](../frontend/src/pages/knowledge-graph/versions/comparison/README.md).
+
+### Build and release
+
+A release must run `npm run build` in `frontend/` before `uv build`: the wheel only ships what is in `src/stetiq/_frontend` (gitignored), and `tests/test_packaging.py` fails under `CI` when it is missing.
+
+### User guide
+
+The Markdown files in `docs/guide/` are bundled into the web UI at build time (ADR 0004) and shown at `/ui/help/:page`. `frontend/src/pages/help/guide-index.ts` orders them by number prefix and takes each page's slug from its filename and its title from its first `#` heading, so a new page is just a new numbered file. Link between pages with relative `.md` links (`./04-cli.md#tracking-uri`): they work on GitHub, and the app turns them into Help routes. Draw a diagram with a fenced ` ```mermaid ` block: GitHub renders it too, and the app draws it in the current theme with Mermaid (loaded only on pages that have one, strict security level, so no HTML labels or click handlers), showing the source and the parse error if it does not parse. `GuideMarkdown` renders them; the `Markdown` component is for user-written descriptions only. Help sits outside the signed-in pages in `router.tsx` and reads no `/api/v1` data, so it works signed out in server mode; `AppLayout` (the shell it shares with them) must not request session data on its own either. The one exception is the user opening the sidebar's Knowledge Graph switcher: that explicit action loads the Knowledge Graph list, so in server mode it may send a signed-out reader to sign-in.
 
 ## Testing
 
