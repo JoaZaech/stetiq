@@ -20,7 +20,11 @@ function run(overrides: Partial<ConstructionRun>): ConstructionRun {
   }
 }
 
-function evaluation(evaluator: string, metrics: Record<string, number>): EvaluationResult {
+function evaluation(
+  evaluator: string,
+  metrics: Record<string, number>,
+  overrides: Partial<EvaluationResult> = {},
+): EvaluationResult {
   return {
     knowledge_graph: 'support',
     subject_kind: 'construction_run',
@@ -31,6 +35,7 @@ function evaluation(evaluator: string, metrics: Record<string, number>): Evaluat
     created_at: '2026-10-30T11:01:00Z',
     parameters: {},
     use_case_version: null,
+    ...overrides,
   }
 }
 
@@ -102,5 +107,40 @@ describe('runChartPoints', () => {
       { x: Date.parse('2026-10-30T11:00:00Z'), metrics: { recall: 0.8, Conformance: 0.5 } },
       { x: Date.parse('2026-10-30T12:00:00Z'), metrics: { recall: 0.9 } },
     ])
+  })
+
+  it("adds each run's Evaluator results, keyed `<evaluator>/<metric>`, from the Knowledge Graph-wide list", () => {
+    const points = runChartPoints(
+      [
+        run({ id: 'a', started_at: '2026-10-30T11:00:00Z', metrics: { recall: 0.8 } }),
+        run({ id: 'b', started_at: '2026-10-30T12:00:00Z' }),
+      ],
+      [
+        evaluation('observed_schema', { node_types: 2 }, { subject_id: 'b' }),
+        evaluation('conformance', { score: 0.5 }, { subject_id: 'a' }),
+        evaluation('observed_schema', { node_types: 3 }, { subject_id: 'a' }),
+      ],
+    )
+    expect(points).toEqual([
+      {
+        x: Date.parse('2026-10-30T11:00:00Z'),
+        metrics: { recall: 0.8, 'conformance/score': 0.5, 'observed_schema/node_types': 3 },
+      },
+      { x: Date.parse('2026-10-30T12:00:00Z'), metrics: { 'observed_schema/node_types': 2 } },
+    ])
+  })
+
+  it('keeps each parameter configuration of an Evaluator apart, never one mixed metric', () => {
+    const points = runChartPoints(
+      [run({ id: 'a' })],
+      [
+        evaluation('review', { score: 0.9 }, { subject_id: 'a', parameters: { min_confidence: 0.5 } }),
+        evaluation('review', { score: 0.6 }, { subject_id: 'a', parameters: { min_confidence: 0.8 } }),
+      ],
+    )
+    expect(points[0]?.metrics).toEqual({
+      'review (min_confidence=0.5)/score': 0.9,
+      'review (min_confidence=0.8)/score': 0.6,
+    })
   })
 })

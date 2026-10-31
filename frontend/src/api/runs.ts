@@ -22,10 +22,14 @@ export interface ConstructionRun {
   candidate_version: number | null
 }
 
-/** Query keys of Construction Runs and their Evaluator results. */
+/**
+ * Query keys of Construction Runs and their Evaluator results. Every key about a
+ * Knowledge Graph's run Evaluator results starts with `allEvaluations(kg)`.
+ */
 export const runQueryKeys = {
   all: (kg: string) => ['runs', kg] as const,
   one: (runId: string) => ['run', runId] as const,
+  allEvaluations: (kg: string) => ['run-evaluations', kg] as const,
   evaluations: (kg: string, runId: string) => ['run-evaluations', kg, runId] as const,
 }
 
@@ -70,3 +74,13 @@ export const runEvaluationsQuery = (kg: string, runId: string) => ({
 })
 export const useRunEvaluations = (kg: string, runId: string) =>
   useQuery(runEvaluationsQuery(kg, runId))
+
+/**
+ * `GET …/evaluations?subject_kind=construction_run`: the latest Evaluator results of
+ * every run in one request (`subject_id` is the run id).
+ */
+export const allRunEvaluationsQuery = (kg: string) => ({
+  queryKey: runQueryKeys.allEvaluations(kg),
+  queryFn: () => api<EvaluationResult[]>(kgPath(kg) + '/evaluations?subject_kind=construction_run'),
+})
+export const useAllRunEvaluations = (kg: string) => useQuery(allRunEvaluationsQuery(kg))
