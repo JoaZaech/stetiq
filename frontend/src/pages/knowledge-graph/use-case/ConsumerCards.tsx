@@ -1,6 +1,7 @@
 import { useId, type ReactNode } from 'react'
 import type { CompetencyQuestion, Consumer, Task, UseCase } from '@/api/use-cases'
 import { Badge } from '@/components/ui/badge'
+import { ConsumerEdgePlanned } from './planned'
 
 interface ConsumerCardsProps {
   useCase: UseCase
@@ -73,6 +74,7 @@ function ConsumerCard({ consumer, questions, taskStatus, actions, taskActions }:
         )}
         {consumer.description && <p className="whitespace-pre-wrap">{consumer.description}</p>}
       </header>
+      <ConsumerEdgePlanned />
       <section className="space-y-2">
         <h5 id={tasksId} className="text-xs font-medium text-muted-foreground">
           Tasks

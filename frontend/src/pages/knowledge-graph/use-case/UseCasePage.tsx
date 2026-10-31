@@ -23,6 +23,7 @@ import { ConfirmRemoveDialog, TaskList } from './ConfirmRemoveDialog'
 import { ConsumerCards } from './ConsumerCards'
 import { ConsumerDialog } from './ConsumerDialog'
 import { withoutConsumer, withoutTask } from './consumer-form'
+import { DraftWithAiPlanned } from './planned'
 import { RemoveCompetencyQuestionDialog } from './RemoveCompetencyQuestionDialog'
 import { questionsServingNoTask } from './readiness'
 import { savedMessage } from './saved-message'
@@ -299,6 +300,7 @@ function Consumers({ name, version, onSaved }: ConsumersProps) {
         </NeedsEditAccess>
       }
     >
+      <DraftWithAiPlanned />
       <ConsumerCards
         useCase={useCase}
         taskStatus={(task) => <TaskReadiness knowledgeGraph={name} useCaseVersion={version.number} task={task} />}
