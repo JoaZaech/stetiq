@@ -281,6 +281,42 @@ describe('drawnMapOf', () => {
     })
   })
 
+  describe('the side panel', () => {
+    it("shows a comparison's change summary with nothing selected, and on a plain Map nothing", () => {
+      expect(compare(null).panel).toEqual({ kind: 'summary', returnTo: null })
+      expect(open(ONTOLOGY, null).panel).toBeNull()
+    })
+
+    it("shows a selection's details or shortest paths, back to the summary in a comparison", () => {
+      expect(compare({ kind: 'class', label: 'Ticket' }).panel).toEqual({ kind: 'details', back: 'changes' })
+      expect(compare({ kind: 'path', from: 'Agent', to: 'Customer' }).panel).toEqual({ kind: 'path', back: 'changes' })
+      // On a plain Map there is nothing to go back to: the panel closes.
+      expect(open(ONTOLOGY, { kind: 'class', label: 'Ticket' }).panel).toEqual({ kind: 'details', back: null })
+    })
+
+    it('goes back to the summary at the entry of the selection it leaves, by the back link or Escape', () => {
+      const ticket = compare({ kind: 'class', label: 'Ticket' })
+      const returned = { kind: 'summary', returnTo: { kind: 'class', label: 'Ticket' } }
+
+      expect(after(ticket, { kind: 'clear' }).panel).toEqual(returned)
+      expect(after(ticket, { kind: 'escape' }).panel).toEqual(returned)
+      // Selecting another Concept from there returns to its entry instead.
+      expect(
+        after(ticket, { kind: 'clear' }, { kind: 'click-class', label: 'Agent', shift: false }, { kind: 'clear' }).panel,
+      ).toEqual({ kind: 'summary', returnTo: { kind: 'class', label: 'Agent' } })
+    })
+
+    it("shows a search's results in place of the summary, and a result picked back to them", () => {
+      const searched = createDrawnMapOf()({ comparison: COMPARISON, selected: null, query: 'ticket' }, initialMapState(null))
+      expect(searched.panel).toEqual({ kind: 'results' })
+      expect(open(ONTOLOGY, null, 'ticket').panel).toEqual({ kind: 'results' })
+
+      const picked = after(searched, { kind: 'pick', result: { kind: 'class', label: 'Ticket' } })
+      expect(picked.panel).toEqual({ kind: 'details', back: 'results' })
+      expect(after(picked, { kind: 'clear' }).panel).toEqual({ kind: 'results' })
+    })
+  })
+
   it('selects what the change summary selects, without centring on it', () => {
     const view = after(open(ONTOLOGY, null), { kind: 'select', concept: { kind: 'class', label: 'Ticket' } })
 
