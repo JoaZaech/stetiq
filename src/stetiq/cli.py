@@ -13,8 +13,9 @@ import yaml
 from stetiq.client import Client
 from stetiq.config import DEFAULT_CONFIG_PATH, load_config
 from stetiq.entry_point import EntryPoint
-from stetiq.errors import EvaluatorError, GateConfigError, StetiqError
+from stetiq.errors import EvaluatorError, GateConfigError, NoUseCaseError, StetiqError
 from stetiq.gates import parse_gates
+from stetiq.impact import QuestionImpact, UseCaseImpact
 from stetiq.use_case import to_yaml as to_use_case_yaml
 
 app = typer.Typer(
@@ -354,9 +355,15 @@ def ontology_diff(
     ] = None,
     tracking_uri: TrackingUri = None,
 ) -> None:
-    """Show the Ontology Diff from version BASE to TARGET, each change cosmetic, additive, deprecating or breaking."""
+    """Show the Ontology Diff from version BASE to TARGET, each change cosmetic, additive, deprecating or breaking,
+    then the Consumers, Tasks and Competency Questions of the latest Use Case it hits."""
     try:
-        d = _client(tracking_uri).diff_ontology_versions(knowledge_graph, base, target)
+        client = _client(tracking_uri)
+        d = client.diff_ontology_versions(knowledge_graph, base, target)
+        try:
+            impact = client.consumer_impact(knowledge_graph, base, target)
+        except NoUseCaseError:
+            impact = None
     except StetiqError as e:
         raise _fail(e) from None
     if not d.changes:
@@ -368,6 +375,42 @@ def ontology_diff(
     for c in d.changes:
         typer.echo(f"{c.classification:<12} {c.kind:<11} {c.concept:<{width}}  {c.detail}")
     typer.echo(f"Overall: {d.classification}")
+    _echo_impact(impact)
+
+
+_IMPACT_WORDS = {
+    "affected": "affected",
+    "will_be_affected": "will be affected",
+    "unknown": "unknown",
+}
+
+
+def _echo_impact(impact: UseCaseImpact | None) -> None:
+    if impact is None:
+        typer.echo("Consumer impact: no Use Case registered")
+        return
+    if not impact.consumers and not impact.no_consumer:
+        typer.echo("Consumer impact: none")
+        return
+    typer.echo("Consumer impact:")
+    for level in ("affected", "will_be_affected", "unknown"):
+        for consumer in impact.by_level(level):
+            typer.echo(f"  {_IMPACT_WORDS[level]}: {consumer.name} ({consumer.id})")
+            for task in consumer.tasks:
+                typer.echo(f"    Task {task.id}: {task.description}")
+                for q in task.questions:
+                    typer.echo(f"      {_question_line(q)}")
+    if impact.no_consumer:
+        typer.echo("  no Consumer")
+        for q in impact.no_consumer:
+            typer.echo(f"    {_question_line(q)}")
+
+
+def _question_line(q: QuestionImpact) -> str:
+    if q.level == "unknown":
+        return f"{q.id}: unknown (no Concept mapping or query)"
+    concepts = ", ".join(dict.fromkeys(c.concept for c in q.changes))
+    return f"{q.id}: {_IMPACT_WORDS[q.level]} by {concepts}"
 
 
 @use_case_app.command("register")

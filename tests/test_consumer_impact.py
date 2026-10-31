@@ -2,9 +2,11 @@
 
 import pytest
 from fastapi.testclient import TestClient
+from typer.testing import CliRunner
 
 from stetiq import Client, NoUseCaseError, UseCaseImpact
 from stetiq.auth import TokenRegistry
+from stetiq.cli import app
 from stetiq.server import create_app
 
 KG = "support"
@@ -319,3 +321,53 @@ def test_the_route_needs_read_permission_on_the_knowledge_graph(http, database_u
     r = get_impact(http, reader(database_url, {"billing": "read"}), base=1, target=1)
 
     assert r.status_code == 403
+
+
+# --- The CLI ------------------------------------------------------------------------------
+
+
+def run_diff(tmp_path, monkeypatch, evolved: str, use_case: str | None = USE_CASE):
+    monkeypatch.setenv("STETIQ_TRACKING_URI", f"sqlite:///{tmp_path / 'stetiq.db'}")
+    sdk = Client()
+    sdk.create_knowledge_graph(KG, ontology=BASE)
+    if use_case is not None:
+        sdk.register_use_case(KG, use_case)
+    sdk.register_ontology(KG, evolved)
+    return CliRunner().invoke(app, ["ontology", "diff", KG, "1", "2"])
+
+
+def test_the_cli_diff_lists_the_consumers_it_hits_after_the_changes(tmp_path, monkeypatch):
+    result = run_diff(
+        tmp_path,
+        monkeypatch,
+        BASE.replace("  - Agent\n", "  - {label: Agent, deprecated: true}\n")
+        .replace("OPENED, HANDLES]", "HANDLES]")
+        .replace("  - [Customer, OPENED, Ticket]\n", ""),
+    )
+
+    assert result.exit_code == 0, result.output
+    changes, impact = result.output.split("Consumer impact:\n")
+    assert "Overall: breaking" in changes
+    assert impact.splitlines() == [
+        "  affected: Triage bot (triage-bot)",
+        "    Task route-ticket: Route a new ticket by its customer",
+        "      tickets-per-customer: affected by OPENED",
+        "  will be affected: Workload dashboard (workload-dashboard)",
+        "    Task workload-chart: Chart each agent's workload",
+        "      handlers: will be affected by Agent",
+        "  no Consumer",
+        "    agent-names: will be affected by Agent",
+        "    loyal-customers: unknown (no Concept mapping or query)",
+    ]
+
+
+def test_the_cli_diff_says_when_there_is_no_use_case_to_judge_impact_by(tmp_path, monkeypatch):
+    result = run_diff(
+        tmp_path,
+        monkeypatch,
+        BASE.replace("  - Agent\n", "  - {label: Agent, deprecated: true}\n"),
+        use_case=None,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert result.output.endswith("Consumer impact: no Use Case registered\n")
