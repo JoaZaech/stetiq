@@ -124,7 +124,7 @@ def test_the_returns_run_yields_a_candidate_adopted_as_a_new_version(demo):
     # Adopting the Candidate with descriptions is a new version, not a dedupe hit.
     assert (demo.v3.number, demo.v3.origin) == (3, "registered")
     descriptions = demo.mara.diff_ontology_versions(KG, 2, 3)
-    assert descriptions.classification == "additive"
+    assert descriptions.classification == "cosmetic"
     assert {c.detail for c in descriptions.changes} == {"description changed"}
     assert demo.runs[5].ontology_version == 3
     assert demo.runs[5].conformance.score == 1.0

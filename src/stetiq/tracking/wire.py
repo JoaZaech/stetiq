@@ -12,7 +12,7 @@ from typing import Any
 
 from stetiq import errors
 from stetiq.auth import ApiToken
-from stetiq.ontology.diff import OntologyDiff
+from stetiq.ontology.diff import Change, OntologyDiff
 
 API_PREFIX = "/api/v1"
 
@@ -30,17 +30,30 @@ def ontology_diff_to_json(d: OntologyDiff) -> dict[str, Any]:
     """`classification` is the most severe change's, or None when nothing changed."""
     return {
         "classification": d.classification and str(d.classification),
-        "changes": [
-            {
-                "concept": c.concept,
-                "concept_kind": c.concept_kind,
-                "kind": str(c.kind),
-                "classification": str(c.classification),
-                "detail": c.detail,
-            }
-            for c in d.changes
-        ],
+        "changes": [_change_to_json(c) for c in d.changes],
     }
+
+
+def _change_to_json(c: Change) -> dict[str, Any]:
+    """What a change concerns (an attribute and its owner, whether an added attribute is
+    required, an endpoint Pattern) only when it concerns one; a reader takes a missing
+    field as None."""
+    out: dict[str, Any] = {
+        "concept": c.concept,
+        "concept_kind": c.concept_kind,
+        "kind": str(c.kind),
+        "classification": str(c.classification),
+        "detail": c.detail,
+    }
+    facts = {
+        "owner": c.owner,
+        "owner_kind": c.owner_kind,
+        "attribute": c.attribute,
+        "required": c.required,
+        "pattern": c.pattern and [c.pattern.source, c.pattern.relationship, c.pattern.target],
+    }
+    out.update({k: v for k, v in facts.items() if v is not None})
+    return out
 
 
 # --- Errors ------------------------------------------------------------------------------

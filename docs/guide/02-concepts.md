@@ -26,7 +26,7 @@ An **Ontology Version** is an immutable snapshot of a Knowledge Graph's Ontology
 
 You create a Knowledge Graph from its Declared Ontology (see [Getting started](./01-getting-started.md#create-a-knowledge-graph)); it becomes v1, and the `production` Alias points to it.
 
-The **Ontology Diff** between two Ontology Versions lists each change and classes it as *additive*, *deprecating* or *breaking*.
+The **Ontology Diff** between two Ontology Versions lists each change and classes it as *cosmetic* (only a description changed), *additive*, *deprecating* or *breaking*.
 
 ## Construction Runs and Conformance
 

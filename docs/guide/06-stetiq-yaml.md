@@ -129,9 +129,9 @@ No change in the Ontology Diff from the Contract Alias's Ontology Version to the
 
 | Key | Value |
 | --- | --- |
-| `max_classification` | Required. `additive`, `deprecating` or `breaking`, from least to most severe. |
+| `max_classification` | Required. `cosmetic`, `additive`, `deprecating` or `breaking`, from least to most severe. |
 
-With `max_classification: additive`, only additive changes pass. `breaking` lets every change through, which is useful to record the diff without failing on it. When it fails, its reasons list each change that is too severe.
+With `max_classification: cosmetic`, only description changes pass; with `additive`, cosmetic and additive changes pass. `breaking` lets every change through, which is useful to record the diff without failing on it. When it fails, its reasons list each change that is too severe.
 
 ```yaml
 gates:

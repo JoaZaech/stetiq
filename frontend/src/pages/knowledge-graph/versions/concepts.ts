@@ -21,12 +21,6 @@ export interface ClassOrRelation {
   label: string
 }
 
-/** An attribute's Concept, `<owner>.<attribute>` as the Diff names it, split into the two. */
-export function attributeReference(concept: string): { owner: string; attribute: string } {
-  const dot = concept.indexOf('.')
-  return { owner: concept.slice(0, dot), attribute: concept.slice(dot + 1) }
-}
-
 /** A class Concept, placed in the hierarchy: `depth` 0 has no (known) superclass. */
 export interface ClassRow {
   label: string

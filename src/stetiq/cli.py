@@ -354,7 +354,7 @@ def ontology_diff(
     ] = None,
     tracking_uri: TrackingUri = None,
 ) -> None:
-    """Show the Ontology Diff from version BASE to TARGET, each change additive, deprecating or breaking."""
+    """Show the Ontology Diff from version BASE to TARGET, each change cosmetic, additive, deprecating or breaking."""
     try:
         d = _client(tracking_uri).diff_ontology_versions(knowledge_graph, base, target)
     except StetiqError as e:

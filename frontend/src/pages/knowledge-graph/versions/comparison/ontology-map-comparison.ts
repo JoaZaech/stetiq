@@ -8,21 +8,21 @@ import {
 } from '@/api/ontology-diff'
 import type { Ontology } from '@/api/ontology-versions'
 import { codePointOrder } from '@/lib/compare'
-import { attributeReference, constraintsOn } from '../concepts'
+import { patternId } from '../concepts'
 import { ontologyMap, type OntologyMap, type PatternLink } from '../map/ontology-map'
 import type { MapSelection } from '../map/ontology-map-focus'
 
 /**
  * How an item of a comparison changed from the base to the target version: present in
  * one side only (added, removed), changed according to the Ontology Diff (modified),
- * changed in nothing but descriptions (documentation-only), or none of these. Not the
- * Diff's own change kind, which is per Concept.
+ * changed only cosmetically (documentation-only: the Diff classes every change to it
+ * cosmetic), or none of these. Not the Diff's own change kind, which is per Concept.
  */
 export type MapChangeKind = 'added' | 'removed' | 'modified' | 'documentation-only' | 'unchanged'
 
 /**
  * An item's change in a comparison, with the severity the Ontology Diff gives it, its
- * documentation-only changes left out (null when unchanged or documentation-only).
+ * cosmetic changes left out (null when unchanged or documentation-only).
  */
 export interface MapChange {
   kind: MapChangeKind
@@ -75,131 +75,40 @@ const mostSevere = (classifications: Classification[]): Classification | null =>
     null,
   )
 
-/** A comparison's two Ontologies and the Diff between them. */
-type ComparedOntologies = Pick<OntologyComparison, 'base' | 'target' | 'diff'>
+/** A comparison's Ontology Diff. */
+type ComparedOntologies = Pick<OntologyComparison, 'diff'>
 
 /**
  * The Diff's changes to one class or relation: those to the Concept itself and to its
- * attributes (`<owner>.<attribute>`), which the Diff records apart from their owner.
+ * attributes, which the Diff records apart from their owner (an attribute change states
+ * its owner and the owner's kind, so a class and a relation sharing a label stay apart).
  */
-export function changesOfConcept(
-  { base, target, diff }: ComparedOntologies,
-  kind: OwnerKind,
-  label: string,
-): OntologyChange[] {
+export function changesOfConcept({ diff }: ComparedOntologies, kind: OwnerKind, label: string): OntologyChange[] {
   return diff.changes.filter((c) =>
     c.concept_kind === 'property'
-      ? c.concept.startsWith(`${label}.`) &&
-        attributeChanged(base, target, kind, label, c.concept.slice(label.length + 1))
+      ? c.owner_kind === kind && c.owner === label
       : c.concept_kind === kind && c.concept === label,
   )
 }
 
 /**
- * Whether the class or relation `label` declares attribute `name` differently in `base`
- * and `target`, a class's constraints on it included. The Diff names a class's and a
- * relation's attributes alike, so this tells which of two Concepts sharing a label owns
- * an attribute change.
- */
-function attributeChanged(
-  base: Ontology,
-  target: Ontology,
-  kind: OwnerKind,
-  label: string,
-  name: string,
-): boolean {
-  return declaredAlike(base, target, (o) => attributeDeclaration(o, kind, label, name)) !== 'same'
-}
-
-/** How the class or relation `label` declares attribute `name`, a class's constraints on it included. */
-function attributeDeclaration(ontology: Ontology, kind: OwnerKind, label: string, name: string) {
-  const attribute = conceptsOf(ontology, kind)
-    .find((c) => c.label === label)
-    ?.properties?.find((p) => p.name === name)
-  const constraints = kind === 'node_type' ? constraintsOn(ontology, label, name) : []
-  return { ...attribute, constraints }
-}
-
-/** How the class or relation `label` itself is declared: a relation's Patterns included, attributes left out. */
-function conceptDeclaration(ontology: Ontology, kind: OwnerKind, label: string) {
-  const concept = conceptsOf(ontology, kind).find((c) => c.label === label)
-  const patterns = kind === 'relationship_type' ? ontology.patterns.filter((p) => p[1] === label) : []
-  return { ...concept, properties: undefined, patterns }
-}
-
-const conceptsOf = (ontology: Ontology, kind: OwnerKind) =>
-  kind === 'node_type' ? ontology.node_types : ontology.relationship_types
-
-/**
- * How `declare` sees the two Ontologies: the same, different only in the description,
- * or otherwise different.
- */
-function declaredAlike(
-  base: Ontology,
-  target: Ontology,
-  declare: (ontology: Ontology) => { description?: string },
-): 'same' | 'description' | 'different' {
-  const [b, t] = [declare(base), declare(target)]
-  const undescribed = (d: object) => JSON.stringify({ ...d, description: undefined })
-  if (undescribed(b) !== undescribed(t)) return 'different'
-  return b.description === t.description ? 'same' : 'description'
-}
-
-/**
- * Whether one of the Diff's changes is documentation-only: the two Ontologies declare its
- * Concept alike but for the description (an attribute alone, a class or relation without
- * its attributes but with a relation's Patterns). Told from the Ontologies, never from the
- * Diff's wording; the Diff's classification of it stands.
- */
-export function isDocumentationOnly(
-  { base, target }: Pick<OntologyComparison, 'base' | 'target'>,
-  change: OntologyChange,
-): boolean {
-  if (change.kind !== 'changed') return false
-  if (change.concept_kind !== 'property') {
-    const kind = change.concept_kind
-    return declaredAlike(base, target, (o) => conceptDeclaration(o, kind, change.concept)) === 'description'
-  }
-  const { owner: label, attribute: name } = attributeReference(change.concept)
-  // The owners that changed it: a class and a relation may share a label.
-  const owners = (['node_type', 'relationship_type'] as const).map((kind) =>
-    declaredAlike(base, target, (o) => attributeDeclaration(o, kind, label, name)),
-  )
-  return owners.includes('description') && !owners.includes('different')
-}
-
-/**
- * The Pattern an endpoint change names, as its link id (`Pattern.__str__`); null for any
- * other change. The wording is `_diff_patterns`' in `ontology/diff.py`, which the Diff
- * carries only as text; e2e/ontology-map-changes.spec.ts fails if it changes.
- */
-const endpointPattern = (change: OntologyChange) =>
-  /^endpoint pattern (.*) (?:added|removed)$/.exec(change.detail)?.[1] ?? null
-
-/**
  * The Diff's changes to one Pattern link. The Diff records them against its relation:
- * an endpoint change belongs to the one link it names, any other change to every link
- * of the relation.
+ * an endpoint change belongs to the one link whose Pattern it states, any other change
+ * to every link of the relation.
  */
 function changesOfLink(compared: ComparedOntologies, link: PatternLink): OntologyChange[] {
-  return changesOfConcept(compared, 'relationship_type', link.relation).filter((c) => {
-    const pattern = endpointPattern(c)
-    return pattern === null || pattern === link.id
-  })
+  return changesOfConcept(compared, 'relationship_type', link.relation).filter(
+    (c) => c.pattern === undefined || patternId(c.pattern) === link.id,
+  )
 }
 
 /**
  * An item's change from which sides have it and the Diff's changes to it: added or
  * removed by side; otherwise modified in the severity of its changes that are not
- * documentation-only, documentation-only when those are all it has, or unchanged.
+ * cosmetic, documentation-only when cosmetic ones are all it has, or unchanged.
  */
-function mapChange(
-  compared: ComparedOntologies,
-  inBase: boolean,
-  inTarget: boolean,
-  changes: OntologyChange[],
-): MapChange {
-  const severity = mostSevere(structural(compared, changes).map((c) => c.classification))
+function mapChange(inBase: boolean, inTarget: boolean, changes: OntologyChange[]): MapChange {
+  const severity = mostSevere(structural(changes).map((c) => c.classification))
   const kind: MapChangeKind = !inBase
     ? 'added'
     : !inTarget
@@ -212,9 +121,8 @@ function mapChange(
   return { kind, severity }
 }
 
-/** The changes of `changes` that are not documentation-only. */
-const structural = (compared: ComparedOntologies, changes: OntologyChange[]) =>
-  changes.filter((c) => !isDocumentationOnly(compared, c))
+/** The changes of `changes` that are not cosmetic. */
+const structural = (changes: OntologyChange[]) => changes.filter((c) => c.classification !== 'cosmetic')
 
 /**
  * The comparison from `base` to `target`. Whether an item is added or removed comes from
@@ -242,7 +150,7 @@ export function compareOntologies(base: Ontology, target: Ontology, diff: Ontolo
   const [baseLinks, targetLinks] = [baseMap, targetMap].map((m) => new Set(m.links.map((l) => l.id)))
   const compared = { base, target, diff }
   const classChange = (label: string, inBase: boolean, inTarget: boolean) =>
-    mapChange(compared, inBase, inTarget, changesOfConcept(compared, 'node_type', label))
+    mapChange(inBase, inTarget, changesOfConcept(compared, 'node_type', label))
 
   const classes = Object.fromEntries(
     map.nodes.map((n): [string, MapChange] => [
@@ -254,7 +162,7 @@ export function compareOntologies(base: Ontology, target: Ontology, diff: Ontolo
   const links = Object.fromEntries(
     map.links.map((l): [string, MapChange] => [
       l.id,
-      mapChange(compared, baseLinks.has(l.id), targetLinks.has(l.id), changesOfLink(compared, l)),
+      mapChange(baseLinks.has(l.id), targetLinks.has(l.id), changesOfLink(compared, l)),
     ]),
   )
   // A class has one superclass per side, so a moved class has both its old and new link.
@@ -273,12 +181,9 @@ export function compareOntologies(base: Ontology, target: Ontology, diff: Ontolo
       return [l.id, { kind: inBase ? 'removed' : 'added', severity: classChange(l.child, true, true).severity }]
     }),
   )
-  // Only the attributes changed in more than their description are listed.
+  // Only the attributes with more than cosmetic changes are listed.
   const attributes = Object.fromEntries(
-    map.nodes.map((n) => [
-      n.label,
-      attributeChanges(structural(compared, changesOfConcept(compared, 'node_type', n.label))),
-    ]),
+    map.nodes.map((n) => [n.label, attributeChanges(structural(changesOfConcept(compared, 'node_type', n.label)))]),
   )
   return {
     map: { ...map, subclassLinks },
@@ -296,9 +201,9 @@ export function compareOntologies(base: Ontology, target: Ontology, diff: Ontolo
  */
 function attributeChanges(changes: OntologyChange[]): AttributeChange[] {
   const byName = new Map<string, OntologyChange[]>()
-  for (const c of changes.filter((c) => c.concept_kind === 'property')) {
-    const name = attributeReference(c.concept).attribute
-    byName.set(name, [...(byName.get(name) ?? []), c])
+  for (const c of changes) {
+    if (c.attribute === undefined) continue
+    byName.set(c.attribute, [...(byName.get(c.attribute) ?? []), c])
   }
   return [...byName]
     .sort(([a], [b]) => codePointOrder(a, b))

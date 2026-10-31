@@ -379,7 +379,7 @@ def _parse_diff(name: str, p: _Params) -> Gate:
         classification = Classification(raw)
     except ValueError:
         raise GateConfigError(
-            f"Gate {name!r}: max_classification must be additive, deprecating or breaking"
+            f"Gate {name!r}: max_classification must be cosmetic, additive, deprecating or breaking"
         ) from None
     p.done()
     return OntologyDiffGate(name=name, max_classification=classification)

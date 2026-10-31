@@ -29,7 +29,7 @@ import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { type ConceptSelection, formatSelection, useConceptSelection } from '../concept-selection'
 import type { ClassOrRelation } from '../concepts'
-import { ChangeLevelBadge, MapChangeSummary } from '../comparison/MapChangeSummary'
+import { MapChangeSummary } from '../comparison/MapChangeSummary'
 import { MapDetailsPanel } from './MapDetailsPanel'
 import { MAP_HEIGHT } from '../map-view'
 import { MapPathPanel } from './MapPathPanel'
@@ -57,7 +57,6 @@ import {
 } from './ontology-map-sizes'
 import { shortestPaths } from './ontology-map-paths'
 import { searchOntology } from './ontology-map-search'
-import { levelOf } from '../comparison/ontology-map-summary'
 import { SEVERITY, severityStroke } from '../comparison/severity-style'
 
 /**
@@ -122,7 +121,8 @@ interface ChangeStyle {
 
 /**
  * Change kind's channel, mark style: added solid, removed a dashed ghost, modified ringed,
- * documentation-only a neutral dot on an otherwise plain mark, unchanged muted.
+ * documentation-only (only cosmetic changes) a neutral dot on an otherwise plain mark,
+ * unchanged muted.
  */
 const CHANGE_STYLE: Record<MapChangeKind, ChangeStyle> = {
   added: {
@@ -470,7 +470,7 @@ function ChangeDetails({
           {changes.map((c) => (
             <li key={`${c.concept}:${c.detail}`} className="space-y-1">
               <div className="flex items-center gap-2">
-                <ChangeLevelBadge level={levelOf(comparison, c)} />
+                <ClassificationBadge classification={c.classification} />
                 <span className="text-xs text-muted-foreground">{c.kind}</span>
               </div>
               <div className="text-xs">{c.detail}</div>
@@ -498,7 +498,8 @@ function ComparisonLegend() {
           {kind}
         </span>
       ))}
-      {CLASSIFICATIONS.map((s) => (
+      {/* Cosmetic has no Diff colour: its key is the documentation-only mark above. */}
+      {CLASSIFICATIONS.filter((s) => s !== 'cosmetic').map((s) => (
         <ClassificationBadge key={s} classification={s} />
       ))}
     </Panel>
