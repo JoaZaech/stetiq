@@ -12,6 +12,7 @@ from typing import Any
 
 from stetiq import errors
 from stetiq.auth import ApiToken
+from stetiq.ontology.canonical import pattern_to_list
 from stetiq.ontology.diff import Change, OntologyDiff
 
 API_PREFIX = "/api/v1"
@@ -50,7 +51,7 @@ def _change_to_json(c: Change) -> dict[str, Any]:
         "owner_kind": c.owner_kind,
         "attribute": c.attribute,
         "required": c.required,
-        "pattern": c.pattern and [c.pattern.source, c.pattern.relationship, c.pattern.target],
+        "pattern": c.pattern and pattern_to_list(c.pattern),
     }
     out.update({k: v for k, v in facts.items() if v is not None})
     return out

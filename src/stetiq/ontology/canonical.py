@@ -45,6 +45,11 @@ def _concept_to_dict(c: NodeType | RelationshipType) -> dict[str, Any]:
     return d
 
 
+def pattern_to_list(p: Pattern) -> list[str]:
+    """A Pattern's JSON form, `[source, relationship, target]`."""
+    return [p.source, p.relationship, p.target]
+
+
 def to_dict(ontology: Ontology) -> dict[str, Any]:
     """The canonical dict form; also the shape of the stetiq YAML."""
     d: dict[str, Any] = {
@@ -54,7 +59,7 @@ def to_dict(ontology: Ontology) -> dict[str, Any]:
         "relationship_types": [
             _concept_to_dict(r) for r in sorted(ontology.relationship_types, key=lambda r: r.label)
         ],
-        "patterns": [[p.source, p.relationship, p.target] for p in sorted(ontology.patterns)],
+        "patterns": [pattern_to_list(p) for p in sorted(ontology.patterns)],
     }
     if ontology.constraints:  # omitted when empty, so pre-constraint hashes are unchanged
         d["constraints"] = [
