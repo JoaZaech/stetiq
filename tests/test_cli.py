@@ -2,6 +2,7 @@
 
 import sys
 
+import pytest
 import yaml
 from typer.testing import CliRunner
 
@@ -350,3 +351,36 @@ def test_cli_gate_reports_a_malformed_config_file(tmp_path, monkeypatch, support
     assert "nope" in result.output
     assert missing.exit_code == 1
     assert "absent.yaml" in missing.output
+
+
+@pytest.mark.parametrize(
+    "config, args, message",
+    [
+        (
+            GATES_CONFIG,
+            ["--version", "1", "--run", "r"],
+            "Gates are evaluated for a version or a run, not both",
+        ),
+        ("knowledge_graph: kg\ngates: []\n", [], "No Gates to evaluate"),
+    ],
+)
+def test_cli_gate_reports_the_tracking_services_refusal(
+    tmp_path, monkeypatch, support_ontology, config, args, message
+):
+    monkeypatch.setenv("STETIQ_TRACKING_URI", f"sqlite:///{tmp_path / 'stetiq.db'}")
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "stetiq.yaml").write_text(config)
+    ontology = tmp_path / "ontology.yaml"
+    ontology.write_text(support_ontology)
+    CliRunner().invoke(app, ["kg", "create", "kg", "--ontology", str(ontology)])
+
+    result = CliRunner().invoke(app, ["gate", *args])
+
+    assert result.exit_code == 1
+    assert f"error: {message}" in result.output
+
+
+def test_cli_alias_set_help_says_a_server_ignores_actor():
+    result = CliRunner().invoke(app, ["alias", "set", "--help"], env={"COLUMNS": "200"})
+
+    assert "Ignored in remote mode" in " ".join(result.output.split())

@@ -340,3 +340,17 @@ def test_listing_results_needs_a_known_knowledge_graph_and_subject_kind(client, 
         client.list_evaluation_results("nope")
     with pytest.raises(stetiq.EvaluatorError, match="subject kind"):
         client.list_evaluation_results(kg.name, "observation")
+
+
+BUILT_IN_NAME_MESSAGE = "'hierarchy' is a built-in Evaluator; its results are computed by stetiq"
+
+
+def test_a_built_in_name_is_refused_with_one_message_however_the_evaluator_is_given(client, kg):
+    impostor = Returns("hierarchy", {})
+
+    with pytest.raises(stetiq.EvaluatorError) as registered:
+        client.register_evaluator(impostor)
+    with pytest.raises(stetiq.EvaluatorError) as one_off:
+        client.evaluate(kg.name, 1, evaluators=[impostor])
+
+    assert str(registered.value) == str(one_off.value) == BUILT_IN_NAME_MESSAGE

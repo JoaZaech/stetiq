@@ -22,12 +22,14 @@ from stetiq import use_case as use_case_format
 from stetiq.conformance import assess_conformance, candidate_ontology
 from stetiq.drift import DriftThresholds, assess_drift
 from stetiq.errors import (
+    ConflictingArgumentsError,
     EvaluatorError,
     GateConfigError,
     GraphSourceNotBoundError,
     InvalidEvolutionModeError,
     MissingDeclaredOntologyError,
     NotFoundError,
+    NoUseCaseError,
     RunNotActiveError,
 )
 from stetiq.evaluation.answerability import (
@@ -89,6 +91,18 @@ RESERVED_EVALUATOR_NAMES = frozenset(
     | {e.name for e in SERVER_RUN_EVALUATORS}
 )
 
+
+def check_not_built_in(evaluator: str) -> None:
+    """Refuse a custom Evaluator (or a result recorded for one) that takes a built-in's name.
+
+    The tracking service applies it to recorded results; the SDK also applies it before
+    running a custom Evaluator, since those run in the user's process."""
+    if evaluator in RESERVED_EVALUATOR_NAMES:
+        raise EvaluatorError(
+            f"{evaluator!r} is a built-in Evaluator; its results are computed by stetiq"
+        )
+
+
 # The audit-log actor for Alias moves stetiq makes itself (the Contract Alias on creation).
 SYSTEM_ACTOR = "stetiq"
 
@@ -131,7 +145,16 @@ class TrackingService(Protocol):
 
     def get_evolution_mode(self, knowledge_graph: str) -> EvolutionMode: ...
 
-    def start_run(self, knowledge_graph: str, ontology_version: int) -> ConstructionRun: ...
+    def start_run(
+        self,
+        knowledge_graph: str,
+        ontology_version: int | None = None,
+        *,
+        alias: str | None = None,
+    ) -> ConstructionRun:
+        """Its Declared Ontology is `ontology_version`, or the version `alias` points
+        to, or by default the Contract Alias's version."""
+        ...
 
     def get_run(self, run_id: str) -> ConstructionRun: ...
 
@@ -172,6 +195,10 @@ class TrackingService(Protocol):
     def set_contract_alias(self, knowledge_graph: str, alias: str) -> None: ...
 
     def get_contract_alias(self, knowledge_graph: str) -> str: ...
+
+    def get_contract_version(self, knowledge_graph: str) -> OntologyVersion:
+        """The Ontology Version the Contract Alias points to."""
+        ...
 
     def evaluate_ontology_version(
         self, knowledge_graph: str, number: int, use_case_version: int | None = None
@@ -232,7 +259,12 @@ class TrackingService(Protocol):
 
     def list_use_case_versions(self, knowledge_graph: str) -> list[UseCaseVersion]: ...
 
-    def get_use_case_version(self, knowledge_graph: str, number: int) -> UseCaseVersion: ...
+    def get_use_case_version(
+        self, knowledge_graph: str, number: int | None = None
+    ) -> UseCaseVersion:
+        """Use Case version `number`, by default the latest. Raises NoUseCaseError when
+        the latest is asked for and the Knowledge Graph has no Use Case."""
+        ...
 
     def evaluate_gates(
         self,
@@ -299,9 +331,7 @@ class LocalTrackingService:
         name = kg.name
         versions = self._store.list_ontology_versions(name)
         runs = self._store.list_runs(name)
-        contract = self._store.get_alias(
-            name, self._store.get_contract_alias(name) or DEFAULT_CONTRACT_ALIAS
-        )
+        contract = self._store.get_alias(name, self._contract_alias(name))
         return KnowledgeGraphSummary(
             knowledge_graph=kg,
             contract_version=None if contract is None else contract.version,
@@ -342,13 +372,10 @@ class LocalTrackingService:
         self, version: OntologyVersion, use_case_version: int | None = None
     ) -> list[EvaluationResult]:
         """Structural answerability against a Use Case version (default: the latest)."""
-        if use_case_version is None:
-            versions = self._store.list_use_case_versions(version.knowledge_graph)
-            if not versions:
-                return []
-            use_case = versions[-1]
-        else:
+        try:
             use_case = self.get_use_case_version(version.knowledge_graph, use_case_version)
+        except NoUseCaseError:
+            return []
         evaluator = StructuralAnswerability(use_case.use_case, self._question_mapper)
         return [
             self._store_result(
@@ -467,10 +494,8 @@ class LocalTrackingService:
         # Executed Competency Questions are a built-in computed SDK-side (the Graph
         # Source lives there), so only that name is accepted, and only on a run.
         sdk_side = subject_kind == "construction_run" and evaluator == CQ_EXECUTION_EVALUATOR
-        if evaluator in RESERVED_EVALUATOR_NAMES and not sdk_side:
-            raise EvaluatorError(
-                f"{evaluator!r} is a built-in Evaluator; its results are computed by stetiq"
-            )
+        if not sdk_side:
+            check_not_built_in(evaluator)
         evaluation = check_evaluation(evaluator, evaluation)
         parameters = check_parameters(evaluator, parameters or {})
         with self._store.transaction():
@@ -558,8 +583,22 @@ class LocalTrackingService:
 
     # --- Construction Runs ----------------------------------------------------------
 
-    def start_run(self, knowledge_graph: str, ontology_version: int) -> ConstructionRun:
+    def start_run(
+        self,
+        knowledge_graph: str,
+        ontology_version: int | None = None,
+        *,
+        alias: str | None = None,
+    ) -> ConstructionRun:
+        if ontology_version is not None and alias is not None:
+            raise ConflictingArgumentsError(
+                "A run consumes an ontology_version or an alias, not both"
+            )
         with self._store.transaction():
+            if alias is not None:
+                ontology_version = self.get_alias(knowledge_graph, alias).version
+            elif ontology_version is None:
+                ontology_version = self.get_contract_version(knowledge_graph).number
             self.get_ontology_version(knowledge_graph, ontology_version)
             self.get_graph_source(knowledge_graph)  # ending the run will observe it
             run = ConstructionRun(
@@ -676,8 +715,15 @@ class LocalTrackingService:
         self.get_knowledge_graph(knowledge_graph)
         return self._store.list_use_case_versions(knowledge_graph)
 
-    def get_use_case_version(self, knowledge_graph: str, number: int) -> UseCaseVersion:
+    def get_use_case_version(
+        self, knowledge_graph: str, number: int | None = None
+    ) -> UseCaseVersion:
         self.get_knowledge_graph(knowledge_graph)
+        if number is None:
+            versions = self._store.list_use_case_versions(knowledge_graph)
+            if not versions:
+                raise NoUseCaseError(f"Knowledge Graph {knowledge_graph!r} has no Use Case")
+            return versions[-1]
         version = self._store.get_use_case_version(knowledge_graph, number)
         if version is None:
             raise NotFoundError(
@@ -709,9 +755,7 @@ class LocalTrackingService:
             )
             self._store.add_observation(obs)
             contract_alias = self.get_contract_alias(knowledge_graph)
-            contract = self.get_ontology_version(
-                knowledge_graph, self.get_alias(knowledge_graph, contract_alias).version
-            )
+            contract = self.get_contract_version(knowledge_graph)
             findings = assess_drift(
                 contract.ontology, schema, None if previous is None else previous.schema, thresholds
             )
@@ -792,7 +836,15 @@ class LocalTrackingService:
 
     def get_contract_alias(self, knowledge_graph: str) -> str:
         self.get_knowledge_graph(knowledge_graph)
+        return self._contract_alias(knowledge_graph)
+
+    def _contract_alias(self, knowledge_graph: str) -> str:
         return self._store.get_contract_alias(knowledge_graph) or DEFAULT_CONTRACT_ALIAS
+
+    def get_contract_version(self, knowledge_graph: str) -> OntologyVersion:
+        with self._store.transaction():
+            alias = self.get_alias(knowledge_graph, self.get_contract_alias(knowledge_graph))
+            return self.get_ontology_version(knowledge_graph, alias.version)
 
     # --- Gates ----------------------------------------------------------------------
 
@@ -849,10 +901,7 @@ class LocalTrackingService:
     def _gate_inputs(
         self, knowledge_graph: str, number: int, run: ConstructionRun | None
     ) -> GateInputs:
-        contract = self.get_ontology_version(
-            knowledge_graph,
-            self.get_alias(knowledge_graph, self.get_contract_alias(knowledge_graph)).version,
-        )
+        contract = self.get_contract_version(knowledge_graph)
         target = self.get_ontology_version(knowledge_graph, number)
         observed = baseline = None
         if run is not None and run.observation_id is not None:

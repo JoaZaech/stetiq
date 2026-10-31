@@ -276,8 +276,11 @@ def create_app(
     # --- Construction Runs and Observations -------------------------------------------
 
     @api.post("/knowledge-graphs/{name}/runs", status_code=201)
-    def start_run(name: str, ontology_version: int = Body(embed=True)) -> dict[str, Any]:
-        return wire.run_to_json(tracking.start_run(name, ontology_version))
+    def start_run(
+        name: str, ontology_version: int | None = Body(None), alias: str | None = Body(None)
+    ) -> dict[str, Any]:
+        # Older SDKs resolve the version themselves and send no alias.
+        return wire.run_to_json(tracking.start_run(name, ontology_version, alias=alias))
 
     @api.get("/knowledge-graphs/{name}/runs")
     def list_runs(name: str) -> list[dict[str, Any]]:
@@ -376,6 +379,10 @@ def create_app(
     def get_contract_alias(name: str) -> dict[str, str]:
         return {"alias": tracking.get_contract_alias(name)}
 
+    @api.get("/knowledge-graphs/{name}/contract-version")
+    def get_contract_version(name: str) -> dict[str, Any]:
+        return wire.ontology_version_to_json(tracking.get_contract_version(name))
+
     # --- Evaluation results ----------------------------------------------------------
     # One pair of routes per subject kind. Run results live under the run's Knowledge
     # Graph, whose subject check also confirms the run belongs to it.
@@ -448,6 +455,10 @@ def create_app(
     @api.get("/knowledge-graphs/{name}/use-case-versions")
     def list_use_case_versions(name: str) -> list[dict[str, Any]]:
         return [wire.use_case_version_to_json(v) for v in tracking.list_use_case_versions(name)]
+
+    @api.get("/knowledge-graphs/{name}/use-case-versions/latest")  # before {number}
+    def get_latest_use_case_version(name: str) -> dict[str, Any]:
+        return wire.use_case_version_to_json(tracking.get_use_case_version(name))
 
     @api.get("/knowledge-graphs/{name}/use-case-versions/{number}")
     def get_use_case_version(name: str, number: int) -> dict[str, Any]:
