@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from datetime import date
 from typing import Any
 
 import stetiq
@@ -15,6 +16,28 @@ def issue_token(client: stetiq.Client, user: str, grants: dict[str, str]) -> dic
     """An API Token on the seeded database: `{"id", "value"}` (revoke it by `id`)."""
     token, value = TokenRegistry(client.tracking_uri).issue(user, grants)
     return {"id": token.id, "value": value}
+
+
+def add_ada_and_ticket(
+    graph: stetiq.InMemoryGraphSource,
+    *,
+    ada_labels: Sequence[str] = ("Customer",),
+    ticket_labels: Sequence[str] = ("Ticket",),
+    priority: int | None = 2,
+) -> tuple[int, int]:
+    """Customer Ada, a Ticket opened on 2026-01-01 (with `priority`, unless it is None)
+    and Ada's `OPENED` relationship to it; returns `(ada, ticket)`."""
+    ada = graph.add_node(ada_labels, {"name": "Ada"})
+    ticket_properties: dict[str, Any] = {"opened_at": date(2026, 1, 1)}
+    if priority is not None:
+        ticket_properties["priority"] = priority
+    ticket = graph.add_node(ticket_labels, ticket_properties)
+    graph.add_relationship(ada, "OPENED", ticket)
+    return ada, ticket
+
+
+# The smallest Ontology: a single Customer node type.
+CUSTOMER_ONLY = "node_types:\n  - label: Customer\n"
 
 
 SUPPORT_V1 = """

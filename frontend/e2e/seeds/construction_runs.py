@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import date
 from typing import Any
 
 import stetiq
 from stetiq.graph_source import GraphSourceScope
 
-from ._shared import SUPPORT_V1, Scenario, issue_token
+from ._shared import SUPPORT_V1, Scenario, add_ada_and_ticket, issue_token
 
 RUNS_USE_CASE = """
 description: Support agents triage tickets
@@ -26,9 +25,7 @@ competency_questions:
 def _runs_client(client: stetiq.Client) -> stetiq.Client:
     """A Client on `client`'s database over the Graph Source of `construction_runs`."""
     graph = stetiq.InMemoryGraphSource()
-    ada = graph.add_node(["Customer"], {"name": "Ada"})
-    ticket = graph.add_node(["Ticket"], {"opened_at": date(2026, 1, 1), "priority": 2})
-    graph.add_relationship(ada, "OPENED", ticket)
+    ada, ticket = add_ada_and_ticket(graph)
     graph.add_relationship(ticket, "ESCALATED", ada)
     graph.add_query_result("MATCH (c:Customer) RETURN c.name AS name", [{"name": "Ada"}])
     return stetiq.Client(client.tracking_uri, graph_source=graph)

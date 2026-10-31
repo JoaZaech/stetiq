@@ -9,7 +9,7 @@ import stetiq
 from stetiq.drift import DriftThresholds
 from stetiq.graph_source import GraphSourceScope
 
-from ._shared import SUPPORT_V1, Scenario
+from ._shared import SUPPORT_V1, Scenario, add_ada_and_ticket
 
 
 def observed_support(_client: stetiq.Client) -> dict[str, Any]:
@@ -20,9 +20,12 @@ def observed_support(_client: stetiq.Client) -> dict[str, Any]:
     client = stetiq.Client(_client.tracking_uri, graph_source=graph)
     client.create_knowledge_graph("support", ontology=SUPPORT_V1)
     client.bind_graph_source("support", GraphSourceScope(database="neo4j", label="Support"))
-    ada = graph.add_node(["Support", "Party", "Customer"], {"name": "Ada"})
-    ticket = graph.add_node(["Support", "Ticket"], {"opened_at": date(2026, 1, 1)})
-    graph.add_relationship(ada, "OPENED", ticket)
+    add_ada_and_ticket(
+        graph,
+        ada_labels=("Support", "Party", "Customer"),
+        ticket_labels=("Support", "Ticket"),
+        priority=None,
+    )
     with client.start_run("support", ontology_version=1) as run:
         pass
     for day in (2, 3, 4):

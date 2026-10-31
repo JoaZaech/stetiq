@@ -3,13 +3,20 @@ promotion and version metrics."""
 
 from __future__ import annotations
 
-from datetime import date
 from typing import Any
 
 import stetiq
 from stetiq.graph_source import GraphSourceScope
 
-from ._shared import SUPPORT_USE_CASE, SUPPORT_V1, SUPPORT_V2, Scenario, issue_token
+from ._shared import (
+    CUSTOMER_ONLY,
+    SUPPORT_USE_CASE,
+    SUPPORT_V1,
+    SUPPORT_V2,
+    Scenario,
+    add_ada_and_ticket,
+    issue_token,
+)
 
 NO_BREAKING_GATE = """
 gates:
@@ -35,9 +42,7 @@ def support_lineage(_client: stetiq.Client) -> dict[str, Any]:
     client.evaluate_gates("support", NO_BREAKING_GATE, version=2)
 
     client.bind_graph_source("support", GraphSourceScope(database="neo4j"))
-    ada = graph.add_node(["Customer"], {"name": "Ada"})
-    ticket = graph.add_node(["Ticket"], {"opened_at": date(2026, 1, 1), "priority": 2})
-    graph.add_relationship(ada, "OPENED", ticket)
+    add_ada_and_ticket(graph)
     with client.start_run("support", ontology_version=2) as run:
         pass
     ended = client.get_run(run.id)
@@ -48,7 +53,7 @@ def support_lineage_reader(client: stetiq.Client) -> dict[str, Any]:
     """`support_lineage`, plus a `secret` Knowledge Graph and a token for grace that can
     read `support` only."""
     seeded = support_lineage(client)
-    client.create_knowledge_graph("secret", ontology="node_types:\n  - label: Customer\n")
+    client.create_knowledge_graph("secret", ontology=CUSTOMER_ONLY)
     return {**seeded, "grace": issue_token(client, "grace", {"support": "read"})}
 
 
