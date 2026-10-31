@@ -184,7 +184,8 @@ def test_a_rename_declared_via_replaced_by_is_deprecating(diff):
         ("HANDLES", "deprecated", "deprecating"),
         ("RESOLVES", "added", "additive"),
     ]
-    assert "replaced by RESOLVES" in d.changes[0].detail
+    # A change to a Concept says what changed, beside the Concept it names: no repeat of it.
+    assert d.changes[0].detail == "deprecated; replaced by RESOLVES"
     assert d.classification == "deprecating"
     assert concerns_the_concept_itself(d)
 
@@ -199,6 +200,10 @@ def test_undeprecating_is_additive_and_changing_a_replacement_is_deprecating(cli
 
     assert summary(undeprecated) == [("Agent", "changed", "additive")]
     assert summary(changed) == [("Agent", "deprecated", "deprecating")]
+    assert [undeprecated.changes[0].detail, changed.changes[0].detail] == [
+        "no longer deprecated",
+        "replacement changed Staff -> Worker",
+    ]
     assert concerns_the_concept_itself(undeprecated)
     assert concerns_the_concept_itself(changed)
 

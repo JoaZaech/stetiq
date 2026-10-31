@@ -213,7 +213,10 @@ def _is_deprecated(c: NodeType | RelationshipType) -> bool:
 def _diff_deprecation(
     kind: ConceptKind, old: NodeType | RelationshipType, new: NodeType | RelationshipType
 ) -> list[Change]:
-    """Deprecating (incl. a rename declared via `replacedBy`) is deprecating; undeprecating is additive."""
+    """Deprecating (incl. a rename declared via `replacedBy`) is deprecating; undeprecating is additive.
+
+    Like every change to a Concept that is still there, the detail says what changed without
+    repeating the Concept, which the change names beside it."""
     label = new.label
     replacement = f"; replaced by {new.replaced_by}" if new.replaced_by else ""
     if _is_deprecated(new) and not _is_deprecated(old):
@@ -223,7 +226,7 @@ def _diff_deprecation(
                 kind,
                 ChangeKind.DEPRECATED,
                 Classification.DEPRECATING,
-                f"{_KIND_NAMES[kind]} {label} deprecated{replacement}",
+                f"deprecated{replacement}",
             )
         ]
     if _is_deprecated(old) and not _is_deprecated(new):
@@ -233,7 +236,7 @@ def _diff_deprecation(
                 kind,
                 ChangeKind.CHANGED,
                 Classification.ADDITIVE,
-                f"{_KIND_NAMES[kind]} {label} no longer deprecated",
+                "no longer deprecated",
             )
         ]
     if old.replaced_by != new.replaced_by:
@@ -243,7 +246,7 @@ def _diff_deprecation(
                 kind,
                 ChangeKind.DEPRECATED,
                 Classification.DEPRECATING,
-                f"{_KIND_NAMES[kind]} {label} replacement changed {old.replaced_by or '(none)'} -> {new.replaced_by or '(none)'}",
+                f"replacement changed {old.replaced_by or '(none)'} -> {new.replaced_by or '(none)'}",
             )
         ]
     return []
