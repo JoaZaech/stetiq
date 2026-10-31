@@ -492,17 +492,46 @@ describe('summarizeChanges', () => {
     ])
   })
 
-  it('groups the changes by the class or relation they belong to, the most severe Concept first', () => {
-    const { concepts } = summarizeChanges(compareOntologies(TRANSIT_V2, TRANSIT_V3, TRANSIT_DIFF))
+  it('partitions the changed Concepts by level, most severe first, each in the section of its most severe change', () => {
+    const { sections } = summarizeChanges(compareOntologies(TRANSIT_V2, TRANSIT_V3, TRANSIT_DIFF))
 
-    expect(concepts.map((c) => [c.kind, c.label, c.level])).toEqual([
-      // Equally severe Concepts in label order.
-      ['node_type', 'Stop', 'breaking'],
-      ['node_type', 'Trip', 'breaking'],
+    expect(sections.map((s) => [s.level, s.concepts.map((c) => [c.kind, c.label])])).toEqual([
+      // Equally severe Concepts in label order. Stop and Trip each also gained an attribute,
+      // which leaves the additive section empty, so it is left out.
+      ['breaking', [['node_type', 'Stop'], ['node_type', 'Trip']]],
+      // HAS_TRIP only gained a description.
+      ['cosmetic', [['relationship_type', 'HAS_TRIP']]],
     ])
   })
 
-  it('sets the cosmetic changes apart, grouped by Concept', () => {
+  it('orders the sections Breaking, Deprecating, Additive, then Documentation-only', () => {
+    const target: Ontology = {
+      ...TRANSIT_V3,
+      node_types: [
+        ...TRANSIT_V3.node_types.map((n) => (n.label === 'Route' ? { ...n, deprecated: true } : n)),
+        { label: 'Shape' },
+      ],
+    }
+    const { sections } = summarizeChanges(
+      compareOntologies(TRANSIT_V2, target, {
+        classification: 'breaking',
+        changes: [
+          conceptChange('node_type', 'Shape', 'added', 'additive'),
+          conceptChange('node_type', 'Route', 'deprecated', 'deprecating', 'deprecated'),
+          ...TRANSIT_DIFF.changes,
+        ],
+      }),
+    )
+
+    expect(sections.map((s) => [s.level, s.concepts.map((c) => c.label)])).toEqual([
+      ['breaking', ['Stop', 'Trip']],
+      ['deprecating', ['Route']],
+      ['additive', ['Shape']],
+      ['cosmetic', ['HAS_TRIP']],
+    ])
+  })
+
+  it('lists a Concept with only cosmetic changes under Documentation-only, by label', () => {
     const described: Ontology = {
       ...TRANSIT_V3,
       node_types: TRANSIT_V3.node_types.map((n) =>
@@ -513,7 +542,7 @@ describe('summarizeChanges', () => {
             : n,
       ),
     }
-    const { counts, concepts, cosmetic } = summarizeChanges(
+    const { counts, sections } = summarizeChanges(
       compareOntologies(TRANSIT_V2, described, {
         classification: 'breaking',
         changes: [conceptDescribed('node_type', 'Route'), ...TRANSIT_DIFF.changes],
@@ -521,32 +550,47 @@ describe('summarizeChanges', () => {
     )
 
     expect(counts.at(-1)).toEqual({ level: 'cosmetic', count: 2 })
-    expect(cosmetic.map((c) => [c.label, c.level, c.statements.map((s) => s.text)])).toEqual([
-      ['HAS_TRIP', 'cosmetic', ['description changed']],
-      ['Route', 'cosmetic', ['description changed']],
-    ])
     // Stop's attribute was added with its description, so that change is not cosmetic.
-    expect(concepts.map((c) => c.label)).toEqual(['Stop', 'Trip'])
+    expect(sections.map((s) => [s.level, s.concepts.map((c) => c.label)])).toEqual([
+      ['breaking', ['Stop', 'Trip']],
+      ['cosmetic', ['HAS_TRIP', 'Route']],
+    ])
+    expect(sections[1].concepts.map((c) => c.statements.map((s) => [s.text, s.level]))).toEqual([
+      [['description changed', null]],
+      [['description changed', null]],
+    ])
   })
 
-  it("orders a Concept's changes most severe first, and says each in words", () => {
-    const deprecating: OntologyDiff = {
-      classification: 'breaking',
-      changes: [
-        ...TRANSIT_DIFF.changes,
-        conceptChange('node_type', 'Stop', 'deprecated', 'deprecating', 'deprecated; replaced by Platform'),
-      ],
+  it("orders a Concept's changes most severe first, says each in words, and names a level only where it differs from its section's", () => {
+    const target: Ontology = {
+      ...TRANSIT_V3,
+      node_types: TRANSIT_V3.node_types.map((n) =>
+        n.label === 'Stop' ? { ...n, deprecated: true, description: 'Where riders board' } : n,
+      ),
     }
-    const { concepts, cosmetic } = summarizeChanges(
-      compareOntologies(TRANSIT_V2, { ...TRANSIT_V3, node_types: TRANSIT_V3.node_types.map((n) => (n.label === 'Stop' ? { ...n, deprecated: true } : n)) }, deprecating),
+    const { sections } = summarizeChanges(
+      compareOntologies(TRANSIT_V2, target, {
+        classification: 'breaking',
+        changes: [
+          conceptDescribed('node_type', 'Stop'),
+          ...TRANSIT_DIFF.changes,
+          conceptChange('node_type', 'Stop', 'deprecated', 'deprecating', 'deprecated; replaced by Platform'),
+        ],
+      }),
     )
 
-    expect(concepts[0].statements.map((s) => [s.attribute, s.text, s.level])).toEqual([
-      ['wheelchairBoarding', 'removed', 'breaking'],
+    expect(sections[0].level).toBe('breaking')
+    // Stop's description edit stays in its entry, in the Breaking section, named documentation-only.
+    expect(sections[0].concepts[0].statements.map((s) => [s.attribute, s.text, s.level])).toEqual([
+      ['wheelchairBoarding', 'removed', null],
       [null, 'deprecated; replaced by Platform', 'deprecating'],
       ['wheelchair_boarding', 'added', 'additive'],
+      [null, 'description changed', 'cosmetic'],
     ])
-    expect(cosmetic[0].statements.map((s) => [s.attribute, s.text])).toEqual([[null, 'description changed']])
+    expect(sections.map((s) => [s.level, s.concepts.map((c) => c.label)])).toEqual([
+      ['breaking', ['Stop', 'Trip']],
+      ['cosmetic', ['HAS_TRIP']],
+    ])
   })
 
   it('says how each kind of change landed', () => {
@@ -564,7 +608,7 @@ describe('summarizeChanges', () => {
       patterns: [['Agency', 'OPERATES', 'Route']],
       constraints: [{ type: 'UNIQUENESS', node_type: 'Route', property_name: 'id' }],
     }
-    const { concepts } = summarizeChanges(
+    const { sections } = summarizeChanges(
       compareOntologies(base, target, {
         classification: 'breaking',
         changes: [
@@ -578,7 +622,7 @@ describe('summarizeChanges', () => {
       }),
     )
     const said = Object.fromEntries(
-      concepts.map((c) => [c.label, c.statements.map((s) => (s.attribute ? `${s.attribute}: ${s.text}` : s.text))]),
+      sections.flatMap((s) => s.concepts).map((c) => [c.label, c.statements.map((s) => (s.attribute ? `${s.attribute}: ${s.text}` : s.text))]),
     )
 
     expect(said).toEqual({
@@ -593,7 +637,7 @@ describe('summarizeChanges', () => {
   it('says when nothing changed', () => {
     const summary = summarizeChanges(compareOntologies(TRANSIT_V2, TRANSIT_V2, { classification: null, changes: [] }))
 
-    expect(summary).toEqual({ counts: [], concepts: [], cosmetic: [] })
+    expect(summary).toEqual({ counts: [], sections: [] })
   })
 })
 
@@ -610,14 +654,14 @@ describe("summarizeChanges: the Diff's wording", () => {
       ),
     }
 
-    const { counts, concepts } = summarizeChanges(compareOntologies(TRANSIT_V2, target, { classification: 'breaking', changes }))
+    const { counts, sections } = summarizeChanges(compareOntologies(TRANSIT_V2, target, { classification: 'breaking', changes }))
 
     expect(counts).toEqual([
       { level: 'breaking', count: 3 },
       { level: 'additive', count: 2 },
       { level: 'cosmetic', count: 1 },
     ])
-    expect(concepts.find((c) => c.label === 'Route')?.statements.map((s) => [s.attribute, s.text])).toEqual([
+    expect(sections[0].concepts.find((c) => c.label === 'Route')?.statements.map((s) => [s.attribute, s.text])).toEqual([
       ['name', 'added, required'],
     ])
   })
