@@ -34,7 +34,7 @@ export interface StetiqApp {
 }
 
 interface Options {
-  /** Name of a scenario function in seed.py. */
+  /** Name of a scenario function in the `seeds/` package (`e2e/seeds/`, registry in its `__init__.py`). */
   seed: string
   /** The local actor `stetiq ui` records actions with ($STETIQ_ACTOR). */
   actor: string
