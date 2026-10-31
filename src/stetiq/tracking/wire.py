@@ -225,6 +225,7 @@ ERROR_STATUS[errors.RunNotActiveError] = 409
 
 
 ERROR_STATUS[errors.InvalidEvolutionModeError] = 422
+ERROR_STATUS[errors.ConflictingArgumentsError] = 422
 
 
 def run_to_json(run: ConstructionRun) -> dict[str, Any]:
@@ -372,8 +373,9 @@ def drift_thresholds_to_json(t: DriftThresholds) -> dict[str, Any]:
     return t.to_dict()
 
 
-def drift_thresholds_from_json(d: dict[str, Any] | None) -> DriftThresholds:
-    return DriftThresholds() if d is None else DriftThresholds.from_dict(d)
+def drift_thresholds_from_json(d: dict[str, Any] | None) -> DriftThresholds | None:
+    """None means "not given": the tracking service applies the default."""
+    return None if d is None else DriftThresholds.from_dict(d)
 
 
 def drift_event_to_json(e: DriftEvent) -> dict[str, Any]:
@@ -400,7 +402,7 @@ def drift_event_from_json(d: dict[str, Any]) -> DriftEvent:
         ontology_version=d["ontology_version"],
         detected_at=datetime.fromisoformat(d["detected_at"]),
         findings=tuple(DriftFinding.from_dict(f) for f in d["findings"]),
-        thresholds=drift_thresholds_from_json(d.get("thresholds")),
+        thresholds=DriftThresholds.from_dict(d.get("thresholds") or {}),
     )
 
 

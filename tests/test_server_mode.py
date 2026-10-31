@@ -202,3 +202,32 @@ def test_server_revalidates_ontologies_it_receives(tmp_path):
     assert response.json()["error"]["type"] == "OntologyValidationError"
     assert "patterns[0]" in response.json()["error"]["message"]
     assert missing.status_code == 404
+
+
+def test_the_server_accepts_bodies_from_sdks_that_resolve_defaults_themselves(tmp_path):
+    """Older SDKs send a resolved version to start a run and always send Drift thresholds;
+    newer ones leave both to the tracking service."""
+    database_url = f"sqlite:///{tmp_path / 'server.db'}"
+    _, token = TokenRegistry(database_url).issue("admin", {"*": "edit"})
+    kg = "/api/v1/knowledge-graphs/support"
+    observed = {
+        "scope": {"database": "neo4j"},
+        "observed_schema": {"node_types": [], "relationship_types": [], "patterns": []},
+    }
+    with TestClient(create_app(database_url), headers={"Authorization": f"Bearer {token}"}) as http:
+        http.post(
+            "/api/v1/knowledge-graphs",
+            json={"name": "support", "declared_ontology": {"node_types": [{"label": "Customer"}]}},
+        )
+        http.put(kg + "/graph-source", json={"scope": {"database": "neo4j"}})
+        older_run = http.post(kg + "/runs", json={"ontology_version": 1})
+        newer_run = http.post(kg + "/runs", json={})
+        older_observation = http.post(
+            kg + "/observations",
+            json={**observed, "drift_thresholds": {"max_count_drop": 0.1}},
+        )
+        newer_observation = http.post(kg + "/observations", json=observed)
+
+    assert [r.status_code for r in (older_run, newer_run)] == [201, 201]
+    assert [r.json()["ontology_version"] for r in (older_run, newer_run)] == [1, 1]
+    assert [r.status_code for r in (older_observation, newer_observation)] == [201, 201]

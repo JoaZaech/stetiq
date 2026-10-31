@@ -6,6 +6,7 @@ from stetiq.drift import DriftFinding, DriftKind, DriftThresholds
 from stetiq.entry_point import EntryPoint, EntryPointError, InvalidEntryPointError
 from stetiq.errors import (
     AuthenticationError,
+    ConflictingArgumentsError,
     EvaluatorError,
     GateConfigError,
     GraphSourceNotBoundError,
@@ -17,6 +18,7 @@ from stetiq.errors import (
     KnowledgeGraphAlreadyExistsError,
     MissingDeclaredOntologyError,
     NotFoundError,
+    NoUseCaseError,
     OntologyValidationError,
     PermissionDeniedError,
     RunNotActiveError,
@@ -60,6 +62,7 @@ __all__ = [
     "Classification",
     "Client",
     "CompetencyQuestion",
+    "ConflictingArgumentsError",
     "Conformance",
     "ConstructionRun",
     "ConstructionRunEvaluator",
@@ -95,6 +98,7 @@ __all__ = [
     "Mismatch",
     "MismatchKind",
     "MissingDeclaredOntologyError",
+    "NoUseCaseError",
     "NotFoundError",
     "Observation",
     "ObservationOutcome",

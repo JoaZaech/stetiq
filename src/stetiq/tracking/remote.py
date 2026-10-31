@@ -133,8 +133,14 @@ class RemoteTrackingService:
     def _run_path(run_id: str) -> str:
         return f"/runs/{quote(run_id, safe='')}"
 
-    def start_run(self, knowledge_graph: str, ontology_version: int) -> ConstructionRun:
-        body = {"ontology_version": ontology_version}
+    def start_run(
+        self,
+        knowledge_graph: str,
+        ontology_version: int | None = None,
+        *,
+        alias: str | None = None,
+    ) -> ConstructionRun:
+        body = {"ontology_version": ontology_version, "alias": alias}
         return wire.run_from_json(
             self._call("POST", self._kg_path(knowledge_graph) + "/runs", body)
         )
@@ -181,7 +187,9 @@ class RemoteTrackingService:
         body = {
             "scope": wire.graph_source_scope_to_json(scope),
             "observed_schema": wire.observed_schema_to_json(schema),
-            "drift_thresholds": wire.drift_thresholds_to_json(thresholds or DriftThresholds()),
+            "drift_thresholds": None
+            if thresholds is None
+            else wire.drift_thresholds_to_json(thresholds),
         }
         data = self._call("POST", self._kg_path(knowledge_graph) + "/observations", body)
         return wire.observation_outcome_from_json(data)
@@ -196,7 +204,10 @@ class RemoteTrackingService:
         return f"{self._kg_path(knowledge_graph)}/aliases/{quote(name, safe='')}"
 
     def set_alias(self, knowledge_graph: str, name: str, version: int, actor: str) -> Alias:
-        validate_alias_name(name)  # a name like "a/b" would not even reach its route
+        # Kept on the client side on purpose: an empty name or one with "/" never reaches
+        # the route (the server answers a bare 405/404, even for "%2F"), so only here can it
+        # become the InvalidAliasNameError the service raises.
+        validate_alias_name(name)
         body = {"version": version, "actor": actor}
         return wire.alias_from_json(
             self._call("PUT", self._alias_path(knowledge_graph, name), body)
@@ -218,6 +229,10 @@ class RemoteTrackingService:
 
     def get_contract_alias(self, knowledge_graph: str) -> str:
         return self._call("GET", self._kg_path(knowledge_graph) + "/contract-alias")["alias"]
+
+    def get_contract_version(self, knowledge_graph: str) -> OntologyVersion:
+        data = self._call("GET", self._kg_path(knowledge_graph) + "/contract-version")
+        return wire.ontology_version_from_json(data)
 
     def _subject_path(
         self, knowledge_graph: str, subject_kind: SubjectKind, subject_id: str
@@ -282,6 +297,9 @@ class RemoteTrackingService:
     # --- Use Cases ------------------------------------------------------------------
 
     def register_use_case(self, knowledge_graph: str, use_case: UseCase) -> UseCaseVersion:
+        # Format conversion, not a second rule: `to_dict` and JSON encoding assume a valid
+        # model (a set answer or a None id would raise TypeError), so a model built by
+        # hand gets the same UseCaseValidationError the service would raise.
         body = {"use_case": use_case_format.to_dict(use_case_format.check_use_case(use_case))}
         data = self._call("POST", self._kg_path(knowledge_graph) + "/use-case-versions", body)
         return wire.use_case_version_from_json(data)
@@ -290,8 +308,11 @@ class RemoteTrackingService:
         data = self._call("GET", self._kg_path(knowledge_graph) + "/use-case-versions")
         return [wire.use_case_version_from_json(v) for v in data]
 
-    def get_use_case_version(self, knowledge_graph: str, number: int) -> UseCaseVersion:
-        data = self._call("GET", f"{self._kg_path(knowledge_graph)}/use-case-versions/{number}")
+    def get_use_case_version(
+        self, knowledge_graph: str, number: int | None = None
+    ) -> UseCaseVersion:
+        which = "latest" if number is None else number
+        data = self._call("GET", f"{self._kg_path(knowledge_graph)}/use-case-versions/{which}")
         return wire.use_case_version_from_json(data)
 
     # --- Gates --------------------------------------------------------------------------

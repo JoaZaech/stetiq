@@ -406,3 +406,18 @@ def test_malformed_gates_are_rejected_naming_the_problem(client, support_kg, con
 
     assert message in str(raised.value)
     assert client.list_gate_results(support_kg) == []
+
+
+def test_gates_are_evaluated_for_a_version_or_a_run_not_both(client, support_kg):
+    with pytest.raises(stetiq.GateConfigError) as raised:
+        client.evaluate_gates(support_kg, NO_BREAKING, version=2, run="any-run")
+
+    assert str(raised.value) == "Gates are evaluated for a version or a run, not both"
+    assert client.list_gate_results(support_kg) == []
+
+
+def test_a_config_without_gates_is_refused(client, support_kg):
+    with pytest.raises(stetiq.GateConfigError) as raised:
+        client.evaluate_gates(support_kg, "gates: []")
+
+    assert str(raised.value) == "No Gates to evaluate"
