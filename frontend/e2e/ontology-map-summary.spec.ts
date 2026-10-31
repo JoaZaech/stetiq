@@ -7,21 +7,46 @@ const ontologyMap = (page: Page) => page.getByRole('application', { name: 'Ontol
 const summaryOf = (page: Page) => page.getByRole('complementary', { name: 'Change summary' })
 const entry = (summary: Locator, label: string) => summary.getByRole('listitem', { name: label, exact: true })
 
+/** The lines `el`'s text is laid out on. */
+const linesOf = (el: Locator) =>
+  el.evaluate((root) => {
+    const lines: string[] = []
+    let top: number | null = null
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const text = node.textContent ?? ''
+      for (let i = 0; i < text.length; i++) {
+        const range = document.createRange()
+        range.setStart(node, i)
+        range.setEnd(node, i + 1)
+        const at = Math.round(range.getBoundingClientRect().top)
+        if (at !== top) lines.push('')
+        top = at
+        lines[lines.length - 1] += text[i]
+      }
+    }
+    return lines
+  })
+
 /** A class's drawn shape: the node's own box is transparent, its shape is its first child. */
 const shape = (map: Locator, label: string) =>
   map.getByRole('group', { name: label, exact: true }).locator(':scope > *').first()
 
-test('a comparison sums up its changes beside the Map, per level and per Concept', async ({ page }) => {
+test('a comparison sums up its changes beside the Map, by level, then per Concept', async ({ page }) => {
   await page.goto('/ui/kg/city-transit/versions/3/changes')
   const summary = summaryOf(page)
 
   await expect(summary.getByRole('status')).toHaveText('2 breaking · 2 additive · 1 documentation-only')
-  const entries = summary.getByRole('list', { name: 'Changed Concepts' }).getByRole('listitem')
-  // Most severe first: Stop and Trip each lost an attribute.
+  // A section per level with changed Concepts, the most severe first, each with its count of
+  // Concepts. Stop and Trip each lost an attribute, so their additions are in Breaking too.
+  await expect(summary.getByRole('heading', { level: 4 })).toHaveText(['Breaking 2', 'Documentation-only 1'])
+  const entries = summary.getByRole('region', { name: 'Breaking' }).getByRole('listitem')
   await expect
     .poll(() => entries.evaluateAll((items) => items.map((i) => i.getAttribute('aria-label'))))
     .toEqual(['Stop', 'Trip'])
-  await expect(entry(summary, 'Stop')).toContainText('attribute wheelchairBoarding removed (breaking)')
+  // A statement names its level only when it differs from its section's.
+  await expect(entry(summary, 'Stop')).toContainText('attribute wheelchairBoarding removed')
+  await expect(entry(summary, 'Stop')).not.toContainText('(breaking)')
   await expect(entry(summary, 'Stop')).toContainText('attribute wheelchair_boarding added (additive)')
 
   // The Compare page has it too.
@@ -36,12 +61,13 @@ test('documentation-only changes collapse to one line in the summary, and to a n
   const map = ontologyMap(page)
   const summary = summaryOf(page)
 
-  // Only HAS_TRIP's description changed: one collapsed line, which expands to its entry.
-  const line = summary.getByRole('button', { name: '1 documentation-only change' })
-  await expect(line).toHaveAttribute('aria-expanded', 'false')
+  // Only HAS_TRIP's description changed: a collapsed section, which expands to its entry.
+  const heading = summary.getByRole('button', { name: 'Documentation-only 1' })
+  await expect(heading).toHaveAttribute('aria-expanded', 'false')
   await expect(entry(summary, 'HAS_TRIP')).toBeHidden()
-  await line.click()
-  await expect(entry(summary, 'HAS_TRIP')).toContainText('description changed (documentation-only)')
+  await heading.click()
+  await expect(entry(summary, 'HAS_TRIP')).toContainText('description changed')
+  await expect(entry(summary, 'HAS_TRIP')).not.toContainText('(documentation-only)')
 
   // On the Map its link has no severity colour, only a dot: the v2 → v3 links are not all green.
   const hasTrip = map
@@ -60,6 +86,20 @@ test('documentation-only changes collapse to one line in the summary, and to a n
   await expect(map.locator('[data-link-label]', { hasText: 'HAS_TRIP' }).locator('[data-documentation-dot]')).toHaveCount(1)
 })
 
+test("a Concept's name has its own line in the summary, and wraps only at `_`, never mid-word", async ({ page }) => {
+  await page.goto('/ui/kg/city-transit/versions/3/changes')
+  const summary = summaryOf(page)
+  await summary.getByRole('button', { name: 'Documentation-only 1' }).click()
+  const name = (label: string) => entry(summary, label).locator('[data-concept-name]')
+
+  for (const label of ['Stop', 'Trip', 'HAS_TRIP']) expect(await linesOf(name(label))).toEqual([label])
+
+  // Too narrow for HAS_TRIP on one line, it wraps after its `_`.
+  await summary.evaluate((el: HTMLElement) => (el.style.width = '7rem'))
+  expect(await linesOf(name('HAS_TRIP'))).toEqual(['HAS_', 'TRIP'])
+  expect(await linesOf(name('Stop'))).toEqual(['Stop'])
+})
+
 test('a documentation-only change shows its description before and after, the changed words marked', async ({
   page,
 }) => {
@@ -67,7 +107,7 @@ test('a documentation-only change shows its description before and after, the ch
   const summary = summaryOf(page)
 
   // Its entry previews the new description.
-  await summary.getByRole('button', { name: '1 documentation-only change' }).click()
+  await summary.getByRole('button', { name: 'Documentation-only 1' }).click()
   await expect(entry(summary, 'HAS_TRIP')).toContainText('The scheduled trips of a route')
 
   // Selected on the Map, its details show both descriptions, removed and added words marked.
