@@ -1,8 +1,11 @@
 """Consumer impact: which Consumers, Tasks and Competency Questions an Ontology Diff hits."""
 
 import pytest
+from fastapi.testclient import TestClient
 
-from stetiq import NoUseCaseError, UseCaseImpact
+from stetiq import Client, NoUseCaseError, UseCaseImpact
+from stetiq.auth import TokenRegistry
+from stetiq.server import create_app
 
 KG = "support"
 
@@ -214,3 +217,105 @@ def test_the_impact_is_judged_against_the_use_case_version_asked_for(impact, cli
     assert [c.id for c in client.consumer_impact(KG, 1, 2, use_case_version=1).consumers] == [
         "workload-dashboard"
     ]
+
+
+# --- The route the web UI reads (raw HTTP) --------------------------------------------------
+
+
+@pytest.fixture
+def database_url(tmp_path):
+    return f"sqlite:///{tmp_path / 'server.db'}"
+
+
+@pytest.fixture
+def http(database_url):
+    with TestClient(create_app(database_url)) as c:
+        yield c
+
+
+def reader(database_url, grants):
+    return {"Authorization": f"Bearer {TokenRegistry(database_url).issue('ada', grants)[1]}"}
+
+
+def get_impact(http, headers, **params):
+    return http.get(
+        f"/api/v1/knowledge-graphs/{KG}/consumer-impact", params=params, headers=headers
+    )
+
+
+def test_the_route_returns_the_impact_for_explicit_versions(http, database_url):
+    sdk = Client(database_url)
+    sdk.create_knowledge_graph(KG, ontology=BASE)
+    sdk.register_use_case(KG, USE_CASE)
+    sdk.register_ontology(KG, BASE.replace("  - Agent\n", "  - {label: Agent, deprecated: true}\n"))
+
+    r = get_impact(http, reader(database_url, {KG: "read"}), base=1, target=2)
+
+    assert r.status_code == 200, r.text
+    deprecated_agent = {
+        "concept": "Agent",
+        "concept_kind": "node_type",
+        "kind": "deprecated",
+        "classification": "deprecating",
+        "detail": "deprecated",
+    }
+    assert r.json() == {
+        "consumers": [
+            {
+                "id": "workload-dashboard",
+                "name": "Workload dashboard",
+                "kind": None,
+                "level": "will_be_affected",
+                "tasks": [
+                    {
+                        "id": "workload-chart",
+                        "description": "Chart each agent's workload",
+                        "level": "will_be_affected",
+                        "questions": [
+                            {
+                                "id": "handlers",
+                                "question": "Who handles which ticket?",
+                                "level": "will_be_affected",
+                                "changes": [deprecated_agent],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+        "no_consumer": [
+            {
+                "id": "agent-names",
+                "question": "What are our agents called?",
+                "level": "will_be_affected",
+                "changes": [deprecated_agent],
+            },
+            {
+                "id": "loyal-customers",
+                "question": "Which customers are the most loyal?",
+                "level": "unknown",
+                "changes": [],
+            },
+        ],
+    }
+    pinned = get_impact(
+        http, reader(database_url, {KG: "read"}), base=1, target=2, use_case_version=1
+    )
+    assert pinned.json() == r.json()
+
+
+def test_the_route_says_when_there_is_no_use_case(http, database_url):
+    Client(database_url).create_knowledge_graph(KG, ontology=BASE)
+
+    r = get_impact(http, reader(database_url, {KG: "read"}), base=1, target=1)
+
+    assert r.status_code == 404
+    assert r.json()["error"]["type"] == "NoUseCaseError"
+
+
+def test_the_route_needs_read_permission_on_the_knowledge_graph(http, database_url):
+    Client(database_url).create_knowledge_graph(KG, ontology=BASE)
+
+    r = get_impact(http, reader(database_url, {"billing": "read"}), base=1, target=1)
+
+    assert r.status_code == 403
