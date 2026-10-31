@@ -6,7 +6,7 @@ from typing import Any
 
 import stetiq
 
-from ._shared import SUPPORT_USE_CASE, Scenario
+from ._shared import SUPPORT_USE_CASE, Scenario, issue_token
 from .ontology_versions import support_lineage
 
 SUPPORT_USE_CASE_V2 = (
@@ -75,4 +75,14 @@ def support_use_case_consumers(client: stetiq.Client) -> dict[str, Any]:
     return seeded
 
 
-SCENARIOS: tuple[Scenario, ...] = (support_use_case_versions, support_use_case_consumers)
+def support_use_case_consumers_reader(client: stetiq.Client) -> dict[str, Any]:
+    """`support_use_case_consumers`, with a token for grace that can only read `support`."""
+    seeded = support_use_case_consumers(client)
+    return {**seeded, "grace": issue_token(client, "grace", {"support": "read"})}
+
+
+SCENARIOS: tuple[Scenario, ...] = (
+    support_use_case_versions,
+    support_use_case_consumers,
+    support_use_case_consumers_reader,
+)
