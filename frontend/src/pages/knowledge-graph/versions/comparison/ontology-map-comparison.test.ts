@@ -4,6 +4,7 @@ import type { Ontology } from '@/api/ontology-versions'
 import {
   changesOf,
   compareOntologies,
+  descriptionChangeOf,
   selectionOf,
   summarizeChanges,
   summaryConceptOf,
@@ -302,6 +303,39 @@ describe('cosmetic changes', () => {
     })
 
     expect(changes.classes.Stop).toEqual({ kind: 'modified', severity: 'additive' })
+  })
+
+  it("gives a cosmetic change's description in both versions, empty where there is none", () => {
+    const comparison = compareOntologies(base, target, diff)
+    const [stop, headsign, hasTrip] = diff.changes
+
+    expect(descriptionChangeOf(comparison, stop)).toEqual({ before: '', after: 'Where riders board' })
+    expect(descriptionChangeOf(comparison, headsign)).toEqual({ before: '', after: 'The sign on the vehicle' })
+    // From the other side: the base's description is the one before.
+    expect(descriptionChangeOf(compareOntologies(target, base, diff), hasTrip)).toEqual({
+      before: 'The scheduled trips of a route',
+      after: '',
+    })
+  })
+
+  it('gives no descriptions for a change that is not cosmetic', () => {
+    const comparison = compareOntologies(base, target, diff)
+
+    expect(descriptionChangeOf(comparison, endpointChange(['Route', 'SERVES', 'Stop'], 'additive'))).toBeNull()
+  })
+
+  it('reads a description from the Concept of the kind the change states, when a class and a relation share a label', () => {
+    const shared = (description: string): Ontology => ({
+      node_types: [{ label: 'Stop', description: `class ${description}` }],
+      relationship_types: [{ label: 'Stop', description: `relation ${description}` }],
+      patterns: [['Stop', 'Stop', 'Stop']],
+    })
+    const comparison = compareOntologies(shared('before'), shared('after'), { classification: 'cosmetic', changes: [] })
+
+    expect(descriptionChangeOf(comparison, conceptDescribed('relationship_type', 'Stop'))).toEqual({
+      before: 'relation before',
+      after: 'relation after',
+    })
   })
 })
 

@@ -239,6 +239,32 @@ export function changesOf(comparison: OntologyComparison, selection: MapSelectio
   return []
 }
 
+/** A description in the base version and in the target, each empty where there is none. */
+export interface DescriptionChange {
+  before: string
+  after: string
+}
+
+/**
+ * What a cosmetic (documentation-only) change changed: the description of its class,
+ * relation or attribute in the two Ontologies compared. Null for any other change.
+ */
+export function descriptionChangeOf(
+  { base, target }: Pick<OntologyComparison, 'base' | 'target'>,
+  change: OntologyChange,
+): DescriptionChange | null {
+  if (!cosmetic(change)) return null
+  const describe = (ontology: Ontology) => {
+    const concepts = (kind: OwnerKind) => (kind === 'node_type' ? ontology.node_types : ontology.relationship_types)
+    if (change.concept_kind !== 'property') {
+      return concepts(change.concept_kind).find((c) => c.label === change.concept)?.description ?? ''
+    }
+    const owner = concepts(change.owner_kind).find((c) => c.label === change.owner)
+    return owner?.properties?.find((p) => p.name === change.attribute)?.description ?? ''
+  }
+  return { before: describe(base), after: describe(target) }
+}
+
 /** Whether a comparison's link changed in any way, cosmetically included. */
 const linkChanged = (comparison: OntologyComparison, link: PatternLink) =>
   comparison.changes.links[link.id]?.kind !== 'unchanged'
