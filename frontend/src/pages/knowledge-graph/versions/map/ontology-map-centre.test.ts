@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { ontologyMap } from './ontology-map'
-import { centreOf, locatedSelection } from './ontology-map-centre'
-import { ONTOLOGY } from './ontology-map.fixtures'
+import { centreOf, firstFramed, locatedSelection } from './ontology-map-centre'
+import { changedOf } from './ontology-map-focus'
+import { ONTOLOGY, TRANSIT } from './ontology-map.fixtures'
 
 // Classes are 160 × 40 unless sized otherwise.
 const map = ontologyMap(ONTOLOGY)
@@ -45,5 +46,16 @@ describe('locatedSelection', () => {
       .toBeNull()
     expect(locatedSelection(null, { kind: 'class', label: 'Ticket' }, { kind: 'class', label: 'Ticket' })).toBeNull()
     expect(locatedSelection('class:Ticket', null, null)).toBeNull()
+  })
+})
+
+describe('firstFramed', () => {
+  it("frames a comparison's changed classes and the classes of its changed links", () => {
+    // Trip and Stop broke; HAS_TRIP, documentation-only, brings in Route. Agency did not change.
+    expect(firstFramed(TRANSIT.map, changedOf(TRANSIT))).toEqual(['Route', 'Stop', 'Trip'])
+  })
+
+  it('frames the whole Map when nothing changed', () => {
+    expect(firstFramed(map, { classes: new Set(), links: new Set() })).toBeNull()
   })
 })

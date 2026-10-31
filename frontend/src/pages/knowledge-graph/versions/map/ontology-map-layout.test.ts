@@ -3,7 +3,7 @@ import type { Ontology } from '@/api/ontology-versions'
 import { ontologyMap } from './ontology-map'
 import { layoutOntologyMap, type Point } from './ontology-map-layout'
 import { linkShape, type Box } from './ontology-map-links'
-import { NODE_SIZE, type Size } from './ontology-map-sizes'
+import { classSizes, NODE_SIZE, type Size } from './ontology-map-sizes'
 import { HIERARCHY, ONTOLOGY, PARTIES } from './ontology-map.fixtures'
 
 describe('layoutOntologyMap', () => {
@@ -47,10 +47,12 @@ describe('layoutOntologyMap', () => {
     ['HIERARCHY', HIERARCHY],
     ['PARTIES', PARTIES],
     ['LONG_LABELS', LONG_LABELS],
+    ['LONG_NAMES', LONG_NAMES],
   ])('leaves room for every link label clear of every class, in %s', async (_, ontology) => {
     const map = ontologyMap(ontology)
-    const positions = await layoutOntologyMap(map)
-    const node = (label: string): Box => ({ ...positions[label], ...NODE_SIZE })
+    const sizes = classSizes(map.nodes.map((n) => n.label))
+    const positions = await layoutOntologyMap(map, sizes)
+    const node = (label: string): Box => ({ ...positions[label], ...sizes[label] })
     const overlap = (a: Box, b: Box) =>
       a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
 
@@ -74,6 +76,26 @@ describe('layoutOntologyMap', () => {
     expect(labels.flatMap((a) => labels.filter((b) => a < b && overlap(a, b)))).toEqual([])
   })
 
+  it.each([
+    ['an Ontology of 100 classes', generatedOntology(100), ['Class000', 'Class001', 'Class050']],
+    ['long names and unlinked classes', LONG_NAMES, ['Station', 'Platform']],
+  ])('keeps every class apart from every other, sized to its name, some expanded, in %s', async (_, ontology, expanded) => {
+    const map = ontologyMap(ontology)
+    const labels = map.nodes.map((n) => n.label)
+    const sizes: Record<string, Size> = {
+      ...classSizes(labels),
+      ...Object.fromEntries(expanded.map((label) => [label, { width: 320, height: 200 }])),
+    }
+    const positions = await layoutOntologyMap(map, sizes)
+    const box = (label: string) => ({ ...positions[label], ...sizes[label] })
+    const overlap = (a: string, b: string) => {
+      const [p, q] = [box(a), box(b)]
+      return p.x < q.x + q.width && q.x < p.x + p.width && p.y < q.y + q.height && q.y < p.y + p.height
+    }
+
+    expect(labels.flatMap((a) => labels.filter((b) => a < b && overlap(a, b)))).toEqual([])
+  })
+
   it('keeps every class in its place relative to the others when one is larger', async () => {
     const map = ontologyMap(HIERARCHY)
     const centres = (positions: Record<string, Point>, sizes: Record<string, Size> = {}) =>
@@ -91,6 +113,26 @@ describe('layoutOntologyMap', () => {
 
     expect(order(larger, 'x')).toEqual(order(plain, 'x'))
     expect(order(larger, 'y')).toEqual(order(plain, 'y'))
+  })
+
+  it('keeps linked classes far from a larger class as far apart as they were', async () => {
+    const map = ontologyMap(generatedOntology(40))
+    const grown: Record<string, Size> = { Class000: { width: 320, height: 200 } }
+    const centres = (positions: Record<string, Point>, sizes: Record<string, Size> = {}) => (label: string) => {
+      const { width, height } = sizes[label] ?? NODE_SIZE
+      return { x: positions[label].x + width / 2, y: positions[label].y + height / 2 }
+    }
+    const plain = centres(await layoutOntologyMap(map))
+    const larger = centres(await layoutOntologyMap(map, grown), grown)
+    // Classes ten or more steps round the ring from Class000, which only it grows.
+    const far = (label: string) => Math.abs(Number(label.slice(5)) - 20) <= 10
+    const length = (centre: (label: string) => Point, l: { source: string; target: string }) => {
+      const [p, q] = [centre(l.source), centre(l.target)]
+      return Math.round(Math.hypot(p.x - q.x, p.y - q.y))
+    }
+    const farLinks = map.links.filter((l) => far(l.source) && far(l.target))
+
+    expect(farLinks.map((l) => length(larger, l))).toEqual(farLinks.map((l) => length(plain, l)))
   })
 
   it.each([
@@ -174,6 +216,26 @@ const LONG_LABELS: Ontology = {
     ['Ticket', 'ESCALATED_BY_CUSTOMER', 'Customer'],
     ['Ticket', 'IS_DUPLICATE_OF', 'Ticket'],
     ['Ticket', 'REFERS_TO_PRODUCT', 'Product'],
+  ],
+}
+
+/** Class names far wider than the node size, linked by long relations, and two classes with no links. */
+const LONG_NAMES: Ontology = {
+  node_types: [
+    'AccessibleBoardingPlatformEntrance',
+    'Platform',
+    'ScheduledServiceCalendarException',
+    'Station',
+    'StationWheelchairAccessibilityAssessment',
+    'TransitAgencyFareAttributeRule',
+  ].map((label) => ({ label })),
+  relationship_types: ['ASSESSES', 'HAS_WHEELCHAIR_ACCESSIBLE_ENTRANCE', 'SERVES_ON_SCHEDULED_SERVICE_DAYS'].map((label) => ({ label })),
+  patterns: [
+    ['AccessibleBoardingPlatformEntrance', 'SERVES_ON_SCHEDULED_SERVICE_DAYS', 'ScheduledServiceCalendarException'],
+    ['StationWheelchairAccessibilityAssessment', 'ASSESSES', 'AccessibleBoardingPlatformEntrance'],
+    ['TransitAgencyFareAttributeRule', 'HAS_WHEELCHAIR_ACCESSIBLE_ENTRANCE', 'AccessibleBoardingPlatformEntrance'],
+    ['TransitAgencyFareAttributeRule', 'ASSESSES', 'ScheduledServiceCalendarException'],
+    ['StationWheelchairAccessibilityAssessment', 'SERVES_ON_SCHEDULED_SERVICE_DAYS', 'TransitAgencyFareAttributeRule'],
   ],
 }
 

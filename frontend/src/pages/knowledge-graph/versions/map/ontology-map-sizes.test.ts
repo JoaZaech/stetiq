@@ -29,28 +29,48 @@ describe('attributeLine', () => {
 })
 
 describe('classNodeSize', () => {
-  it('keeps a class without changed attributes at the node size', () => {
-    expect(classNodeSize()).toEqual(NODE_SIZE)
-    expect(classNodeSize([])).toEqual(NODE_SIZE)
+  it('keeps a class with a short name and no changed attributes at the node size', () => {
+    expect(classNodeSize('Stop')).toEqual(NODE_SIZE)
+    expect(classNodeSize('Stop', [])).toEqual(NODE_SIZE)
+  })
+
+  it('widens a class to at least its whole name, at one height', () => {
+    // 36 monospace characters at 14px, 0.62 of the font size each.
+    const name = 'WheelchairAccessibleBoardingPlatform'
+    const size = classNodeSize(name)
+
+    expect(size.width).toBeGreaterThanOrEqual(36 * 14 * 0.62)
+    expect(size.height).toBe(NODE_SIZE.height)
   })
 
   it('grows a class one line taller per changed attribute', () => {
-    const [one, two] = [classNodeSize([removed]), classNodeSize([removed, added])]
+    const [one, two] = [classNodeSize('Stop', [removed]), classNodeSize('Stop', [removed, added])]
 
     expect(one.height).toBeGreaterThan(NODE_SIZE.height)
     expect(two.height - one.height).toBe(16)
   })
 
   it('widens a class to its longest line, up to a limit past which lines truncate', () => {
-    expect(classNodeSize([{ ...added, name: 'x' }]).width).toBe(NODE_SIZE.width)
-    expect(classNodeSize([{ ...added, name: 'wheelchair_boarding_status' }]).width).toBeGreaterThan(NODE_SIZE.width)
-    expect(classNodeSize([modified]).width).toBe(320)
+    expect(classNodeSize('Stop', [{ ...added, name: 'x' }]).width).toBe(NODE_SIZE.width)
+    expect(classNodeSize('Stop', [{ ...added, name: 'wheelchair_boarding_status' }]).width).toBeGreaterThan(
+      NODE_SIZE.width,
+    )
+    expect(classNodeSize('Stop', [modified]).width).toBe(320)
+  })
+
+  it('never truncates a class’s name for its lines’ limit', () => {
+    const name = 'WheelchairAccessibleBoardingPlatformEntrance'
+
+    expect(classNodeSize(name, [modified]).width).toBe(classNodeSize(name).width)
   })
 })
 
 describe('classSizes', () => {
-  it('sizes only the classes with changed attributes', () => {
-    expect(classSizes({ Stop: [removed, added], Trip: [] })).toEqual({ Stop: classNodeSize([removed, added]) })
-    expect(classSizes()).toEqual({})
+  it('sizes every class, to its name and its changed attributes', () => {
+    expect(classSizes(['Stop', 'Trip'], { Stop: [removed, added], Trip: [] })).toEqual({
+      Stop: classNodeSize('Stop', [removed, added]),
+      Trip: NODE_SIZE,
+    })
+    expect(classSizes(['Stop'])).toEqual({ Stop: NODE_SIZE })
   })
 })

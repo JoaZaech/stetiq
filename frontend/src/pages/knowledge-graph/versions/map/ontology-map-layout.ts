@@ -26,9 +26,11 @@ const elk = new ELK()
  * both classes, even side by side.
  *
  * Classes are laid out as uniform nodes, turned to lie wide (a stress layout has no
- * orientation of its own, and the Map is wider than tall), then spread apart by one factor until no
- * node of its size (`sizes`, by class label, else `NODE_SIZE`) overlaps another. Sizes
- * only spread the Map, so every class keeps its place relative to the others.
+ * orientation of its own, and the Map is wider than tall), then each drawn at its size
+ * (`sizes`, by class label, else `NODE_SIZE`) and moved apart where two overlap, by ELK's
+ * SPOrE overlap removal. Only colliding classes move, outward from each other, so every
+ * class keeps its place relative to the others, and a larger class leaves the far side
+ * of the Map as it was.
  */
 export async function layoutOntologyMap(
   map: OntologyMap,
@@ -73,14 +75,15 @@ export async function layoutOntologyMap(
   const looped = new Set(map.links.filter((l) => l.source === l.target).map((l) => l.source))
   const linked = [...pairs.keys()].map((key) => JSON.parse(key) as [string, string])
   const turned = landscape(laidOut, looped, linked)
-  const nodes = turned.map(({ label, centre }) => ({ label, centre, size: sizes[label] ?? NODE_SIZE }))
-  const spread = spreadApart(nodes)
-  return Object.fromEntries(
-    nodes.map(({ label, centre, size }) => [
-      label,
-      { x: centre.x * spread - size.width / 2, y: centre.y * spread - size.height / 2 },
-    ]),
-  )
+  const apart = await elk.layout({
+    id: 'root',
+    layoutOptions: { 'elk.algorithm': 'sporeOverlap', 'elk.spacing.nodeNode': String(NODE_GAP) },
+    children: turned.map(({ label, centre }) => {
+      const size = sizes[label] ?? NODE_SIZE
+      return { id: label, x: centre.x - size.width / 2, y: centre.y - size.height / 2, ...size }
+    }),
+  })
+  return Object.fromEntries((apart.children ?? []).map((n) => [n.id, { x: n.x ?? 0, y: n.y ?? 0 }]))
 }
 
 /** The four quarter turns about the origin: none, a quarter, a half and three quarters. */
@@ -121,22 +124,4 @@ function landscape<T extends { label: string; centre: Point }>(
   const better = (a: (typeof scored)[number], b: (typeof scored)[number]) =>
     a.inLoopsWay !== b.inLoopsWay ? a.inLoopsWay < b.inLoopsWay : !a.tall && b.tall
   return scored.reduce((best, s) => (better(s, best) ? s : best)).turned
-}
-
-/**
- * The least factor, at least 1, by which to spread `nodes`' centres so that no two of
- * them overlap: a pair is apart once it is apart along either axis.
- */
-function spreadApart(nodes: { centre: Point; size: Size }[]): number {
-  let spread = 1
-  for (const [i, a] of nodes.entries()) {
-    for (const b of nodes.slice(i + 1)) {
-      // Classes the layout puts on one spot no spread can part.
-      if (a.centre.x === b.centre.x && a.centre.y === b.centre.y) continue
-      const along = (axis: 'x' | 'y', extent: 'width' | 'height') =>
-        ((a.size[extent] + b.size[extent]) / 2 + NODE_GAP) / Math.abs(a.centre[axis] - b.centre[axis])
-      spread = Math.max(spread, Math.min(along('x', 'width'), along('y', 'height')))
-    }
-  }
-  return spread
 }

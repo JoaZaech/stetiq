@@ -42,13 +42,14 @@ import {
   type MapChangeKind,
   type OntologyComparison,
 } from '../comparison/ontology-map-comparison'
-import { centreOf } from './ontology-map-centre'
+import { centreOf, FIT_MIN_ZOOM } from './ontology-map-centre'
 import { layoutOntologyMap, type Point } from './ontology-map-layout'
-import { labelShown, linkShape, READABLE_ZOOM, straightPath, type Box } from './ontology-map-links'
+import { labelShown, linkShape, straightPath, type Box } from './ontology-map-links'
 import {
   ATTRIBUTE_LINE_HEIGHT,
   ATTRIBUTE_MARKER,
   attributeLine,
+  CLASS_NAME_FONT_SIZE,
   classSizes,
   MONOSPACE_FONT_SIZE,
   NODE_SIZE,
@@ -90,8 +91,8 @@ const EDGE_TYPES = { pattern: PatternEdgeView, subclass: SubclassEdgeView }
 /** The hollow triangle at the superclass end of a subclass link (see `SubclassArrowhead`). */
 const SUBCLASS_ARROWHEAD = 'ontology-map-subclass-arrowhead'
 
-/** Fit-to-view never zooms out so far that link labels can no longer be read. */
-const FIT_VIEW_OPTIONS = { minZoom: READABLE_ZOOM }
+/** Fit-to-view frames the whole Map, never zooming out so far that class names can no longer be read. */
+const FIT_VIEW_OPTIONS = { minZoom: FIT_MIN_ZOOM }
 
 /** The dash of a removed link: a ghost of where it used to be. */
 const REMOVED_DASH = '6 4'
@@ -223,8 +224,15 @@ export function OntologyMap({ ontology, comparison, query = '' }: OntologyMapPro
     document.addEventListener('keydown', escape)
     return () => document.removeEventListener('keydown', escape)
   }, [])
-  // A comparison's changed classes grow to list their changed attributes.
-  const sizes = useMemo(() => classSizes(comparison?.changes.attributes), [comparison])
+  // Each class grows to fit its name and, in a comparison, to list its changed attributes.
+  const sizes = useMemo(
+    () =>
+      classSizes(
+        map.nodes.map((n) => n.label),
+        comparison?.changes.attributes,
+      ),
+    [map, comparison],
+  )
   // The whole Map is laid out, and filters only hide, so nothing moves when one changes.
   const layout = useQuery({
     queryKey: ['ontology-map-layout', map, sizes],
@@ -281,6 +289,12 @@ export function OntologyMap({ ontology, comparison, query = '' }: OntologyMapPro
     return { nodes, edges: [...subclassEdges, ...patternEdges] }
   }, [layout.data, sizes, shown, classes, links, subclassLinks, comparison])
 
+  // The Map opens on what `fitTo` names (a comparison's changes), else on all of it.
+  const openingFit = useMemo(
+    () => ({ ...FIT_VIEW_OPTIONS, nodes: view.fitTo?.map((id) => ({ id })) }),
+    [view.fitTo],
+  )
+
   const centre = useMemo(
     () => (layout.data ? centreOf(map, layout.data, sizes, view.centreOn) : null),
     [layout.data, sizes, map, view.centreOn],
@@ -315,7 +329,7 @@ export function OntologyMap({ ontology, comparison, query = '' }: OntologyMapPro
         onPaneClick={() => respond({ kind: 'clear' })}
         minZoom={0.2}
         fitView={view.fitView}
-        fitViewOptions={FIT_VIEW_OPTIONS}
+        fitViewOptions={openingFit}
       >
         <Controls showInteractive={false} fitViewOptions={FIT_VIEW_OPTIONS} />
         <Panel position="top-right" className="flex gap-4 rounded-md border bg-card px-3 py-2 text-sm shadow-xs">
@@ -485,6 +499,7 @@ function ClassNodeView({ data }: NodeProps<ClassNode>) {
       data-class
       data-selected={data.selected || undefined}
       data-match={data.match || undefined}
+      data-context={data.context || undefined}
       data-faded={data.faded || undefined}
       data-change={data.change && changeKindLabel(data.change.kind)}
       data-severity={severity ?? undefined}
@@ -498,12 +513,14 @@ function ClassNodeView({ data }: NodeProps<ClassNode>) {
         // Search matches get a ring in the primary colour: diff-* hues are reserved for severity.
         data.match && 'ring-2 ring-primary ring-offset-2 ring-offset-background',
         data.selected && 'border-2 border-foreground',
+        // Changed but out of focus: readable as context, its severity still drawn.
+        data.context && 'opacity-60',
         data.faded && 'opacity-30',
       )}
     >
       <span
-        className={cn('flex max-w-full shrink-0 items-center truncate', data.deprecated && 'line-through')}
-        style={{ height: NODE_SIZE.height - 2 }}
+        className={cn('flex shrink-0 items-center font-mono whitespace-nowrap', data.deprecated && 'line-through')}
+        style={{ height: NODE_SIZE.height - 2, fontSize: CLASS_NAME_FONT_SIZE }}
       >
         {data.label}
         {style.dot && <CosmeticDot className="ml-1.5" />}
@@ -567,7 +584,7 @@ function PatternEdgeView({ id, source, target, data, markerEnd }: EdgeProps<Patt
           stroke,
           strokeWidth: emphasized ? 2 : undefined,
           strokeDasharray: style.dashed ? REMOVED_DASH : undefined,
-          opacity: data.faded ? 0.2 : style.muted ? 0.4 : undefined,
+          opacity: data.faded ? 0.2 : data.context ? 0.6 : style.muted ? 0.4 : undefined,
           cursor: 'pointer',
         }}
       />
@@ -589,6 +606,7 @@ function PatternEdgeView({ id, source, target, data, markerEnd }: EdgeProps<Patt
               className={cn(
                 data.deprecated && 'line-through opacity-50',
                 style.muted && 'opacity-60',
+                data.context && 'opacity-60',
                 data.faded && 'opacity-30',
               )}
             >
