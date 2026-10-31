@@ -153,10 +153,10 @@ How to run each check, and what a green run prints, is in [`docs/agents/running-
 ### Frontend unit
 
 - **Vitest** unit tests sit next to the module they test, as `*.test.ts` (e.g. `src/lib/data-table.test.ts`). They cover framework-free logic; anything that needs a browser goes in *End-to-end*.
-- **`npm run check`** in `frontend/` (`scripts/check.ts`) runs typecheck, lint and the unit tests in one go. Run it rather than the three scripts separately.
+- **Running them:** `npm run check` (`scripts/check.ts`), as in [`running-checks.md`](agents/running-checks.md).
 
 ### End-to-end
 
-- **Playwright** specs live in `frontend/e2e/*.spec.ts` and use the harness in `frontend/e2e/fixtures.ts`. The tests serve the production build, so run `npm run build` first.
+- **Playwright** specs live in `frontend/e2e/*.spec.ts` and use the harness in `frontend/e2e/fixtures.ts`.
 - **Seeds.** A spec picks its data with `test.use({ seed: 'name' })`; `e2e/seed.py` runs that scenario against a local-mode `stetiq.Client` and the test gets its return value as `stetiq.seeded`. Scenarios live in the `frontend/e2e/seeds/` package, one module per feature area, each listing its scenarios in a `SCENARIOS` tuple. A new feature area gets its own module, added to `MODULES` in `seeds/__init__.py`; helpers and Ontologies shared by several modules go in `seeds/_shared.py` (`issue_token` for a `mode: 'server'` test). The package docstring has the full rules.
-- **While building**, run only the specs you touched; run the full suite (`npm run test:e2e`) once before reporting.
+- **Running them:** which specs to run while building and before reporting is in [`running-checks.md`](agents/running-checks.md).
