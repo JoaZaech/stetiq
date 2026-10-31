@@ -64,6 +64,8 @@ from stetiq.tracking.entities import (
     DriftEvent,
     EvaluationResult,
     EvolutionMode,
+    GatePreview,
+    GatePreviewSource,
     GateResult,
     KnowledgeGraph,
     KnowledgeGraphSummary,
@@ -282,6 +284,12 @@ class TrackingService(Protocol):
 
     def list_gate_results(self, knowledge_graph: str) -> list[GateResult]:
         """Every recorded Gate evaluation, oldest first."""
+        ...
+
+    def preview_gates(self, knowledge_graph: str) -> list[GatePreview]:
+        """A Gate Preview for every Construction Run, in run order: the Gate definitions
+        of the latest Gate result about a run (else about any subject) evaluated against
+        each run. Records nothing. Empty if the Knowledge Graph was never gated."""
         ...
 
 
@@ -937,6 +945,32 @@ class LocalTrackingService:
     def list_gate_results(self, knowledge_graph: str) -> list[GateResult]:
         self.get_knowledge_graph(knowledge_graph)
         return self._store.list_gate_results(knowledge_graph)
+
+    def preview_gates(self, knowledge_graph: str) -> list[GatePreview]:
+        with self._store.transaction():
+            results = self.list_gate_results(knowledge_graph)
+            if not results:
+                return []
+            run_results = [r for r in results if r.subject_kind == "construction_run"]
+            source = (run_results or results)[-1]
+            previews = []
+            for run in self._store.list_runs(knowledge_graph):
+                _, _, inputs = self._gate_subject(knowledge_graph, version=None, run=run.id)
+                previews.append(
+                    GatePreview(
+                        knowledge_graph=knowledge_graph,
+                        subject_kind="construction_run",
+                        subject_id=run.id,
+                        ontology_version=inputs.ontology_version,
+                        outcomes=run_gates(source.gates, inputs),
+                        source=GatePreviewSource(
+                            subject_kind=source.subject_kind,
+                            subject_id=source.subject_id,
+                            evaluated_at=source.evaluated_at,
+                        ),
+                    )
+                )
+            return previews
 
     def _latest_gate_verdict(self, knowledge_graph: str, version: int) -> str | None:
         """ "passed"/"failed" for the version's latest Gate result; None if never gated."""
