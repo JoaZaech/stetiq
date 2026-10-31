@@ -118,6 +118,13 @@ class TrackingService(Protocol):
         """Replace the markdown description; a blank one clears it."""
         ...
 
+    def set_knowledge_graph_governance(
+        self, name: str, steward: str | None, authority: str | None
+    ) -> KnowledgeGraph:
+        """Name the Steward and the Authority. None leaves a name as it is; a blank one
+        clears it. The names grant no permission."""
+        ...
+
     def list_knowledge_graphs(self) -> list[KnowledgeGraphSummary]:
         """By name, each with a summary of its state. In server mode, only those the API
         token can read."""
@@ -320,6 +327,18 @@ class LocalTrackingService:
         with self._store.transaction():
             self.get_knowledge_graph(name)
             self._store.set_knowledge_graph_description(name, description or None)
+            return self.get_knowledge_graph(name)
+
+    def set_knowledge_graph_governance(
+        self, name: str, steward: str | None, authority: str | None
+    ) -> KnowledgeGraph:
+        with self._store.transaction():
+            kg = self.get_knowledge_graph(name)
+            self._store.set_knowledge_graph_governance(
+                name,
+                kg.steward if steward is None else steward.strip() or None,
+                kg.authority if authority is None else authority.strip() or None,
+            )
             return self.get_knowledge_graph(name)
 
     def list_knowledge_graphs(self) -> list[KnowledgeGraphSummary]:

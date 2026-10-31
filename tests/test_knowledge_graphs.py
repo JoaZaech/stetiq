@@ -155,3 +155,66 @@ def test_a_database_from_before_descriptions_gains_the_column_on_startup(
     client.set_knowledge_graph_description("support", "Answers support questions.")
 
     assert client.get_knowledge_graph("support").description == "Answers support questions."
+
+
+def test_a_new_knowledge_graph_names_no_steward_or_authority(client, support_ontology):
+    client.create_knowledge_graph("support", ontology=support_ontology)
+
+    kg = client.get_knowledge_graph("support")
+    assert (kg.steward, kg.authority) == (None, None)
+
+
+def test_the_steward_and_authority_are_set_and_read_back(client_factory, support_ontology):
+    client = client_factory()
+    client.create_knowledge_graph("support", ontology=support_ontology)
+
+    updated = client.set_knowledge_graph_governance("support", steward="Ada", authority="Ops board")
+
+    assert (updated.steward, updated.authority) == ("Ada", "Ops board")
+    other = client_factory()
+    kg = other.get_knowledge_graph("support")
+    assert (kg.steward, kg.authority) == ("Ada", "Ops board")
+    [listed] = other.list_knowledge_graphs()
+    assert (listed.knowledge_graph.steward, listed.knowledge_graph.authority) == (
+        "Ada",
+        "Ops board",
+    )
+
+
+def test_an_empty_string_clears_the_steward_and_leaves_the_authority(client, support_ontology):
+    client.create_knowledge_graph("support", ontology=support_ontology)
+    client.set_knowledge_graph_governance("support", steward="Ada", authority="Ops board")
+
+    client.set_knowledge_graph_governance("support", steward="")
+
+    kg = client.get_knowledge_graph("support")
+    assert (kg.steward, kg.authority) == (None, "Ops board")
+
+
+def test_an_empty_string_clears_the_authority_and_leaves_the_steward(client, support_ontology):
+    client.create_knowledge_graph("support", ontology=support_ontology)
+    client.set_knowledge_graph_governance("support", steward="Ada", authority="Ops board")
+
+    client.set_knowledge_graph_governance("support", authority="")
+
+    kg = client.get_knowledge_graph("support")
+    assert (kg.steward, kg.authority) == ("Ada", None)
+
+
+def test_naming_a_steward_on_an_unknown_knowledge_graph_is_rejected(client):
+    with pytest.raises(stetiq.NotFoundError):
+        client.set_knowledge_graph_governance("nope", steward="Ada")
+
+
+def test_a_database_from_before_stewards_gains_the_columns_on_startup(tmp_path, support_ontology):
+    url = f"sqlite:///{tmp_path / 'stetiq.db'}"
+    stetiq.Client(url).create_knowledge_graph("support", ontology=support_ontology)
+    with sqlite3.connect(tmp_path / "stetiq.db") as db:
+        db.execute("ALTER TABLE knowledge_graphs DROP COLUMN steward")
+        db.execute("ALTER TABLE knowledge_graphs DROP COLUMN authority")
+
+    client = stetiq.Client(url)
+    client.set_knowledge_graph_governance("support", steward="Ada", authority="Ops board")
+
+    kg = client.get_knowledge_graph("support")
+    assert (kg.steward, kg.authority) == ("Ada", "Ops board")

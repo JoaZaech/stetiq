@@ -66,7 +66,13 @@ USE_CASE = parse_use_case_dict(
 SCOPE = GraphSourceScope(database="kgs", label="KG_support", namespace="support")
 SCHEMA = ObservedSchema(node_types=(ObservedNodeType("Customer", 3, ()),), relationship_types=())
 DETAIL = Detail(item="Customer", message="isolated", metric="isolated", data={"missing": ["x"]})
-KNOWLEDGE_GRAPH = KnowledgeGraph(name="support", created_at=AT, description="Support tickets")
+KNOWLEDGE_GRAPH = KnowledgeGraph(
+    name="support",
+    created_at=AT,
+    description="Support tickets",
+    steward="Ada",
+    authority="Ops board",
+)
 OBSERVATION = Observation(
     id="obs-1",
     knowledge_graph="support",

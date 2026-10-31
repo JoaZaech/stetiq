@@ -37,6 +37,10 @@ class Store(Protocol):
 
     def set_knowledge_graph_description(self, name: str, description: str | None) -> None: ...
 
+    def set_knowledge_graph_governance(
+        self, name: str, steward: str | None, authority: str | None
+    ) -> None: ...
+
     def list_knowledge_graphs(self) -> list[KnowledgeGraph]:
         """All Knowledge Graphs, by name."""
         ...
