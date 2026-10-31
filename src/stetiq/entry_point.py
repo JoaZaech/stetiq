@@ -26,7 +26,9 @@ import shlex
 from dataclasses import dataclass
 from typing import Any
 
-from stetiq.errors import StetiqError
+from stetiq.errors import EntryPointError, InvalidEntryPointError
+
+__all__ = ["EntryPoint", "EntryPointError", "InvalidEntryPointError", "placeholder_values"]
 
 CONFIG_SECTION = "entry_point"
 PLACEHOLDERS = (
@@ -40,14 +42,6 @@ PLACEHOLDERS = (
     "run_id",
 )
 _PLACEHOLDER = re.compile(r"\{(" + "|".join(PLACEHOLDERS) + r")\}")
-
-
-class InvalidEntryPointError(StetiqError, ValueError):
-    """The repo config has no usable `entry_point` section."""
-
-
-class EntryPointError(StetiqError):
-    """The Construction Entry Point could not be started (e.g. command not found)."""
 
 
 @dataclass(frozen=True)

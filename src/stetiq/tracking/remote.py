@@ -15,7 +15,7 @@ from stetiq.evaluation.framework import Evaluation, ParameterValue, SubjectKind
 from stetiq.gates import Gate
 from stetiq.graph_source import GraphSourceScope
 from stetiq.ontology import Ontology, to_dict
-from stetiq.tracking import wire
+from stetiq.tracking import codec, wire
 from stetiq.tracking.entities import (
     Alias,
     ConstructionRun,
@@ -77,28 +77,28 @@ class RemoteTrackingService:
             "name": name,
             "declared_ontology": None if declared_ontology is None else to_dict(declared_ontology),
         }
-        return wire.knowledge_graph_from_json(self._call("POST", "/knowledge-graphs", body))
+        return codec.knowledge_graph_from_json(self._call("POST", "/knowledge-graphs", body))
 
     def get_knowledge_graph(self, name: str) -> KnowledgeGraph:
-        return wire.knowledge_graph_from_json(self._call("GET", self._kg_path(name)))
+        return codec.knowledge_graph_from_json(self._call("GET", self._kg_path(name)))
 
     def set_knowledge_graph_description(self, name: str, description: str | None) -> KnowledgeGraph:
         body = {"description": description}
         data = self._call("PUT", self._kg_path(name) + "/description", body)
-        return wire.knowledge_graph_from_json(data)
+        return codec.knowledge_graph_from_json(data)
 
     def list_knowledge_graphs(self) -> list[KnowledgeGraphSummary]:
         data = self._call("GET", "/knowledge-graphs")
-        return [wire.knowledge_graph_summary_from_json(k) for k in data]
+        return [codec.knowledge_graph_summary_from_json(k) for k in data]
 
     def register_ontology(self, knowledge_graph: str, ontology: Ontology) -> OntologyVersion:
         body = {"ontology": to_dict(ontology)}
         data = self._call("POST", self._kg_path(knowledge_graph) + "/ontology-versions", body)
-        return wire.ontology_version_from_json(data)
+        return codec.ontology_version_from_json(data)
 
     def list_ontology_versions(self, knowledge_graph: str) -> list[OntologyVersion]:
         data = self._call("GET", self._kg_path(knowledge_graph) + "/ontology-versions")
-        return [wire.ontology_version_from_json(v) for v in data]
+        return [codec.ontology_version_from_json(v) for v in data]
 
     def list_candidates(self, knowledge_graph: str) -> list[int]:
         # The server marks Candidates in its version list.
@@ -107,17 +107,17 @@ class RemoteTrackingService:
 
     def get_ontology_version(self, knowledge_graph: str, number: int) -> OntologyVersion:
         data = self._call("GET", f"{self._kg_path(knowledge_graph)}/ontology-versions/{number}")
-        return wire.ontology_version_from_json(data)
+        return codec.ontology_version_from_json(data)
 
     # --- Graph Sources ------------------------------------------------------------------
 
     def bind_graph_source(self, knowledge_graph: str, scope: GraphSourceScope) -> None:
-        body = {"scope": wire.graph_source_scope_to_json(scope)}
+        body = {"scope": codec.graph_source_scope_to_json(scope)}
         self._call("PUT", self._kg_path(knowledge_graph) + "/graph-source", body)
 
     def get_graph_source(self, knowledge_graph: str) -> GraphSourceScope:
         data = self._call("GET", self._kg_path(knowledge_graph) + "/graph-source")
-        return wire.graph_source_scope_from_json(data)
+        return codec.graph_source_scope_from_json(data)
 
     # --- Evolution Mode -----------------------------------------------------------------
 
@@ -141,16 +141,16 @@ class RemoteTrackingService:
         alias: str | None = None,
     ) -> ConstructionRun:
         body = {"ontology_version": ontology_version, "alias": alias}
-        return wire.run_from_json(
+        return codec.run_from_json(
             self._call("POST", self._kg_path(knowledge_graph) + "/runs", body)
         )
 
     def get_run(self, run_id: str) -> ConstructionRun:
-        return wire.run_from_json(self._call("GET", self._run_path(run_id)))
+        return codec.run_from_json(self._call("GET", self._run_path(run_id)))
 
     def list_runs(self, knowledge_graph: str) -> list[ConstructionRun]:
         data = self._call("GET", self._kg_path(knowledge_graph) + "/runs")
-        return [wire.run_from_json(r) for r in data]
+        return [codec.run_from_json(r) for r in data]
 
     def log_params(self, run_id: str, params: dict[str, str]) -> None:
         self._call("POST", self._run_path(run_id) + "/params", {"params": params})
@@ -161,21 +161,21 @@ class RemoteTrackingService:
     def end_run(self, run_id: str, observation: ObservationInput) -> ConstructionRun:
         scope, schema = observation
         body = {
-            "scope": wire.graph_source_scope_to_json(scope),
-            "observed_schema": wire.observed_schema_to_json(schema),
+            "scope": codec.graph_source_scope_to_json(scope),
+            "observed_schema": codec.observed_schema_to_json(schema),
         }
-        return wire.run_from_json(self._call("POST", self._run_path(run_id) + "/end", body))
+        return codec.run_from_json(self._call("POST", self._run_path(run_id) + "/end", body))
 
     def fail_run(self, run_id: str) -> ConstructionRun:
-        return wire.run_from_json(self._call("POST", self._run_path(run_id) + "/fail"))
+        return codec.run_from_json(self._call("POST", self._run_path(run_id) + "/fail"))
 
     def get_observation(self, observation_id: str) -> Observation:
         data = self._call("GET", f"/observations/{quote(observation_id, safe='')}")
-        return wire.observation_from_json(data)
+        return codec.observation_from_json(data)
 
     def list_observations(self, knowledge_graph: str) -> list[Observation]:
         data = self._call("GET", self._kg_path(knowledge_graph) + "/observations")
-        return [wire.observation_from_json(o) for o in data]
+        return [codec.observation_from_json(o) for o in data]
 
     def record_observation(
         self,
@@ -185,18 +185,18 @@ class RemoteTrackingService:
     ) -> ObservationOutcome:
         scope, schema = observation
         body = {
-            "scope": wire.graph_source_scope_to_json(scope),
-            "observed_schema": wire.observed_schema_to_json(schema),
+            "scope": codec.graph_source_scope_to_json(scope),
+            "observed_schema": codec.observed_schema_to_json(schema),
             "drift_thresholds": None
             if thresholds is None
-            else wire.drift_thresholds_to_json(thresholds),
+            else codec.drift_thresholds_to_json(thresholds),
         }
         data = self._call("POST", self._kg_path(knowledge_graph) + "/observations", body)
-        return wire.observation_outcome_from_json(data)
+        return codec.observation_outcome_from_json(data)
 
     def list_drift_events(self, knowledge_graph: str) -> list[DriftEvent]:
         data = self._call("GET", self._kg_path(knowledge_graph) + "/drift-events")
-        return [wire.drift_event_from_json(e) for e in data]
+        return [codec.drift_event_from_json(e) for e in data]
 
     # --- Aliases and Promotion ----------------------------------------------------------
 
@@ -209,20 +209,20 @@ class RemoteTrackingService:
         # become the InvalidAliasNameError the service raises.
         validate_alias_name(name)
         body = {"version": version, "actor": actor}
-        return wire.alias_from_json(
+        return codec.alias_from_json(
             self._call("PUT", self._alias_path(knowledge_graph, name), body)
         )
 
     def get_alias(self, knowledge_graph: str, name: str) -> Alias:
-        return wire.alias_from_json(self._call("GET", self._alias_path(knowledge_graph, name)))
+        return codec.alias_from_json(self._call("GET", self._alias_path(knowledge_graph, name)))
 
     def list_aliases(self, knowledge_graph: str) -> list[Alias]:
         data = self._call("GET", self._kg_path(knowledge_graph) + "/aliases")
-        return [wire.alias_from_json(a) for a in data]
+        return [codec.alias_from_json(a) for a in data]
 
     def list_promotions(self, knowledge_graph: str) -> list[Promotion]:
         data = self._call("GET", self._kg_path(knowledge_graph) + "/promotions")
-        return [wire.promotion_from_json(p) for p in data]
+        return [codec.promotion_from_json(p) for p in data]
 
     def set_contract_alias(self, knowledge_graph: str, alias: str) -> None:
         self._call("PUT", self._kg_path(knowledge_graph) + "/contract-alias", {"alias": alias})
@@ -232,7 +232,7 @@ class RemoteTrackingService:
 
     def get_contract_version(self, knowledge_graph: str) -> OntologyVersion:
         data = self._call("GET", self._kg_path(knowledge_graph) + "/contract-version")
-        return wire.ontology_version_from_json(data)
+        return codec.ontology_version_from_json(data)
 
     def _subject_path(
         self, knowledge_graph: str, subject_kind: SubjectKind, subject_id: str
@@ -251,13 +251,13 @@ class RemoteTrackingService:
         path = self._subject_path(knowledge_graph, "ontology_version", str(number))
         body = {"use_case_version": use_case_version}
         return [
-            wire.evaluation_result_from_json(r)
+            codec.evaluation_result_from_json(r)
             for r in self._call("POST", path + "/evaluate", body)
         ]
 
     def evaluate_construction_run(self, run_id: str) -> list[EvaluationResult]:
         return [
-            wire.evaluation_result_from_json(r)
+            codec.evaluation_result_from_json(r)
             for r in self._call("POST", self._run_path(run_id) + "/evaluate")
         ]
 
@@ -275,24 +275,24 @@ class RemoteTrackingService:
         path = self._subject_path(knowledge_graph, subject_kind, subject_id) + "/evaluations"
         body = {
             "evaluator": evaluator,
-            **wire.evaluation_to_json(evaluation),
+            **codec.evaluation_to_json(evaluation),
             "parameters": dict(parameters or {}),
         }
         if use_case_version is not None:
             body["use_case_version"] = use_case_version
-        return wire.evaluation_result_from_json(self._call("POST", path, body))
+        return codec.evaluation_result_from_json(self._call("POST", path, body))
 
     def get_evaluation_results(
         self, knowledge_graph: str, subject_kind: SubjectKind, subject_id: str
     ) -> list[EvaluationResult]:
         path = self._subject_path(knowledge_graph, subject_kind, subject_id) + "/evaluations"
-        return [wire.evaluation_result_from_json(r) for r in self._call("GET", path)]
+        return [codec.evaluation_result_from_json(r) for r in self._call("GET", path)]
 
     def list_evaluation_results(
         self, knowledge_graph: str, subject_kind: SubjectKind
     ) -> list[EvaluationResult]:
         path = f"{self._kg_path(knowledge_graph)}/evaluations?subject_kind={quote(subject_kind)}"
-        return [wire.evaluation_result_from_json(r) for r in self._call("GET", path)]
+        return [codec.evaluation_result_from_json(r) for r in self._call("GET", path)]
 
     # --- Use Cases ------------------------------------------------------------------
 
@@ -302,18 +302,18 @@ class RemoteTrackingService:
         # hand gets the same UseCaseValidationError the service would raise.
         body = {"use_case": use_case_format.to_dict(use_case_format.check_use_case(use_case))}
         data = self._call("POST", self._kg_path(knowledge_graph) + "/use-case-versions", body)
-        return wire.use_case_version_from_json(data)
+        return codec.use_case_version_from_json(data)
 
     def list_use_case_versions(self, knowledge_graph: str) -> list[UseCaseVersion]:
         data = self._call("GET", self._kg_path(knowledge_graph) + "/use-case-versions")
-        return [wire.use_case_version_from_json(v) for v in data]
+        return [codec.use_case_version_from_json(v) for v in data]
 
     def get_use_case_version(
         self, knowledge_graph: str, number: int | None = None
     ) -> UseCaseVersion:
         which = "latest" if number is None else number
         data = self._call("GET", f"{self._kg_path(knowledge_graph)}/use-case-versions/{which}")
-        return wire.use_case_version_from_json(data)
+        return codec.use_case_version_from_json(data)
 
     # --- Gates --------------------------------------------------------------------------
 
@@ -327,8 +327,8 @@ class RemoteTrackingService:
     ) -> GateResult:
         body = {"gates": [g.to_dict() for g in gates], "version": version, "run": run}
         data = self._call("POST", self._kg_path(knowledge_graph) + "/gate-results", body)
-        return wire.gate_result_from_json(data)
+        return codec.gate_result_from_json(data)
 
     def list_gate_results(self, knowledge_graph: str) -> list[GateResult]:
         data = self._call("GET", self._kg_path(knowledge_graph) + "/gate-results")
-        return [wire.gate_result_from_json(r) for r in data]
+        return [codec.gate_result_from_json(r) for r in data]

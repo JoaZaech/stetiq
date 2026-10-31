@@ -15,7 +15,7 @@ from stetiq.auth import TokenRegistry
 from stetiq.cli import app
 from stetiq.graph_source import InMemoryGraphSource
 from stetiq.server import create_app
-from stetiq.tracking import wire
+from stetiq.tracking import codec
 
 SHELL = "<!doctype html><title>stetiq</title><div id=root></div>"
 
@@ -327,7 +327,7 @@ def test_the_knowledge_graph_list_shows_only_readable_ones_with_their_summary(
 
 
 def test_a_knowledge_graph_list_item_without_summary_fields_still_parses():
-    listed = wire.knowledge_graph_summary_from_json(
+    listed = codec.knowledge_graph_summary_from_json(
         {"name": "support", "created_at": "2026-01-02T03:04:05"}
     )
 
@@ -450,7 +450,7 @@ def test_a_version_payload_without_the_candidate_flag_still_parses(http, databas
     ).json()
 
     assert "candidate" not in payload
-    assert wire.ontology_version_from_json(payload) == sdk.get_ontology_version("support", 1)
+    assert codec.ontology_version_from_json(payload) == sdk.get_ontology_version("support", 1)
 
 
 def diff(http, kg, base, target, headers):
