@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { OntologyDiff } from '@/api/ontology-diff'
 import type { Ontology } from '@/api/ontology-versions'
 import { compareOntologies } from './ontology-map-comparison'
-import { levelOf, summarizeChanges, summaryConceptOf } from './ontology-map-summary'
+import { attributeChange, conceptChange, conceptDescribed, endpointChange } from './ontology-diff.fixtures'
+import { summarizeChanges, summaryConceptOf } from './ontology-map-summary'
 
 // Canonical form, as the server sends it: a city transit network, v2 → v3.
 const V2: Ontology = {
@@ -35,11 +36,11 @@ const V3: Ontology = {
 const DIFF: OntologyDiff = {
   classification: 'breaking',
   changes: [
-    { concept: 'Stop.wheelchairBoarding', concept_kind: 'property', kind: 'removed', classification: 'breaking', detail: 'property Stop.wheelchairBoarding removed' },
-    { concept: 'Stop.wheelchair_boarding', concept_kind: 'property', kind: 'added', classification: 'additive', detail: 'optional property Stop.wheelchair_boarding added' },
-    { concept: 'Trip.bikesAllowed', concept_kind: 'property', kind: 'removed', classification: 'breaking', detail: 'property Trip.bikesAllowed removed' },
-    { concept: 'Trip.bikes_allowed', concept_kind: 'property', kind: 'added', classification: 'additive', detail: 'optional property Trip.bikes_allowed added' },
-    { concept: 'HAS_TRIP', concept_kind: 'relationship_type', kind: 'changed', classification: 'additive', detail: 'description changed' },
+    attributeChange('node_type', 'Stop', 'wheelchairBoarding', 'removed', 'breaking'),
+    attributeChange('node_type', 'Stop', 'wheelchair_boarding', 'added', 'additive'),
+    attributeChange('node_type', 'Trip', 'bikesAllowed', 'removed', 'breaking'),
+    attributeChange('node_type', 'Trip', 'bikes_allowed', 'added', 'additive'),
+    conceptDescribed('relationship_type', 'HAS_TRIP'),
   ],
 }
 
@@ -51,7 +52,7 @@ describe('summarizeChanges', () => {
       { level: 'breaking', count: 2 },
       { level: 'additive', count: 2 },
       // HAS_TRIP only gained a description.
-      { level: 'documentation-only', count: 1 },
+      { level: 'cosmetic', count: 1 },
     ])
   })
 
@@ -65,7 +66,7 @@ describe('summarizeChanges', () => {
     ])
   })
 
-  it('sets the documentation-only changes apart, grouped by Concept', () => {
+  it('sets the cosmetic changes apart, grouped by Concept', () => {
     const described: Ontology = {
       ...V3,
       node_types: V3.node_types.map((n) =>
@@ -76,22 +77,19 @@ describe('summarizeChanges', () => {
             : n,
       ),
     }
-    const { counts, concepts, documentationOnly } = summarizeChanges(
+    const { counts, concepts, cosmetic } = summarizeChanges(
       compareOntologies(V2, described, {
         classification: 'breaking',
-        changes: [
-          { concept: 'Route', concept_kind: 'node_type', kind: 'changed', classification: 'additive', detail: 'description changed' },
-          ...DIFF.changes,
-        ],
+        changes: [conceptDescribed('node_type', 'Route'), ...DIFF.changes],
       }),
     )
 
-    expect(counts.at(-1)).toEqual({ level: 'documentation-only', count: 2 })
-    expect(documentationOnly.map((c) => [c.label, c.level, c.statements.map((s) => s.text)])).toEqual([
-      ['HAS_TRIP', 'documentation-only', ['description changed']],
-      ['Route', 'documentation-only', ['description changed']],
+    expect(counts.at(-1)).toEqual({ level: 'cosmetic', count: 2 })
+    expect(cosmetic.map((c) => [c.label, c.level, c.statements.map((s) => s.text)])).toEqual([
+      ['HAS_TRIP', 'cosmetic', ['description changed']],
+      ['Route', 'cosmetic', ['description changed']],
     ])
-    // Stop's attribute was added with its description, so that change is not documentation-only.
+    // Stop's attribute was added with its description, so that change is not cosmetic.
     expect(concepts.map((c) => c.label)).toEqual(['Stop', 'Trip'])
   })
 
@@ -100,10 +98,10 @@ describe('summarizeChanges', () => {
       classification: 'breaking',
       changes: [
         ...DIFF.changes,
-        { concept: 'Stop', concept_kind: 'node_type', kind: 'deprecated', classification: 'deprecating', detail: 'node type Stop deprecated; replaced by Platform' },
+        conceptChange('node_type', 'Stop', 'deprecated', 'deprecating', 'deprecated; replaced by Platform'),
       ],
     }
-    const { concepts, documentationOnly } = summarizeChanges(
+    const { concepts, cosmetic } = summarizeChanges(
       compareOntologies(V2, { ...V3, node_types: V3.node_types.map((n) => (n.label === 'Stop' ? { ...n, deprecated: true } : n)) }, deprecating),
     )
 
@@ -112,7 +110,7 @@ describe('summarizeChanges', () => {
       [null, 'deprecated; replaced by Platform', 'deprecating'],
       ['wheelchair_boarding', 'added', 'additive'],
     ])
-    expect(documentationOnly[0].statements.map((s) => [s.attribute, s.text])).toEqual([[null, 'description changed']])
+    expect(cosmetic[0].statements.map((s) => [s.attribute, s.text])).toEqual([[null, 'description changed']])
   })
 
   it('says how each kind of change landed', () => {
@@ -134,12 +132,12 @@ describe('summarizeChanges', () => {
       compareOntologies(base, target, {
         classification: 'breaking',
         changes: [
-          { concept: 'Agency', concept_kind: 'node_type', kind: 'added', classification: 'additive', detail: 'node type Agency added' },
-          { concept: 'Route.name', concept_kind: 'property', kind: 'added', classification: 'breaking', detail: 'required property Route.name added' },
-          { concept: 'Trip', concept_kind: 'node_type', kind: 'removed', classification: 'breaking', detail: 'node type Trip removed' },
-          { concept: 'HAS_TRIP', concept_kind: 'relationship_type', kind: 'removed', classification: 'breaking', detail: 'relationship type HAS_TRIP removed' },
-          { concept: 'OPERATES', concept_kind: 'relationship_type', kind: 'added', classification: 'additive', detail: 'relationship type OPERATES added' },
-          { concept: 'Route.id', concept_kind: 'property', kind: 'changed', classification: 'breaking', detail: 'UNIQUENESS constraint added' },
+          conceptChange('node_type', 'Agency', 'added', 'additive'),
+          attributeChange('node_type', 'Route', 'name', 'added', 'breaking', { required: true }),
+          conceptChange('node_type', 'Trip', 'removed', 'breaking'),
+          conceptChange('relationship_type', 'HAS_TRIP', 'removed', 'breaking'),
+          conceptChange('relationship_type', 'OPERATES', 'added', 'additive'),
+          attributeChange('node_type', 'Route', 'id', 'changed', 'breaking', { detail: 'UNIQUENESS constraint added' }),
         ],
       }),
     )
@@ -159,20 +157,32 @@ describe('summarizeChanges', () => {
   it('says when nothing changed', () => {
     const summary = summarizeChanges(compareOntologies(V2, V2, { classification: null, changes: [] }))
 
-    expect(summary).toEqual({ counts: [], concepts: [], documentationOnly: [] })
+    expect(summary).toEqual({ counts: [], concepts: [], cosmetic: [] })
   })
 })
 
-describe('levelOf', () => {
-  it("gives a change the Diff's classification, or documentation-only when only a description differs", () => {
-    const comparison = compareOntologies(V2, V3, DIFF)
+describe("the Diff's wording", () => {
+  it('says an added attribute is required, and a change at its level, from the fields, whatever the detail says', () => {
+    const changes = [
+      ...DIFF.changes,
+      attributeChange('node_type', 'Route', 'name', 'added', 'breaking', { required: true }),
+    ].map((c) => ({ ...c, detail: 'something changed' }))
+    const target: Ontology = {
+      ...V3,
+      node_types: V3.node_types.map((n) =>
+        n.label === 'Route' ? { ...n, properties: [{ name: 'name', type: 'STRING', required: true }] } : n,
+      ),
+    }
 
-    expect(DIFF.changes.map((c) => [c.concept, levelOf(comparison, c)])).toEqual([
-      ['Stop.wheelchairBoarding', 'breaking'],
-      ['Stop.wheelchair_boarding', 'additive'],
-      ['Trip.bikesAllowed', 'breaking'],
-      ['Trip.bikes_allowed', 'additive'],
-      ['HAS_TRIP', 'documentation-only'],
+    const { counts, concepts } = summarizeChanges(compareOntologies(V2, target, { classification: 'breaking', changes }))
+
+    expect(counts).toEqual([
+      { level: 'breaking', count: 3 },
+      { level: 'additive', count: 2 },
+      { level: 'cosmetic', count: 1 },
+    ])
+    expect(concepts.find((c) => c.label === 'Route')?.statements.map((s) => [s.attribute, s.text])).toEqual([
+      ['name', 'added, required'],
     ])
   })
 })
@@ -185,7 +195,7 @@ describe('linking the summary and the Map', () => {
         classification: 'breaking',
         changes: [
           ...DIFF.changes.filter((c) => c.concept !== 'HAS_TRIP'),
-          { concept: 'HAS_TRIP', concept_kind: 'relationship_type', kind: 'changed', classification: 'additive', detail: 'endpoint pattern (Stop)-[HAS_TRIP]->(Trip) added' },
+          endpointChange(['Stop', 'HAS_TRIP', 'Trip'], 'added'),
         ],
       }),
     )

@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import type { OntologyChange, OntologyDiff } from '@/api/ontology-diff'
+import type { OntologyDiff } from '@/api/ontology-diff'
 import type { Ontology } from '@/api/ontology-versions'
-import { changesOf, compareOntologies, isDocumentationOnly } from './ontology-map-comparison'
+import { changesOf, compareOntologies } from './ontology-map-comparison'
+import {
+  attributeChange,
+  attributeDescribed,
+  conceptChange,
+  conceptDescribed,
+  endpointChange,
+} from './ontology-diff.fixtures'
 import { layoutOntologyMap } from '../map/ontology-map-layout'
 
 // Canonical form, as the server sends it: Concepts sorted by label.
@@ -40,13 +47,13 @@ const TARGET: Ontology = {
 const DIFF: OntologyDiff = {
   classification: 'breaking',
   changes: [
-    { concept: 'Agent', concept_kind: 'node_type', kind: 'added', classification: 'additive', detail: 'node type Agent added' },
-    { concept: 'Customer', concept_kind: 'node_type', kind: 'deprecated', classification: 'deprecating', detail: 'node type Customer deprecated' },
-    { concept: 'LegacyTicket', concept_kind: 'node_type', kind: 'removed', classification: 'breaking', detail: 'node type LegacyTicket removed' },
-    { concept: 'Ticket.priority', concept_kind: 'property', kind: 'removed', classification: 'breaking', detail: 'property Ticket.priority removed' },
-    { concept: 'ASSIGNED', concept_kind: 'relationship_type', kind: 'added', classification: 'additive', detail: 'relationship type ASSIGNED added' },
-    { concept: 'FILED', concept_kind: 'relationship_type', kind: 'removed', classification: 'breaking', detail: 'relationship type FILED removed' },
-    { concept: 'OPENED', concept_kind: 'relationship_type', kind: 'changed', classification: 'additive', detail: 'endpoint pattern (Agent)-[OPENED]->(Ticket) added' },
+    conceptChange('node_type', 'Agent', 'added', 'additive'),
+    conceptChange('node_type', 'Customer', 'deprecated', 'deprecating', 'deprecated'),
+    conceptChange('node_type', 'LegacyTicket', 'removed', 'breaking'),
+    attributeChange('node_type', 'Ticket', 'priority', 'removed', 'breaking'),
+    conceptChange('relationship_type', 'ASSIGNED', 'added', 'additive'),
+    conceptChange('relationship_type', 'FILED', 'removed', 'breaking'),
+    endpointChange(['Agent', 'OPENED', 'Ticket'], 'added'),
   ],
 }
 
@@ -107,7 +114,7 @@ describe('compareOntologies', () => {
       classification: 'breaking',
       changes: [
         ...DIFF.changes,
-        { concept: 'OPENED.channel', concept_kind: 'property', kind: 'added', classification: 'breaking', detail: 'required property OPENED.channel added' },
+        attributeChange('relationship_type', 'OPENED', 'channel', 'added', 'breaking', { required: true }),
       ],
     })
 
@@ -123,7 +130,7 @@ describe('compareOntologies', () => {
       {
         classification: 'breaking',
         changes: [
-          { concept: 'Bug', concept_kind: 'node_type', kind: 'changed', classification: 'breaking', detail: 'parent Ticket -> Product' },
+          conceptChange('node_type', 'Bug', 'changed', 'breaking', 'parent Ticket -> Product'),
         ],
       },
     )
@@ -187,10 +194,10 @@ describe('compareOntologies: changed attributes', () => {
   const diff: OntologyDiff = {
     classification: 'breaking',
     changes: [
-      { concept: 'Stop.name', concept_kind: 'property', kind: 'changed', classification: 'breaking', detail: 'now required' },
-      { concept: 'Stop.wheelchairBoarding', concept_kind: 'property', kind: 'removed', classification: 'breaking', detail: 'property Stop.wheelchairBoarding removed' },
-      { concept: 'Stop.wheelchair_boarding', concept_kind: 'property', kind: 'added', classification: 'additive', detail: 'optional property Stop.wheelchair_boarding added' },
-      { concept: 'Stop.code', concept_kind: 'property', kind: 'changed', classification: 'breaking', detail: 'UNIQUENESS constraint added' },
+      attributeChange('node_type', 'Stop', 'name', 'changed', 'breaking', { detail: 'now required' }),
+      attributeChange('node_type', 'Stop', 'wheelchairBoarding', 'removed', 'breaking'),
+      attributeChange('node_type', 'Stop', 'wheelchair_boarding', 'added', 'additive'),
+      attributeChange('node_type', 'Stop', 'code', 'changed', 'breaking', { detail: 'UNIQUENESS constraint added' }),
     ],
   }
 
@@ -215,18 +222,18 @@ describe('compareOntologies: changed attributes', () => {
     const { changes } = compareOntologies(base, target, {
       classification: 'breaking',
       changes: [
-        { concept: 'Stop.name', concept_kind: 'property', kind: 'changed', classification: 'additive', detail: 'description changed' },
-        { concept: 'Stop.name', concept_kind: 'property', kind: 'changed', classification: 'breaking', detail: 'now required' },
+        attributeChange('node_type', 'Stop', 'name', 'changed', 'additive', { detail: 'now optional' }),
+        attributeChange('node_type', 'Stop', 'name', 'changed', 'breaking', { detail: 'type STRING -> INTEGER (narrowed)' }),
       ],
     })
 
     expect(changes.attributes.Stop).toEqual([
-      { name: 'name', kind: 'modified', severity: 'breaking', details: ['description changed', 'now required'] },
+      { name: 'name', kind: 'modified', severity: 'breaking', details: ['now optional', 'type STRING -> INTEGER (narrowed)'] },
     ])
   })
 })
 
-describe('documentation-only changes', () => {
+describe('cosmetic changes', () => {
   // A transit network whose class Stop, attribute Trip.headsign and relation HAS_TRIP
   // gain a description; SERVES gains one too, with a new Pattern beside it.
   const base: Ontology = {
@@ -253,66 +260,67 @@ describe('documentation-only changes', () => {
       ['Trip', 'SERVES', 'Stop'],
     ],
   }
-  const described = (concept: string, concept_kind: OntologyChange['concept_kind']): OntologyChange => ({
-    concept,
-    concept_kind,
-    kind: 'changed',
-    classification: 'additive',
-    detail: 'description changed',
-  })
   // What the core's Ontology Diff reports from base to target.
   const diff: OntologyDiff = {
     classification: 'additive',
     changes: [
-      described('Stop', 'node_type'),
-      described('Trip.headsign', 'property'),
-      described('HAS_TRIP', 'relationship_type'),
-      described('SERVES', 'relationship_type'),
-      { concept: 'SERVES', concept_kind: 'relationship_type', kind: 'changed', classification: 'additive', detail: 'endpoint pattern (Route)-[SERVES]->(Stop) added' },
+      conceptDescribed('node_type', 'Stop'),
+      attributeDescribed('node_type', 'Trip', 'headsign'),
+      conceptDescribed('relationship_type', 'HAS_TRIP'),
+      conceptDescribed('relationship_type', 'SERVES'),
+      endpointChange(['Route', 'SERVES', 'Stop'], 'added'),
     ],
   }
 
-  it("tells a change documentation-only when the two Ontologies differ only in its Concept's description", () => {
-    const only = diff.changes.map((c) => [c.concept, isDocumentationOnly({ base, target }, c)])
-
-    expect(only).toEqual([
-      ['Stop', true],
-      ['Trip.headsign', true],
-      ['HAS_TRIP', true],
-      // SERVES also gained a Pattern, so neither of its changes is documentation-only.
-      ['SERVES', false],
-      ['SERVES', false],
-    ])
-  })
-
-  it('tells an attribute change documentation-only only when the attribute differs in nothing but its description', () => {
-    const retyped: Ontology = {
-      ...target,
-      node_types: target.node_types.map((n) =>
-        n.label === 'Trip'
-          ? { ...n, properties: [{ name: 'headsign', type: 'INTEGER', description: 'The sign on the vehicle' }] }
-          : n,
-      ),
-    }
-
-    expect(isDocumentationOnly({ base, target: retyped }, described('Trip.headsign', 'property'))).toBe(false)
-  })
-
-  it('draws a Concept changed only in its description as documentation-only, with no severity', () => {
+  it('draws a Concept with only cosmetic changes as documentation-only, with no severity', () => {
     const { changes } = compareOntologies(base, target, diff)
 
     expect(changes.classes.Stop).toEqual({ kind: 'documentation-only', severity: null })
     expect(changes.links['(Route)-[HAS_TRIP]->(Trip)']).toEqual({ kind: 'documentation-only', severity: null })
-    // A class whose attributes changed only in their descriptions lists none of them.
+    // A class whose attributes had only cosmetic changes lists none of them.
     expect(changes.classes.Trip).toEqual({ kind: 'documentation-only', severity: null })
     expect(changes.attributes.Trip).toEqual([])
   })
 
-  it("draws a Concept with a description change and a structural one in the structural change's severity", () => {
+  it("gives an endpoint change to its own link only, so a relation's other links stay documentation-only", () => {
     const { changes } = compareOntologies(base, target, diff)
 
-    expect(changes.links['(Trip)-[SERVES]->(Stop)']).toEqual({ kind: 'modified', severity: 'additive' })
     expect(changes.links['(Route)-[SERVES]->(Stop)']).toEqual({ kind: 'added', severity: 'additive' })
+    expect(changes.links['(Trip)-[SERVES]->(Stop)']).toEqual({ kind: 'documentation-only', severity: null })
+  })
+
+  it("follows the Diff's classification, not the two Ontologies: a description change it calls additive is not cosmetic", () => {
+    const { changes } = compareOntologies(base, target, {
+      classification: 'additive',
+      changes: [conceptChange('node_type', 'Stop', 'changed', 'additive', 'description changed')],
+    })
+
+    expect(changes.classes.Stop).toEqual({ kind: 'modified', severity: 'additive' })
+  })
+})
+
+describe("the Diff's wording", () => {
+  it('draws the same comparison whatever words a change is in: code reads the fields, never the detail', () => {
+    const withRelationAttribute: OntologyDiff = {
+      classification: 'breaking',
+      changes: [...DIFF.changes, attributeChange('relationship_type', 'OPENED', 'channel', 'added', 'breaking', { required: true })],
+    }
+    const reworded: OntologyDiff = {
+      ...withRelationAttribute,
+      changes: withRelationAttribute.changes.map((c) => ({ ...c, detail: 'something changed' })),
+    }
+
+    const comparison = compareOntologies(BASE, TARGET, reworded)
+
+    expect(comparison.changes).toEqual(compareOntologies(BASE, TARGET, withRelationAttribute).changes)
+    expect(comparison.changes.links['(Customer)-[OPENED]->(Ticket)']).toEqual({ kind: 'modified', severity: 'breaking' })
+    expect(changesOf(comparison, { kind: 'link', id: '(Agent)-[OPENED]->(Ticket)' }).map((c) => c.concept)).toEqual([
+      'OPENED',
+      'OPENED.channel',
+    ])
+    expect(changesOf(comparison, { kind: 'link', id: '(Customer)-[OPENED]->(Ticket)' }).map((c) => c.concept)).toEqual([
+      'OPENED.channel',
+    ])
   })
 })
 
@@ -351,8 +359,8 @@ describe('changesOf', () => {
     const comparison = compareOntologies(base, target, {
       classification: 'breaking',
       changes: [
-        { concept: 'Rating.weight', concept_kind: 'property', kind: 'removed', classification: 'breaking', detail: 'property Rating.weight removed' },
-        { concept: 'Rating.stars', concept_kind: 'property', kind: 'changed', classification: 'breaking', detail: 'UNIQUENESS constraint added' },
+        attributeChange('relationship_type', 'Rating', 'weight', 'removed', 'breaking'),
+        attributeChange('node_type', 'Rating', 'stars', 'changed', 'breaking', { detail: 'UNIQUENESS constraint added' }),
       ],
     })
 

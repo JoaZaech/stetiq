@@ -15,8 +15,8 @@ export const READABLE_ZOOM = 0.7
 
 /**
  * Whether a link's label shows at `zoom`: always when readable, and below that only on a
- * link `focused` by the selection or changed in a comparison (documentation-only does not
- * count), so a zoomed-out Map keeps the labels being looked at.
+ * link `focused` by the selection or changed in a comparison (documentation-only, changed
+ * only cosmetically, does not count), so a zoomed-out Map keeps the labels being looked at.
  */
 export function labelShown(zoom: number, link: { focused: boolean; change?: MapChange }): boolean {
   const changed = link.change !== undefined && !['unchanged', 'documentation-only'].includes(link.change.kind)

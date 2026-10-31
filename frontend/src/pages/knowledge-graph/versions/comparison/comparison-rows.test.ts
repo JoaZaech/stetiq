@@ -3,6 +3,7 @@ import type { OntologyDiff } from '@/api/ontology-diff'
 import type { Ontology } from '@/api/ontology-versions'
 import { compareOntologies } from './ontology-map-comparison'
 import { comparisonRows } from './comparison-rows'
+import { attributeChange, conceptDescribed } from './ontology-diff.fixtures'
 
 // Canonical form, as the server sends it: a city transit network, v2 → v3.
 const V2: Ontology = {
@@ -35,11 +36,11 @@ const V3: Ontology = {
 const DIFF: OntologyDiff = {
   classification: 'breaking',
   changes: [
-    { concept: 'Stop.wheelchairBoarding', concept_kind: 'property', kind: 'removed', classification: 'breaking', detail: 'property Stop.wheelchairBoarding removed' },
-    { concept: 'Stop.wheelchair_boarding', concept_kind: 'property', kind: 'added', classification: 'additive', detail: 'optional property Stop.wheelchair_boarding added' },
-    { concept: 'Trip.bikesAllowed', concept_kind: 'property', kind: 'removed', classification: 'breaking', detail: 'property Trip.bikesAllowed removed' },
-    { concept: 'Trip.bikes_allowed', concept_kind: 'property', kind: 'added', classification: 'additive', detail: 'optional property Trip.bikes_allowed added' },
-    { concept: 'HAS_TRIP', concept_kind: 'relationship_type', kind: 'changed', classification: 'additive', detail: 'description changed' },
+    attributeChange('node_type', 'Stop', 'wheelchairBoarding', 'removed', 'breaking'),
+    attributeChange('node_type', 'Stop', 'wheelchair_boarding', 'added', 'additive'),
+    attributeChange('node_type', 'Trip', 'bikesAllowed', 'removed', 'breaking'),
+    attributeChange('node_type', 'Trip', 'bikes_allowed', 'added', 'additive'),
+    conceptDescribed('relationship_type', 'HAS_TRIP'),
   ],
 }
 
@@ -52,8 +53,8 @@ describe('comparisonRows', () => {
       ['Trip.bikesAllowed', 'attribute', 'removed', 'breaking', 'property Trip.bikesAllowed removed'],
       ['Stop.wheelchair_boarding', 'attribute', 'added', 'additive', 'optional property Stop.wheelchair_boarding added'],
       ['Trip.bikes_allowed', 'attribute', 'added', 'additive', 'optional property Trip.bikes_allowed added'],
-      // Only a description differs: its own level, whatever the Diff classified it as.
-      ['HAS_TRIP', 'relation', 'changed', 'documentation-only', 'description changed'],
+      // Only a description differs: cosmetic, the least weighty.
+      ['HAS_TRIP', 'relation', 'changed', 'cosmetic', 'description changed'],
     ])
   })
 
@@ -73,12 +74,28 @@ describe('comparisonRows', () => {
     const diff: OntologyDiff = {
       classification: 'additive',
       changes: [
-        { concept: 'SERVES.sequence', concept_kind: 'property', kind: 'added', classification: 'additive', detail: 'optional property SERVES.sequence added' },
+        attributeChange('relationship_type', 'SERVES', 'sequence', 'added', 'additive'),
       ],
     }
 
     const [row] = comparisonRows(compareOntologies(base, target, diff))
 
     expect(row.owner).toEqual({ kind: 'relation', label: 'SERVES' })
+  })
+
+  it('names the owner the Diff states, when a class and a relation share its label', () => {
+    const shared: Ontology = {
+      node_types: [{ label: 'Rating', properties: [{ name: 'stars', type: 'INTEGER' }] }],
+      relationship_types: [{ label: 'Rating', properties: [{ name: 'stars', type: 'INTEGER' }] }],
+      patterns: [['Rating', 'Rating', 'Rating']],
+    }
+    const diff: OntologyDiff = {
+      classification: 'breaking',
+      changes: [attributeChange('relationship_type', 'Rating', 'stars', 'removed', 'breaking', { detail: 'gone' })],
+    }
+
+    const [row] = comparisonRows(compareOntologies(shared, shared, diff))
+
+    expect(row.owner).toEqual({ kind: 'relation', label: 'Rating' })
   })
 })
