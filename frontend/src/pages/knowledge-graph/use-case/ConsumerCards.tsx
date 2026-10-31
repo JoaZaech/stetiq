@@ -1,6 +1,7 @@
 import { useId } from 'react'
 import type { CompetencyQuestion, Consumer, Task, UseCase } from '@/api/use-cases'
 import { Badge } from '@/components/ui/badge'
+import { ConsumerEdgePlanned } from './planned'
 
 /**
  * A Use Case Version's Consumers, one card each, listing its Tasks and the Competency
@@ -52,6 +53,7 @@ function ConsumerCard({ consumer, questions }: ConsumerCardProps) {
         )}
         {consumer.description && <p className="whitespace-pre-wrap">{consumer.description}</p>}
       </header>
+      <ConsumerEdgePlanned />
       <section className="space-y-2">
         <h5 id={tasksId} className="text-xs font-medium text-muted-foreground">
           Tasks

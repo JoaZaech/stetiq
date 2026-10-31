@@ -44,7 +44,7 @@ Click a column header to sort, and type in **Search by name** to filter. Click a
 
 ## Inside a Knowledge Graph
 
-A Knowledge Graph opens on its Ontology Versions. Every section starts with the same header: the Knowledge Graph's name, its description (written in markdown), its Evolution Mode (*strict* or *evolving*) and its Contract Alias with the version it points to, e.g. `production → v3`.
+A Knowledge Graph opens on its Ontology Versions. Every section starts with the same header: the Knowledge Graph's name, its description (written in markdown), its Evolution Mode (*strict* or *evolving*) and its Contract Alias with the version it points to, e.g. `production → v3`. Below them, a pipeline strip shows where the Knowledge Graph sits: upstream pipeline → Gate → Knowledge Graph → Consumer Gate → Consumers, with the number of Consumers the latest Use Case Version declares (click it to open the [Use Case](#use-case-and-competency-questions)). The Consumer Gate is muted: it is [planned](#planned-features).
 
 **Edit description** (needs edit access) opens a markdown editor with a **Write** and a **Preview** tab. Saving shows the new description to everyone who can read the Knowledge Graph.
 
@@ -118,6 +118,15 @@ This section is read-only: an Observation needs your graph database credentials,
 ### Promotions
 
 The section is the Promotion audit, newest first: which Alias moved, from which version to which, who moved it, when, and the version's latest Gate result at that moment (*Passed*, *Failed* or *None*). Promote an Ontology Version from [its page](#ontology-versions) to add a row.
+
+## Planned features
+
+Some parts of stetiq's [vision](../vision.md) are shown in the web UI but not built yet. Each is muted or disabled and carries a **Planned** badge: point at the badge for what it will do, and click it to read about it in the vision.
+
+- **Consumer Gate**, in the pipeline strip of every Knowledge Graph section.
+- **Connector: not connected** and **Consumer Gate: none**, on each Consumer card.
+- **Gate on Consumer impact**, under an Ontology Version's latest Gate result.
+- **Draft Tasks & questions with AI**, on the Use Case page.
 
 ## Next steps
 

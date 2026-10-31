@@ -18,6 +18,7 @@ import { useKnowledgeGraphName } from '../params'
 import { CompetencyQuestionDialog } from './CompetencyQuestionDialog'
 import { CompetencyQuestionsTable } from './CompetencyQuestionsTable'
 import { ConsumerCards } from './ConsumerCards'
+import { DraftWithAiPlanned } from './planned'
 import { RemoveCompetencyQuestionDialog } from './RemoveCompetencyQuestionDialog'
 import { savedMessage } from './saved-message'
 import { StructuralAnswerability } from './StructuralAnswerability'
@@ -75,6 +76,7 @@ export function UseCasePage() {
             <>
               <LatestVersion name={name} version={latest} onSaved={setSaved} />
               <Panel title="Consumers">
+                <DraftWithAiPlanned />
                 <ConsumerCards useCase={latest.use_case} />
               </Panel>
               <StructuralAnswerability knowledgeGraph={name} useCaseVersion={latest.number} />
