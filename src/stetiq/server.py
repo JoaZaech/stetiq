@@ -480,6 +480,11 @@ def create_app(
     def list_gate_results(name: str) -> list[dict[str, Any]]:
         return [codec.gate_result_to_json(r) for r in tracking.list_gate_results(name)]
 
+    @api.get("/knowledge-graphs/{name}/gate-previews")
+    def preview_gates(name: str) -> list[dict[str, Any]]:
+        # Computed here from stored results and never recorded (ADR 0007).
+        return [codec.gate_preview_to_json(p) for p in tracking.preview_gates(name)]
+
     app.include_router(api)
     app.include_router(ui_router(frontend_dir))
     return app

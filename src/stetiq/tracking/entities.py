@@ -267,3 +267,38 @@ class GateResult:
     @property
     def gates(self) -> tuple[Gate, ...]:
         return tuple(o.gate for o in self.outcomes)
+
+
+@dataclass(frozen=True)
+class GatePreviewSource:
+    """The recorded Gate result whose Gate definitions a Gate Preview used."""
+
+    subject_kind: SubjectKind
+    subject_id: str
+    evaluated_at: datetime
+
+
+@dataclass(frozen=True)
+class GatePreview:
+    """A Gate Preview (ADR 0007): a Gate result's shape, computed on demand for a
+    subject from the Gate definitions of `source`, and never recorded. Promotion's
+    audit never counts it, and a recorded Gate result about the subject wins over it."""
+
+    knowledge_graph: str
+    subject_kind: SubjectKind
+    subject_id: str
+    ontology_version: int
+    outcomes: tuple[GateOutcome, ...]
+    source: GatePreviewSource
+
+    @property
+    def passed(self) -> bool:
+        return all(o.passed for o in self.outcomes)
+
+    @property
+    def failed(self) -> tuple[GateOutcome, ...]:
+        return tuple(o for o in self.outcomes if not o.passed)
+
+    @property
+    def gates(self) -> tuple[Gate, ...]:
+        return tuple(o.gate for o in self.outcomes)

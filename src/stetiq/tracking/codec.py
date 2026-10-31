@@ -32,6 +32,8 @@ from stetiq.tracking.entities import (
     ConstructionRun,
     DriftEvent,
     EvaluationResult,
+    GatePreview,
+    GatePreviewSource,
     GateResult,
     KnowledgeGraph,
     KnowledgeGraphSummary,
@@ -433,6 +435,46 @@ def gate_result_from_json(d: dict[str, Any]) -> GateResult:
     )
 
 
+def gate_preview_source_to_json(s: GatePreviewSource) -> dict[str, Any]:
+    return {
+        "subject_kind": s.subject_kind,
+        "subject_id": s.subject_id,
+        "evaluated_at": s.evaluated_at.isoformat(),
+    }
+
+
+def gate_preview_source_from_json(d: dict[str, Any]) -> GatePreviewSource:
+    return GatePreviewSource(
+        subject_kind=d["subject_kind"],
+        subject_id=d["subject_id"],
+        evaluated_at=datetime.fromisoformat(d["evaluated_at"]),
+    )
+
+
+def gate_preview_to_json(p: GatePreview) -> dict[str, Any]:
+    """`passed` is derived from the outcomes: sent for readers, ignored when decoding."""
+    return {
+        "knowledge_graph": p.knowledge_graph,
+        "subject_kind": p.subject_kind,
+        "subject_id": p.subject_id,
+        "ontology_version": p.ontology_version,
+        "passed": p.passed,
+        "outcomes": gate_outcomes_to_json(p.outcomes),
+        "source": gate_preview_source_to_json(p.source),
+    }
+
+
+def gate_preview_from_json(d: dict[str, Any]) -> GatePreview:
+    return GatePreview(
+        knowledge_graph=d["knowledge_graph"],
+        subject_kind=d["subject_kind"],
+        subject_id=d["subject_id"],
+        ontology_version=d["ontology_version"],
+        outcomes=gate_outcomes_from_json(d["outcomes"]),
+        source=gate_preview_source_from_json(d["source"]),
+    )
+
+
 # --- Dispatch by type --------------------------------------------------------------------
 
 _CODECS: dict[type, tuple[Callable[[Any], dict[str, Any]], Callable[[dict[str, Any]], Any]]] = {
@@ -448,6 +490,8 @@ _CODECS: dict[type, tuple[Callable[[Any], dict[str, Any]], Callable[[dict[str, A
     DriftEvent: (drift_event_to_json, drift_event_from_json),
     ObservationOutcome: (observation_outcome_to_json, observation_outcome_from_json),
     GateResult: (gate_result_to_json, gate_result_from_json),
+    GatePreview: (gate_preview_to_json, gate_preview_from_json),
+    GatePreviewSource: (gate_preview_source_to_json, gate_preview_source_from_json),
     Detail: (detail_to_json, detail_from_json),
     Evaluation: (evaluation_to_json, evaluation_from_json),
 }
