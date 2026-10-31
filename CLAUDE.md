@@ -12,6 +12,10 @@ Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-
 
 Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
+### Running checks
+
+Run checks and tests as `docs/agents/running-checks.md` describes.
+
 ## Architecture
 
-Before adding an SDK operation, REST route, CLI command or test fixture, read `docs/architecture.md`.
+Before adding an SDK operation, REST route, CLI command or test fixture, read `docs/architecture.md`. A brief for a subagent cites the one section it needs (e.g. *Frontend › Map*), not the whole file.
