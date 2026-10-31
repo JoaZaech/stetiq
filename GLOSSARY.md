@@ -98,6 +98,10 @@ _Avoid_: Schema mode, open/closed world
 A rule, defined in the user's repository, over Evaluator results, Conformance or the Ontology Diff that must hold for a CI check to pass.
 _Avoid_: Policy, check, threshold
 
+**Gate Preview**:
+Evaluating a Knowledge Graph's most recently used Gates against a Construction Run or Ontology Version without recording the outcome; Promotion's audit never counts it.
+_Avoid_: Dry run, simulated gate, gate check
+
 **Drift**:
 A divergence, found by an Observation, between a Graph Source's Observed Schema and the Contract Alias's Ontology Version; it raises an alert, never a new Ontology Version.
 _Avoid_: Schema change, deviation
