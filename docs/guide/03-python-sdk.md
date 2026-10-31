@@ -106,6 +106,30 @@ for change in diff.changes:
 client.diff_ontologies(Path("main/support.yaml"), Path("support.yaml"))
 ```
 
+### Consumer impact
+
+`consumer_impact` answers "which Consumers does this change hit?". It follows each change of the Ontology Diff through Concept → Competency Question → Task → Consumer, against the latest Use Case Version (or `use_case_version=`):
+
+- a **breaking** change makes every question that needs its Concept, and the Tasks and Consumers that need that question, **affected**;
+- a **deprecating** change makes them **will be affected**: they still work, but not for long;
+- cosmetic and additive changes hit nothing.
+
+A question's Concepts are read the way structural answerability reads them: its `concepts` mapping, otherwise its `query`. An attribute change also hits a question about a class that inherits the attribute, and an endpoint Pattern change hits only the paths that Pattern serves. A question with neither `concepts` nor a `query`, which only an LLM question mapper could map, is **unknown** whenever the Diff breaks or deprecates anything, so it is never reported as unaffected. The versions default as for `diff_ontology_versions`. Without a Use Case it raises `NoUseCaseError`.
+
+```python
+impact = client.consumer_impact("support", 1, 2)
+for consumer in impact.consumers:  # only the Consumers hit
+    print(consumer.level, consumer.name)  # affected, will_be_affected or unknown
+    for task in consumer.tasks:
+        for question in task.questions:
+            print("  ", task.id, question.id, [c.concept for c in question.changes])
+for question in impact.no_consumer:  # hit questions no Task needs
+    print("no Consumer:", question.id, question.level)
+impact.by_level("affected")  # the affected Consumers only
+```
+
+A Task or Consumer takes the most severe level among its questions, and lists only the Tasks and questions that are hit, each question with the changes that hit it.
+
 The stetiq YAML format itself is described in [Getting started](./01-getting-started.md#create-a-knowledge-graph).
 
 ## Graph Source

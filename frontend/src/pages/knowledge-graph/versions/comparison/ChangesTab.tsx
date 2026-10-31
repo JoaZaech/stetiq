@@ -1,3 +1,4 @@
+import { ConsumerImpactPanel } from '@/components/ConsumerImpact'
 import { useComparisonView } from './comparison-view'
 import { useMapViewControls } from '../map-view-controls'
 import { OntologyComparisonMap } from './OntologyComparisonMap'
@@ -26,6 +27,7 @@ export function ChangesTab() {
         <p className="text-sm text-muted-foreground">Changes from v{base}</p>
         {controls}
       </div>
+      <ConsumerImpactPanel knowledgeGraph={version.knowledge_graph} base={base} target={version.number} />
       {view === 'map' ? (
         <OntologyComparisonMap
           knowledgeGraph={version.knowledge_graph}

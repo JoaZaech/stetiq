@@ -31,8 +31,8 @@ from stetiq.use_case.concepts import (
     Requirement,
     parse_concept_reference,
 )
-from stetiq.use_case.cypher import requirements_from_query
 from stetiq.use_case.model import CompetencyQuestion, UseCase
+from stetiq.use_case.requirements import stated_requirements
 
 ANSWERABILITY_EVALUATOR = "structural_answerability"
 
@@ -182,12 +182,9 @@ class StructuralAnswerability(OntologyVersionEvaluator):
     def _requirements(
         self, question: CompetencyQuestion, ontology: Ontology
     ) -> tuple[str | None, list[Requirement], str | None]:
-        if question.concepts:
-            return "concepts", [parse_concept_reference(c) for c in question.concepts], None
-        if question.query:
-            found = requirements_from_query(question.query)
-            if found:
-                return "query", found, None
+        source, stated = stated_requirements(question)
+        if source is not None:
+            return source, stated, None
         if self.mapper is not None:
             try:
                 mapped = [

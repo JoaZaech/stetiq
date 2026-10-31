@@ -113,8 +113,9 @@ def test_act_2_evolving_mode_yields_candidate_v2_as_an_additive_diff(demo):
     assert "Candidate: Ontology Version 2" in evolving.output
     diff = demo.step("diff-1-2")
     assert diff.exit_code == 0
-    assert diff.lines[-1] == "Overall: additive"
-    assert [line.split()[2] for line in diff.lines[:-1]] == [
+    # Additive changes hit no Consumer.
+    assert diff.lines[-2:] == ["Overall: additive", "Consumer impact: none"]
+    assert [line.split()[2] for line in diff.lines[:-2]] == [
         "Stop.wheelchairBoarding",
         "Trip.bikesAllowed",
         "PARENT_STATION",
@@ -135,7 +136,7 @@ def test_act_2_naming_conventions_flag_the_feed_spelling_in_v2_and_nothing_in_v3
     v3 = demo.step("evaluate-v3")
     assert v3.metrics("naming_conventions") == {"checked": 46, "compliance": 1, "violations": 0}
     assert v3.metrics("structural_answerability")["answerable_ratio"] == pytest.approx(6 / 7)
-    assert demo.step("diff-1-3").lines[-1] == "Overall: additive"
+    assert demo.step("diff-1-3").lines[-2:] == ["Overall: additive", "Consumer impact: none"]
 
 
 def test_act_3_gates_reject_the_candidate_pass_v3_and_ci_promotes_production(demo):

@@ -1,7 +1,7 @@
 """HTTP transport for the stetiq server and `RemoteTrackingService`.
 
 Entities travel in the JSON form `stetiq.tracking.codec` gives them; this module holds
-what only the wire needs: the API prefix, who-am-I, the Ontology Diff and errors.
+what only the wire needs: the API prefix, who-am-I, the Ontology Diff, its Consumer impact and errors.
 Errors travel as `{"error": {"type": <StetiqError subclass name>, "message": ...}}`
 and are re-raised client-side as the same class, so both modes raise identically.
 """
@@ -12,6 +12,7 @@ from typing import Any
 
 from stetiq import errors
 from stetiq.auth import ApiToken
+from stetiq.impact import ConsumerImpact, QuestionImpact, TaskImpact, UseCaseImpact
 from stetiq.ontology.canonical import pattern_to_list
 from stetiq.ontology.diff import Change, OntologyDiff
 
@@ -55,6 +56,42 @@ def _change_to_json(c: Change) -> dict[str, Any]:
     }
     out.update({k: v for k, v in facts.items() if v is not None})
     return out
+
+
+def use_case_impact_to_json(i: UseCaseImpact) -> dict[str, Any]:
+    """Each level is `affected`, `will_be_affected` or `unknown`; changes as in the Diff."""
+    return {
+        "consumers": [_consumer_impact_to_json(c) for c in i.consumers],
+        "no_consumer": [_question_impact_to_json(q) for q in i.no_consumer],
+    }
+
+
+def _consumer_impact_to_json(c: ConsumerImpact) -> dict[str, Any]:
+    return {
+        "id": c.id,
+        "name": c.name,
+        "kind": c.kind,
+        "level": c.level,
+        "tasks": [_task_impact_to_json(t) for t in c.tasks],
+    }
+
+
+def _task_impact_to_json(t: TaskImpact) -> dict[str, Any]:
+    return {
+        "id": t.id,
+        "description": t.description,
+        "level": t.level,
+        "questions": [_question_impact_to_json(q) for q in t.questions],
+    }
+
+
+def _question_impact_to_json(q: QuestionImpact) -> dict[str, Any]:
+    return {
+        "id": q.id,
+        "question": q.question,
+        "level": q.level,
+        "changes": [_change_to_json(c) for c in q.changes],
+    }
 
 
 # --- Errors ------------------------------------------------------------------------------

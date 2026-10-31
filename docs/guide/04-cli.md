@@ -88,7 +88,7 @@ stetiq ontology evaluations support 2
 
 - `ontology register` registers a changed Ontology. Content identical to an existing version returns that version.
 - `ontology get` prints a version as stetiq YAML.
-- `ontology diff KG BASE TARGET` prints the Ontology Diff, one change per line, each cosmetic, additive, deprecating or breaking, then the overall classification. Without `BASE` it starts from the Contract Alias's version; without `TARGET` it ends at the latest Candidate.
+- `ontology diff KG BASE TARGET` prints the Ontology Diff, one change per line, each cosmetic, additive, deprecating or breaking, then the overall classification. Without `BASE` it starts from the Contract Alias's version; without `TARGET` it ends at the latest Candidate. A **Consumer impact** section follows: the Consumers the changes affect (breaking), then those they will affect (deprecating) and those of unknown impact, each with the Tasks and Competency Questions hit and the Concepts that hit them, then the questions no Task needs under *no Consumer*. It is judged against the latest Use Case Version and says so when there is no Use Case; see [Consumer impact](./03-python-sdk.md#consumer-impact).
 - `ontology evaluate` runs the built-in Evaluators again, plus any custom one given as `--evaluator module:Class` (repeatable; see [Custom Evaluators](./03-python-sdk.md#custom-evaluators)). `--use-case-version` picks the Use Case Version to judge answerability against. `ontology evaluations` shows the latest results.
 
 ### Use Cases
