@@ -7,6 +7,7 @@ Comparing two Ontology Versions, as a Map or as a Table (`?view=`).
 - `ChangesTab.tsx` (`ChangesTab`): a version compared with the one before it.
 - `OntologyDiffPage.tsx` (`OntologyDiffPage`): the Compare page, any two versions.
 - `OntologyComparisonMap.tsx` and `OntologyComparisonTable.tsx`: the two views both of these show, with `MapChangeSummary.tsx` (`MapChangeSummary`, `MapChangesRail`, `LevelCounts`) beside them. `LevelCounts` draws each count with its `SeveritySwatch` (`@/components/SeveritySwatch`), so the headline is the severity key. `DescriptionDiff.tsx` (`DescriptionDiff`): a documentation-only change's description Before and After in a Concept's details, its words marked by `wordDiff` (`@/lib/word-diff`, tested).
+- `ConsumerImpactPanel` (`@/components/ConsumerImpact`, with `ConsumerImpactView` for an impact already loaded): whom the Diff hits, above both views on both entry points; its grouping is `impactSections` and `causesOf` in `@/lib/consumer-impact` (tested). The Promotion confirmation can reuse it.
 - `use-ontology-comparison.ts` (`useOntologyComparison`): the loader, both versions and their Ontology Diff; `comparison-view.ts` (`useComparisonView`): the Table / Map toggle.
 
 **Pure modules:**
