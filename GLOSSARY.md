@@ -35,7 +35,7 @@ An immutable snapshot of a Knowledge Graph's Ontology.
 _Avoid_: Revision, release, graph version
 
 **Ontology Diff**:
-The structural difference between two Ontology Versions, with each change classed as additive, deprecating or breaking.
+The structural difference between two Ontology Versions, with each change classed as cosmetic, additive, deprecating or breaking. A cosmetic change touches only documentation (only a description changes) and ranks below additive.
 _Avoid_: Changeset, delta
 
 **Graph Source**:
