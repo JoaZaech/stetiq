@@ -122,24 +122,14 @@ def _diff_constraints(base: Ontology, target: Ontology) -> list[Change]:
     """A new constraint may reject existing data (breaking); dropping one only relaxes (additive)."""
     old, new = set(base.constraints), set(target.constraints)
     changes = [
-        _attribute_change(
-            c.node_type,
-            "node_type",
-            c.property_name,
-            ChangeKind.CHANGED,
-            Classification.BREAKING,
-            f"{c.type} constraint added",
+        _Attribute(c.node_type, "node_type", c.property_name).change(
+            ChangeKind.CHANGED, Classification.BREAKING, f"{c.type} constraint added"
         )
         for c in sorted(new - old)
     ]
     changes += [
-        _attribute_change(
-            c.node_type,
-            "node_type",
-            c.property_name,
-            ChangeKind.CHANGED,
-            Classification.ADDITIVE,
-            f"{c.type} constraint removed",
+        _Attribute(c.node_type, "node_type", c.property_name).change(
+            ChangeKind.CHANGED, Classification.ADDITIVE, f"{c.type} constraint removed"
         )
         for c in sorted(old - new)
     ]
@@ -289,27 +279,36 @@ def _diff_patterns(label: str, base: Ontology, target: Ontology) -> list[Change]
 WIDENING_TYPE_CHANGES: frozenset[tuple[str, str]] = frozenset({("INTEGER", "FLOAT")})
 
 
-def _attribute_change(
-    owner: str,
-    owner_kind: ConceptKind,
-    name: str,
-    kind: ChangeKind,
-    classification: Classification,
-    detail: str,
-    required: bool | None = None,
-) -> Change:
-    """A change to attribute `name` of the node or relationship type `owner`."""
-    return Change(
-        f"{owner}.{name}",
-        "property",
-        kind,
-        classification,
-        detail,
-        owner=owner,
-        owner_kind=owner_kind,
-        attribute=name,
-        required=required,
-    )
+@dataclass(frozen=True)
+class _Attribute:
+    """Attribute `name` of the node or relationship type `owner`."""
+
+    owner: str
+    owner_kind: ConceptKind
+    name: str
+
+    @property
+    def concept(self) -> str:
+        return f"{self.owner}.{self.name}"
+
+    def change(
+        self,
+        kind: ChangeKind,
+        classification: Classification,
+        detail: str,
+        required: bool | None = None,
+    ) -> Change:
+        return Change(
+            self.concept,
+            "property",
+            kind,
+            classification,
+            detail,
+            owner=self.owner,
+            owner_kind=self.owner_kind,
+            attribute=self.name,
+            required=required,
+        )
 
 
 def _diff_properties(
@@ -319,47 +318,36 @@ def _diff_properties(
 ) -> list[Change]:
     old = {p.name: p for p in old_owner.properties}
     new = {p.name: p for p in new_owner.properties}
-    owner = old_owner.label
     changes: list[Change] = []
     for name in sorted(old.keys() | new.keys()):
-        concept = f"{owner}.{name}"
+        attribute = _Attribute(old_owner.label, owner_kind, name)
         if name not in old:
             # Existing data lacks a newly required property, so it no longer conforms.
             required = new[name].required
             changes.append(
-                _attribute_change(
-                    owner,
-                    owner_kind,
-                    name,
+                attribute.change(
                     ChangeKind.ADDED,
                     Classification.BREAKING if required else Classification.ADDITIVE,
-                    f"{'required' if required else 'optional'} property {concept} added",
+                    f"{'required' if required else 'optional'} property {attribute.concept} added",
                     required=required,
                 )
             )
         elif name not in new:
             changes.append(
-                _attribute_change(
-                    owner,
-                    owner_kind,
-                    name,
+                attribute.change(
                     ChangeKind.REMOVED,
                     Classification.BREAKING,
-                    f"property {concept} removed",
+                    f"property {attribute.concept} removed",
                 )
             )
         else:
-            changes += _diff_property(owner, owner_kind, name, old[name], new[name])
+            changes += _diff_property(attribute, old[name], new[name])
     return changes
 
 
-def _diff_property(
-    owner: str, owner_kind: ConceptKind, name: str, old: Property, new: Property
-) -> list[Change]:
+def _diff_property(attribute: _Attribute, old: Property, new: Property) -> list[Change]:
     def change(classification: Classification, detail: str) -> Change:
-        return _attribute_change(
-            owner, owner_kind, name, ChangeKind.CHANGED, classification, detail
-        )
+        return attribute.change(ChangeKind.CHANGED, classification, detail)
 
     changes: list[Change] = []
     if old.description != new.description:
