@@ -1,4 +1,5 @@
-import type { CompetencyQuestion, UseCase } from '@/api/use-cases'
+import type { CompetencyQuestion, Task, UseCase } from '@/api/use-cases'
+import { mapTasks } from './consumer-form'
 
 /** The Competency Question form's fields, as typed (all text). */
 export interface QuestionDraft {
@@ -114,7 +115,20 @@ export function serverErrorField(message: string): DraftField | undefined {
   return SERVER_FIELD_RE.exec(message)?.[1] as DraftField | undefined
 }
 
-/** `useCase` without the question `id`. */
+/** The Tasks of `useCase` that need the question `id`, in Consumer order. */
+export function tasksNeeding(useCase: UseCase, id: string): Task[] {
+  return (useCase.consumers ?? []).flatMap((c) =>
+    (c.tasks ?? []).filter((t) => t.competency_questions?.includes(id)),
+  )
+}
+
+/** `useCase` without the question `id`, which every Task that needed it loses. */
 export function withoutQuestion(useCase: UseCase, id: string): UseCase {
-  return { ...useCase, competency_questions: useCase.competency_questions.filter((q) => q.id !== id) }
+  const rest = { ...useCase, competency_questions: useCase.competency_questions.filter((q) => q.id !== id) }
+  return mapTasks(rest, (task) => {
+    if (!task.competency_questions?.includes(id)) return task
+    const { competency_questions, ...bare } = task
+    const needs = competency_questions.filter((q) => q !== id)
+    return needs.length ? { ...bare, competency_questions: needs } : bare
+  })
 }

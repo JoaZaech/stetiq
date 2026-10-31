@@ -1,6 +1,6 @@
 # Using the web UI
 
-The web UI shows every Knowledge Graph you can read: its Ontology Versions, Construction Runs, Use Case, Observations and Promotions. It is also where you make the governance edits that don't belong in code: promoting an Ontology Version, editing a Knowledge Graph's description and changing its Competency Questions.
+The web UI shows every Knowledge Graph you can read: its Ontology Versions, Construction Runs, Use Case, Observations and Promotions. It is also where you make the governance edits that don't belong in code: promoting an Ontology Version, editing a Knowledge Graph's description and changing its Use Case's Competency Questions, Consumers and Tasks.
 
 Open it with `stetiq ui` (local mode, see [Getting started](./01-getting-started.md#open-the-web-ui)) or at `/ui` on a stetiq server, where you sign in with an API Token (see [Server and API Tokens](./05-server-and-api-tokens.md)). The words used here are explained on the [Concepts](./02-concepts.md) page.
 
@@ -28,6 +28,9 @@ Some controls change a Knowledge Graph, and they need the *edit* permission on i
 | **Promote** | An Ontology Version's page |
 | **Add Competency Question** | The Use Case section |
 | Edit and remove a Competency Question | The row of each Competency Question in the Use Case section |
+| **Add Consumer** | The Consumers panel of the Use Case section |
+| Edit and remove a Consumer, add a Task to it | The header of each Consumer card |
+| Edit and remove a Task | Beside each Task on its Consumer card |
 
 Without *edit*, these controls stay visible but disabled, with a *Needs edit access* tooltip. Everything else in the UI is read-only. In local mode every Knowledge Graph is editable. The server checks every change too, so a disabled button is a convenience, not the protection.
 
@@ -94,12 +97,14 @@ If there are no runs yet, the page shows how to start one from the Python SDK.
 
 The section shows the latest Use Case Version: its description and its Competency Questions, each with its id, question, Cypher query, expected answer and Concept mapping. A question that no Consumer's Task needs is marked *serves no Task* (in a Use Case without Consumers, every question is). Below it:
 
-- **Consumers**: a card per Consumer the Use Case declares, with its kind, contact and description, and its Tasks. Each Task lists the Competency Questions it needs (id and question), or says it needs none. A Task that needs questions also shows its **readiness** on the latest Ontology Version, such as "3/4 questions answerable on v5", and how many of the rest are *unanswerable* (the Ontology lacks Concepts they need) or *unmapped* (nothing maps them onto the Ontology). Readiness comes from the stored structural answerability result, and says "Not judged" until that Ontology Version has been judged against this Use Case Version. Consumers and Tasks are read-only here: declare them in the Use Case you register from the [Python SDK](./03-python-sdk.md#use-cases-and-competency-questions) or the [CLI](./04-cli.md#use-cases). Editing a Competency Question here keeps them.
+- **Consumers**: a card per Consumer the Use Case declares, with its kind, contact and description, and its Tasks. Each Task lists the Competency Questions it needs (id and question), or says it needs none. A Task that needs questions also shows its **readiness** on the latest Ontology Version, such as "3/4 questions answerable on v5", and how many of the rest are *unanswerable* (the Ontology lacks Concepts they need) or *unmapped* (nothing maps them onto the Ontology). Readiness comes from the stored structural answerability result, and says "Not judged" until that Ontology Version has been judged against this Use Case Version. You can edit Consumers and Tasks here (see below) or declare them in the Use Case you register from the [Python SDK](./03-python-sdk.md#use-cases-and-competency-questions) or the [CLI](./04-cli.md#use-cases).
 
 - **Structural answerability**: how many of those Competency Questions the latest Ontology Version can answer, and for each one whether it is *Answerable*, *Unanswerable* (with the Concepts it is missing) or *Unmapped*.
 - **Use Case Versions**: every Use Case Version with when it was created and how many Competency Questions it has.
 
-**Editing Competency Questions** (needs edit access). **Add Competency Question** opens a form with an **Id**, a **Question**, and optionally a **Cypher query**, an **Expected answer** (any JSON value the query's rows must match) and a **Concept mapping** (one Concept reference per line, e.g. `Customer`, `Ticket.opened_at` or `(Customer)-[OPENED]->(Ticket)`). Each row also has an edit button, which opens the same form (the id is locked: to change it, remove the question and add a new one), and a remove button.
+**Editing Competency Questions** (needs edit access). **Add Competency Question** opens a form with an **Id**, a **Question**, and optionally a **Cypher query**, an **Expected answer** (any JSON value the query's rows must match) and a **Concept mapping** (one Concept reference per line, e.g. `Customer`, `Ticket.opened_at` or `(Customer)-[OPENED]->(Ticket)`). Each row also has an edit button, which opens the same form (the id is locked: to change it, remove the question and add a new one), and a remove button. Removing a question that Tasks need names those Tasks first: they stay, without that question.
+
+**Editing Consumers and Tasks** (needs edit access). **Add Consumer** opens a form with an **Id** and a **Name**, and optionally a **Kind** (an application, an agent, a dashboard, a team...), a **Contact** and a **Description**. On each Consumer card, the edit button opens the same form (the id is locked), the remove button removes the Consumer with all its Tasks after naming them (the Competency Questions stay), and the add button adds a Task: an **Id**, a **Description**, and the Competency Questions it needs, ticked from the Use Case's. Each Task has its own edit and remove buttons. A new Consumer's or Task's id must differ from every other Consumer, Task and Competency Question id in the Use Case.
 
 Every save registers a new Use Case Version, so earlier results stay tied to the version they were judged against. After saving, the page says which Use Case Version you got. If the content is the same as the latest or an earlier version, no new version is created and the page says which one already has it.
 

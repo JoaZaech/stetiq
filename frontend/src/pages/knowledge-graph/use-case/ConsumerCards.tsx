@@ -2,19 +2,21 @@ import { useId, type ReactNode } from 'react'
 import type { CompetencyQuestion, Consumer, Task, UseCase } from '@/api/use-cases'
 import { Badge } from '@/components/ui/badge'
 
+interface ConsumerCardsProps {
+  useCase: UseCase
+  /** Renders under each Task's description, e.g. its readiness. */
+  taskStatus?: (task: Task) => ReactNode
+  /** Edit controls for a Consumer, shown in its card's header. */
+  consumerActions?: (consumer: Consumer) => ReactNode
+  /** Edit controls for a Task, shown beside it. */
+  taskActions?: (task: Task, consumer: Consumer) => ReactNode
+}
+
 /**
  * A Use Case Version's Consumers, one card each, listing its Tasks and the Competency
- * Questions each Task needs. Read-only.
- *
- * `taskStatus` renders under each Task's description, e.g. its readiness.
+ * Questions each Task needs, with the edit controls the page passes in.
  */
-export function ConsumerCards({
-  useCase,
-  taskStatus,
-}: {
-  useCase: UseCase
-  taskStatus?: (task: Task) => ReactNode
-}) {
+export function ConsumerCards({ useCase, taskStatus, consumerActions, taskActions }: ConsumerCardsProps) {
   const consumers = useCase.consumers ?? []
   if (consumers.length === 0) {
     return (
@@ -27,7 +29,14 @@ export function ConsumerCards({
   return (
     <div className="grid gap-4 md:grid-cols-2">
       {consumers.map((consumer) => (
-        <ConsumerCard key={consumer.id} consumer={consumer} questions={questions} taskStatus={taskStatus} />
+        <ConsumerCard
+          key={consumer.id}
+          consumer={consumer}
+          questions={questions}
+          taskStatus={taskStatus}
+          actions={consumerActions?.(consumer)}
+          taskActions={taskActions && ((task) => taskActions(task, consumer))}
+        />
       ))}
     </div>
   )
@@ -37,9 +46,11 @@ interface ConsumerCardProps {
   consumer: Consumer
   questions: Map<string, CompetencyQuestion>
   taskStatus?: (task: Task) => ReactNode
+  actions?: ReactNode
+  taskActions?: (task: Task) => ReactNode
 }
 
-function ConsumerCard({ consumer, questions, taskStatus }: ConsumerCardProps) {
+function ConsumerCard({ consumer, questions, taskStatus, actions, taskActions }: ConsumerCardProps) {
   const titleId = useId()
   const tasksId = useId()
   const tasks = consumer.tasks ?? []
@@ -55,6 +66,7 @@ function ConsumerCard({ consumer, questions, taskStatus }: ConsumerCardProps) {
           </h4>
           {consumer.kind && <Badge variant="secondary">{consumer.kind}</Badge>}
           <code className="font-mono text-xs text-muted-foreground">{consumer.id}</code>
+          {actions && <div className="ml-auto flex items-center gap-1">{actions}</div>}
         </div>
         {consumer.contact && (
           <p className="text-xs text-muted-foreground">Contact: {consumer.contact}</p>
@@ -70,7 +82,13 @@ function ConsumerCard({ consumer, questions, taskStatus }: ConsumerCardProps) {
         ) : (
           <ul aria-labelledby={tasksId} className="space-y-3">
             {tasks.map((task) => (
-              <TaskItem key={task.id} task={task} questions={questions} status={taskStatus?.(task)} />
+              <TaskItem
+                key={task.id}
+                task={task}
+                questions={questions}
+                status={taskStatus?.(task)}
+                actions={taskActions?.(task)}
+              />
             ))}
           </ul>
         )}
@@ -83,16 +101,20 @@ interface TaskItemProps {
   task: Task
   questions: Map<string, CompetencyQuestion>
   status?: ReactNode
+  actions?: ReactNode
 }
 
-function TaskItem({ task, questions, status }: TaskItemProps) {
+function TaskItem({ task, questions, status, actions }: TaskItemProps) {
   const needs = task.competency_questions ?? []
   return (
     <li className="space-y-1 border-l-2 pl-3">
-      <p>
-        {task.description}{' '}
-        <code className="font-mono text-xs text-muted-foreground">{task.id}</code>
-      </p>
+      <div className="flex items-start gap-2">
+        <p className="min-w-0 flex-1">
+          {task.description}{' '}
+          <code className="font-mono text-xs text-muted-foreground">{task.id}</code>
+        </p>
+        {actions && <div className="flex shrink-0 items-center gap-1">{actions}</div>}
+      </div>
       {status}
       {needs.length === 0 ? (
         <p className="text-xs text-muted-foreground">Needs no Competency Question</p>
