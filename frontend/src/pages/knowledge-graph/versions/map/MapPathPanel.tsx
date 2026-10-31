@@ -1,5 +1,5 @@
 import { formatCount } from '@/lib/format'
-import { MapSidePanel } from './MapSidePanel'
+import { MapSidePanel, type MapPanelNav } from './MapSidePanel'
 import type { MapPath } from './ontology-map-paths'
 
 /**
@@ -11,17 +11,17 @@ export function MapPathPanel({
   from,
   to,
   paths,
-  onClose,
+  nav,
 }: {
   from: string
   to: string
   paths: MapPath[]
-  onClose: () => void
+  nav: MapPanelNav
 }) {
   const steps = paths[0]?.steps.length ?? 0
 
   return (
-    <MapSidePanel label="Path" kind="Shortest path" title={`${from} to ${to}`} onClose={onClose}>
+    <MapSidePanel label="Path" kind="Shortest path" title={`${from} to ${to}`} nav={nav}>
       {paths.length === 0 ? (
         <p className="text-muted-foreground">
           No path connects {from} and {to}: no Pattern relates them, directly or through other classes, nor

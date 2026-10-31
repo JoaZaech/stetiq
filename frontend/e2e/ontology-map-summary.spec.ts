@@ -75,18 +75,23 @@ test('an entry focuses its Concept on the Map, and selecting on the Map finds it
   await page.mouse.move(0, 0)
   await expect.poll(() => faded('Agency')).toBe(false)
 
-  // Clicking selects it.
+  // Clicking selects it, its details in place of the summary.
+  const details = page.getByRole('complementary', { name: 'Details' })
+  const back = details.getByRole('button', { name: 'All changes' })
   await entry(summary, 'Stop').getByRole('button').click()
   await expect(shape(map, 'Stop')).toHaveAttribute('data-selected', 'true')
-  await expect(page.getByRole('complementary', { name: 'Details' })).toContainText('Stop')
+  await expect(details).toContainText('Stop')
+  await back.click()
   await expect(entry(summary, 'Stop').getByRole('button')).toHaveAttribute('aria-current', 'true')
 
-  // Selecting on the Map highlights the entry, the relation's for a link.
+  // Selected on the Map, the summary returns to its entry, the relation's for a link.
   await map.getByRole('group', { name: 'Trip', exact: true }).click()
+  await back.click()
   await expect(entry(summary, 'Trip').getByRole('button')).toHaveAttribute('aria-current', 'true')
   await expect(entry(summary, 'Trip')).toBeInViewport()
   await expect(entry(summary, 'Stop').getByRole('button')).not.toHaveAttribute('aria-current')
   await map.getByRole('group', { name: '(Route)-[HAS_TRIP]->(Trip)', exact: true }).click()
+  await back.click()
   await expect(entry(summary, 'HAS_TRIP').getByRole('button')).toHaveAttribute('aria-current', 'true')
 })
 
@@ -104,7 +109,7 @@ test.describe('with a filter hiding the first changed Pattern of a relation', ()
     await page.goto('/ui/kg/support/versions/2/changes?select=relation:OPENED')
     const details = page.getByRole('complementary', { name: 'Details' })
     await expect(details).toContainText('(Agent)-[OPENED]->(LegacyTicket)')
-    // By keyboard: with the summary and details open, the legend overlaps the filters.
+    // By keyboard: with the details open, the legend overlaps the filters.
     await page.getByRole('switch', { name: 'Hide deprecated' }).focus()
     await page.keyboard.press('Space')
 
@@ -116,6 +121,7 @@ test.describe('with a filter hiding the first changed Pattern of a relation', ()
     await expect(details).toHaveCount(0)
     await entry(summaryOf(page), 'OPENED').getByRole('button').click()
     await expect(details).toContainText('(Agent)-[OPENED]->(Ticket)')
+    await details.getByRole('button', { name: 'All changes' }).click()
     await expect(entry(summaryOf(page), 'OPENED').getByRole('button')).toHaveAttribute('aria-current', 'true')
   })
 })
