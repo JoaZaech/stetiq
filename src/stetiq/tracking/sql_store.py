@@ -74,6 +74,8 @@ knowledge_graphs = Table(
     Column("name", Text, primary_key=True),
     Column("created_at", Text, nullable=False),  # ISO-8601, UTC
     Column("description", Text),  # markdown; NULL when unset
+    Column("steward", Text),  # NULL when unset
+    Column("authority", Text),  # NULL when unset
 )
 
 ontology_versions = Table(
@@ -288,6 +290,8 @@ _ADDED_COLUMNS = [
     ("evaluation_results", "use_case_version", "INTEGER"),
     ("evaluation_results", "parameters_json", "TEXT NOT NULL DEFAULT '{}'"),
     ("knowledge_graphs", "description", "TEXT"),
+    ("knowledge_graphs", "steward", "TEXT"),
+    ("knowledge_graphs", "authority", "TEXT"),
 ]
 
 
@@ -408,6 +412,16 @@ class SqlStore:
                 update(knowledge_graphs)
                 .where(knowledge_graphs.c.name == name)
                 .values(description=description)
+            )
+
+    def set_knowledge_graph_governance(
+        self, name: str, steward: str | None, authority: str | None
+    ) -> None:
+        with self._connection() as conn:
+            conn.execute(
+                update(knowledge_graphs)
+                .where(knowledge_graphs.c.name == name)
+                .values(steward=steward, authority=authority)
             )
 
     def list_knowledge_graphs(self) -> list[KnowledgeGraph]:
@@ -934,6 +948,8 @@ def _knowledge_graph_from_row(row) -> KnowledgeGraph:
         name=row["name"],
         created_at=datetime.fromisoformat(row["created_at"]),
         description=row["description"],
+        steward=row["steward"],
+        authority=row["authority"],
     )
 
 
