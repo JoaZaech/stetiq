@@ -87,6 +87,13 @@ class RemoteTrackingService:
         data = self._call("PUT", self._kg_path(name) + "/description", body)
         return codec.knowledge_graph_from_json(data)
 
+    def set_knowledge_graph_governance(
+        self, name: str, steward: str | None, authority: str | None
+    ) -> KnowledgeGraph:
+        body = {"steward": steward, "authority": authority}
+        data = self._call("PUT", self._kg_path(name) + "/governance", body)
+        return codec.knowledge_graph_from_json(data)
+
     def list_knowledge_graphs(self) -> list[KnowledgeGraphSummary]:
         data = self._call("GET", "/knowledge-graphs")
         return [codec.knowledge_graph_summary_from_json(k) for k in data]

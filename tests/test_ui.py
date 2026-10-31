@@ -344,7 +344,7 @@ def test_a_single_knowledge_graph_carries_no_summary_fields(http, database_url, 
 
     r = http.get("/api/v1/knowledge-graphs/support", headers=bearer(database_url, {"*": "read"}))
 
-    assert set(r.json()) == {"name", "created_at", "description"}
+    assert set(r.json()) == {"name", "created_at", "description", "steward", "authority"}
 
 
 # --- Knowledge Graph description ------------------------------------------------------------

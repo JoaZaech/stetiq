@@ -99,6 +99,17 @@ def test_running_needs_edit_permission(server, support):
     assert reader.list_runs(support) == []
 
 
+def test_naming_a_steward_or_authority_needs_edit_permission(server, support):
+    reader = _client(server, _issue(server, "ada", {"support": "read"}))
+
+    with pytest.raises(stetiq.PermissionDeniedError):
+        reader.set_knowledge_graph_governance(support, steward="Ada")
+    with pytest.raises(stetiq.PermissionDeniedError):
+        reader.set_knowledge_graph_governance(support, authority="Ops board")
+    kg = reader.get_knowledge_graph(support)
+    assert (kg.steward, kg.authority) == (None, None)
+
+
 def test_edit_permission_allows_registering_running_and_moving_aliases(
     server, support, support_ontology
 ):
