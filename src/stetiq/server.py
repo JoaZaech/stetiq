@@ -221,6 +221,15 @@ def create_app(
         kg = tracking.set_knowledge_graph_description(name, description)
         return codec.knowledge_graph_to_json(kg)
 
+    @api.put("/knowledge-graphs/{name}/governance")
+    def set_knowledge_graph_governance(
+        name: str,
+        steward: str | None = Body(default=None, embed=True),
+        authority: str | None = Body(default=None, embed=True),
+    ) -> dict[str, Any]:
+        kg = tracking.set_knowledge_graph_governance(name, steward, authority)
+        return codec.knowledge_graph_to_json(kg)
+
     @api.post("/knowledge-graphs/{name}/ontology-versions")
     def register_ontology(name: str, ontology: dict[str, Any] = Body(embed=True)) -> dict[str, Any]:
         # Always origin "registered": "run" versions only arise from ending a run.

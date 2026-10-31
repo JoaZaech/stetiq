@@ -22,11 +22,18 @@ Origin = Literal["registered", "run"]
 
 @dataclass(frozen=True)
 class KnowledgeGraph:
-    """A Knowledge Graph. `description` is optional, mutable markdown saying what it is for."""
+    """A Knowledge Graph. `description` is optional, mutable markdown saying what it is for.
+
+    `steward` names who watches its Drift and keeps its Definitions and Competency
+    Questions current, `authority` who decides changes to its Ontology. Both are free
+    strings for display and routing only: they grant no permission.
+    """
 
     name: str
     created_at: datetime
     description: str | None = None
+    steward: str | None = None
+    authority: str | None = None
 
 
 @dataclass(frozen=True)
