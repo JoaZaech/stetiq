@@ -45,6 +45,26 @@ describe('answerabilityOf', () => {
     })
   })
 
+  it('lists a regressed question once', () => {
+    const regressed = result({
+      ...JUDGED,
+      details: [
+        ...JUDGED.details,
+        {
+          item: 'refunds',
+          message: 'answered by Ontology Version 1, missing Refund',
+          metric: 'regressed_questions',
+          data: { status: 'regressed', contract_version: 1, missing: ['Refund'] },
+        },
+      ],
+    })
+
+    expect(answerabilityOf([regressed], 2)?.rows.map((r) => r.id)).toEqual([
+      'customer-names',
+      'refunds',
+    ])
+  })
+
   it('finds nothing when the result was judged against another Use Case Version', () => {
     expect(answerabilityOf([JUDGED], 3)).toBeUndefined()
   })

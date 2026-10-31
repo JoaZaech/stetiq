@@ -371,12 +371,20 @@ class LocalTrackingService:
     def _run_answerability(
         self, version: OntologyVersion, use_case_version: int | None = None
     ) -> list[EvaluationResult]:
-        """Structural answerability against a Use Case version (default: the latest)."""
+        """Structural answerability against a Use Case version (default: the latest),
+        with regressions judged against the Contract Alias's version."""
         try:
             use_case = self.get_use_case_version(version.knowledge_graph, use_case_version)
         except NoUseCaseError:
             return []
-        evaluator = StructuralAnswerability(use_case.use_case, self._question_mapper)
+        kg = version.knowledge_graph
+        contract_alias = self._store.get_alias(kg, self._contract_alias(kg))
+        contract = (
+            None
+            if contract_alias is None
+            else self._store.get_ontology_version(kg, contract_alias.version)
+        )
+        evaluator = StructuralAnswerability(use_case.use_case, self._question_mapper, contract)
         return [
             self._store_result(
                 version.knowledge_graph,
