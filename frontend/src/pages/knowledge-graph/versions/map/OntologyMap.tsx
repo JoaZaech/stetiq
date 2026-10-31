@@ -107,7 +107,7 @@ const REMOVED_DASH = '6 4'
 interface ChangeStyle {
   /** A class's box, and the parts of it its severity colours. */
   node: string
-  nodeSeverity: (keyof typeof SEVERITY)[]
+  nodeSeverity: Exclude<keyof typeof SEVERITY, 'swatch'>[]
   /** A link: dashed as a ghost, emphasized (thicker, its label bold), or muted. */
   dashed: boolean
   emphasized: boolean
