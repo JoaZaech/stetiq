@@ -7,7 +7,7 @@ import { CompareToolbar } from '@/components/CompareToolbar'
 import { DataTable } from '@/components/DataTable'
 import { Checkbox } from '@/components/ui/checkbox'
 import { createDataTableColumnHelper, useDataTable } from '@/lib/data-table'
-import { formatDateTime } from '@/lib/format'
+import { formatCount, formatDateTime } from '@/lib/format'
 
 interface VersionRow {
   number: number
@@ -41,7 +41,7 @@ const columns = column.columns([
   column.accessor('questions', {
     header: 'Competency Questions',
     cell: ({ getValue }) =>
-      `${getValue()} Competency Question${getValue() === 1 ? '' : 's'}`,
+      formatCount(getValue(), 'Competency Question'),
   }),
 ])
 

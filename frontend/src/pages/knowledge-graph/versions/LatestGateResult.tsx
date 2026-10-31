@@ -2,7 +2,7 @@ import { latestGateResult, useGateResults } from '@/api/gate-results'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatDateTime } from '@/lib/format'
+import { formatCount, formatDateTime } from '@/lib/format'
 
 /**
  * An Ontology Version's latest Gate result: Passed, Failed or None, with when it was
@@ -26,8 +26,7 @@ export function LatestGateResult({ name, number }: { name: string; number: numbe
     <p className="flex flex-wrap items-center gap-2 text-sm">
       <Badge variant={latest.passed ? 'default' : 'destructive'}>{latest.passed ? 'Passed' : 'Failed'}</Badge>
       <span className="text-muted-foreground">
-        {formatDateTime(latest.evaluated_at)} · {latest.outcomes.length} Gate
-        {latest.outcomes.length === 1 ? '' : 's'}
+        {formatDateTime(latest.evaluated_at)} · {formatCount(latest.outcomes.length, 'Gate')}
         {failed.length > 0 && `, failed: ${failed.join(', ')}`}
       </span>
     </p>

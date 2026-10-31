@@ -1,150 +1,575 @@
-import { useId, useMemo, type ReactNode } from 'react'
-import { Search } from 'lucide-react'
+import { type Ref, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useSearchParams } from 'react-router'
+import type { ColumnDef } from '@tanstack/react-table'
+import type { Ontology } from '@/api/ontology-versions'
+import { ColumnPicker } from '@/components/ColumnPicker'
+import { DataTable, DataTableRowCount } from '@/components/DataTable'
+import { SearchInput } from '@/components/SearchInput'
+import { ViewToggle } from '@/components/ViewToggle'
 import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { createDataTableColumnHelper, type DataTableFeatures, filterColumn, useDataTable } from '@/lib/data-table'
+import { type DataTableParamsOptions, useDataTableParams } from '@/lib/data-table-params'
+import { formatCount } from '@/lib/format'
+import { setOrDeleteParam } from '@/lib/search-params'
+import { useViewParam } from '@/lib/view-param'
+import { attributeRows } from './attribute-rows'
+import { AttributesGrid, type GroupRequest } from './AttributesGrid'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { conceptTables, searchConcepts } from './concepts'
+  type ConceptSelection,
+  isSelectedRow,
+  type SelectedRows,
+  selectedRows,
+  useConceptSelection,
+  useShowOnMap,
+} from './concept-selection'
+import {
+  type ClassOrRelation,
+  type ClassRow,
+  conceptTables,
+  type Connection,
+  type Pattern,
+  patternId,
+  type RelationRow,
+} from './concepts'
+import { MAP_VIEW_OPTIONS, MAP_VIEWS } from './map-view'
+import { OntologyMap } from './OntologyMap'
+import { conceptRowId, selectedRowProps, type TableLinks, TableLinksContext } from './table-links'
+import { AttributeCountLink, ConceptLink, ShowOnMap } from './TableLinks'
 import { useOntologyVersionTab } from './version-context'
 
-/** The version page's Ontology tab: its Concepts grouped as classes, relations and attributes. */
+/**
+ * The version page's Ontology tab: a Map of the Ontology by default (`?view=` absent), or
+ * its Concepts as a Table (`?view=table`): classes, relations and attributes stacked in
+ * collapsible sections under a jump bar. The Concept search (`?q=`) drives both: it
+ * filters the Table and highlights on the Map. So does the selection (`?select=`): it is
+ * selected on the Map and highlighted in the Table.
+ */
 export function OntologyTab() {
   const version = useOntologyVersionTab()
+  const [view, setView] = useViewParam(MAP_VIEWS)
   const [params, setParams] = useSearchParams()
   const query = params.get('q') ?? ''
-  const all = useMemo(() => conceptTables(version.ontology), [version.ontology])
-  const { classes, relations, attributes } = searchConcepts(all, query)
 
   return (
-    <div className="space-y-8">
-      <div className="relative max-w-sm">
-        <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-        <Input
-          type="search"
-          aria-label="Search Concepts"
-          placeholder="Search Concepts"
-          className="pl-8"
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-4">
+        <SearchInput
+          label="Search Concepts"
+          className="w-full max-w-sm"
           value={query}
-          onChange={(e) =>
-            setParams(e.target.value ? { q: e.target.value } : {}, { replace: true })
-          }
+          onChange={(value) => setParams((p) => setOrDeleteParam(p, 'q', value), { replace: true })}
         />
+        <ViewToggle options={MAP_VIEW_OPTIONS} mode={view} onChange={setView} />
       </div>
-
-      <Group title="Classes" count={classes.length} query={query}>
-        <Table aria-label="Classes">
-          <TableHeader>
-            <TableRow>
-              <TableHead>Class</TableHead>
-              <TableHead>Superclass</TableHead>
-              <TableHead>Constraints</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {classes.map((c) => (
-              <TableRow key={c.label}>
-                <TableCell style={{ paddingLeft: `${0.5 + c.depth * 1.25}rem` }}>
-                  <ConceptName label={c.label} description={c.description} deprecated={c.deprecated} />
-                </TableCell>
-                <TableCell>{c.parent}</TableCell>
-                <TableCell>{c.constraints.join(', ')}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Group>
-
-      <Group title="Relations" count={relations.length} query={query}>
-        <Table aria-label="Relations">
-          <TableHeader>
-            <TableRow>
-              <TableHead>Relation</TableHead>
-              <TableHead>Patterns</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {relations.map((r) => (
-              <TableRow key={r.label}>
-                <TableCell>
-                  <ConceptName label={r.label} description={r.description} deprecated={r.deprecated} />
-                </TableCell>
-                <TableCell className="font-mono text-xs">
-                  {r.patterns.map((p) => (
-                    <div key={p}>{p}</div>
-                  ))}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Group>
-
-      <Group title="Attributes" count={attributes.length} query={query}>
-        <Table aria-label="Attributes">
-          <TableHeader>
-            <TableRow>
-              <TableHead>Class or relation</TableHead>
-              <TableHead>Attribute</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Required</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {attributes.map((a) => (
-              <TableRow key={`${a.owner}.${a.name}`}>
-                <TableCell>{a.owner}</TableCell>
-                <TableCell>
-                  <ConceptName label={a.name} description={a.description} />
-                </TableCell>
-                <TableCell className="font-mono text-xs">{a.type}</TableCell>
-                <TableCell>{a.required && 'Required'}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Group>
+      {view === 'map' ? (
+        <OntologyMap ontology={version.ontology} query={query} />
+      ) : (
+        <OntologyTables ontology={version.ontology} />
+      )}
     </div>
   )
 }
 
-function Group({
+type SectionId = 'classes' | 'relations' | 'attributes'
+
+/**
+ * What each section means in the Ontology, in glossary words, and what one of its rows
+ * is, as its grid counts them.
+ */
+const SECTIONS: readonly { id: SectionId; title: string; row: [string, string]; purpose: string }[] = [
+  {
+    id: 'classes',
+    title: 'Classes',
+    row: ['class', 'classes'],
+    purpose:
+      'Classes are the kinds of things the Knowledge Graph stores; an indented class is a subclass and inherits its superclass’s attributes and relations.',
+  },
+  {
+    id: 'relations',
+    title: 'Relations',
+    row: ['relation', 'relations'],
+    purpose: 'Relations say how classes connect; each Pattern says which class may link to which through the relation.',
+  },
+  {
+    id: 'attributes',
+    title: 'Attributes',
+    row: ['attribute', 'attributes'],
+    purpose: 'Attributes are the fields stored on a class or relation.',
+  },
+]
+
+/** The row a selection highlights first: a link's relation, a path's first class. */
+function rowOf(ontology: Ontology, selection: ConceptSelection | null): ClassOrRelation | null {
+  const { classes, relations } = selectedRows(ontology, selection)
+  const [label] = [...classes, ...relations]
+  if (label === undefined) return null
+  return { kind: classes.has(label) ? 'class' : 'relation', label }
+}
+
+/** A request to scroll to a row by DOM id; `seq` tells a repeated request from the last. */
+type ScrollRequest = { id: string; seq: number }
+
+/**
+ * The Table's three sections. Every class and relation name links to its row (selecting
+ * it), attribute counts link to their owner's group, and each row can be shown on the
+ * Map. It opens scrolled to the selection's row.
+ */
+function OntologyTables({ ontology }: { ontology: Ontology }) {
+  const all = useMemo(() => conceptTables(ontology), [ontology])
+  const attributes = useMemo(() => attributeRows(ontology), [ontology])
+  const [collapsed, setCollapsed] = useState<ReadonlySet<SectionId>>(new Set())
+  const sections = useRef(new Map<SectionId, HTMLElement>())
+  const [selection, setSelection] = useConceptSelection()
+  const highlighted = useMemo(() => selectedRows(ontology, selection), [ontology, selection])
+  const showOnMap = useShowOnMap()
+  const [scroll, setScroll] = useState<ScrollRequest | null>(() => {
+    const row = rowOf(ontology, selection)
+    return row && { id: conceptRowId(row), seq: 0 }
+  })
+  const [group, setGroup] = useState<GroupRequest | null>(null)
+
+  useEffect(() => {
+    if (scroll) document.getElementById(scroll.id)?.scrollIntoView({ block: 'center' })
+  }, [scroll])
+
+  const toggle = (id: SectionId, open: boolean) =>
+    setCollapsed((c) => {
+      const next = new Set(c)
+      if (open) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  const jump = (id: SectionId) => {
+    toggle(id, true)
+    sections.current.get(id)?.scrollIntoView({ block: 'start' })
+  }
+  const links = useMemo(
+    (): TableLinks => {
+      const open = (id: SectionId) => setCollapsed((c) => new Set([...c].filter((s) => s !== id)))
+      return {
+        select: (concept) => {
+          setSelection(concept)
+          open(concept.kind === 'class' ? 'classes' : 'relations')
+          setScroll((s) => ({ id: conceptRowId(concept), seq: (s?.seq ?? 0) + 1 }))
+        },
+        openGroup: (owner) => {
+          open('attributes')
+          setGroup((g) => ({ owner, seq: (g?.seq ?? 0) + 1 }))
+        },
+        showOnMap,
+      }
+    },
+    [setSelection, showOnMap],
+  )
+  // Each section's rows: the attributes inherited by each subclass included.
+  const rows: Record<SectionId, number> = {
+    classes: all.classes.length,
+    relations: all.relations.length,
+    attributes: attributes.length,
+  }
+  const body: Record<SectionId, ReactNode> = {
+    classes: (
+      <ConceptGrid kind="class" rows={all.classes} columns={classColumns} params={CLASSES_GRID} selected={highlighted} />
+    ),
+    relations: (
+      <ConceptGrid
+        kind="relation"
+        rows={all.relations}
+        columns={relationColumns}
+        params={RELATIONS_GRID}
+        selected={highlighted}
+      />
+    ),
+    attributes: <AttributesGrid attributes={attributes} reveal={group} />,
+  }
+
+  return (
+    <TableLinksContext value={links}>
+      <div className="space-y-6">
+        <nav
+          aria-label="Ontology sections"
+          className="sticky top-0 z-10 -mx-1 flex items-center gap-1 border-b bg-background px-1 py-1.5 text-sm"
+        >
+          {SECTIONS.map((s, i) => (
+            <span key={s.id} className="inline-flex items-center gap-1">
+              {i > 0 && (
+                <span aria-hidden className="text-muted-foreground">
+                  ·
+                </span>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2"
+                title={formatCount(rows[s.id], ...s.row)}
+                onClick={() => jump(s.id)}
+              >
+                {s.title} <span className="text-muted-foreground tabular-nums">{rows[s.id]}</span>
+              </Button>
+            </span>
+          ))}
+        </nav>
+        {SECTIONS.map((s) => (
+          <Section
+            key={s.id}
+            ref={(el) => {
+              if (el) sections.current.set(s.id, el)
+              else sections.current.delete(s.id)
+            }}
+            title={s.title}
+            purpose={s.purpose}
+            open={!collapsed.has(s.id)}
+            onOpenChange={(open) => toggle(s.id, open)}
+          >
+            {body[s.id]}
+          </Section>
+        ))}
+      </div>
+    </TableLinksContext>
+  )
+}
+
+function Section({
+  ref,
   title,
-  count,
-  query,
+  purpose,
+  open,
+  onOpenChange,
   children,
 }: {
+  ref: Ref<HTMLElement>
   title: string
-  count: number
-  query: string
+  purpose: string
+  open: boolean
+  onOpenChange: (open: boolean) => void
   children: ReactNode
 }) {
   const id = useId()
-  const empty = query.trim()
-    ? `No ${title.toLowerCase()} match “${query.trim()}”.`
-    : `This Ontology has no ${title.toLowerCase()}.`
+  const Chevron = open ? ChevronDown : ChevronRight
   return (
-    <section aria-labelledby={id} className="space-y-2">
+    <section ref={ref} aria-labelledby={id} className="scroll-mt-12 space-y-2">
       <h2 id={id} className="text-sm font-semibold">
-        {title} <span className="font-normal text-muted-foreground">{count}</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="-ml-2 h-7 px-2 text-sm font-semibold"
+          aria-expanded={open}
+          aria-controls={`${id}-body`}
+          onClick={() => onOpenChange(!open)}
+        >
+          <Chevron aria-hidden className="size-4" />
+          {title}
+        </Button>
       </h2>
-      {count > 0 ? children : <p className="text-sm text-muted-foreground">{empty}</p>}
+      <div id={`${id}-body`} hidden={!open} className="space-y-2">
+        <p className="text-sm text-muted-foreground">{purpose}</p>
+        {children}
+      </div>
     </section>
   )
 }
 
-function ConceptName({
+/** A row's props: its id to scroll to, and its highlight when selected. */
+const rowProps = (concept: ClassOrRelation, selected: SelectedRows) => ({
+  id: conceptRowId(concept),
+  ...selectedRowProps(isSelectedRow(selected, concept)),
+})
+
+/** The column every row ends in: its "Show on Map". */
+const showOnMapColumn = (kind: ClassOrRelation['kind']) => ({
+  id: 'map',
+  header: '',
+  cell: ({ row }: { row: { original: { label: string } } }) => <ShowOnMap concept={{ kind, label: row.original.label }} />,
+})
+
+const classColumn = createDataTableColumnHelper<ClassRow>()
+
+const none = <span className="text-muted-foreground">—</span>
+
+/** How a class's outgoing and incoming relations point: `HAS_TRIP → Trip`, `HAS_TRIP ← Route`. */
+const ARROW = { outgoing: '→', incoming: '←' } as const
+
+/** A connection as text, as its column filters and searches it. */
+const connectionText = (direction: keyof typeof ARROW) => (row: ClassRow) =>
+  row[direction].map((c) => `${c.relation} ${ARROW[direction]} ${c.other}`)
+
+/** A class's outgoing or incoming relations, one per line, each name a link. */
+const connections = (items: readonly Connection[], direction: keyof typeof ARROW) =>
+  items.length === 0 ? (
+    none
+  ) : (
+    <div className="font-mono text-xs">
+      {items.map(({ relation, other }) => (
+        <div key={`${relation} ${other}`}>
+          <ConceptLink concept={{ kind: 'relation', label: relation }} /> {ARROW[direction]}{' '}
+          <ConceptLink concept={{ kind: 'class', label: other }} />
+        </div>
+      ))}
+    </div>
+  )
+
+const classColumns = classColumn.columns([
+  classColumn.accessor('label', {
+    header: 'Class',
+    ...filterColumn('text'),
+    // Indented under its superclass while the rows keep hierarchy order (no sort).
+    cell: ({ row, table }) => (
+      <div style={{ paddingLeft: table.store.state.sorting.length === 0 ? `${row.original.depth * 1.25}rem` : 0 }}>
+        <ConceptName
+          label={<ConceptLink concept={{ kind: 'class', label: row.original.label }} />}
+          deprecated={row.original.deprecated}
+        />
+      </div>
+    ),
+  }),
+  classColumn.accessor('parent', {
+    header: 'Superclass',
+    ...filterColumn('values'),
+    enableGlobalFilter: false,
+    sortUndefined: 'last',
+    cell: ({ getValue }) => {
+      const parent = getValue()
+      return parent === undefined ? none : <ConceptLink concept={{ kind: 'class', label: parent }} />
+    },
+  }),
+  classColumn.accessor('attributes', {
+    header: 'Attributes',
+    sortFn: 'basic',
+    enableGlobalFilter: false,
+    cell: ({ row }) => {
+      const { label, attributes, inheritedAttributes } = row.original
+      const count = (
+        <span className="tabular-nums">
+          {attributes}
+          {inheritedAttributes > 0 && (
+            <span className="text-muted-foreground" title="inherited">
+              {' '}
+              ({inheritedAttributes})
+            </span>
+          )}
+        </span>
+      )
+      const total = attributes + inheritedAttributes
+      return total === 0 ? (
+        count
+      ) : (
+        <AttributeCountLink owner={label} count={total}>
+          {count}
+        </AttributeCountLink>
+      )
+    },
+  }),
+  classColumn.accessor(connectionText('outgoing'), {
+    id: 'outgoing',
+    header: 'Outgoing',
+    ...filterColumn('text'),
+    enableSorting: false,
+    enableGlobalFilter: false,
+    cell: ({ row }) => connections(row.original.outgoing, 'outgoing'),
+  }),
+  classColumn.accessor(connectionText('incoming'), {
+    id: 'incoming',
+    header: 'Incoming',
+    ...filterColumn('text'),
+    enableSorting: false,
+    enableGlobalFilter: false,
+    cell: ({ row }) => connections(row.original.incoming, 'incoming'),
+  }),
+  classColumn.accessor('constraints', {
+    header: 'Constraints',
+    ...filterColumn('text'),
+    enableSorting: false,
+    enableGlobalFilter: false,
+    cell: ({ getValue }) => (getValue().length === 0 ? none : getValue().join(', ')),
+  }),
+  classColumn.accessor('description', {
+    header: 'Description',
+    ...filterColumn('text'),
+    enableSorting: false,
+    cell: ({ getValue }) => <span className="text-muted-foreground">{getValue()}</span>,
+  }),
+  classColumn.accessor('deprecated', {
+    header: 'Deprecated',
+    ...filterColumn('toggle'),
+    enableGlobalFilter: false,
+    cell: ({ getValue }) => (getValue() ? 'Deprecated' : ''),
+  }),
+  classColumn.display(showOnMapColumn('class')),
+])
+
+/**
+ * The Classes grid's URL state. The search is the Concept search (`?q=`), matching a
+ * class's name or description as the Map's search does.
+ */
+const CLASSES_GRID: DataTableParamsOptions = {
+  key: 'classes',
+  filters: {
+    label: 'text',
+    parent: 'values',
+    outgoing: 'text',
+    incoming: 'text',
+    constraints: 'text',
+    description: 'text',
+    deprecated: 'toggle',
+  },
+  optional: ['deprecated'],
+  search: 'q',
+}
+
+/**
+ * The Classes or Relations grid: a row per class or relation, with its row count and a
+ * column picker for Deprecated above it, each row its id and its highlight when selected.
+ */
+function ConceptGrid<TRow extends { label: string }>({
+  kind,
+  rows,
+  columns,
+  params,
+  selected,
+}: {
+  kind: ClassOrRelation['kind']
+  rows: TRow[]
+  columns: ColumnDef<DataTableFeatures, TRow, unknown>[]
+  /** The grid's URL state. */
+  params: DataTableParamsOptions
+  selected: SelectedRows
+}) {
+  const grid = useDataTableParams(params)
+  const table = useDataTable({
+    data: rows,
+    columns,
+    getRowId: (row) => row.label,
+    globalFilterFn: 'includesString',
+    ...grid.tableOptions,
+  })
+  const { title, plural } = GRID_NAMES[kind]
+  return (
+    <>
+      <div className="flex items-center justify-between gap-4">
+        <DataTableRowCount table={table} noun={plural} />
+        <ColumnPicker
+          groups={[{ label: 'Columns', columns: [{ id: 'deprecated', label: 'Deprecated' }] }]}
+          visible={grid.shown}
+          onToggle={grid.setShown}
+        />
+      </div>
+      <DataTable
+        table={table}
+        label={title}
+        empty={`No ${plural} match.`}
+        rowProps={(row) => rowProps({ kind, label: row.original.label }, selected)}
+      />
+    </>
+  )
+}
+
+/** How a grid of classes or relations names itself and its rows. */
+const GRID_NAMES: Record<ClassOrRelation['kind'], { title: string; plural: string }> = {
+  class: { title: 'Classes', plural: 'classes' },
+  relation: { title: 'Relations', plural: 'relations' },
+}
+
+const relationColumn = createDataTableColumnHelper<RelationRow>()
+
+/** A Pattern as `(Source)-[REL]->(Target)`, its two class names set apart from the syntax. */
+function PatternText({ pattern: [source, relation, target] }: { pattern: Pattern }) {
+  const syntax = (text: string) => <span className="text-muted-foreground">{text}</span>
+  return (
+    <div>
+      {syntax('(')}
+      <span className="font-semibold">
+        <ConceptLink concept={{ kind: 'class', label: source }} />
+      </span>
+      {syntax(')-[')}
+      <ConceptLink concept={{ kind: 'relation', label: relation }} />
+      {syntax(']->(')}
+      <span className="font-semibold">
+        <ConceptLink concept={{ kind: 'class', label: target }} />
+      </span>
+      {syntax(')')}
+    </div>
+  )
+}
+
+const relationColumns = relationColumn.columns([
+  relationColumn.accessor('label', {
+    header: 'Relation',
+    ...filterColumn('text'),
+    cell: ({ row }) => (
+      <ConceptName
+        label={<ConceptLink concept={{ kind: 'relation', label: row.original.label }} />}
+        deprecated={row.original.deprecated}
+      />
+    ),
+  }),
+  // Filtered by the Patterns' text, `(Source)-[REL]->(Target)`.
+  relationColumn.accessor((row) => row.patterns.map(patternId), {
+    id: 'patterns',
+    header: 'Patterns',
+    ...filterColumn('text'),
+    enableSorting: false,
+    enableGlobalFilter: false,
+    cell: ({ row: { original } }) =>
+      original.patterns.length === 0 ? (
+        none
+      ) : (
+        <div className="font-mono text-xs">
+          {original.patterns.map((p) => (
+            <PatternText key={patternId(p)} pattern={p} />
+          ))}
+        </div>
+      ),
+  }),
+  relationColumn.accessor('attributes', {
+    header: 'Attributes',
+    sortFn: 'basic',
+    enableGlobalFilter: false,
+    cell: ({ row }) => {
+      const { label, attributes } = row.original
+      const count = <span className="tabular-nums">{attributes}</span>
+      return attributes === 0 ? (
+        count
+      ) : (
+        <AttributeCountLink owner={label} count={attributes}>
+          {count}
+        </AttributeCountLink>
+      )
+    },
+  }),
+  relationColumn.accessor('description', {
+    header: 'Description',
+    ...filterColumn('text'),
+    enableSorting: false,
+    cell: ({ getValue }) => <span className="text-muted-foreground">{getValue()}</span>,
+  }),
+  relationColumn.accessor('deprecated', {
+    header: 'Deprecated',
+    ...filterColumn('toggle'),
+    enableGlobalFilter: false,
+    cell: ({ getValue }) => (getValue() ? 'Deprecated' : ''),
+  }),
+  relationColumn.display(showOnMapColumn('relation')),
+])
+
+/**
+ * The Relations grid's URL state. The search is the Concept search (`?q=`), matching a
+ * relation's name or description as the Map's search does.
+ */
+const RELATIONS_GRID: DataTableParamsOptions = {
+  key: 'relations',
+  filters: { label: 'text', patterns: 'text', description: 'text', deprecated: 'toggle' },
+  optional: ['deprecated'],
+  search: 'q',
+}
+
+export function ConceptName({
   label,
   description,
   deprecated = false,
 }: {
-  label: string
+  label: ReactNode
   description?: string
   deprecated?: boolean
 }) {

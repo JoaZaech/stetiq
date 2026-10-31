@@ -7,9 +7,8 @@
  * and wrap it in `<Suspense>`. Shape the data with `metricSeries` (`@/lib/metric-charts`).
  */
 import { useId, useMemo } from 'react'
-import { Search } from 'lucide-react'
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { Input } from '@/components/ui/input'
+import { SearchInput } from '@/components/SearchInput'
 import { formatMetric } from '@/lib/format'
 import { filterMetricSeries, type MetricSeries } from '@/lib/metric-charts'
 
@@ -42,17 +41,7 @@ export default function MetricChartGrid({ series, xAxis, search, onSearchChange 
       <h3 id={id} className="sr-only">
         Metric charts
       </h3>
-      <div className="relative w-72 max-w-full">
-        <Search aria-hidden className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          type="search"
-          aria-label="Search metric charts"
-          placeholder="Search metric charts"
-          className="pl-8"
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-        />
-      </div>
+      <SearchInput label="Search metric charts" value={search} onChange={onSearchChange} />
       {series.length === 0 ? (
         <p className="text-sm text-muted-foreground">No metrics to chart yet.</p>
       ) : shown.length === 0 ? (

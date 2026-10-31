@@ -11,3 +11,8 @@ const metric = new Intl.NumberFormat(undefined, { maximumSignificantDigits: 4, u
 export function formatMetric(value: number): string {
   return Number.isInteger(value) ? String(value) : metric.format(value)
 }
+
+/** `n` and `noun`, the noun plural unless `n` is 1: "1 attribute", "3 attributes", "2 classes". */
+export function formatCount(n: number, noun: string, plural = `${noun}s`): string {
+  return `${n} ${n === 1 ? noun : plural}`
+}

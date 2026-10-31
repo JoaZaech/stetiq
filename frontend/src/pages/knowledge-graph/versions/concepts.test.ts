@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Ontology } from '@/api/ontology-versions'
-import { conceptTables, searchConcepts } from './concepts'
+import { conceptTables } from './concepts'
 
 // Canonical form, as the server sends it: Concepts sorted by label.
 const ONTOLOGY: Ontology = {
@@ -39,21 +39,20 @@ describe('conceptTables', () => {
     expect(classes.find((c) => c.label === 'Person')?.constraints).toEqual([])
   })
 
-  it('lists relations with their patterns, and attributes with their owner', () => {
-    const { relations, attributes } = conceptTables(ONTOLOGY)
+  it('lists relations with their patterns', () => {
+    const { relations } = conceptTables(ONTOLOGY)
 
     expect(relations).toEqual([
       {
         label: 'OPENED',
         description: undefined,
         deprecated: false,
-        patterns: ['(Agent)-[OPENED]->(Ticket)', '(Customer)-[OPENED]->(Ticket)'],
+        patterns: [
+          ['Agent', 'OPENED', 'Ticket'],
+          ['Customer', 'OPENED', 'Ticket'],
+        ],
+        attributes: 1,
       },
-    ])
-    expect(attributes.map((a) => [a.owner, a.name, a.type, a.required])).toEqual([
-      ['Person', 'name', 'STRING', true],
-      ['Ticket', 'opened_at', 'DATE', false],
-      ['OPENED', 'via', 'STRING', false],
     ])
   })
 
@@ -66,27 +65,80 @@ describe('conceptTables', () => {
 
     expect(classes.map((c) => [c.label, c.depth])).toEqual([['Orphan', 0]])
   })
-})
 
-describe('searchConcepts', () => {
-  it('keeps Concepts whose name or description contains the query, ignoring case', () => {
-    const found = searchConcepts(conceptTables(ONTOLOGY), 'TICKETS')
+  it('counts each class’s own attributes and those it inherits along its superclass chain', () => {
+    const { classes } = conceptTables(ONTOLOGY)
 
-    expect(found.classes.map((c) => c.label)).toEqual(['Customer'])
-    expect(found.relations).toEqual([])
-    expect(found.attributes).toEqual([])
+    expect(classes.map((c) => [c.label, c.attributes, c.inheritedAttributes])).toEqual([
+      ['Person', 1, 0],
+      ['Agent', 0, 1],
+      ['Supervisor', 0, 1],
+      ['Customer', 0, 1],
+      ['Ticket', 1, 0],
+    ])
   })
 
-  it('matches attributes by their owner too', () => {
-    const found = searchConcepts(conceptTables(ONTOLOGY), 'ticket')
+  it('counts a redeclared attribute once, as the class’s own', () => {
+    const { classes } = conceptTables({
+      node_types: [
+        {
+          label: 'Base',
+          properties: [
+            { name: 'id', type: 'STRING' },
+            { name: 'name', type: 'STRING' },
+          ],
+        },
+        { label: 'Sub', parent: 'Base', properties: [{ name: 'id', type: 'INTEGER' }] },
+      ],
+      relationship_types: [],
+      patterns: [],
+    })
 
-    expect(found.classes.map((c) => c.label)).toEqual(['Customer', 'Ticket'])
-    expect(found.attributes.map((a) => `${a.owner}.${a.name}`)).toEqual(['Ticket.opened_at'])
+    expect(classes.find((c) => c.label === 'Sub')).toMatchObject({ attributes: 1, inheritedAttributes: 1 })
   })
 
-  it('returns everything for a blank query', () => {
-    const tables = conceptTables(ONTOLOGY)
+  it('lists each class’s outgoing and incoming relations with the class at the other end', () => {
+    const { classes } = conceptTables({
+      node_types: [{ label: 'Paper' }, { label: 'Person' }],
+      relationship_types: [{ label: 'CITES' }, { label: 'WROTE' }],
+      patterns: [
+        ['Paper', 'CITES', 'Paper'],
+        ['Person', 'WROTE', 'Paper'],
+      ],
+    })
 
-    expect(searchConcepts(tables, '  ')).toBe(tables)
+    expect(classes.map((c) => [c.label, c.outgoing, c.incoming])).toEqual([
+      [
+        'Paper',
+        [{ relation: 'CITES', other: 'Paper' }],
+        [
+          { relation: 'CITES', other: 'Paper' },
+          { relation: 'WROTE', other: 'Person' },
+        ],
+      ],
+      ['Person', [{ relation: 'WROTE', other: 'Paper' }], []],
+    ])
+  })
+
+  it('counts each relation’s attributes, keeping a relation without Patterns or attributes', () => {
+    const { relations } = conceptTables({
+      node_types: [{ label: 'Paper' }],
+      relationship_types: [
+        {
+          label: 'CITES',
+          properties: [
+            { name: 'page', type: 'INTEGER' },
+            { name: 'since', type: 'DATE' },
+          ],
+        },
+        { label: 'UNUSED', deprecated: true },
+      ],
+      patterns: [['Paper', 'CITES', 'Paper']],
+    })
+
+    expect(relations.map((r) => [r.label, r.patterns, r.attributes, r.deprecated])).toEqual([
+      ['CITES', [['Paper', 'CITES', 'Paper']], 2, false],
+      ['UNUSED', [], 0, true],
+    ])
   })
 })

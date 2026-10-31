@@ -1,9 +1,17 @@
-import { OntologyDiffPanel } from '@/components/OntologyDiff'
+import { ViewToggle } from '@/components/ViewToggle'
+import { useComparisonView } from './comparison-view'
+import { MAP_VIEW_OPTIONS } from './map-view'
+import { OntologyComparisonMap } from './OntologyComparisonMap'
+import { OntologyComparisonTable } from './OntologyComparisonTable'
 import { useOntologyVersionTab } from './version-context'
 
-/** The version page's Changes tab: the Ontology Diff against the previous version. */
+/**
+ * The version page's Changes tab, against the previous version: both versions superimposed
+ * on a Map (`?view=` absent), or its changes as a grid (`?view=table`).
+ */
 export function ChangesTab() {
   const version = useOntologyVersionTab()
+  const [view, setView] = useComparisonView()
   if (version.number === 1) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -11,12 +19,18 @@ export function ChangesTab() {
       </p>
     )
   }
+  const base = version.number - 1
   return (
-    <OntologyDiffPanel
-      knowledgeGraph={version.knowledge_graph}
-      base={version.number - 1}
-      target={version.number}
-      caption={`Changes from v${version.number - 1}`}
-    />
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-sm text-muted-foreground">Changes from v{base}</p>
+        <ViewToggle options={MAP_VIEW_OPTIONS} mode={view} onChange={setView} />
+      </div>
+      {view === 'map' ? (
+        <OntologyComparisonMap knowledgeGraph={version.knowledge_graph} base={base} target={version.number} />
+      ) : (
+        <OntologyComparisonTable knowledgeGraph={version.knowledge_graph} base={base} target={version.number} />
+      )}
+    </div>
   )
 }

@@ -9,23 +9,16 @@
  */
 import { useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router'
+import { setOrDeleteParam } from './search-params'
+import { useViewParam } from './view-param'
 
 export type ViewMode = 'table' | 'chart'
 
+const VIEW_MODES: readonly [ViewMode, ...ViewMode[]] = ['table', 'chart']
+
 /** The Table/Chart toggle, kept in `?view=`. Switching adds a history entry. */
 export function useViewMode(): [ViewMode, (mode: ViewMode) => void] {
-  const [params, setParams] = useSearchParams()
-  const mode: ViewMode = params.get('view') === 'chart' ? 'chart' : 'table'
-  const setMode = useCallback(
-    (next: ViewMode) =>
-      setParams((p) => {
-        if (next === 'chart') p.set('view', 'chart')
-        else p.delete('view')
-        return p
-      }),
-    [setParams],
-  )
-  return [mode, setMode]
+  return useViewParam(VIEW_MODES)
 }
 
 /** Column ids of a table's optional columns, as the `ColumnPicker` and the URL name them. */
@@ -61,11 +54,7 @@ export function useChartSearch(): [string, (search: string) => void] {
   const setSearch = useCallback(
     (next: string) =>
       setParams(
-        (p) => {
-          if (next) p.set('charts', next)
-          else p.delete('charts')
-          return p
-        },
+        (p) => setOrDeleteParam(p, 'charts', next),
         { replace: true },
       ),
     [setParams],

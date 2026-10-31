@@ -75,6 +75,29 @@ test.describe('the Knowledge Graph switcher', () => {
     await expect(page).toHaveURL('/ui/kg/billing/use-case')
   })
 
+  test('picks the first match even when the list loads after the search is typed', async ({ page }) => {
+    // Hold the list back until the search is typed, as a slow server would.
+    let release = () => {}
+    const typed = new Promise<void>((resolve) => (release = resolve))
+    await page.route(/\/api\/v1\/knowledge-graphs$/, async (route) => {
+      await typed
+      await route.continue()
+    })
+    await page.goto('/ui/kg/support/use-case')
+    const switcher = page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Knowledge Graph: support' })
+
+    await switcher.focus()
+    await page.keyboard.press('Enter')
+    await page.getByRole('combobox', { name: 'Search Knowledge Graphs' }).fill('bill')
+    release()
+
+    const list = page.getByRole('listbox', { name: 'Knowledge Graphs' })
+    await expect(list.getByRole('option')).toHaveText(['billing', 'All Knowledge Graphs'])
+    await page.keyboard.press('Enter')
+
+    await expect(page).toHaveURL('/ui/kg/billing/use-case')
+  })
+
   test('from a detail or compare page, switching opens that section of the other Knowledge Graph', async ({
     page,
   }) => {
@@ -205,31 +228,37 @@ test('the Ontology tab lists Concepts grouped, with hierarchy and constraints, a
   await page.goto('/ui/kg/support/versions/3')
   await page.getByRole('navigation', { name: 'Ontology Version' }).getByRole('link', { name: 'Ontology' }).click()
   await expect(page).toHaveURL('/ui/kg/support/versions/3/ontology')
+  await page.getByRole('radio', { name: 'Table' }).click()
 
   const classes = page.getByRole('table', { name: 'Classes' })
   const relations = page.getByRole('table', { name: 'Relations' })
   const attributes = page.getByRole('table', { name: 'Attributes' })
   await expect(classes.getByRole('row')).toHaveText([
-    /Class.*Superclass.*Constraints/,
-    /^Party/,
-    /^Agent\s*Party/,
-    /^Customer\s*Someone who opens tickets\s*Party\s*UNIQUENESS \(name\)/,
-    /^Ticket/,
+    /Class.*Superclass.*Attributes.*Outgoing.*Incoming.*Constraints.*Description/,
+    /^Party\s*—\s*1\s*—/,
+    /^Agent\s*Party\s*0\s*\(1\)/,
+    /^Customer\s*Party\s*0\s*\(1\)\s*OPENED → Ticket\s*—\s*UNIQUENESS \(name\)\s*Someone who opens tickets/,
+    /^Ticket\s*—\s*2\s*—\s*OPENED ← Customer/,
   ])
   await expect(relations.getByRole('row').nth(1)).toHaveText(/OPENED.*\(Customer\)-\[OPENED\]->\(Ticket\)/)
   await expect(attributes.getByRole('row')).toHaveText([
-    /Class or relation.*Attribute.*Type.*Required/,
-    /Party\s*name\s*STRING\s*Required/,
-    /Ticket\s*opened_at\s*DATE/,
-    /Ticket\s*priority\s*INTEGER/,
+    /Owner.*Attribute.*Type.*Required.*Unique.*Description/,
+    /^Party · class/,
+    /^name\s*STRING\s*Required/,
+    /^Agent · class/,
+    /^name\s*from Party/,
+    /^Customer · class/,
+    /^name\s*from Party\s*STRING\s*Required\s*Unique/,
+    /^Ticket · class/,
+    /^opened_at\s*DATE/,
+    /^priority\s*INTEGER/,
   ])
 
   await page.getByRole('searchbox', { name: 'Search Concepts' }).fill('ticket')
 
   await expect(classes.getByRole('row')).toHaveText([/Class/, /^Customer/, /^Ticket/])
-  await expect(relations).toHaveCount(0)
-  await expect(page.getByText('No relations match “ticket”.')).toBeVisible()
-  await expect(attributes.getByRole('row')).toHaveCount(3)
+  await expect(relations.getByRole('row')).toHaveText([/Relation/, /^No relations match\.$/])
+  await expect(attributes.getByRole('row')).toHaveText([/Owner/, /^Ticket · class · 2 attributes/, /^opened_at/, /^priority/])
 })
 
 test('an unknown Knowledge Graph or version shows a not-found page', async ({ page }) => {

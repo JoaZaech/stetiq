@@ -1,11 +1,11 @@
-import { Search } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import type { KnowledgeGraphSummary } from '@/api/knowledge-graphs'
 import { DataTable } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
-import { Input } from '@/components/ui/input'
+import { SearchInput } from '@/components/SearchInput'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useDataTable } from '@/lib/data-table'
+import { setOrDeleteParam } from '@/lib/search-params'
 import { knowledgeGraphColumns } from './knowledge-graph-columns'
 import { KnowledgeGraphsLoaded } from './KnowledgeGraphsLoaded'
 
@@ -43,27 +43,13 @@ function KnowledgeGraphTable({ data }: { data: KnowledgeGraphSummary[] }) {
 
   const setSearch = (value: string) =>
     setSearchParams(
-      (params) => {
-        if (value) params.set('q', value)
-        else params.delete('q')
-        return params
-      },
+      (params) => setOrDeleteParam(params, 'q', value),
       { replace: true },
     )
 
   return (
     <div className="space-y-3">
-      <div className="relative w-72 max-w-full">
-        <Search aria-hidden className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          type="search"
-          aria-label="Search Knowledge Graphs"
-          placeholder="Search by name"
-          className="pl-8"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-      </div>
+      <SearchInput label="Search Knowledge Graphs" placeholder="Search by name" value={search} onChange={setSearch} />
       <DataTable table={table} empty={`No Knowledge Graph matches “${search}”`} />
     </div>
   )

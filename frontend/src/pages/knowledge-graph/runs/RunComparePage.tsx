@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatDateTime, formatMetric } from '@/lib/format'
+import { setOrDeleteParam } from '@/lib/search-params'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { useComparedIds, useKnowledgeGraphName } from '../params'
 import { type ComparedValue, type ComparisonRow, compareRuns, differs } from './compare'
@@ -35,11 +36,7 @@ export function RunComparePage() {
   const setDiffOnly = useCallback(
     (on: boolean) =>
       setSearchParams(
-        (p) => {
-          if (on) p.set('diff', 'only')
-          else p.delete('diff')
-          return p
-        },
+        (p) => setOrDeleteParam(p, 'diff', on ? 'only' : null),
         { replace: true },
       ),
     [setSearchParams],
