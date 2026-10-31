@@ -81,7 +81,7 @@ test('documentation-only changes collapse to one line in the summary, and to a n
     .evaluateAll((paths) => paths.map((p) => (p as SVGElement).dataset.severity ?? null))
   expect(severities.length).toBeGreaterThan(0)
   expect(severities.every((s) => s === null)).toBe(true)
-  // One dot among the link labels: HAS_TRIP's (the legend has its own).
+  // One dot among the link labels: HAS_TRIP's.
   await expect(map.locator('[data-link-label] [data-documentation-dot]')).toHaveCount(1)
   await expect(map.locator('[data-link-label]', { hasText: 'HAS_TRIP' }).locator('[data-documentation-dot]')).toHaveCount(1)
 })
@@ -149,7 +149,6 @@ test.describe('with a filter hiding the first changed Pattern of a relation', ()
     await page.goto('/ui/kg/support/versions/2/changes?select=relation:OPENED')
     const details = page.getByRole('complementary', { name: 'Details' })
     await expect(details).toContainText('(Agent)-[OPENED]->(LegacyTicket)')
-    // By keyboard: with the details open, the legend overlaps the filters.
     await page.getByRole('switch', { name: 'Hide deprecated' }).focus()
     await page.keyboard.press('Space')
 

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Network, Table2 } from 'lucide-react'
 import type { ViewOption } from '@/components/ViewToggle'
 
@@ -19,3 +20,12 @@ export const MAP_VIEW_OPTIONS: readonly ViewOption<MapView>[] = [
  * small Ontology to pan; never less than 32rem. Its loading placeholder is as tall.
  */
 export const MAP_HEIGHT = 'h-[max(32rem,calc(100dvh-18rem))]'
+
+/**
+ * Where a Map draws its filters: an element in the page's header row, beside the Table /
+ * Map toggle, so nothing overlays the top of the canvas. Set the element's `ref` to the
+ * setter and pass the element to the Map as `filtersIn`.
+ */
+export function useMapFiltersSlot() {
+  return useState<HTMLElement | null>(null)
+}

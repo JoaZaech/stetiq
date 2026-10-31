@@ -9,7 +9,7 @@ import { NotFoundPage } from '@/pages/NotFoundPage'
 import { parseVersionNumber } from '@/lib/version-number'
 import { useComparedIds, useKnowledgeGraphName } from '../../params'
 import { useComparisonView } from './comparison-view'
-import { MAP_VIEW_OPTIONS } from '../map-view'
+import { MAP_VIEW_OPTIONS, useMapFiltersSlot } from '../map-view'
 import { OntologyComparisonMap } from './OntologyComparisonMap'
 import { OntologyComparisonTable } from './OntologyComparisonTable'
 
@@ -23,6 +23,7 @@ export function OntologyDiffPage() {
   const name = useKnowledgeGraphName()
   const ids = useComparedIds()
   const [view, setView] = useComparisonView()
+  const [filters, setFilters] = useMapFiltersSlot()
   const [base, target] = ids.length === 2 ? ids.map(parseVersionNumber) : []
   const diff = useOntologyDiff(name, base ?? NaN, target ?? NaN)
 
@@ -44,12 +45,17 @@ export function OntologyDiffPage() {
             <VersionLink name={name} number={target} />.
           </>
         }
-        actions={<ViewToggle options={MAP_VIEW_OPTIONS} mode={view} onChange={setView} />}
+        actions={
+          <div className="flex items-center gap-4">
+            {view === 'map' && <div ref={setFilters} className="flex items-center gap-4" />}
+            <ViewToggle options={MAP_VIEW_OPTIONS} mode={view} onChange={setView} />
+          </div>
+        }
       />
       {diff.isError ? (
         <ErrorAlert error={diff.error} />
       ) : view === 'map' ? (
-        <OntologyComparisonMap knowledgeGraph={name} base={base} target={target} />
+        <OntologyComparisonMap knowledgeGraph={name} base={base} target={target} filtersIn={filters} />
       ) : (
         <OntologyComparisonTable knowledgeGraph={name} base={base} target={target} />
       )}
