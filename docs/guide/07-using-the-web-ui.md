@@ -94,6 +94,8 @@ If there are no runs yet, the page shows how to start one from the Python SDK.
 
 The section shows the latest Use Case Version: its description and its Competency Questions, each with its id, question, Cypher query, expected answer and Concept mapping. Below it:
 
+- **Consumers**: a card per Consumer the Use Case declares, with its kind, contact and description, and its Tasks. Each Task lists the Competency Questions it needs (id and question), or says it needs none. Consumers and Tasks are read-only here: declare them in the Use Case you register from the [Python SDK](./03-python-sdk.md#use-cases-and-competency-questions) or the [CLI](./04-cli.md#use-cases). Editing a Competency Question here keeps them.
+
 - **Structural answerability**: how many of those Competency Questions the latest Ontology Version can answer, and for each one whether it is *Answerable*, *Unanswerable* (with the Concepts it is missing) or *Unmapped*.
 - **Use Case Versions**: every Use Case Version with when it was created and how many Competency Questions it has.
 

@@ -100,7 +100,7 @@ stetiq use-case list support
 stetiq use-case get support 2
 ```
 
-Each change registers a new Use Case Version. `add-question` takes `--query` for a Cypher query that answers the question, and `--concept` (repeatable) for the Concepts it needs.
+`use-case.yaml` holds the Competency Questions and, optionally, the Consumers and their Tasks, in the format shown in [Use Cases and Competency Questions](./03-python-sdk.md#use-cases-and-competency-questions). `get` prints a Use Case Version in that format. Each change registers a new Use Case Version. `add-question` keeps the Consumers and Tasks, and takes `--query` for a Cypher query that answers the question, and `--concept` (repeatable) for the Concepts it needs.
 
 ### Aliases and Promotion
 

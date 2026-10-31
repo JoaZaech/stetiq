@@ -192,9 +192,10 @@ The Observation is compared with the Contract Alias's Ontology Version (structur
 
 ## Use Cases and Competency Questions
 
-A Use Case is the set of Competency Questions the Knowledge Graph must answer. Register it from a YAML file (or text, or a list of `CompetencyQuestion`s); each registration with new content is a new Use Case Version.
+A Use Case states what the Knowledge Graph is for: the **Consumers** that use it, the **Tasks** each one performs with it, and the Competency Questions those Tasks need answered. Register it from a YAML file (or text, a dict of the same shape, a `UseCase`, or a list of `CompetencyQuestion`s); each registration with new content is a new Use Case Version.
 
 ```yaml
+description: Support agents triage tickets
 competency_questions:
   - id: tickets-per-customer
     question: How many tickets has each customer opened?
@@ -202,7 +203,41 @@ competency_questions:
   - id: customer-names
     question: What are our customers called?
     concepts: [Customer.name]
+consumers:
+  - id: triage-bot
+    name: Triage bot
+    kind: agent
+    contact: Ada Lovelace
+    description: Routes new tickets to the right team.
+    tasks:
+      - id: route-ticket
+        description: Route a new ticket by its customer
+        competency_questions: [tickets-per-customer, customer-names]
+  - id: workload-dashboard
+    name: Workload dashboard
+    tasks:
+      - id: tickets-per-customer-chart
+        description: Chart the tickets each customer opened
+        competency_questions: [tickets-per-customer]
 ```
+
+`consumers` is optional. A Consumer is anyone or anything downstream (an application, an agent, a dashboard, a team): it has an `id` that stays the same across Use Case Versions, a `name`, and optionally a free-text `kind`, a `contact` (a name only) and a `description`. Each Task belongs to one Consumer and has an `id`, a `description` and the ids of the `competency_questions` it needs. One Competency Question may serve several Tasks, or none. A Consumer depends on Concepts only through its Tasks' Competency Questions, so there is no separate list of Concepts per Consumer. Consumer, Task and Competency Question ids must each be unique across the Use Case, and a Task may only name questions the Use Case has; otherwise registering raises `UseCaseValidationError`, naming the offending element. The same structure is available as the `Consumer` and `Task` dataclasses:
+
+```python
+from stetiq import CompetencyQuestion, Consumer, Task, UseCase
+
+UseCase(
+    competency_questions=(CompetencyQuestion(id="customer-names", question="What are our customers called?"),),
+    consumers=(
+        Consumer(
+            id="crm", name="CRM sync", kind="application",
+            tasks=(Task(id="sync-names", description="Copy customer names", competency_questions=("customer-names",)),),
+        ),
+    ),
+)
+```
+
+Adding, changing or removing a Consumer or Task yields a new Use Case Version, like a change to a Competency Question; the order of Consumers and Tasks doesn't matter.
 
 ```python
 client.register_use_case("support", Path("use-case.yaml"))
@@ -211,7 +246,7 @@ client.add_competency_question(
 )
 ```
 
-`add_competency_question` adds one question to the latest Use Case Version and registers the result as a new one. `client.get_use_case_version("support")` without a number returns the latest Use Case Version, and raises `NoUseCaseError` (a `NotFoundError`) when there is none. Every new Ontology Version is judged against the latest Use Case (`structural_answerability`: does the Ontology have the Concepts each question needs?). At the end of a Construction Run, the SDK also executes the questions that have a `query` against your Graph Source (`competency_question_execution`). Their rows are judged and then dropped: only the result leaves your process.
+`add_competency_question` adds one question to the latest Use Case Version, keeping its Consumers and Tasks, and registers the result as a new one. `client.get_use_case_version("support")` without a number returns the latest Use Case Version, and raises `NoUseCaseError` (a `NotFoundError`) when there is none. Every new Ontology Version is judged against the latest Use Case (`structural_answerability`: does the Ontology have the Concepts each question needs?). At the end of a Construction Run, the SDK also executes the questions that have a `query` against your Graph Source (`competency_question_execution`). Their rows are judged and then dropped: only the result leaves your process.
 
 ## Evaluators
 
