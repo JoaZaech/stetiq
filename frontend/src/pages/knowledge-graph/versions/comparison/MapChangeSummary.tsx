@@ -11,6 +11,7 @@ import { MapSidePanel, type MapPanelNav } from '../map/MapSidePanel'
 import {
   type ChangeStatement,
   type ConceptChanges,
+  descriptionPreviewOf,
   type LevelCount,
   type OntologyComparison,
   selectionOf,
@@ -49,6 +50,7 @@ export function MapChangeSummary({
   const link: MapLink = {
     current: summaryConceptOf(comparison, summary, returnTo),
     locate: ({ kind, label }) => selectionOf(comparison, { kind: CONCEPT_NOUN[kind], label }, shown),
+    describe: (concept) => descriptionPreviewOf(comparison, concept),
     onPreview,
     onSelect,
   }
@@ -84,11 +86,13 @@ export function MapChangesRail({ comparison, onExpand }: { comparison: OntologyC
 /**
  * How the summary is linked with the Map: the entry of the Map's selection, where an
  * entry's Concept is on the Map (null when not shown), and what pointing at an entry
- * (`onPreview`) and clicking it (`onSelect`) do.
+ * (`onPreview`) and clicking it (`onSelect`) do. `describe` gives the new description an
+ * entry with a documentation-only change previews (`descriptionPreviewOf`).
  */
 interface MapLink {
   current: ConceptChanges | null
   locate: (concept: ConceptChanges) => MapSelection | null
+  describe: (concept: ConceptChanges) => string | null
   onPreview: (selection: MapSelection | null) => void
   onSelect: (selection: MapSelection) => void
 }
@@ -167,11 +171,15 @@ function LevelSection({ section: { level, concepts }, link }: { section: Summary
 /** A level as a section heading names it, e.g. "Documentation-only". */
 const headingOf = (level: Classification) => CLASSIFICATION_LABEL[level].replace(/^./, (c) => c.toUpperCase())
 
-/** An entry: the Concept's name on its own full-width line, its kind, then its changes. */
+/**
+ * An entry: the Concept's name on its own full-width line, its kind, then its changes,
+ * and with a documentation-only one, its new description on one line.
+ */
 function SummaryEntry({ concept, link }: { concept: ConceptChanges; link: MapLink }) {
   const { onPreview, onSelect } = link
   const current = concept === link.current
   const selection = link.locate(concept)
+  const preview = link.describe(concept)
   const ref = useRef<HTMLLIElement>(null)
   useEffect(() => {
     if (current) ref.current?.scrollIntoView({ block: 'nearest' })
@@ -199,6 +207,11 @@ function SummaryEntry({ concept, link }: { concept: ConceptChanges; link: MapLin
         {concept.statements.map((s) => (
           <Statement key={`${s.change.concept}:${s.change.detail}`} statement={s} />
         ))}
+        {preview && (
+          <span title={preview} className="block truncate text-xs text-muted-foreground">
+            {preview}
+          </span>
+        )}
       </button>
     </li>
   )

@@ -61,7 +61,7 @@ test('documentation-only changes collapse to one line in the summary, and to a n
   const map = ontologyMap(page)
   const summary = summaryOf(page)
 
-  // HAS_TRIP only gained a description: a collapsed section, which expands to its entry.
+  // Only HAS_TRIP's description changed: a collapsed section, which expands to its entry.
   const heading = summary.getByRole('button', { name: 'Documentation-only 1' })
   await expect(heading).toHaveAttribute('aria-expanded', 'false')
   await expect(entry(summary, 'HAS_TRIP')).toBeHidden()
@@ -98,6 +98,29 @@ test("a Concept's name has its own line in the summary, and wraps only at `_`, n
   await summary.evaluate((el: HTMLElement) => (el.style.width = '7rem'))
   expect(await linesOf(name('HAS_TRIP'))).toEqual(['HAS_', 'TRIP'])
   expect(await linesOf(name('Stop'))).toEqual(['Stop'])
+})
+
+test('a documentation-only change shows its description before and after, the changed words marked', async ({
+  page,
+}) => {
+  await page.goto('/ui/kg/city-transit/versions/3/changes')
+  const summary = summaryOf(page)
+
+  // Its entry previews the new description.
+  await summary.getByRole('button', { name: 'Documentation-only 1' }).click()
+  await expect(entry(summary, 'HAS_TRIP')).toContainText('The scheduled trips of a route')
+
+  // Selected on the Map, its details show both descriptions, removed and added words marked.
+  await ontologyMap(page).getByRole('group', { name: '(Route)-[HAS_TRIP]->(Trip)', exact: true }).click()
+  const details = page.getByRole('complementary', { name: 'Details' })
+  const before = details.getByRole('group', { name: 'Before' })
+  const after = details.getByRole('group', { name: 'After' })
+  await expect(before).toHaveText('The trips run on a route')
+  await expect(after).toHaveText('The scheduled trips of a route')
+  await expect(before.locator('del')).toHaveText(['run on'])
+  await expect(before.locator('ins')).toHaveCount(0)
+  await expect(after.locator('ins')).toHaveText(['scheduled', 'of'])
+  await expect(after.locator('del')).toHaveCount(0)
 })
 
 test('an entry focuses its Concept on the Map, and selecting on the Map finds its entry', async ({ page }) => {

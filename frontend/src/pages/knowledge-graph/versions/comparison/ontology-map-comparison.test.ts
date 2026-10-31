@@ -4,6 +4,9 @@ import type { Ontology } from '@/api/ontology-versions'
 import {
   changesOf,
   compareOntologies,
+  descriptionChangeOf,
+  descriptionPreviewOf,
+  type OntologyComparison,
   selectionOf,
   summarizeChanges,
   summaryConceptOf,
@@ -302,6 +305,80 @@ describe('cosmetic changes', () => {
     })
 
     expect(changes.classes.Stop).toEqual({ kind: 'modified', severity: 'additive' })
+  })
+
+  it("gives a cosmetic change's description in both versions, empty where there is none", () => {
+    const comparison = compareOntologies(base, target, diff)
+    const [stop, headsign, hasTrip] = diff.changes
+
+    expect(descriptionChangeOf(comparison, stop)).toEqual({ before: '', after: 'Where riders board' })
+    expect(descriptionChangeOf(comparison, headsign)).toEqual({ before: '', after: 'The sign on the vehicle' })
+    // From the other side: the base's description is the one before.
+    expect(descriptionChangeOf(compareOntologies(target, base, diff), hasTrip)).toEqual({
+      before: 'The scheduled trips of a route',
+      after: '',
+    })
+  })
+
+  it('gives no descriptions for a change that is not cosmetic', () => {
+    const comparison = compareOntologies(base, target, diff)
+
+    expect(descriptionChangeOf(comparison, endpointChange(['Route', 'SERVES', 'Stop'], 'additive'))).toBeNull()
+  })
+
+  /** Every entry of the change summary, section by section. */
+  const entriesOf = (comparison: OntologyComparison) =>
+    summarizeChanges(comparison).sections.flatMap((s) => s.concepts)
+
+  it("previews the new description of an entry with a documentation-only change, its Concept's own before its attributes'", () => {
+    const comparison = compareOntologies(base, target, diff)
+
+    // SERVES, additive for its new Pattern, previews the description it gained as well.
+    expect(entriesOf(comparison).map((c) => [c.label, descriptionPreviewOf(comparison, c)])).toEqual([
+      ['SERVES', 'The stops a trip calls at'],
+      ['HAS_TRIP', 'The scheduled trips of a route'],
+      ['Stop', 'Where riders board'],
+      ['Trip', 'The sign on the vehicle'],
+    ])
+
+    // Trip gains a description of its own too, which the Diff reports after its attribute's.
+    const tripDescribed: Ontology = {
+      ...target,
+      node_types: target.node_types.map((n) => (n.label === 'Trip' ? { ...n, description: 'One run along a route' } : n)),
+    }
+    const both = compareOntologies(base, tripDescribed, {
+      classification: 'cosmetic',
+      changes: [attributeDescribed('node_type', 'Trip', 'headsign'), conceptDescribed('node_type', 'Trip')],
+    })
+    const [trip] = entriesOf(both)
+    expect(descriptionPreviewOf(both, trip)).toBe('One run along a route')
+  })
+
+  it('previews nothing when the description was removed, or for an entry with no documentation-only change', () => {
+    const removed = compareOntologies(target, base, diff)
+    const stop = entriesOf(removed).find((c) => c.label === 'Stop')!
+    expect(descriptionPreviewOf(removed, stop)).toBeNull()
+
+    const undocumented = compareOntologies(base, target, {
+      classification: 'additive',
+      changes: [endpointChange(['Route', 'SERVES', 'Stop'], 'additive')],
+    })
+    const [serves] = entriesOf(undocumented)
+    expect(descriptionPreviewOf(undocumented, serves)).toBeNull()
+  })
+
+  it('reads a description from the Concept of the kind the change states, when a class and a relation share a label', () => {
+    const shared = (description: string): Ontology => ({
+      node_types: [{ label: 'Stop', description: `class ${description}` }],
+      relationship_types: [{ label: 'Stop', description: `relation ${description}` }],
+      patterns: [['Stop', 'Stop', 'Stop']],
+    })
+    const comparison = compareOntologies(shared('before'), shared('after'), { classification: 'cosmetic', changes: [] })
+
+    expect(descriptionChangeOf(comparison, conceptDescribed('relationship_type', 'Stop'))).toEqual({
+      before: 'relation before',
+      after: 'relation after',
+    })
   })
 })
 

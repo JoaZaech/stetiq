@@ -39,10 +39,12 @@ import type { MapPanelNav } from './MapSidePanel'
 import type { LinkRoute } from './ontology-map'
 import {
   type AttributeChange,
+  descriptionChangeOf,
   type MapChange,
   type MapChangeKind,
   type OntologyComparison,
 } from '../comparison/ontology-map-comparison'
+import { DescriptionDiff } from '../comparison/DescriptionDiff'
 import { centreOf, FIT_MIN_ZOOM } from './ontology-map-centre'
 import { layoutOntologyMap, type Point } from './ontology-map-layout'
 import { labelShown, linkShape, straightPath, type Box } from './ontology-map-links'
@@ -370,7 +372,7 @@ export function OntologyMap({ ontology, comparison, query = '', filtersIn }: Ont
           )}
           {panel?.kind === 'details' && details && (
             <MapDetailsPanel details={details} nav={selectionNav}>
-              {view.changes && <ChangeDetails changes={view.changes} />}
+              {view.changes && comparison && <ChangeDetails comparison={comparison} changes={view.changes} />}
               {details.kind === 'class' && (
                 <p className="text-xs text-muted-foreground">Shift-click another class for the shortest path to it.</p>
               )}
@@ -419,8 +421,11 @@ function CentreOn({ point }: { point: Point | null }) {
   return null
 }
 
-/** A comparison's details section: the Ontology Diff's changes behind the selection. */
-function ChangeDetails({ changes }: { changes: OntologyChange[] }) {
+/**
+ * A comparison's details section: the Ontology Diff's changes behind the selection, a
+ * documentation-only one with its description before and after.
+ */
+function ChangeDetails({ comparison, changes }: { comparison: OntologyComparison; changes: OntologyChange[] }) {
   return (
     <section className="space-y-1">
       <h4 className="text-xs font-semibold">Changes</h4>
@@ -435,12 +440,19 @@ function ChangeDetails({ changes }: { changes: OntologyChange[] }) {
                 <span className="text-xs text-muted-foreground">{c.kind}</span>
               </div>
               <div className="text-xs">{c.detail}</div>
+              <ChangedDescription comparison={comparison} change={c} />
             </li>
           ))}
         </ul>
       )}
     </section>
   )
+}
+
+/** A documentation-only change's description before and after; nothing for any other change. */
+function ChangedDescription({ comparison, change }: { comparison: OntologyComparison; change: OntologyChange }) {
+  const description = descriptionChangeOf(comparison, change)
+  return description && <DescriptionDiff change={description} />
 }
 
 /**

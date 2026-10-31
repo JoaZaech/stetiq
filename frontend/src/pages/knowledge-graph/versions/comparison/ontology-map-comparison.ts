@@ -238,6 +238,32 @@ export function changesOf(comparison: OntologyComparison, selection: MapSelectio
   return []
 }
 
+/** A description in the base version and in the target, each empty where there is none. */
+export interface DescriptionChange {
+  before: string
+  after: string
+}
+
+/**
+ * What a cosmetic (documentation-only) change changed: the description of its class,
+ * relation or attribute in the two Ontologies compared. Null for any other change.
+ */
+export function descriptionChangeOf(
+  { base, target }: Pick<OntologyComparison, 'base' | 'target'>,
+  change: OntologyChange,
+): DescriptionChange | null {
+  if (!cosmetic(change)) return null
+  const describe = (ontology: Ontology) => {
+    const concepts = (kind: OwnerKind) => (kind === 'node_type' ? ontology.node_types : ontology.relationship_types)
+    if (change.concept_kind !== 'property') {
+      return concepts(change.concept_kind).find((c) => c.label === change.concept)?.description ?? ''
+    }
+    const owner = concepts(change.owner_kind).find((c) => c.label === change.owner)
+    return owner?.properties?.find((p) => p.name === change.attribute)?.description ?? ''
+  }
+  return { before: describe(base), after: describe(target) }
+}
+
 /** Whether a comparison's link changed in any way, cosmetically included. */
 const linkChanged = (comparison: OntologyComparison, link: PatternLink) =>
   comparison.changes.links[link.id]?.kind !== 'unchanged'
@@ -362,6 +388,20 @@ export function summaryConceptOf(
         : []
   const of = (c: ConceptChanges) => c.kind === kind && c.label === label
   return summary.sections.flatMap((s) => s.concepts).find(of) ?? null
+}
+
+/**
+ * The new description a summary entry previews when it has a documentation-only change:
+ * its Concept's own, else its first changed attribute's. Null when it has none, or that
+ * description was removed.
+ */
+export function descriptionPreviewOf(
+  comparison: Pick<OntologyComparison, 'base' | 'target'>,
+  concept: ConceptChanges,
+): string | null {
+  const described = concept.statements.filter((s) => cosmetic(s.change))
+  const statement = described.find((s) => s.attribute === null) ?? described[0]
+  return (statement && descriptionChangeOf(comparison, statement.change)?.after) || null
 }
 
 /** The items of `items` that `besides` has none of, by `key`. */
