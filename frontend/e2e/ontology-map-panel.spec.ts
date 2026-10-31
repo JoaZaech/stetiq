@@ -91,13 +91,13 @@ test('the panel collapses to a rail of the headline counts, each with its severi
   await expect(counts.locator('[data-swatch]')).toHaveCount(2)
   await expect(counts.locator('[data-swatch="breaking"]')).toHaveCount(1)
   await expect(counts.locator('[data-swatch="additive"]')).toHaveCount(1)
-  await expect(counts.locator('[data-documentation-dot]')).toHaveCount(1)
+  await expect(counts.locator('[data-cosmetic-dot]')).toHaveCount(1)
   const width = (await map.boundingBox())!.width
 
   await page.getByRole('button', { name: 'Collapse panel' }).click()
   const rail = panel(page, 'Changes collapsed')
   await expect(rail.getByRole('status')).toHaveText(/2\s*breaking.*2\s*additive.*1\s*documentation-only/)
-  await expect(rail.locator('[data-swatch], [data-documentation-dot]')).toHaveCount(3)
+  await expect(rail.locator('[data-swatch], [data-cosmetic-dot]')).toHaveCount(3)
   await expect.poll(async () => (await map.boundingBox())!.width).toBeGreaterThan(width + 200)
 
   await rail.getByRole('button', { name: 'Expand panel' }).click()

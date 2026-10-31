@@ -82,8 +82,8 @@ test('documentation-only changes collapse to one line in the summary, and to a n
   expect(severities.length).toBeGreaterThan(0)
   expect(severities.every((s) => s === null)).toBe(true)
   // One dot among the link labels: HAS_TRIP's.
-  await expect(map.locator('[data-link-label] [data-documentation-dot]')).toHaveCount(1)
-  await expect(map.locator('[data-link-label]', { hasText: 'HAS_TRIP' }).locator('[data-documentation-dot]')).toHaveCount(1)
+  await expect(map.locator('[data-link-label] [data-cosmetic-dot]')).toHaveCount(1)
+  await expect(map.locator('[data-link-label]', { hasText: 'HAS_TRIP' }).locator('[data-cosmetic-dot]')).toHaveCount(1)
 })
 
 test("a Concept's name has its own line in the summary, and wraps only at `_`, never mid-word", async ({ page }) => {
