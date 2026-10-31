@@ -50,8 +50,8 @@ test('the chart view shows one chart per Evaluator metric, and the search narrow
   await expect(page.getByRole('table', { name: 'Ontology Versions' })).toHaveCount(0)
   const grid = page.getByRole('region', { name: 'Metric charts' })
   // 5 constraint_consistency + 4 hierarchy + 2 isolated_node_types + 4 orphan_concepts
-  // + 3 redundancy + 5 structural_answerability + 1 review
-  await expect(grid.getByRole('figure')).toHaveCount(24)
+  // + 3 redundancy + 6 structural_answerability + 1 review
+  await expect(grid.getByRole('figure')).toHaveCount(25)
   const score = grid.getByRole('figure', { name: 'review/score' })
   await expect(score.getByText('v1')).toBeVisible()
   await expect(score.getByText('v3')).toBeVisible()
