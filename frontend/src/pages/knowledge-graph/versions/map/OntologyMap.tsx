@@ -28,7 +28,7 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
-import { useConceptSelection } from '../concept-selection'
+import { formatSelection, useConceptSelection } from '../concept-selection'
 import { MapChangeSummary, MapChangesRail } from '../comparison/MapChangeSummary'
 import { CosmeticDot } from '@/components/SeveritySwatch'
 import { MapDetailsPanel } from './MapDetailsPanel'
@@ -218,6 +218,13 @@ export function OntologyMap({ ontology, comparison, query = '', filtersIn }: Ont
   const drawnMapOf = useMemo(() => createDrawnMapOf(), [])
   const [state, setState] = useState(() => initialMapState(selected))
   const [collapsed, setCollapsed] = useState(false)
+  // A new selection or search opens a collapsed panel, so its details, path or results show.
+  const shownFor = `${selected ? formatSelection(selected) : ''} ${query.trim()}`
+  const [lastShownFor, setLastShownFor] = useState(shownFor)
+  if (shownFor !== lastShownFor) {
+    setLastShownFor(shownFor)
+    if (shownFor.trim() !== '') setCollapsed(false)
+  }
   const view = drawnMapOf(comparison ? { comparison, selected, query } : { ontology: ontology!, selected, query }, state)
   const { map, shown, selection, details, paths, results, classes, links, subclassLinks, panel } = view
   /** Answers `gesture` as the view says: its next state, and the page's next selection. */

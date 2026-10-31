@@ -103,3 +103,22 @@ test('the panel collapses to a rail of the headline counts, each with its severi
   await rail.getByRole('button', { name: 'Expand panel' }).click()
   await expect(panel(page, 'Change summary')).toBeVisible()
 })
+
+test('a collapsed panel opens again for a selection on the Map, or a shortest path', async ({ page }) => {
+  await page.goto('/ui/kg/city-transit/versions/3/changes')
+  const map = ontologyMap(page)
+  await page.getByRole('button', { name: 'Collapse panel' }).click()
+  await expect(panel(page, 'Changes collapsed')).toBeVisible()
+
+  // A class clicked on the canvas shows its details, not the rail.
+  await item(map, 'Stop').click()
+  await expect(panel(page, 'Details').getByRole('heading', { name: 'Stop' })).toBeVisible()
+  await expect(panel(page, 'Changes collapsed')).toHaveCount(0)
+
+  // Collapsed again, a shift-click shows the shortest path.
+  await page.getByRole('button', { name: 'Collapse panel' }).click()
+  await expect(panel(page, 'Changes collapsed')).toBeVisible()
+  await item(map, 'Trip').click({ modifiers: ['Shift'] })
+  await expect(panel(page, 'Path')).toContainText('Stop → Trip')
+  await expect(panel(page, 'Changes collapsed')).toHaveCount(0)
+})
