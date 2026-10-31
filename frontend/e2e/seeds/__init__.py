@@ -6,7 +6,7 @@ test gets it as `stetiq.seeded`. A spec picks one by its function name with
 `test.use({ seed: 'name' })`.
 
 To add a scenario, write the function in the module of the feature it seeds and add it
-to that module's `SCENARIOS` tuple. A new feature area gets its own module, listed in
+to that module's `SCENARIOS` tuple. A new feature area gets its own module, named in
 `MODULES` below. Helpers and Ontologies that several modules use go in `_shared.py`
 (`issue_token` issues an API Token for a `mode: 'server'` test). A scenario that builds
 on another one imports it from that module.
@@ -14,25 +14,21 @@ on another one imports it from that module.
 
 from __future__ import annotations
 
-from . import (
-    auth,
-    construction_runs,
-    knowledge_graphs,
-    observations,
-    ontology_map,
-    ontology_versions,
-    use_case,
-)
+from importlib import import_module
+
 from ._shared import Scenario
 
-MODULES = (
-    auth,
-    construction_runs,
-    knowledge_graphs,
-    observations,
-    ontology_map,
-    ontology_versions,
-    use_case,
+MODULES = tuple(
+    import_module(f".{name}", __name__)
+    for name in (
+        "auth",
+        "construction_runs",
+        "knowledge_graphs",
+        "observations",
+        "ontology_map",
+        "ontology_versions",
+        "use_case",
+    )
 )
 
 SCENARIOS: dict[str, Scenario] = {
