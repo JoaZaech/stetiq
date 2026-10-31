@@ -25,7 +25,7 @@ Touch every one of these places, in this order:
 4. **Server route** in `server.create_app`, under `api` (prefix `/api/v1`). Call `tracking.<method>` and return `wire.*_to_json`. Read the auth rules below first. Don't name a body field `schema`, because it clashes with pydantic; the existing routes use `observed_schema`.
 5. **`RemoteTrackingService`** method: `self._call(METHOD, path, body)` → `wire.*_from_json`. Build paths with `_kg_path(name)` and `quote(id, safe='')`.
 6. **`Client`** method: format conversion only, then `self._service.<method>`. Pass an argument the caller left out on as `None`; the service resolves the default.
-7. **CLI** command in `cli.py`. Catch `StetiqError` and `raise _fail(e)`, which prints `error: …` and exits 1. Every CLI command that touches tracking takes `--tracking-uri` (`TrackingUri`). The token comes only from `$STETIQ_TOKEN`: there is no `--token` flag. Add a smoke test with `CliRunner`, as in `tests/test_cli_parity.py`.
+7. **CLI** command in `cli.py`. Catch `StetiqError` and `raise _fail(e)`, which prints `error: …` and exits 1. Every CLI command that touches tracking takes `--tracking-uri` (`TrackingUri`). The token comes only from `$STETIQ_TOKEN`: there is no `--token` flag. Add a smoke test with `CliRunner`, as in `tests/test_cli_local_smoke.py`.
 8. **Export** new public names from `stetiq/__init__.py`.
 9. **Tests** go through the `client` fixture, so they run in every mode (see *Testing*).
 10. **User guide.** Describe the new capability in `docs/guide/` (the SDK, CLI, server or `stetiq.yaml` page it belongs to), so it shows under Help in the web UI (ADR 0004).
