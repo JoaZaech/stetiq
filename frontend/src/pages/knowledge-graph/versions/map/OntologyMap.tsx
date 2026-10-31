@@ -45,7 +45,7 @@ import {
   type OntologyComparison,
 } from '../comparison/ontology-map-comparison'
 import { DescriptionDiff } from '../comparison/DescriptionDiff'
-import { centreOf, FIT_MIN_ZOOM } from './ontology-map-centre'
+import { centreOf, FIRST_VIEW_MIN_ZOOM } from './ontology-map-centre'
 import { layoutOntologyMap, type Point } from './ontology-map-layout'
 import { labelShown, linkShape, straightPath, type Box } from './ontology-map-links'
 import {
@@ -93,9 +93,6 @@ const EDGE_TYPES = { pattern: PatternEdgeView, subclass: SubclassEdgeView }
 
 /** The hollow triangle at the superclass end of a subclass link (see `SubclassArrowhead`). */
 const SUBCLASS_ARROWHEAD = 'ontology-map-subclass-arrowhead'
-
-/** Fit-to-view frames the whole Map, never zooming out so far that class names can no longer be read. */
-const FIT_VIEW_OPTIONS = { minZoom: FIT_MIN_ZOOM }
 
 /**
  * How far the change-kind key sits from the canvas's left edge: past the zoom controls
@@ -308,9 +305,10 @@ export function OntologyMap({ ontology, comparison, query = '', filtersIn }: Ont
     return { nodes, edges: [...subclassEdges, ...patternEdges] }
   }, [layout.data, sizes, shown, classes, links, subclassLinks, comparison])
 
-  // The Map opens on what `fitTo` names (a comparison's changes), else on all of it.
+  // The Map opens on what `fitTo` names (a comparison's changes), else on all of it, never
+  // zooming out so far that class names can no longer be read. Fit view frames it all.
   const openingFit = useMemo(
-    () => ({ ...FIT_VIEW_OPTIONS, nodes: view.fitTo?.map((id) => ({ id })) }),
+    () => ({ minZoom: FIRST_VIEW_MIN_ZOOM, nodes: view.fitTo?.map((id) => ({ id })) }),
     [view.fitTo],
   )
 
@@ -350,7 +348,7 @@ export function OntologyMap({ ontology, comparison, query = '', filtersIn }: Ont
         fitView={view.fitView}
         fitViewOptions={openingFit}
       >
-        <Controls showInteractive={false} fitViewOptions={FIT_VIEW_OPTIONS} />
+        <Controls showInteractive={false} />
         {comparison && <ChangeKindKey />}
         <CentreOn point={centre} />
       </ReactFlow>

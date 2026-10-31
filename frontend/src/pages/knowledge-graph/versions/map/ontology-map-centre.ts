@@ -9,10 +9,11 @@ import type { Point } from './ontology-map-layout'
 import { NODE_SIZE, type Size } from './ontology-map-sizes'
 
 /**
- * The least zoom fit-to-view frames at, so a class's name stays readable (about 12px). A
- * view framing more is left to be panned.
+ * The least zoom the Map's first view frames at, so a class's name stays readable (about
+ * 12px); a first view framing more is left to be panned. The Fit view control has no such
+ * floor: it frames the whole Map.
  */
-export const FIT_MIN_ZOOM = 0.85
+export const FIRST_VIEW_MIN_ZOOM = 0.85
 
 /**
  * The classes a Map opened on no selection first frames: those `changed` (`changedOf`), and

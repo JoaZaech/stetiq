@@ -177,10 +177,9 @@ test.describe('city transit, v2 → v3', () => {
     expect(Math.abs(changes.x - pane.x)).toBeLessThan(8)
     expect(Math.abs(changes.y - pane.y)).toBeLessThan(8)
 
-    // Fit view still frames everything.
+    // Fit view frames everything.
     await map.getByRole('button', { name: 'Fit View' }).click()
     await expect(shape(map, 'Agency')).toBeInViewport()
-    expect(await zoom(map)).toBeGreaterThanOrEqual(0.85)
   })
 
   test('with OPERATES selected, the breaking classes stay readable with their severity outline', async ({ page }) => {

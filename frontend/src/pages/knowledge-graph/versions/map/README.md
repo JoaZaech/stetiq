@@ -14,6 +14,6 @@ The Ontology Map: an Ontology Version drawn as a node-link diagram, on the Ontol
 - `ontology-map-focus.ts`: a selection's focus and details, the changes kept as context outside it, and the search's matches (`focusOf`, `pathFocus`, `contextOf`, `changedOf`, `detailsOf`, `searchMap`, `MapSelection`).
 - `ontology-map-paths.ts`: shortest paths between two classes (`shortestPaths`).
 - `ontology-map-search.ts`: the Concept search (`searchOntology`).
-- `ontology-map-centre.ts`: where the Map centres, and what it first frames (`centreOf`, `locatedSelection`, `firstFramed`, `FIT_MIN_ZOOM`).
+- `ontology-map-centre.ts`: where the Map centres, and what it first frames (`centreOf`, `locatedSelection`, `firstFramed`, `FIRST_VIEW_MIN_ZOOM`).
 
 `ontology-map.fixtures.ts` holds the Ontologies the Map's tests share. Superimposing two versions lives in `../comparison/`; the selection, Concepts and Table/Map toggle stay in `..`.
