@@ -3,10 +3,11 @@
 // run costs one line of a coding agent's context.
 import { spawnSync } from 'node:child_process'
 
+// Each step calls a package.json script, so the two can't drift apart.
 const steps: [name: string, command: string][] = [
-  ['typecheck', 'tsc -b --pretty false'],
-  ['lint', 'eslint .'],
-  ['unit tests', 'vitest run --reporter=dot'],
+  ['typecheck', 'npm run --silent typecheck -- --pretty false'],
+  ['lint', 'npm run --silent lint'],
+  ['unit tests', 'npm run --silent test -- --reporter=dot'],
 ]
 
 const failed: string[] = []
