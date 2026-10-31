@@ -109,7 +109,6 @@ test.describe('with a filter hiding the first changed Pattern of a relation', ()
     await page.goto('/ui/kg/support/versions/2/changes?select=relation:OPENED')
     const details = page.getByRole('complementary', { name: 'Details' })
     await expect(details).toContainText('(Agent)-[OPENED]->(LegacyTicket)')
-    // By keyboard: with the details open, the legend overlaps the filters.
     await page.getByRole('switch', { name: 'Hide deprecated' }).focus()
     await page.keyboard.press('Space')
 

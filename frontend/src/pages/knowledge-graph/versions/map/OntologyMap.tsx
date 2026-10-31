@@ -1,5 +1,6 @@
 import '@xyflow/react/dist/style.css'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   BaseEdge,
@@ -182,7 +183,11 @@ const changeStyle = (change?: MapChange): Partial<ChangeStyle> => (change ? CHAN
 /** A change kind as the UI names it (the legend, `data-change`): cosmetic is "documentation-only", as its class is. */
 const changeKindLabel = (kind: MapChangeKind): string => (kind === 'cosmetic' ? CLASSIFICATION_LABEL.cosmetic : kind)
 
-type OntologyMapProps = { query?: string } & (
+type OntologyMapProps = {
+  query?: string
+  /** Where its filters go, in the page's header row (`useMapFiltersSlot`); none shows none. */
+  filtersIn?: HTMLElement | null
+} & (
   | { ontology: Ontology; comparison?: never }
   | { comparison: OntologyComparison; ontology?: never }
 )
@@ -201,7 +206,7 @@ type OntologyMapProps = { query?: string } & (
  * Details, paths, results and a comparison's change summary share one panel on the
  * Map's right (`DrawnMap.panel`); a comparison's collapses to a rail of its counts.
  */
-export function OntologyMap({ ontology, comparison, query = '' }: OntologyMapProps) {
+export function OntologyMap({ ontology, comparison, query = '', filtersIn }: OntologyMapProps) {
   const [selected, setSelection] = useConceptSelection()
   const drawnMapOf = useMemo(() => createDrawnMapOf(), [])
   const [state, setState] = useState(() => initialMapState(selected))
@@ -332,20 +337,6 @@ export function OntologyMap({ ontology, comparison, query = '' }: OntologyMapPro
         fitViewOptions={openingFit}
       >
         <Controls showInteractive={false} fitViewOptions={FIT_VIEW_OPTIONS} />
-        <Panel position="top-right" className="flex gap-4 rounded-md border bg-card px-3 py-2 text-sm shadow-xs">
-          <FilterSwitch
-            id="map-hide-deprecated"
-            label="Hide deprecated"
-            checked={state.filters.hideDeprecated}
-            onCheckedChange={(hideDeprecated) => respond({ kind: 'filter', filters: { hideDeprecated } })}
-          />
-          <FilterSwitch
-            id="map-hide-subclass-links"
-            label="Hide subclass links"
-            checked={state.filters.hideSubclassLinks}
-            onCheckedChange={(hideSubclassLinks) => respond({ kind: 'filter', filters: { hideSubclassLinks } })}
-          />
-        </Panel>
         {comparison && <ComparisonLegend />}
         <CentreOn point={centre} />
       </ReactFlow>
@@ -386,6 +377,25 @@ export function OntologyMap({ ontology, comparison, query = '' }: OntologyMapPro
         </>
       )}
       <SubclassArrowhead />
+      {/* Off the canvas, in the page's header row, so nothing overlays the top of the Map. */}
+      {filtersIn &&
+        createPortal(
+          <>
+            <FilterSwitch
+              id="map-hide-deprecated"
+              label="Hide deprecated"
+              checked={state.filters.hideDeprecated}
+              onCheckedChange={(hideDeprecated) => respond({ kind: 'filter', filters: { hideDeprecated } })}
+            />
+            <FilterSwitch
+              id="map-hide-subclass-links"
+              label="Hide subclass links"
+              checked={state.filters.hideSubclassLinks}
+              onCheckedChange={(hideSubclassLinks) => respond({ kind: 'filter', filters: { hideSubclassLinks } })}
+            />
+          </>,
+          filtersIn,
+        )}
     </div>
   )
 }
