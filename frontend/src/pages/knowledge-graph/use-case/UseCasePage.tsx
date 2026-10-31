@@ -1,4 +1,4 @@
-import { useCallback, useId, useState, type ReactNode } from 'react'
+import { useCallback, useId, useMemo, useState, type ReactNode } from 'react'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import {
   useUseCaseVersions,
@@ -19,8 +19,10 @@ import { CompetencyQuestionDialog } from './CompetencyQuestionDialog'
 import { CompetencyQuestionsTable } from './CompetencyQuestionsTable'
 import { ConsumerCards } from './ConsumerCards'
 import { RemoveCompetencyQuestionDialog } from './RemoveCompetencyQuestionDialog'
+import { questionsServingNoTask } from './readiness'
 import { savedMessage } from './saved-message'
 import { StructuralAnswerability } from './StructuralAnswerability'
+import { TaskReadiness } from './TaskReadiness'
 import { UseCaseVersionsTable } from './UseCaseVersionsTable'
 
 const SECTION = knowledgeGraphSection('use-case')
@@ -75,7 +77,12 @@ export function UseCasePage() {
             <>
               <LatestVersion name={name} version={latest} onSaved={setSaved} />
               <Panel title="Consumers">
-                <ConsumerCards useCase={latest.use_case} />
+                <ConsumerCards
+                  useCase={latest.use_case}
+                  taskStatus={(task) => (
+                    <TaskReadiness knowledgeGraph={name} useCaseVersion={latest.number} task={task} />
+                  )}
+                />
               </Panel>
               <StructuralAnswerability knowledgeGraph={name} useCaseVersion={latest.number} />
               <Panel title="Use Case Versions">
@@ -147,6 +154,7 @@ function LatestVersion({ name, version, onSaved }: LatestVersionProps) {
     ),
     [name, useCase, onSaved],
   )
+  const servingNoTask = useMemo(() => questionsServingNoTask(useCase), [useCase])
   return (
     <Panel title={`Use Case Version ${version.number}`}>
       <p className="text-xs text-muted-foreground">
@@ -155,7 +163,11 @@ function LatestVersion({ name, version, onSaved }: LatestVersionProps) {
       <p className="text-sm">
         {useCase.description ?? <span className="text-muted-foreground">No description</span>}
       </p>
-      <CompetencyQuestionsTable questions={useCase.competency_questions} rowActions={rowActions} />
+      <CompetencyQuestionsTable
+        questions={useCase.competency_questions}
+        rowActions={rowActions}
+        servingNoTask={servingNoTask}
+      />
     </Panel>
   )
 }

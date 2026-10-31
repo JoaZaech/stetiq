@@ -1,12 +1,20 @@
-import { useId } from 'react'
+import { useId, type ReactNode } from 'react'
 import type { CompetencyQuestion, Consumer, Task, UseCase } from '@/api/use-cases'
 import { Badge } from '@/components/ui/badge'
 
 /**
  * A Use Case Version's Consumers, one card each, listing its Tasks and the Competency
  * Questions each Task needs. Read-only.
+ *
+ * `taskStatus` renders under each Task's description, e.g. its readiness.
  */
-export function ConsumerCards({ useCase }: { useCase: UseCase }) {
+export function ConsumerCards({
+  useCase,
+  taskStatus,
+}: {
+  useCase: UseCase
+  taskStatus?: (task: Task) => ReactNode
+}) {
   const consumers = useCase.consumers ?? []
   if (consumers.length === 0) {
     return (
@@ -19,7 +27,7 @@ export function ConsumerCards({ useCase }: { useCase: UseCase }) {
   return (
     <div className="grid gap-4 md:grid-cols-2">
       {consumers.map((consumer) => (
-        <ConsumerCard key={consumer.id} consumer={consumer} questions={questions} />
+        <ConsumerCard key={consumer.id} consumer={consumer} questions={questions} taskStatus={taskStatus} />
       ))}
     </div>
   )
@@ -28,9 +36,10 @@ export function ConsumerCards({ useCase }: { useCase: UseCase }) {
 interface ConsumerCardProps {
   consumer: Consumer
   questions: Map<string, CompetencyQuestion>
+  taskStatus?: (task: Task) => ReactNode
 }
 
-function ConsumerCard({ consumer, questions }: ConsumerCardProps) {
+function ConsumerCard({ consumer, questions, taskStatus }: ConsumerCardProps) {
   const titleId = useId()
   const tasksId = useId()
   const tasks = consumer.tasks ?? []
@@ -61,7 +70,7 @@ function ConsumerCard({ consumer, questions }: ConsumerCardProps) {
         ) : (
           <ul aria-labelledby={tasksId} className="space-y-3">
             {tasks.map((task) => (
-              <TaskItem key={task.id} task={task} questions={questions} />
+              <TaskItem key={task.id} task={task} questions={questions} status={taskStatus?.(task)} />
             ))}
           </ul>
         )}
@@ -70,7 +79,13 @@ function ConsumerCard({ consumer, questions }: ConsumerCardProps) {
   )
 }
 
-function TaskItem({ task, questions }: { task: Task; questions: Map<string, CompetencyQuestion> }) {
+interface TaskItemProps {
+  task: Task
+  questions: Map<string, CompetencyQuestion>
+  status?: ReactNode
+}
+
+function TaskItem({ task, questions, status }: TaskItemProps) {
   const needs = task.competency_questions ?? []
   return (
     <li className="space-y-1 border-l-2 pl-3">
@@ -78,6 +93,7 @@ function TaskItem({ task, questions }: { task: Task; questions: Map<string, Comp
         {task.description}{' '}
         <code className="font-mono text-xs text-muted-foreground">{task.id}</code>
       </p>
+      {status}
       {needs.length === 0 ? (
         <p className="text-xs text-muted-foreground">Needs no Competency Question</p>
       ) : (
