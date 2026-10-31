@@ -56,11 +56,12 @@ test('a shortest path opens in the same panel, back to the summary', async ({ pa
   await page.goto('/ui/kg/city-transit/versions/3/changes')
   const map = ontologyMap(page)
 
-  await item(map, 'Agency').click()
-  await item(map, 'Stop').click({ modifiers: ['Shift'] })
+  // Two changed classes, both in the first view, which frames the changes.
+  await item(map, 'Stop').click()
+  await item(map, 'Trip').click({ modifiers: ['Shift'] })
 
   const path = panel(page, 'Path')
-  await expect(path).toContainText('Agency → Route → Trip → Stop')
+  await expect(path).toContainText('Stop → Trip')
   await expect.poll(() => onlyPanelOnRight(page)).toBe(true)
   await path.getByRole('button', { name: 'All changes' }).click()
   await expect(panel(page, 'Change summary')).toBeVisible()
