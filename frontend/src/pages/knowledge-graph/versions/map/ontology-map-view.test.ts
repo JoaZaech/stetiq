@@ -5,7 +5,7 @@ import { endpointChange } from '../comparison/ontology-diff.fixtures'
 import type { ConceptSelection } from '../concept-selection'
 import {
   canPick,
-  createDrawMap,
+  createDrawnMapOf,
   initialMapState,
   respondTo,
   type MapGesture,
@@ -28,7 +28,7 @@ vi.mock('./ontology-map-search', async (actual) => {
 
 /** The Map of `ontology` opened on `selected` (a `?select=`), as `OntologyMap` opens it. */
 function open(ontology: Ontology, selected: ConceptSelection | null, query = '') {
-  return createDrawMap()({ ontology, selected, query }, initialMapState(selected))
+  return createDrawnMapOf()({ ontology, selected, query }, initialMapState(selected))
 }
 
 // OPENED gained Customer → Ticket; Agent → Ticket is unchanged and comes first.
@@ -46,21 +46,21 @@ const COMPARISON = compareOntologies(
 
 /** The comparison's Map opened on `selected`. */
 function compare(selected: ConceptSelection | null) {
-  return createDrawMap()({ comparison: COMPARISON, selected, query: '' }, initialMapState(selected))
+  return createDrawnMapOf()({ comparison: COMPARISON, selected, query: '' }, initialMapState(selected))
 }
 
 /** The Map after the user's `gestures`, each answered as `OntologyMap` answers it. */
 function after(view: DrawnMap, ...gestures: MapGesture[]): DrawnMap {
-  const drawMap = createDrawMap()
+  const drawnMapOf = createDrawnMapOf()
   for (const g of gestures) {
     const { state, select } = respondTo(view, g)
     const input: MapInput = { ...view.input, selected: select === undefined ? view.input.selected : select }
-    view = drawMap(input, state)
+    view = drawnMapOf(input, state)
   }
   return view
 }
 
-describe('drawMap', () => {
+describe('drawnMapOf', () => {
   it('emphasizes a selected class and its neighbourhood, and fades the rest', () => {
     // Customer links to Ticket only; Product is two steps away.
     const view = open(ONTOLOGY, { kind: 'class', label: 'Customer' })
@@ -291,20 +291,20 @@ describe('drawMap', () => {
   it('finds paths and searches once per change of what they read', () => {
     vi.mocked(shortestPaths).mockClear()
     vi.mocked(searchOntology).mockClear()
-    const drawMap = createDrawMap()
+    const drawnMapOf = createDrawnMapOf()
     const path = { kind: 'path', from: 'Customer', to: 'Product' } as const
     const state = initialMapState(path)
     const input = { ontology: ONTOLOGY, selected: path, query: 'ticket' }
 
-    drawMap(input, state)
+    drawnMapOf(input, state)
     // The same `?select=` as a new object, a preview and another search: no new paths.
-    drawMap({ ...input, selected: { ...path } }, state)
-    drawMap({ ...input, query: 'product' }, { ...state, preview: { kind: 'class', label: 'Ticket' } })
+    drawnMapOf({ ...input, selected: { ...path } }, state)
+    drawnMapOf({ ...input, query: 'product' }, { ...state, preview: { kind: 'class', label: 'Ticket' } })
     expect(shortestPaths).toHaveBeenCalledTimes(1)
     expect(searchOntology).toHaveBeenCalledTimes(2)
 
     // Another selection: no new search.
-    drawMap({ ...input, query: 'product', selected: { kind: 'path', from: 'Product', to: 'Customer' } }, state)
+    drawnMapOf({ ...input, query: 'product', selected: { kind: 'path', from: 'Product', to: 'Customer' } }, state)
     expect(shortestPaths).toHaveBeenCalledTimes(2)
     expect(searchOntology).toHaveBeenCalledTimes(2)
   })

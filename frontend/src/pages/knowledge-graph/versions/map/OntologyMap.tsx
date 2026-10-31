@@ -53,7 +53,7 @@ import {
 } from './ontology-map-sizes'
 import {
   canPick,
-  createDrawMap,
+  createDrawnMapOf,
   initialMapState,
   respondTo,
   type Emphasis,
@@ -201,9 +201,9 @@ type OntologyMapProps = { query?: string } & (
  */
 export function OntologyMap({ ontology, comparison, query = '' }: OntologyMapProps) {
   const [selected, setSelection] = useConceptSelection()
-  const drawMap = useMemo(() => createDrawMap(), [])
+  const drawnMapOf = useMemo(() => createDrawnMapOf(), [])
   const [state, setState] = useState(() => initialMapState(selected))
-  const view = drawMap(comparison ? { comparison, selected, query } : { ontology: ontology!, selected, query }, state)
+  const view = drawnMapOf(comparison ? { comparison, selected, query } : { ontology: ontology!, selected, query }, state)
   const { map, shown, selection, details, paths, results, classes, links, subclassLinks } = view
   /** Answers `gesture` as the view says: its next state, and the page's next selection. */
   const respond = (gesture: MapGesture) => {

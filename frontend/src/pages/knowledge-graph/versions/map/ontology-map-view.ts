@@ -3,7 +3,7 @@
  * Ontology (or a comparison), the page's `?select=`, the Concept search, the Map's filters
  * and the user's gestures, and returns the selection, its focus, details and paths, the
  * search results, how each item is emphasized or faded, and whether to centre.
- * `OntologyMap` renders what `createDrawMap`'s function returns and forwards gestures to
+ * `OntologyMap` renders the `DrawnMap` that `createDrawnMapOf`'s function computes and forwards gestures to
  * `respondTo`.
  */
 import type { Ontology } from '@/api/ontology-versions'
@@ -116,7 +116,7 @@ function remember<A extends unknown[], R>(f: (...args: A) => R): (...args: A) =>
  * alone (each `OntologyMap` makes its own). Each step is remembered, so it only runs again when its own inputs change: the shortest
  * paths when the selection or what is reachable changes, the search when the query does.
  */
-export function createDrawMap(): (input: MapInput, state: MapState) => DrawnMap {
+export function createDrawnMapOf(): (input: MapInput, state: MapState) => DrawnMap {
   const mapOf = remember((ontology: Ontology) => ontologyMap(ontology))
   const shownOf = remember(filterOntologyMap)
   // Focus is over what is shown, so a selection a filter hides is no selection. Hiding
