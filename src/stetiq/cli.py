@@ -15,7 +15,7 @@ from stetiq.config import DEFAULT_CONFIG_PATH, load_config
 from stetiq.entry_point import EntryPoint
 from stetiq.errors import EvaluatorError, GateConfigError, NoUseCaseError, StetiqError
 from stetiq.gates import parse_gates
-from stetiq.impact import QuestionImpact, UseCaseImpact
+from stetiq.impact import IMPACT_LEVELS, ImpactLevel, QuestionImpact, UseCaseImpact
 from stetiq.use_case import to_yaml as to_use_case_yaml
 
 app = typer.Typer(
@@ -378,11 +378,9 @@ def ontology_diff(
     _echo_impact(impact)
 
 
-_IMPACT_WORDS = {
-    "affected": "affected",
-    "will_be_affected": "will be affected",
-    "unknown": "unknown",
-}
+def _impact_words(level: ImpactLevel) -> str:
+    """The level as the CLI prints it: `will_be_affected` reads "will be affected"."""
+    return level.replace("_", " ")
 
 
 def _echo_impact(impact: UseCaseImpact | None) -> None:
@@ -393,9 +391,9 @@ def _echo_impact(impact: UseCaseImpact | None) -> None:
         typer.echo("Consumer impact: none")
         return
     typer.echo("Consumer impact:")
-    for level in ("affected", "will_be_affected", "unknown"):
+    for level in IMPACT_LEVELS:
         for consumer in impact.by_level(level):
-            typer.echo(f"  {_IMPACT_WORDS[level]}: {consumer.name} ({consumer.id})")
+            typer.echo(f"  {_impact_words(level)}: {consumer.name} ({consumer.id})")
             for task in consumer.tasks:
                 typer.echo(f"    Task {task.id}: {task.description}")
                 for q in task.questions:
@@ -407,10 +405,10 @@ def _echo_impact(impact: UseCaseImpact | None) -> None:
 
 
 def _question_line(q: QuestionImpact) -> str:
-    if q.level == "unknown":
-        return f"{q.id}: unknown (no Concept mapping or query)"
+    if not q.changes:  # unknown: the question states no Concepts to follow
+        return f"{q.id}: {_impact_words(q.level)} (no Concept mapping or query)"
     concepts = ", ".join(dict.fromkeys(c.concept for c in q.changes))
-    return f"{q.id}: {_IMPACT_WORDS[q.level]} by {concepts}"
+    return f"{q.id}: {_impact_words(q.level)} by {concepts}"
 
 
 @use_case_app.command("register")
