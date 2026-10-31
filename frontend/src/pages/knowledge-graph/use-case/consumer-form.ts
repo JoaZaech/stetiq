@@ -1,4 +1,5 @@
 import type { Consumer, Task, UseCase } from '@/api/use-cases'
+import { checkId } from './element-ids'
 
 /** The Consumer form's fields, as typed (all text; blank optional fields = none). */
 export interface ConsumerDraft {
@@ -13,23 +14,6 @@ export type ConsumerDraftField = keyof ConsumerDraft
 export type ConsumerDraftErrors = Partial<Record<ConsumerDraftField, string>>
 
 export const EMPTY_CONSUMER_DRAFT: ConsumerDraft = { id: '', name: '', kind: '', contact: '', description: '' }
-
-/** What already holds `id` in the Use Case, other than `own` (the id being edited). */
-function holderOf(useCase: UseCase, id: string, own: string | undefined): string | undefined {
-  if (id === own) return undefined
-  if (useCase.competency_questions.some((q) => q.id === id)) return `The Competency Question ${id}`
-  for (const consumer of useCase.consumers ?? []) {
-    if (consumer.id === id) return `The Consumer ${id}`
-    if ((consumer.tasks ?? []).some((t) => t.id === id)) return `The Task ${id}`
-  }
-  return undefined
-}
-
-function checkId(id: string, useCase: UseCase, own: string | undefined): string | undefined {
-  if (!id) return 'Needs an id.'
-  const holder = holderOf(useCase, id, own)
-  return holder && `${holder} already has this id.`
-}
 
 /**
  * The Consumer form's errors, per field: a missing id or name, or an id that another

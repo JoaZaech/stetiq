@@ -84,10 +84,7 @@ export function CompetencyQuestionDialog({
           noValidate
           onSubmit={(event) => {
             event.preventDefault()
-            const otherIds = useCase.competency_questions
-              .map((q) => q.id)
-              .filter((id) => id !== question?.id)
-            const invalid = validateDraft(draft, otherIds)
+            const invalid = validateDraft(draft, useCase, question?.id)
             setErrors(invalid)
             if (Object.keys(invalid).length) return
             saving.mutate(withQuestion(useCase, questionOf(draft)), {

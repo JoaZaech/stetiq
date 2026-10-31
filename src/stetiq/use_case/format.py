@@ -167,16 +167,35 @@ def _check_text(value: Any, path: str, needs: str, *, required: bool = False) ->
     raise UseCaseValidationError(f"{path}: {needs}")
 
 
-def _check_consumer(c: Consumer, question_ids: set[str], task_ids: set[str]) -> None:
+# A Consumer's optional text fields, in YAML order.
+_CONSUMER_TEXT_FIELDS = ("kind", "contact", "description")
+
+
+class _Ids:
+    """The ids claimed so far in a Use Case, with the kind of element holding each."""
+
+    def __init__(self) -> None:
+        self._kinds: dict[str, str] = {}
+
+    def claim(self, id: str, kind: str) -> None:
+        """Claim `id` for an element of `kind`; ids are unique across the whole Use Case."""
+        held_by = self._kinds.get(id)
+        if held_by == kind:
+            raise UseCaseValidationError(f"{id}: duplicate {kind} id")
+        if held_by is not None:
+            raise UseCaseValidationError(f"{id}: {kind} id is already a {held_by} id")
+        self._kinds[id] = kind
+
+
+def _check_consumer(c: Consumer, question_ids: set[str], ids: _Ids) -> None:
     _check_id(c.id, "consumer")
+    ids.claim(c.id, "consumer")
     _check_text(c.name, f"{c.id}.name", "needs a name", required=True)
-    for field in ("kind", "contact", "description"):
+    for field in _CONSUMER_TEXT_FIELDS:
         _check_text(getattr(c, field), f"{c.id}.{field}", "must be a non-empty string")
     for t in c.tasks:
         _check_id(t.id, f"{c.id} task")
-        if t.id in task_ids:
-            raise UseCaseValidationError(f"{t.id}: duplicate task id")
-        task_ids.add(t.id)
+        ids.claim(t.id, "task")
         _check_text(t.description, f"{t.id}.description", "needs a description", required=True)
         for q in t.competency_questions:
             if q not in question_ids:
@@ -189,19 +208,13 @@ def check_use_case(use_case: UseCase) -> UseCase:
     """Validate a Use Case model (however it was built)."""
     if not use_case.competency_questions:
         raise UseCaseValidationError("competency_questions: needs at least one question")
-    seen: set[str] = set()
+    ids = _Ids()
     for q in use_case.competency_questions:
         check_question(q)
-        if q.id in seen:
-            raise UseCaseValidationError(f"{q.id}: duplicate competency question id")
-        seen.add(q.id)
-    consumer_ids: set[str] = set()
-    task_ids: set[str] = set()
+        ids.claim(q.id, "competency question")
+    question_ids = {q.id for q in use_case.competency_questions}
     for c in use_case.consumers:
-        _check_consumer(c, seen, task_ids)
-        if c.id in consumer_ids:
-            raise UseCaseValidationError(f"{c.id}: duplicate consumer id")
-        consumer_ids.add(c.id)
+        _check_consumer(c, question_ids, ids)
     return use_case
 
 
@@ -229,7 +242,7 @@ def to_dict(use_case: UseCase) -> dict[str, Any]:
 
 def _consumer_dict(c: Consumer) -> dict[str, Any]:
     d: dict[str, Any] = {"id": c.id, "name": c.name}
-    for field in ("kind", "contact", "description"):
+    for field in _CONSUMER_TEXT_FIELDS:
         if getattr(c, field) is not None:
             d[field] = getattr(c, field)
     if c.tasks:

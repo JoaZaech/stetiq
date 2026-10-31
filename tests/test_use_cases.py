@@ -622,6 +622,19 @@ QUESTIONS = "competency_questions: [{id: q, question: Who are our customers}]\n"
             " {id: bi, name: BI, tasks: [{id: sync, description: Report}]}]",
             "sync: duplicate task id",
         ),
+        ("[{id: q, name: CRM}]", "q: consumer id is already a competency question id"),
+        (
+            "[{id: crm, name: CRM, tasks: [{id: q, description: Sync}]}]",
+            "q: task id is already a competency question id",
+        ),
+        (
+            "[{id: crm, name: CRM, tasks: [{id: crm, description: Sync}]}]",
+            "crm: task id is already a consumer id",
+        ),
+        (
+            "[{id: crm, name: CRM, tasks: [{id: sync, description: Sync}]}, {id: sync, name: Sync}]",
+            "sync: consumer id is already a task id",
+        ),
         ("[{name: CRM}]", "consumer.id: needs a non-empty string id"),
         (
             "[{id: crm, name: CRM, tasks: [{description: Sync}]}]",
@@ -653,6 +666,10 @@ def test_malformed_consumers_are_rejected_naming_the_element_in_every_mode(
         (
             (stetiq.Consumer("crm", "CRM"), stetiq.Consumer("crm", "CRM again")),
             "crm: duplicate consumer id",
+        ),
+        (
+            (stetiq.Consumer("crm", "CRM", tasks=(stetiq.Task("q", "Sync"),)),),
+            "q: task id is already a competency question id",
         ),
         (
             (stetiq.Consumer(None, "CRM"),),  # type: ignore[arg-type]
