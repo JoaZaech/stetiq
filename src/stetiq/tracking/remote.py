@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from typing import Any
-from urllib.parse import quote, urlencode
+from urllib.parse import quote
 
 import httpx
 
@@ -366,12 +366,12 @@ class RemoteTrackingService:
     def list_consumer_gate_results(
         self, knowledge_graph: str, *, consumer: str | None = None, version: int | None = None
     ) -> list[ConsumerGateResult]:
-        query = urlencode(
-            {k: v for k, v in {"consumer": consumer, "version": version}.items() if v is not None}
-        )
-        path = (
-            self._kg_path(knowledge_graph)
-            + "/consumer-gate-results"
-            + (f"?{query}" if query else "")
-        )
+        filters = [
+            f"{key}={quote(str(value), safe='')}"
+            for key, value in (("consumer", consumer), ("version", version))
+            if value is not None
+        ]
+        path = f"{self._kg_path(knowledge_graph)}/consumer-gate-results"
+        if filters:
+            path += "?" + "&".join(filters)
         return [codec.consumer_gate_result_from_json(r) for r in self._call("GET", path)]

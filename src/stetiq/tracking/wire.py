@@ -116,6 +116,7 @@ ERROR_STATUS: dict[type[errors.StetiqError], int] = {
     errors.ConflictingArgumentsError: 422,
     errors.UseCaseValidationError: 422,
     errors.ConsumerGateConfigError: 422,
+    errors.NoConsumerGatesError: 422,
     errors.InvalidAliasNameError: 422,
     errors.InvalidDriftConfigError: 422,
     errors.GateConfigError: 422,

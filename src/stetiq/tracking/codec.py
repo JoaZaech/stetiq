@@ -532,7 +532,7 @@ def consumer_gate_result_from_json(d: dict[str, Any]) -> ConsumerGateResult:
         run_id=d["run_id"],
         ontology_version=d["ontology_version"],
         baseline_run_id=d.get("baseline_run_id"),
-        baseline_ontology_version=d["baseline_ontology_version"],
+        baseline_ontology_version=d.get("baseline_ontology_version"),
         outcomes=consumer_gate_outcomes_from_json(d["outcomes"]),
         evaluated_at=datetime.fromisoformat(d["evaluated_at"]),
     )

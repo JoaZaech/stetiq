@@ -6,7 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from stetiq.use_case.consumer_gates import ConsumerGate
+from stetiq.use_case.consumer_gates import RowCountDropGate
 
 
 @dataclass(frozen=True)
@@ -66,7 +66,7 @@ class Consumer:
     kind: str | None = None
     contact: str | None = None
     description: str | None = None
-    consumer_gates: tuple[ConsumerGate, ...] = ()
+    consumer_gates: tuple[RowCountDropGate, ...] = ()
 
 
 @dataclass(frozen=True)

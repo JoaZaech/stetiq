@@ -4,14 +4,22 @@ against the Contract Alias baseline, recorded, and enforced in CI by `stetiq con
 The executed Competency Questions of each Construction Run return the rows the test
 sets with `add_query_result`, so each run's row counts are what the test says."""
 
+import os
+
 import pytest
 import yaml
 from typer.testing import CliRunner
 
 import stetiq
-from stetiq import ConflictingArgumentsError, ConsumerGateConfigError, NotFoundError
+from stetiq import (
+    ConflictingArgumentsError,
+    ConsumerGateConfigError,
+    NoConsumerGatesError,
+    NotFoundError,
+)
 from stetiq.cli import CONSUMER_GATE_FAILED_EXIT_CODE, app
 from stetiq.graph_source import GraphSourceScope, InMemoryGraphSource
+from stetiq.tracking import SqlStore
 from stetiq.use_case import RowCountDropGate, canonicalize, parse_use_case_yaml, to_dict
 
 KG = "plant"
@@ -317,6 +325,33 @@ def test_without_a_baseline_run_every_consumer_gate_fails(client, plant, graph_s
     assert "baseline" in outcome.reasons[0].lower()
 
 
+def _store(tracking_mode, tmp_path):
+    """The Store behind `client`, for a state the SDK cannot produce on its own."""
+    url = {
+        "local": f"sqlite:///{tmp_path / 'stetiq.db'}",
+        "remote": f"sqlite:///{tmp_path / 'server.db'}",
+    }.get(tracking_mode) or os.environ["STETIQ_TEST_POSTGRES_URL"]
+    return SqlStore(url)
+
+
+def test_a_contract_alias_pointing_to_no_version_is_a_missing_baseline(
+    client, plant, graph_source, tracking_mode, tmp_path
+):
+    run_with(client, graph_source)
+    run_with(client, graph_source)
+    # E.g. a store edited by hand: the Contract Alias names an Alias that does not exist.
+    _store(tracking_mode, tmp_path).set_contract_alias(KG, "gone")
+
+    results = client.evaluate_consumer_gates(plant)
+
+    assert [r.passed for r in results] == [False, False]
+    assert all((r.baseline_run_id, r.baseline_ontology_version) == (None, None) for r in results)
+    _, outcome = outcome_of(results, "reliability-dashboard")
+    assert {f.missing for f in outcome.findings} == {"no_baseline_run"}
+    assert "Contract Alias" in outcome.reasons[0]
+    assert client.list_consumer_gate_results(plant) == results
+
+
 def test_the_baseline_is_a_run_on_the_contract_aliass_version(client, plant, graph_source):
     on_v1 = run_with(client, graph_source, technicians=5)
     # A run on another version is never the baseline, however recent.
@@ -417,7 +452,7 @@ def test_an_unknown_consumer_is_not_found(client, plant, graph_source):
 def test_a_consumer_without_consumer_gates_cannot_be_evaluated_alone(client, plant, graph_source):
     run_with(client, graph_source)
 
-    with pytest.raises(ConsumerGateConfigError, match="safety-team"):
+    with pytest.raises(NoConsumerGatesError, match="safety-team"):
         client.evaluate_consumer_gates(plant, consumer="safety-team")
 
 
@@ -458,7 +493,7 @@ def test_a_use_case_without_any_consumer_gate_is_refused(client, plant, graph_so
     client.register_use_case(KG, data)
     run_with(client, graph_source)
 
-    with pytest.raises(ConsumerGateConfigError, match="declares a Consumer Gate"):
+    with pytest.raises(NoConsumerGatesError, match="declares a Consumer Gate"):
         client.evaluate_consumer_gates(plant)
 
 

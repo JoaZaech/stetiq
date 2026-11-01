@@ -23,12 +23,12 @@ from stetiq.conformance import assess_conformance, candidate_ontology
 from stetiq.drift import DriftThresholds, assess_drift
 from stetiq.errors import (
     ConflictingArgumentsError,
-    ConsumerGateConfigError,
     EvaluatorError,
     GateConfigError,
     GraphSourceNotBoundError,
     InvalidEvolutionModeError,
     MissingDeclaredOntologyError,
+    NoConsumerGatesError,
     NotFoundError,
     NoUseCaseError,
     RunNotActiveError,
@@ -1055,25 +1055,31 @@ class LocalTrackingService:
                         f"Consumer {consumer!r}"
                     )
                 if not consumers[0].consumer_gates:
-                    raise ConsumerGateConfigError(
+                    raise NoConsumerGatesError(
                         f"Consumer {consumer!r} declares no Consumer Gate in Use Case "
                         f"Version {use_case.number}"
                     )
             gated = [c for c in consumers if c.consumer_gates]
             if not gated:
-                raise ConsumerGateConfigError(
+                raise NoConsumerGatesError(
                     f"No Consumer in Use Case Version {use_case.number} of {knowledge_graph!r} "
                     "declares a Consumer Gate"
                 )
             subject = self._consumer_gate_subject(knowledge_graph, run=run, version=version)
-            contract = self.get_contract_version(knowledge_graph).number
-            baseline = next(
-                (
-                    r
-                    for r in reversed(self._finished_runs_standing_for(knowledge_graph, contract))
-                    if r.id != subject.id
-                ),
-                None,
+            contract = self._contract_version_number(knowledge_graph)
+            baseline = (
+                None
+                if contract is None
+                else next(
+                    (
+                        r
+                        for r in reversed(
+                            self._finished_runs_standing_for(knowledge_graph, contract)
+                        )
+                        if r.id != subject.id
+                    ),
+                    None,
+                )
             )
             inputs = ConsumerGateInputs(
                 task_questions={t.id: t.competency_questions for c in gated for t in c.tasks},
@@ -1100,6 +1106,12 @@ class LocalTrackingService:
                 self._store.add_consumer_gate_result(result)
                 results.append(result)
             return results
+
+    def _contract_version_number(self, knowledge_graph: str) -> int | None:
+        """The Contract Alias's version, None when it points to none: for a Consumer
+        Gate that is a missing baseline, recorded as a failure, not an error."""
+        alias = self._store.get_alias(knowledge_graph, self._contract_alias(knowledge_graph))
+        return None if alias is None else alias.version
 
     def _consumer_gate_subject(
         self, knowledge_graph: str, *, run: str | None, version: int | None

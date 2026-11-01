@@ -136,7 +136,7 @@ test.describe('with Drift that finds an undeclared Concept', () => {
     await page.goto('/ui/kg/support/observations')
 
     const drift = page.getByRole('article').first().getByRole('region', { name: 'Drift' })
-    await expect(planned(drift, 'Pending Migration').standIn).toHaveText('Pending Migration: not detected')
+    await expect(planned(drift, 'Pending Migration').standIn).toHaveText('Pending Migration')
     await expectPlaceholder(drift, 'Pending Migration', 'pending-migration-and-adoption')
     await expect(drift.getByRole('button', { name: 'Adopt into a Candidate' })).toBeDisabled()
     await expectPlaceholder(drift, 'Adoption', 'pending-migration-and-adoption')

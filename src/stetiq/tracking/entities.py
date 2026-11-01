@@ -11,7 +11,7 @@ from stetiq.conformance import Conformance
 from stetiq.drift import DriftFinding, DriftThresholds
 from stetiq.errors import InvalidAliasNameError
 from stetiq.evaluation.framework import Detail, MetricValue, ParameterValue, SubjectKind
-from stetiq.gates import Gate, GateOutcome
+from stetiq.gates import Gate, GateOutcome, Verdict
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import Ontology, to_yaml
 from stetiq.use_case import UseCase
@@ -248,18 +248,23 @@ class ObservationOutcome:
 # --- Gates ---------------------------------------------------------------------------
 
 
-class _HasGateOutcomes:
-    """The verdict views shared by a recorded Gate result and a Gate Preview."""
+class _HasOutcomes[O: Verdict]:
+    """The verdict views shared by a recorded Gate result, a Gate Preview and a Consumer
+    Gate result."""
 
-    outcomes: tuple[GateOutcome, ...]
+    outcomes: tuple[O, ...]
 
     @property
     def passed(self) -> bool:
         return all(o.passed for o in self.outcomes)
 
     @property
-    def failed(self) -> tuple[GateOutcome, ...]:
+    def failed(self) -> tuple[O, ...]:
         return tuple(o for o in self.outcomes if not o.passed)
+
+
+class _HasGateOutcomes(_HasOutcomes[GateOutcome]):
+    """A Gate result's or Gate Preview's views, with the Gates used."""
 
     @property
     def gates(self) -> tuple[Gate, ...]:
@@ -310,7 +315,7 @@ class GatePreview(_HasGateOutcomes):
 
 
 @dataclass(frozen=True)
-class ConsumerGateResult:
+class ConsumerGateResult(_HasOutcomes[ConsumerGateOutcome]):
     """One Consumer's recorded Consumer Gate evaluation: each of its Consumer Gates'
     outcomes, with the definition used (`outcome.gate`) from Use Case Version
     `use_case_version`.
@@ -318,8 +323,9 @@ class ConsumerGateResult:
     The subject is the finished Construction Run `run_id`, standing for
     `ontology_version` (its Candidate, else the version it consumed). The baseline is
     the latest other finished run standing for the Contract Alias's version,
-    `baseline_ontology_version`; `baseline_run_id` is None when there was none, and then
-    every outcome failed. Never read by Promotion's audit."""
+    `baseline_ontology_version` (None when the Contract Alias points to no version);
+    `baseline_run_id` is None when there was none, and then every outcome failed. Never
+    read by Promotion's audit."""
 
     knowledge_graph: str
     consumer: str
@@ -327,14 +333,6 @@ class ConsumerGateResult:
     run_id: str
     ontology_version: int
     baseline_run_id: str | None
-    baseline_ontology_version: int
+    baseline_ontology_version: int | None
     outcomes: tuple[ConsumerGateOutcome, ...]
     evaluated_at: datetime
-
-    @property
-    def passed(self) -> bool:
-        return all(o.passed for o in self.outcomes)
-
-    @property
-    def failed(self) -> tuple[ConsumerGateOutcome, ...]:
-        return tuple(o for o in self.outcomes if not o.passed)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import ipaddress
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Annotated
 
@@ -14,7 +15,7 @@ from stetiq.client import Client
 from stetiq.config import DEFAULT_CONFIG_PATH, load_config
 from stetiq.entry_point import EntryPoint
 from stetiq.errors import EvaluatorError, GateConfigError, NoUseCaseError, StetiqError
-from stetiq.gates import parse_gates
+from stetiq.gates import Verdict, parse_gates
 from stetiq.impact import IMPACT_LEVELS, ImpactLevel, QuestionImpact, UseCaseImpact
 from stetiq.use_case import to_yaml as to_use_case_yaml
 
@@ -845,6 +846,17 @@ def drift_list(knowledge_graph: str, tracking_uri: TrackingUri = None) -> None:
 GATE_FAILED_EXIT_CODE = 3
 
 
+def _echo_outcomes(
+    outcomes: Iterable[Verdict], *, indent: str = "", with_reasons: bool = True
+) -> None:
+    """`PASS`/`FAIL  <name>` per Gate or Consumer Gate outcome, then a failure's reasons."""
+    for outcome in outcomes:
+        typer.echo(f"{indent}{'PASS' if outcome.passed else 'FAIL'}  {outcome.gate.name}")
+        if with_reasons and not outcome.passed:
+            for reason in outcome.reasons:
+                typer.echo(f"{indent}      - {reason}")
+
+
 @app.command("gate")
 def gate(
     knowledge_graph: Annotated[
@@ -875,11 +887,7 @@ def gate(
         )
     except StetiqError as e:
         raise _fail(e) from None
-    for outcome in result.outcomes:
-        typer.echo(f"{'PASS' if outcome.passed else 'FAIL'}  {outcome.gate.name}")
-        if not outcome.passed:
-            for reason in outcome.reasons:
-                typer.echo(f"      - {reason}")
+    _echo_outcomes(result.outcomes)
     subject = f"run {run}" if run is not None else f"Ontology Version {result.ontology_version}"
     if result.passed:
         typer.echo(f"All {len(result.outcomes)} Gates passed for {knowledge_graph} {subject}")
@@ -903,8 +911,7 @@ def gate_results(knowledge_graph: str, tracking_uri: TrackingUri = None) -> None
         typer.echo(
             f"{r.evaluated_at.isoformat()}  {verdict}  Ontology Version {r.ontology_version} ({subject})"
         )
-        for outcome in r.outcomes:
-            typer.echo(f"  {'PASS' if outcome.passed else 'FAIL'}  {outcome.gate.name}")
+        _echo_outcomes(r.outcomes, indent="  ", with_reasons=False)
 
 
 # --- Consumer Gates ---------------------------------------------------------------------
@@ -914,14 +921,6 @@ app.add_typer(consumer_app, name="consumer")
 
 # Like `stetiq gate`: 0 every Consumer Gate passed, 3 one failed, 1 error, 2 usage error.
 CONSUMER_GATE_FAILED_EXIT_CODE = 3
-
-
-def _echo_consumer_gate_outcomes(result, indent: str = "  ") -> None:
-    for outcome in result.outcomes:
-        typer.echo(f"{indent}{'PASS' if outcome.passed else 'FAIL'}  {outcome.gate.name}")
-        if not outcome.passed:
-            for reason in outcome.reasons:
-                typer.echo(f"{indent}      {reason}")
 
 
 @consumer_app.command("gate")
@@ -966,7 +965,7 @@ def consumer_gate(
     for c in use_case.consumers:
         if c.id in by_consumer:
             typer.echo(c.id)
-            _echo_consumer_gate_outcomes(by_consumer[c.id])
+            _echo_outcomes(by_consumer[c.id].outcomes, indent="  ")
         elif consumer is None:
             typer.echo(f"{c.id}: no Consumer Gate declared (skipped)")
     first = results[0]
@@ -1010,7 +1009,7 @@ def consumer_gate_results(
             f"run {r.run_id} (Ontology Version {r.ontology_version}), baseline {baseline} "
             f"(Ontology Version {r.baseline_ontology_version})"
         )
-        _echo_consumer_gate_outcomes(r)
+        _echo_outcomes(r.outcomes, indent="  ")
 
 
 # --- Construction Runs and Observations -------------------------------------------------

@@ -24,6 +24,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar, Literal
 
+from stetiq import gates
 from stetiq.errors import ConsumerGateConfigError
 
 ROW_COUNT_DROP = "row_count_drop"
@@ -51,13 +52,10 @@ class RowCountDropGate:
         }
 
 
-# The one built kind; a union once others are built.
-ConsumerGate = RowCountDropGate
-
 _ROW_COUNT_DROP_KEYS = {"name", "check", "task", "max_drop"}
 
 
-def parse_consumer_gate(path: str, raw: Any) -> ConsumerGate:
+def parse_consumer_gate(path: str, raw: Any) -> RowCountDropGate:
     """One `consumer_gates` entry. Checks its shape; `check_consumer_gates` checks its values."""
     if not isinstance(raw, dict):
         raise ConsumerGateConfigError(f"{path}: expected a mapping with check, task and max_drop")
@@ -105,7 +103,7 @@ def check_consumer_gates(consumer: str, gates: Sequence[Any], task_ids: set[str]
             raise ConsumerGateConfigError(f"{path}.max_drop: must be a number between 0 and 1")
 
 
-def consumer_gate_from_dict(d: Mapping[str, Any]) -> ConsumerGate:
+def consumer_gate_from_dict(d: Mapping[str, Any]) -> RowCountDropGate:
     """Inverse of `to_dict`. Assumes validated input."""
     return RowCountDropGate(name=d["name"], task=d["task"], max_drop=float(d["max_drop"]))
 
@@ -145,7 +143,7 @@ class RowCountFinding:
 
 @dataclass(frozen=True)
 class ConsumerGateOutcome:
-    gate: ConsumerGate
+    gate: RowCountDropGate
     passed: bool
     reasons: tuple[str, ...] = ()
     findings: tuple[RowCountFinding, ...] = ()
@@ -154,15 +152,18 @@ class ConsumerGateOutcome:
 @dataclass(frozen=True)
 class ConsumerGateInputs:
     """The row counts of the Candidate run and the baseline run (None: no baseline run),
-    by Competency Question id."""
+    by Competency Question id. `baseline_version` is the Contract Alias's version, None
+    when it points to none."""
 
     task_questions: Mapping[str, Sequence[str]]  # Task id -> its Competency Question ids
     candidate: Mapping[str, QuestionRows]
     baseline: Mapping[str, QuestionRows] | None
-    baseline_version: int
+    baseline_version: int | None
 
 
-def evaluate_consumer_gate(gate: ConsumerGate, inputs: ConsumerGateInputs) -> ConsumerGateOutcome:
+def evaluate_consumer_gate(
+    gate: RowCountDropGate, inputs: ConsumerGateInputs
+) -> ConsumerGateOutcome:
     questions = inputs.task_questions.get(gate.task, ())
     limit = float(gate.max_drop)
     if not questions:
@@ -186,7 +187,9 @@ def evaluate_consumer_gate(gate: ConsumerGate, inputs: ConsumerGateInputs) -> Co
             gate,
             False,
             (
-                f"No baseline: no finished Construction Run on Ontology Version "
+                "No baseline: the Contract Alias points to no Ontology Version"
+                if inputs.baseline_version is None
+                else f"No baseline: no finished Construction Run on Ontology Version "
                 f"{inputs.baseline_version} (the Contract Alias's) to compare with",
             ),
             findings,
@@ -260,19 +263,16 @@ def _missing(before: QuestionRows | None, after: QuestionRows | None) -> Missing
 
 
 def outcome_to_dict(o: ConsumerGateOutcome) -> dict[str, Any]:
-    return {
-        "gate": o.gate.to_dict(),
-        "passed": o.passed,
-        "reasons": list(o.reasons),
-        "findings": [_finding_to_dict(f) for f in o.findings],
-    }
+    """A Gate outcome's form (`gates.outcome_to_dict`) plus `findings`."""
+    return {**gates.outcome_to_dict(o), "findings": [_finding_to_dict(f) for f in o.findings]}
 
 
 def outcome_from_dict(d: Mapping[str, Any]) -> ConsumerGateOutcome:
+    passed, reasons = gates.verdict_from_dict(d)
     return ConsumerGateOutcome(
         gate=consumer_gate_from_dict(d["gate"]),
-        passed=bool(d["passed"]),
-        reasons=tuple(d["reasons"]),
+        passed=passed,
+        reasons=reasons,
         findings=tuple(_finding_from_dict(f) for f in d.get("findings", ())),
     )
 

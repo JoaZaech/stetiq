@@ -168,7 +168,7 @@ stetiq consumer gate plant --version 4 --consumer reliability-dashboard
 stetiq consumer gate-results plant --consumer reliability-dashboard
 ```
 
-`stetiq consumer gate` evaluates every Consumer's [Consumer Gates](./03-python-sdk.md#consumer-gates), declared in the latest Use Case Version, for a finished Construction Run: the latest by default, the one `--run` names, or the latest standing for the Ontology Version `--version` names. Each is judged against the latest finished run on the Contract Alias's version, and every verdict is recorded on the server. `--consumer` evaluates only that Consumer. The Knowledge Graph defaults to `knowledge_graph` in `stetiq.yaml` (or `--config`); Consumer Gates never live in `stetiq.yaml`. Run it in your pipeline's CI beside `stetiq gate`, with an API Token that has *edit* on the Knowledge Graph, so a pull request shows both checks.
+`stetiq consumer gate` evaluates every Consumer's [Consumer Gates](./03-python-sdk.md#consumer-gates), declared in the latest Use Case Version, for a finished Construction Run: the latest by default, the one `--run` names, or the latest standing for the Ontology Version `--version` names. Each is judged against the latest finished run on the Contract Alias's version, and every verdict is recorded on the server. Without such a run, or when the Contract Alias points to no Ontology Version, there is no baseline: every Consumer Gate fails and that verdict is recorded too. `--consumer` evaluates only that Consumer. The Knowledge Graph defaults to `knowledge_graph` in `stetiq.yaml` (or `--config`); Consumer Gates never live in `stetiq.yaml`. Run it in your pipeline's CI beside `stetiq gate`, with an API Token that has *edit* on the Knowledge Graph, so a pull request shows both checks.
 
 It prints, per Consumer, `PASS` or `FAIL` per Consumer Gate, and under a failure each Task / Competency Question with its row change; Consumers that declare no Consumer Gate are listed as skipped:
 
@@ -177,7 +177,7 @@ maintenance-assistant
   PASS  row_count_drop
 reliability-dashboard
   FAIL  triage-rows-hold
-        triage-breakdowns / breakdown-technicians: 5 → 2 rows (−60.0%, limit −10%)
+        - triage-breakdowns / breakdown-technicians: 5 → 2 rows (−60.0%, limit −10%)
 safety-team: no Consumer Gate declared (skipped)
 1 of 2 Consumer Gates failed for plant run 81a4c0e2f3b5d6e7f8a9b0c1d2e3f4a5 (Ontology Version 4; baseline run 5d0c1f2e9a7b4c3d8e6f1a2b3c4d5e6f on Ontology Version 3)
 ```

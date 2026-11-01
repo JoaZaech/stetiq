@@ -52,8 +52,12 @@ class UseCaseValidationError(StetiqError):
 
 
 class ConsumerGateConfigError(UseCaseValidationError, ValueError):
-    """A Consumer Gate declared in the Use Case is malformed (the message names the field),
-    or there is no Consumer Gate to evaluate."""
+    """A Consumer Gate declared in the Use Case is malformed; the message names the field."""
+
+
+class NoConsumerGatesError(StetiqError):
+    """There is no Consumer Gate to evaluate: no Consumer of the latest Use Case Version
+    declares one, or the Consumer asked for declares none."""
 
 
 class RunNotFinishedError(StetiqError):

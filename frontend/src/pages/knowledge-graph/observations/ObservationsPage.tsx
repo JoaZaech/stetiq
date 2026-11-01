@@ -162,7 +162,7 @@ function DriftDetails({ name, drift }: { name: string; drift: DriftEvent }) {
           section="pending-migration-and-adoption"
           tooltip="Drift that the Ontology Diff since the last version the Graph Source conformed to explains will be shown as a Pending Migration, raising no alert until a grace period ends."
         >
-          Pending Migration: not detected
+          Pending Migration
         </Planned>
         {drift.findings.some((f) => ADOPTABLE.has(f.kind)) && (
           <Planned

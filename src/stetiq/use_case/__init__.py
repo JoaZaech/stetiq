@@ -2,7 +2,6 @@
 
 from stetiq.use_case.concepts import parse_concept_reference
 from stetiq.use_case.consumer_gates import (
-    ConsumerGate,
     ConsumerGateOutcome,
     RowCountDropGate,
     RowCountFinding,
@@ -25,7 +24,6 @@ from stetiq.use_case.model import CompetencyQuestion, Consumer, Task, UseCase
 __all__ = [
     "CompetencyQuestion",
     "Consumer",
-    "ConsumerGate",
     "ConsumerGateOutcome",
     "RowCountDropGate",
     "RowCountFinding",

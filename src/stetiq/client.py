@@ -497,7 +497,7 @@ class Client:
         Consumer Gate fails. The server reads the definitions from its stored Use Case
         Version and the row counts from its stored `competency_question_execution`
         results, so nothing judged comes from this process. Results never reach the
-        Promotion audit. Raises `ConsumerGateConfigError` when no Consumer (or not
+        Promotion audit. Raises `NoConsumerGatesError` when no Consumer (or not
         `consumer`) declares a Consumer Gate."""
         return self._service.evaluate_consumer_gates(
             knowledge_graph, run=run, version=version, consumer=consumer
