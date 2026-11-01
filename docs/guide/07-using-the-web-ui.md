@@ -6,7 +6,7 @@ Open it with `stetiq ui` (local mode, see [Getting started](./01-getting-started
 
 ## Finding your way around
 
-The web UI opens on **Home**: a *Getting Started* block whose cards open the guide pages for each step of the workflow (collapse it once you know your way, and it stays collapsed in that browser), and your five most recently modified Knowledge Graphs, with **View all** leading to the full list. The stetiq logo at the top of the sidebar always leads back to Home.
+The web UI opens on **Home**: your five most recently modified Knowledge Graphs, with **View all** leading to the full list. The line *New to stetiq? Read the guide* under the title opens this guide's first page. The stetiq logo at the top of the sidebar always leads back to Home.
 
 The sidebar looks the same on every page:
 
