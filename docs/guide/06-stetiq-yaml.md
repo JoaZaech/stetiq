@@ -38,8 +38,6 @@ The name of a Knowledge Graph, as a string. `stetiq run`, `stetiq observe` and `
 knowledge_graph: support
 ```
 
-The Knowledge Graph's Steward and Authority are not part of `stetiq.yaml`: they are stored with the Knowledge Graph itself, and set with `stetiq kg steward` and `stetiq kg authority` (see [CLI](./04-cli.md)). A Steward watches the Knowledge Graph's Drift and keeps its Definitions and Competency Questions current; an Authority decides changes to its Ontology. Neither grants any permission.
-
 Without it, those commands need the name as their first argument, or they exit with an error.
 
 ## entry_point
