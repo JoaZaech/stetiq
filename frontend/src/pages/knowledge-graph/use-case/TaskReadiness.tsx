@@ -15,7 +15,7 @@ interface TaskReadinessProps {
  * questions answerable on v5"), and how many of the rest are unanswerable or unmapped,
  * from its stored structural answerability result. Shows nothing while loading or when
  * the Knowledge Graph has no Ontology Version; the queries are shared with the
- * Structural answerability section, which shows errors.
+ * Competency Questions list, which shows errors.
  */
 export function TaskReadiness({ knowledgeGraph, useCaseVersion, task }: TaskReadinessProps) {
   const versions = useOntologyVersions(knowledgeGraph)

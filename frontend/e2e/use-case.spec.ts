@@ -3,7 +3,7 @@ import { expect, test } from './fixtures'
 test.describe('with three Use Case Versions', () => {
   test.use({ seed: 'support_use_case_versions' })
 
-  test('the Use Case page shows the latest Use Case Version and its Competency Questions', async ({
+  test('the Use Case page lists the latest Use Case Version’s Competency Questions with their status', async ({
     page,
   }) => {
     await page.goto('/ui/kg/support/use-case')
@@ -13,14 +13,46 @@ test.describe('with three Use Case Versions', () => {
     const latest = page.getByRole('region', { name: 'Use Case Version 3' })
     await expect(latest.getByText('Support agents triage and answer tickets')).toBeVisible()
 
-    const questions = latest.getByRole('table', { name: 'Competency Questions' })
-    const rows = questions.getByRole('row')
-    await expect(rows.first()).toHaveText(/Id.*Question.*Query.*Expected answer.*Concept mapping/)
-    await expect(rows).toHaveCount(3)
-    await expect(rows.nth(1)).toHaveText(/customer-names.*What is each customer called\?.*Customer\.name/)
-    await expect(rows.nth(2)).toHaveText(
-      /ticket-dates.*When was each ticket opened\?.*MATCH \(t:Ticket\) RETURN t\.opened_at.*\[\s*\{\s*"opened_at": "2026-01-01"\s*\}\s*\].*Ticket\.opened_at/,
+    await expect(latest.getByText('Ontology Version v3 answers 2 of 2 Competency Questions.')).toBeVisible()
+    const questions = latest.getByRole('list', { name: 'Competency Questions' }).getByRole('listitem')
+    await expect(questions).toHaveText([
+      /What is each customer called\?\s*Not used by any Task\s*Answerable/,
+      /When was each ticket opened\?\s*Not used by any Task\s*Answerable/,
+    ])
+    // Ids, Cypher and expected answers stay in the sheet.
+    await expect(latest).not.toContainText('ticket-dates')
+    await expect(latest).not.toContainText('MATCH')
+    await expect(latest).not.toContainText('opened_at')
+    await expect(page.getByRole('region', { name: 'Structural answerability' })).toHaveCount(0)
+  })
+
+  test('clicking a question opens its sheet, which the URL keeps and Back closes', async ({ page }) => {
+    await page.goto('/ui/kg/support/use-case')
+
+    await page.getByRole('button', { name: /When was each ticket opened\?/ }).click()
+    const sheet = page.getByRole('dialog', { name: 'When was each ticket opened?' })
+    await expect(sheet).toContainText('Answerable on Ontology Version v3')
+    await expect(sheet.getByRole('region', { name: 'Missing Concepts' })).toHaveCount(0)
+    await expect(sheet.getByRole('region', { name: 'Needed by' })).toHaveText(/Not used by any Task/)
+    await expect(sheet.getByRole('region', { name: 'Author details' })).toHaveText(
+      /Id\s*ticket-dates\s*Cypher query\s*MATCH \(t:Ticket\) RETURN t\.opened_at\s*Expected answer\s*\[\s*\{\s*"opened_at": "2026-01-01"\s*\}\s*\]\s*Concept mapping\s*Ticket\.opened_at/,
     )
+    await expect(page).toHaveURL(/\/ui\/kg\/support\/use-case\?sheet=question%3Aticket-dates$/)
+
+    await page.reload()
+    await expect(sheet).toBeVisible()
+
+    await page.goBack()
+    await expect(sheet).toBeHidden()
+    await expect(page).toHaveURL(/\/ui\/kg\/support\/use-case$/)
+
+    // A link opens it too; closing it leaves the URL clean.
+    await page.goto('/ui/kg/support/use-case?sheet=question:customer-names')
+    const customers = page.getByRole('dialog', { name: 'What is each customer called?' })
+    await expect(customers).toBeVisible()
+    await customers.getByRole('button', { name: 'Close' }).click()
+    await expect(customers).toBeHidden()
+    await expect(page).toHaveURL(/\/ui\/kg\/support\/use-case$/)
   })
 
   test('the Use Case Versions list compares two versions question by question', async ({ page }) => {
@@ -77,6 +109,7 @@ test.describe('without a Use Case', () => {
 
     await expect(page.getByRole('heading', { level: 2, name: 'Use Case' })).toBeVisible()
     await expect(page.getByText('No Use Case has been registered yet.')).toBeVisible()
+    await expect(page.getByRole('list', { name: 'Competency Questions' })).toHaveCount(0)
     await expect(page.getByRole('table')).toHaveCount(0)
   })
 })

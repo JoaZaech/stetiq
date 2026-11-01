@@ -1,6 +1,7 @@
 import type { CompetencyQuestion, Task, UseCase } from '@/api/use-cases'
 import { mapTasks } from './consumer-form'
 import { checkId } from './element-ids'
+import { neededBy } from './readiness'
 
 /** The Competency Question form's fields, as typed (all text). */
 export interface QuestionDraft {
@@ -119,9 +120,7 @@ export function serverErrorField(message: string): DraftField | undefined {
 
 /** The Tasks of `useCase` that need the question `id`, in Consumer order. */
 export function tasksNeeding(useCase: UseCase, id: string): Task[] {
-  return (useCase.consumers ?? []).flatMap((c) =>
-    (c.tasks ?? []).filter((t) => t.competency_questions?.includes(id)),
-  )
+  return neededBy(useCase, id).map(({ task }) => task)
 }
 
 /** `useCase` without the question `id`, which every Task that needed it loses. */

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { UseCase } from '@/api/use-cases'
 import type { Answerability } from './answerability'
-import { questionsServingNoTask, taskReadiness } from './readiness'
+import { neededBy, questionsServingNoTask, taskReadiness } from './readiness'
 
 const JUDGED: Answerability = {
   questions: 4,
@@ -66,6 +66,13 @@ describe('questionsServingNoTask', () => {
 
   it('lists the questions no Consumer’s Task needs', () => {
     expect([...questionsServingNoTask(useCase)]).toEqual(['agent-names'])
+  })
+
+  it('names each Consumer and Task that needs a question, in Consumer order', () => {
+    expect(
+      neededBy(useCase, 'customer-names').map(({ consumer, task }) => `${consumer.name} · ${task.description}`),
+    ).toEqual(['Bot · Route', 'Dashboard · Show'])
+    expect(neededBy(useCase, 'agent-names')).toEqual([])
   })
 
   it('lists every question of a Use Case without Consumers', () => {
