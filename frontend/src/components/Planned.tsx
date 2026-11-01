@@ -36,7 +36,7 @@ interface PlannedProps {
  * disabled stand-in (`children`, a `group` named `label`), then a "Planned" badge that
  * explains it in a tooltip and links to its section of the vision.
  *
- *   <Planned label="Connector" section="connector" tooltip="…">Connector: not connected</Planned>
+ *   <Planned label="Pending Migration" section="pending-migration-and-adoption" tooltip="…">Pending Migration</Planned>
  */
 export function Planned({ label, section, tooltip, children, className }: PlannedProps) {
   return (

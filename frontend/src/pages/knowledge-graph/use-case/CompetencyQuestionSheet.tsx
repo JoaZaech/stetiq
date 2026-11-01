@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
 import type { CompetencyQuestion, SavedUseCase, UseCaseVersion } from '@/api/use-cases'
 import { ErrorAlert } from '@/components/ErrorAlert'
@@ -13,6 +13,8 @@ import { ConceptMapping, ExpectedAnswer, Query } from './fields'
 import { useLatestAnswerability } from './latest-answerability'
 import { neededBy } from './readiness'
 import { RemoveCompetencyQuestionDialog } from './RemoveCompetencyQuestionDialog'
+import { focusSheetItself } from './sheet-focus'
+import { SheetSection } from './sheet-section'
 
 export interface CompetencyQuestionSheetContentProps {
   knowledgeGraph: string
@@ -42,11 +44,7 @@ export function CompetencyQuestionSheet({ question, onClose, ...props }: Compete
     <Sheet open={question !== undefined} onOpenChange={(open) => !open && onClose()}>
       <SheetContent
         className="overflow-y-auto sm:max-w-md"
-        // Focus the sheet, not Edit: for a reader, that would open its "Needs edit access" tooltip.
-        onOpenAutoFocus={(event) => {
-          event.preventDefault()
-          ;(event.currentTarget as HTMLElement).focus()
-        }}
+        onOpenAutoFocus={focusSheetItself}
       >
         {question && <CompetencyQuestionSheetContent question={question} {...props} />}
       </SheetContent>
@@ -123,7 +121,7 @@ export function CompetencyQuestionSheetContent({
           questionId={question.id}
         />
         {children}
-        <Section title="Needed by">
+        <SheetSection title="Needed by">
           {needs.length === 0 ? (
             <p className="text-muted-foreground">Not used by any Task</p>
           ) : (
@@ -135,8 +133,8 @@ export function CompetencyQuestionSheetContent({
               ))}
             </ul>
           )}
-        </Section>
-        <Section title="Author details">
+        </SheetSection>
+        <SheetSection title="Author details">
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2">
             <dt className="text-muted-foreground">Id</dt>
             <dd>
@@ -155,7 +153,7 @@ export function CompetencyQuestionSheetContent({
               <ConceptMapping value={question.concepts} />
             </dd>
           </dl>
-        </Section>
+        </SheetSection>
       </div>
     </>
   )
@@ -198,7 +196,7 @@ function MissingConcepts({ knowledgeGraph, useCaseVersion, questionId }: Questio
   const row = latest.state === 'judged' ? latest.answerability.rows.find((r) => r.id === questionId) : undefined
   if (row?.status !== 'unanswerable' || row.missing.length === 0) return null
   return (
-    <Section title="Missing Concepts">
+    <SheetSection title="Missing Concepts">
       <ul className="flex flex-wrap gap-1.5">
         {row.missing.map((concept) => (
           <li key={concept}>
@@ -208,19 +206,6 @@ function MissingConcepts({ knowledgeGraph, useCaseVersion, questionId }: Questio
           </li>
         ))}
       </ul>
-    </Section>
-  )
-}
-
-/** One titled part of the sheet; also for what a caller adds as `children`. */
-export function Section({ title, children }: { title: string; children: ReactNode }) {
-  const id = useId()
-  return (
-    <section aria-labelledby={id} className="space-y-2">
-      <h3 id={id} className="text-xs font-medium text-muted-foreground">
-        {title}
-      </h3>
-      {children}
-    </section>
+    </SheetSection>
   )
 }

@@ -22,19 +22,19 @@ interface ConsumerGateSectionProps {
 }
 
 /**
- * A Consumer card's Consumer Gate: the gates it declares in the Use Case Version being
- * viewed, and its latest recorded verdict (`stetiq consumer gate`). The absence of a
- * verdict reads "Not evaluated yet", never as a pass.
+ * A Consumer sheet's Consumer Gate: the gates it declares in the Use Case Version being
+ * viewed, and its latest recorded verdict (`stetiq consumer gate`), or one line saying it
+ * declares none. The absence of a verdict reads "Not evaluated yet", never as a pass.
  */
 export function ConsumerGateSection({ knowledgeGraph, consumer }: ConsumerGateSectionProps) {
   const titleId = useId()
   const gates = consumer.consumer_gates ?? []
   return (
-    <section aria-labelledby={titleId} className="space-y-1.5 text-xs">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <h5 id={titleId} className="font-medium text-muted-foreground">
+    <section aria-labelledby={titleId} className="space-y-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+        <h3 id={titleId} className="font-medium text-muted-foreground">
           Consumer Gate
-        </h5>
+        </h3>
         <Planned
           label="Evaluated on each Observation"
           section="consumer-gate"
@@ -44,9 +44,9 @@ export function ConsumerGateSection({ knowledgeGraph, consumer }: ConsumerGateSe
         </Planned>
       </div>
       {gates.length === 0 ? (
-        <p className="text-muted-foreground">None declared</p>
+        <p className="text-muted-foreground">No Consumer Gate declared</p>
       ) : (
-        <>
+        <div className="space-y-1.5 text-xs">
           <ul aria-label="Declared Consumer Gates" className="space-y-0.5">
             {gates.map((gate) => (
               <li key={gate.name}>
@@ -64,7 +64,7 @@ export function ConsumerGateSection({ knowledgeGraph, consumer }: ConsumerGateSe
             <code className="font-mono">stetiq consumer gate</code>.
           </p>
           <LatestVerdict knowledgeGraph={knowledgeGraph} consumer={consumer.id} />
-        </>
+        </div>
       )}
     </section>
   )

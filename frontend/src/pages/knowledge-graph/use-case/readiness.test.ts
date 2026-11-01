@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import type { UseCase } from '@/api/use-cases'
 import type { Answerability } from './answerability'
-import { neededBy, questionsServingNoTask, taskReadiness } from './readiness'
+import {
+  consumerReadiness,
+  consumerReadinessLine,
+  neededBy,
+  questionsServingNoTask,
+  taskReadiness,
+  taskReadinessText,
+} from './readiness'
 
 const JUDGED: Answerability = {
   questions: 4,
@@ -37,6 +44,49 @@ describe('taskReadiness', () => {
       unanswerable: 0,
       unmapped: 0,
     })
+  })
+})
+
+describe('taskReadinessText', () => {
+  it('says Ready when every question is answerable, and otherwise why not', () => {
+    expect(taskReadinessText({ total: 2, answerable: 2, unanswerable: 0, unmapped: 0 })).toBe('Ready')
+    expect(taskReadinessText({ total: 0, answerable: 0, unanswerable: 0, unmapped: 0 })).toBe('Ready')
+    expect(taskReadinessText({ total: 4, answerable: 2, unanswerable: 1, unmapped: 1 })).toBe(
+      "Not ready: 1 unanswerable, 1 can't check",
+    )
+    expect(taskReadinessText({ total: 1, answerable: 0, unanswerable: 0, unmapped: 1 })).toBe(
+      "Not ready: 1 can't check",
+    )
+  })
+})
+
+describe('consumerReadiness', () => {
+  const ready = { id: 'greet', description: 'Greet', competency_questions: ['customer-names'] }
+  const blocked = { id: 'refund', description: 'Refund', competency_questions: ['customer-names', 'refunds'] }
+  const unchecked = { id: 'survey', description: 'Survey', competency_questions: ['satisfaction'] }
+
+  it('counts the Tasks whose questions are all answerable: success only when all are', () => {
+    const all = consumerReadiness({ id: 'bot', name: 'Bot', tasks: [ready] }, JUDGED)
+    expect(all).toEqual({ state: 'checked', ready: 1, tasks: 1 })
+    expect(consumerReadinessLine(all)).toEqual({ tone: 'success', label: '1 of 1 Tasks ready' })
+
+    const some = consumerReadiness({ id: 'bot', name: 'Bot', tasks: [ready, blocked, unchecked] }, JUDGED)
+    expect(some).toEqual({ state: 'checked', ready: 1, tasks: 3 })
+    expect(consumerReadinessLine(some)).toEqual({ tone: 'failure', label: '1 of 3 Tasks ready' })
+  })
+
+  it('is not checked yet without a judged result, which is neutral, never a pass', () => {
+    const readiness = consumerReadiness({ id: 'bot', name: 'Bot', tasks: [ready] }, undefined)
+    expect(readiness).toEqual({ state: 'not-checked' })
+    expect(consumerReadinessLine(readiness)).toEqual({ tone: 'neutral', label: 'Not checked yet' })
+  })
+
+  it('says No Tasks for a Consumer without Tasks, judged or not', () => {
+    for (const answerability of [JUDGED, undefined]) {
+      const readiness = consumerReadiness({ id: 'bot', name: 'Bot', tasks: [] }, answerability)
+      expect(consumerReadinessLine(readiness)).toEqual({ tone: 'neutral', label: 'No Tasks' })
+    }
+    expect(consumerReadiness({ id: 'bot', name: 'Bot' }, JUDGED)).toEqual({ state: 'no-tasks' })
   })
 })
 

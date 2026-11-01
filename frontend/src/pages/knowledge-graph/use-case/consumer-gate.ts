@@ -1,4 +1,6 @@
-import type { MissingInput, RowCountFinding } from '@/api/consumer-gate-results'
+import type { ConsumerGateResult, MissingInput, RowCountFinding } from '@/api/consumer-gate-results'
+import type { Consumer } from '@/api/use-cases'
+import type { StatusTone } from '@/components/status-tones'
 
 const MINUS = '−'
 
@@ -27,4 +29,20 @@ export function findingText(f: RowCountFinding): string {
 /** A `row_count_drop` gate's `max_drop`, as the largest allowed drop. */
 export function consumerGateLimit(maxDrop: number): string {
   return maxDrop === 0 ? 'no drop in rows' : `at most ${MINUS}${percent(maxDrop)} rows`
+}
+
+/**
+ * A Consumer tile's Consumer Gate line from its latest recorded verdict; null when the
+ * Consumer declares no Consumer Gate, so the tile says nothing about it. No verdict reads
+ * "not evaluated yet", never as a pass.
+ */
+export function consumerGateLine(
+  consumer: Consumer,
+  latest: ConsumerGateResult | undefined,
+): { tone: StatusTone; label: string } | null {
+  if (!consumer.consumer_gates?.length) return null
+  if (!latest) return { tone: 'neutral', label: 'Consumer Gate not evaluated yet' }
+  return latest.passed
+    ? { tone: 'success', label: 'Consumer Gate passed' }
+    : { tone: 'failure', label: 'Consumer Gate failed' }
 }

@@ -8,7 +8,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useSheetParam } from '@/lib/sheet-param'
 import { EvaluatorResults } from '../versions/EvaluatorResults'
 import { Panel } from '../versions/OverviewTab'
-import { CompetencyQuestionSheet, Section } from '../use-case/CompetencyQuestionSheet'
+import { CompetencyQuestionSheet } from '../use-case/CompetencyQuestionSheet'
+import { SheetSection } from '../use-case/sheet-section'
 import { useConstructionRunTab } from './run-context'
 
 /** `evaluation.run.CQ_EXECUTION_EVALUATOR`: executes the Use Case's Competency Questions. */
@@ -130,7 +131,7 @@ function ExecutedQuestions({ knowledgeGraph, result }: { knowledgeGraph: string;
 /** The run's verdict on a question, in its sheet: the result, which check judged it and any error type. */
 function InThisRun({ question }: { question: ExecutedQuestion }) {
   return (
-    <Section title="In this run">
+    <SheetSection title="In this run">
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2">
         <dt className="text-muted-foreground">Result</dt>
         <dd>
@@ -147,6 +148,6 @@ function InThisRun({ question }: { question: ExecutedQuestion }) {
           )}
         </dd>
       </dl>
-    </Section>
+    </SheetSection>
   )
 }
