@@ -99,11 +99,9 @@ def consumer_impact(diff: OntologyDiff, use_case: UseCase, base: Ontology) -> Us
         if (impact := _question_impact(q, relevant, index)) is not None
     }
     consumers = []
-    served: set[str] = set()
     for consumer in use_case.consumers:
         tasks = []
         for task in consumer.tasks:
-            served.update(task.competency_questions)
             hit = tuple(questions[q] for q in task.competency_questions if q in questions)
             if hit:
                 tasks.append(
@@ -120,7 +118,7 @@ def consumer_impact(diff: OntologyDiff, use_case: UseCase, base: Ontology) -> Us
                 )
             )
     return UseCaseImpact(
-        tuple(consumers), tuple(q for id, q in questions.items() if id not in served)
+        tuple(consumers), tuple(q for id, q in questions.items() if not use_case.serving(id))
     )
 
 

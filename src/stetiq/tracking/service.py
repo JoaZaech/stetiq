@@ -56,6 +56,7 @@ from stetiq.evaluation.run import (
     SERVER_RUN_EVALUATORS,
     NoGraphSource,
     RunSubject,
+    executed_questions,
 )
 from stetiq.evaluation.structural import BUILT_IN_EVALUATORS
 from stetiq.gates import Gate, GateInputs
@@ -1174,14 +1175,13 @@ class LocalTrackingService:
                 )
             return subject
         if version is not None:
-            self.get_ontology_version(knowledge_graph, version)
-            runs = self._finished_runs_standing_for(knowledge_graph, version)
-            if not runs:
+            standing = self.latest_finished_run(knowledge_graph, version)
+            if standing is None:
                 raise NotFoundError(
                     f"No finished Construction Run of {knowledge_graph!r} stands for Ontology "
                     f"Version {version}"
                 )
-            return runs[-1]
+            return standing
         runs = [r for r in self.list_runs(knowledge_graph) if r.status == "finished"]
         if not runs:
             raise NotFoundError(
@@ -1201,18 +1201,10 @@ class LocalTrackingService:
     def _question_rows(self, knowledge_graph: str, run: ConstructionRun) -> dict[str, QuestionRows]:
         """The row count `competency_question_execution` recorded per question on the run."""
         results = self.get_evaluation_results(knowledge_graph, "construction_run", run.id)
-        execution = next(
-            (r for r in results if r.evaluator == CQ_EXECUTION_EVALUATOR and not r.parameters),
-            None,
-        )
-        if execution is None:
-            return {}
-        rows = {}
-        for d in execution.details:
-            data = d.data or {}
-            if isinstance(data.get("rows"), int):
-                rows[d.item] = QuestionRows(rows=data["rows"], error=data.get("status") == "error")
-        return rows
+        return {
+            question: QuestionRows(rows=e.rows, error=e.status == "error")
+            for question, e in executed_questions(results).items()
+        }
 
     def list_consumer_gate_results(
         self, knowledge_graph: str, *, consumer: str | None = None, version: int | None = None

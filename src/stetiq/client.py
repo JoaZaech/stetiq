@@ -27,7 +27,12 @@ from stetiq.evaluation.framework import (
     check_evaluator,
 )
 from stetiq.evaluation.llm_mapping import question_mapper_from_env
-from stetiq.evaluation.run import CompetencyQuestionExecution, RunSubject, ScopedGraphSource
+from stetiq.evaluation.run import (
+    CompetencyQuestionExecution,
+    RunSubject,
+    ScopedGraphSource,
+    executed_questions,
+)
 from stetiq.gates import GatesInput, load_gates
 from stetiq.graph_source import (
     DEFAULT_VALUE_CAP,
@@ -121,6 +126,11 @@ def service_for_uri(tracking_uri: str, *, token: str | None = None) -> TrackingS
         f"Unsupported tracking URI {tracking_uri!r} "
         "(expected http(s)://<server>, sqlite:///<path> or postgresql://...)"
     )
+
+
+def _metrics_only(results: Sequence[EvaluationResult]) -> tuple[EvaluationResult, ...]:
+    """Results without their details, which can quote observed values (the run context)."""
+    return tuple(dataclasses.replace(r, details=()) for r in results)
 
 
 def _to_ontology(ontology: OntologyInput) -> Ontology:
@@ -395,12 +405,14 @@ class Client:
     # --- The run context ------------------------------------------------------------
 
     def run_context(self, knowledge_graph: str, version: int | None = None) -> RunContext:
-        """What a pipeline needs before it extracts: the Ontology Version to extract
-        against (`version`, default the Contract Alias's) as a suggestion, the latest Use
-        Case Version (its Consumers, Tasks and Competency Questions), that Ontology
-        Version's evaluation results, and the latest finished Construction Run standing
-        for it with its run-level results (executed Competency Questions included).
-        Only Ontology, Use Case, metrics and counts: no instance data. Needs *read*."""
+        """What the upstream pipeline needs before it extracts: the Ontology Version to
+        extract against (`version`, default the Contract Alias's) as a suggestion, the
+        latest Use Case Version (its Consumers, Tasks and Competency Questions), that
+        Ontology Version's evaluation results, and the latest finished Construction Run
+        standing for it with its run-level results and each executed Competency
+        Question's status and row count. Only Ontology, Use Case, metrics and counts:
+        evaluation results come without their details, which can quote observed values,
+        so there is no instance data. Needs *read*."""
         ontology_version = (
             self.get_contract_version(knowledge_graph)
             if version is None
@@ -411,19 +423,21 @@ class Client:
         except NoUseCaseError:
             use_case_version = None
         run = self._service.latest_finished_run(knowledge_graph, ontology_version.number)
+        run_results = (
+            []
+            if run is None
+            else self._service.get_evaluation_results(knowledge_graph, "construction_run", run.id)
+        )
         return RunContext(
             knowledge_graph=knowledge_graph,
             ontology_version=ontology_version,
             use_case_version=use_case_version,
-            evaluation_results=tuple(
+            evaluation_results=_metrics_only(
                 self.get_evaluation_results(knowledge_graph, ontology_version.number)
             ),
             run=run,
-            run_evaluation_results=()
-            if run is None
-            else tuple(
-                self._service.get_evaluation_results(knowledge_graph, "construction_run", run.id)
-            ),
+            run_evaluation_results=_metrics_only(run_results),
+            question_executions=executed_questions(run_results),
         )
 
     # --- Use Cases ------------------------------------------------------------------

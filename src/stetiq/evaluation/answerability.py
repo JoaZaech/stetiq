@@ -29,6 +29,7 @@ Concepts the Candidate adds to the version its run consumed that no question nee
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 from stetiq.evaluation.framework import Detail, Evaluation, OntologyVersionEvaluator
@@ -219,9 +220,6 @@ class StructuralAnswerability(OntologyVersionEvaluator):
                     )
                 )
         total = len(self.use_case.competency_questions)
-        needed = {
-            q for c in self.use_case.consumers for t in c.tasks for q in t.competency_questions
-        }
         return Evaluation(
             metrics={
                 "questions": total,
@@ -231,7 +229,7 @@ class StructuralAnswerability(OntologyVersionEvaluator):
                 "answerable_ratio": counts["answerable"] / total if total else 1.0,
                 "regressed_questions": len(regressions),
                 "questions_serving_no_task": sum(
-                    q.id not in needed for q in self.use_case.competency_questions
+                    not self.use_case.serving(q.id) for q in self.use_case.competency_questions
                 ),
             },
             details=details + regressions,
@@ -368,14 +366,13 @@ class UnjustifiedAdditions(OntologyVersionEvaluator):
             for _, required, _ in self.answerability.concept_mapping(ontology).values():
                 for req in required:
                     needed |= index.referenced(req)
-        added_keys = {(kind, identity) for kind, identity, _ in added}
-        justified = {
-            (kind, identity)
-            for kind, identity, owner in added
-            if (kind, identity) in needed
-            or (owner is not None and owner in added_keys and owner in needed)
-        }
-        unjustified = [(k, i) for k, i, _ in added if (k, i) not in justified]
+        added_keys = {a.key for a in added}
+        unjustified = [
+            a
+            for a in added
+            if a.key not in needed
+            and not (a.owner is not None and a.owner in added_keys and a.owner in needed)
+        ]
         total = len(added)
         return Evaluation(
             metrics={
@@ -385,22 +382,33 @@ class UnjustifiedAdditions(OntologyVersionEvaluator):
             },
             details=[
                 Detail(
-                    item=identity,
+                    item=a.identity,
                     message="added, but no Competency Question needs it",
                     metric="unjustified_additions",
-                    data={"kind": kind},
+                    data={"kind": a.kind},
                 )
-                for kind, identity in unjustified
+                for a in unjustified
             ],
         )
 
 
-_AddedConcept = tuple[ConceptKind, str, "tuple[ConceptKind, str] | None"]
+@dataclass(frozen=True)
+class _AddedConcept:
+    """A Concept the Ontology Diff adds; `owner` is the (kind, identity) of the added
+    Class or Relation an Attribute belongs to, or of the declared one it was added to."""
+
+    kind: ConceptKind
+    identity: str
+    owner: tuple[ConceptKind, str] | None = None
+
+    @property
+    def key(self) -> tuple[ConceptKind, str]:
+        return (self.kind, self.identity)
 
 
 def _added_concepts(base: Ontology, target: Ontology) -> list[_AddedConcept]:
-    """(kind, identity, owner) of every Concept the diff from `base` to `target` adds; an
-    added Class or Relation brings its own Attributes, owned by it."""
+    """Every Concept the diff from `base` to `target` adds; an added Class or Relation
+    brings its own Attributes, owned by it."""
     owners = {
         **{("node_type", n.label): n for n in target.node_types},
         **{("relationship_type", r.label): r for r in target.relationship_types},
@@ -410,12 +418,16 @@ def _added_concepts(base: Ontology, target: Ontology) -> list[_AddedConcept]:
         if change.kind != ChangeKind.ADDED:
             continue
         if change.concept_kind in ("node_type", "relationship_type"):
-            key: tuple[ConceptKind, str] = (change.concept_kind, change.concept)
-            added.append((key[0], key[1], None))
-            for p in owners[key].properties:
-                added.append(("property", f"{change.concept}.{p.name}", key))
+            concept = _AddedConcept(change.concept_kind, change.concept)
+            added.append(concept)
+            added += [
+                _AddedConcept("property", f"{change.concept}.{p.name}", concept.key)
+                for p in owners[concept.key].properties
+            ]
         elif change.concept_kind == "property" and change.owner and change.owner_kind:
-            added.append(("property", change.concept, (change.owner_kind, change.owner)))
+            added.append(
+                _AddedConcept("property", change.concept, (change.owner_kind, change.owner))
+            )
     return added
 
 

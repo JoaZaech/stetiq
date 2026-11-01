@@ -56,7 +56,7 @@ Local mode needs no token. How to issue one is described in [Server & API Tokens
 | `stetiq observations`, `stetiq drift` | List Observations and Drift events. |
 | `stetiq gate`, `stetiq gate-results` | Evaluate the Gates in `stetiq.yaml`, and list past results. |
 | `stetiq consumer` | Evaluate the Consumer Gates the Use Case declares, and list past results. |
-| `stetiq context` | Print the run context a pipeline extracts with, as JSON. |
+| `stetiq context` | Print the run context the upstream pipeline extracts with, as JSON. |
 | `stetiq ui` | The web UI over a local tracking database. |
 | `stetiq server` | The stetiq server. |
 | `stetiq token` | Issue, list and revoke API Tokens (on the server's database). |
@@ -186,10 +186,10 @@ It exits **0** when every Consumer Gate passed, **3** when one failed, including
 
 ```bash
 stetiq context
-stetiq context plant --version 4 > context.json
+stetiq context plant --version 4 --json > context.json
 ```
 
-`stetiq context` prints the [run context](./03-python-sdk.md#the-run-context) as JSON, for a pipeline in any language: the Ontology Version to extract against (the Contract Alias's, or the one `--version` names), the latest Use Case Version with each Competency Question's Consumers and Tasks, that version's evaluation results, and the executed Competency Questions of the latest finished run standing for it. It holds no instance data. The Knowledge Graph defaults to `knowledge_graph` in `stetiq.yaml` (or `--config`). It needs only *read* permission, and exits 1 on an error such as an unknown Knowledge Graph or Ontology Version.
+`stetiq context` prints the [run context](./03-python-sdk.md#the-run-context) as JSON, for an upstream pipeline in any language: the Ontology Version to extract against (the Contract Alias's, or the one `--version` names), the latest Use Case Version with each Competency Question's Consumers and Tasks, that version's evaluation results, and the executed Competency Questions of the latest finished run standing for it. It holds metrics and counts only: no evaluation details and no instance data. The output is always JSON; `--json` is accepted and changes nothing. The Knowledge Graph defaults to `knowledge_graph` in `stetiq.yaml` (or `--config`). It needs only *read* permission, and exits 1 on an error such as an unknown Knowledge Graph or Ontology Version.
 
 ### Web UI, server and API Tokens
 
