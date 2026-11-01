@@ -109,6 +109,103 @@ def test_integer_values_conform_to_a_declared_float(client, graph_source):
     assert run.conformance.score == 1.0
 
 
+# Every WorkOrder is PERFORMED_ON exactly one Machine; a Machine has at most two WorkOrders.
+CARDINALITY_ONTOLOGY = """
+node_types: [WorkOrder, Machine]
+relationship_types: [PERFORMED_ON]
+patterns:
+  - source: WorkOrder
+    relationship: PERFORMED_ON
+    target: Machine
+    cardinality: {out: {min: 1, max: 1}, in: {max: 2}}
+"""
+
+
+@pytest.fixture
+def maintenance_kg(client):
+    client.create_knowledge_graph("maintenance", ontology=CARDINALITY_ONTOLOGY)
+    client.bind_graph_source("maintenance", GraphSourceScope(database="neo4j"))
+    return "maintenance"
+
+
+def test_a_graph_within_the_declared_cardinality_conforms(client, maintenance_kg, graph_source):
+    press, lathe = graph_source.add_node(["Machine"], {}), graph_source.add_node(["Machine"], {})
+    for machine in (press, press, lathe):
+        graph_source.add_relationship(
+            graph_source.add_node(["WorkOrder"], {}), "PERFORMED_ON", machine
+        )
+    graph_source.add_node(["Machine"], {})  # in-degree 0 is within `in: {max: 2}`
+
+    run = run_once(client, maintenance_kg)
+
+    assert run.conformance.mismatches == ()
+    assert run.conformance.score == 1.0
+
+
+def test_out_and_in_degrees_outside_the_declared_cardinality_are_violations(
+    client, maintenance_kg, graph_source
+):
+    press, lathe = graph_source.add_node(["Machine"], {}), graph_source.add_node(["Machine"], {})
+    for _ in range(3):  # press gets three WorkOrders: in-degree 3 > max 2
+        graph_source.add_relationship(
+            graph_source.add_node(["WorkOrder"], {}), "PERFORMED_ON", press
+        )
+    on_both = graph_source.add_node(["WorkOrder"], {})  # out-degree 2 > max 1
+    graph_source.add_relationship(on_both, "PERFORMED_ON", press)
+    graph_source.add_relationship(on_both, "PERFORMED_ON", lathe)
+    graph_source.add_node(["WorkOrder"], {})  # out-degree 0 < min 1
+
+    run = run_once(client, maintenance_kg)
+
+    assert [(m.subject, m.subject_kind, m.kind, m.detail) for m in run.conformance.mismatches] == [
+        (
+            "(WorkOrder)-[PERFORMED_ON]->(Machine)",
+            "pattern",
+            "cardinality_violation",
+            "out-degree observed 0..2, declared min 1, max 1",
+        ),
+        (
+            "(WorkOrder)-[PERFORMED_ON]->(Machine)",
+            "pattern",
+            "cardinality_violation",
+            "in-degree observed 1..4, declared max 2",
+        ),
+    ]
+    # Items: WorkOrder, Machine, PERFORMED_ON, the pattern, and its three bounds (out min,
+    # out max, in max). All three bounds fail.
+    assert run.conformance.score == 4 / 7
+
+
+def test_each_cardinality_bound_counts_in_the_score(client, maintenance_kg, graph_source):
+    press = graph_source.add_node(["Machine"], {})
+    on_both = graph_source.add_node(["WorkOrder"], {})  # out-degree 2: only `max` fails
+    graph_source.add_relationship(on_both, "PERFORMED_ON", press)
+    graph_source.add_relationship(on_both, "PERFORMED_ON", graph_source.add_node(["Machine"], {}))
+
+    run = run_once(client, maintenance_kg)
+
+    assert [m.detail for m in run.conformance.mismatches] == [
+        "out-degree observed 2..2, declared min 1, max 1"
+    ]
+    assert run.conformance.score == 6 / 7
+
+
+def test_a_minimum_is_violated_when_the_pattern_is_never_observed(
+    client, maintenance_kg, graph_source
+):
+    graph_source.add_node(["WorkOrder"], {})
+    graph_source.add_node(["Machine"], {})
+
+    run = run_once(client, maintenance_kg)
+
+    assert [(m.kind, m.detail) for m in run.conformance.pattern_mismatches] == [
+        ("absent", ""),
+        ("cardinality_violation", "out-degree observed 0..0, declared min 1, max 1"),
+    ]
+    # PERFORMED_ON and the pattern are absent and `out min` fails; `out max` and `in max` hold.
+    assert run.conformance.score == 4 / 7
+
+
 # --- Evolution Mode -----------------------------------------------------------------
 
 
@@ -247,6 +344,19 @@ def test_a_candidate_keeps_the_declared_constraints(client, support_ontology, gr
 
     candidate = client.get_ontology_version("support", run.candidate_version).ontology
     assert [(c.node_type, c.property_name) for c in candidate.constraints] == [("Customer", "name")]
+
+
+def test_a_candidate_keeps_the_declared_cardinality(client, maintenance_kg, graph_source):
+    machine = graph_source.add_node(["Machine"], {})
+    graph_source.add_relationship(graph_source.add_node(["WorkOrder"], {}), "PERFORMED_ON", machine)
+    graph_source.add_node(["Technician"], {})  # a new Concept
+
+    run = run_once(client, maintenance_kg)
+
+    candidate = client.get_ontology_version(maintenance_kg, run.candidate_version).ontology
+    assert [p.cardinality for p in candidate.patterns] == [
+        {"out": {"min": 1, "max": 1}, "in": {"max": 2}}
+    ]
 
 
 HIERARCHY_ONTOLOGY = """

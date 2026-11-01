@@ -15,6 +15,10 @@
     patterns:
       - [Customer, OPENED, Ticket]    # (source, relationship type, target)
       # or neo4j-graphrag's mapping form: {source: ..., relationship: ..., target: ...}
+      - source: Customer              # the mapping form may add a cardinality, every part optional:
+        relationship: OPENED          # `out` bounds each source's edges to targets, `in` each
+        target: Ticket                # target's edges from sources
+        cardinality: {out: {min: 0}, in: {min: 1, max: 1}}
     constraints:                      # optional, neo4j-graphrag's shape
       - {type: UNIQUENESS, node_type: Ticket, property_name: opened_at}
 
@@ -66,6 +70,7 @@ _DOCUMENTATION_KEYS = {"definition", "description", "alternativeLabels"}
 _CONCEPT_KEYS = {"label", "properties", "deprecated", "replacedBy"} | _DOCUMENTATION_KEYS
 _NODE_TYPE_KEYS = _CONCEPT_KEYS | {"parent"}
 _PROPERTY_KEYS = {"name", "type", "required"} | _DOCUMENTATION_KEYS
+_PATTERN_KEYS = {"source", "relationship", "target", "cardinality"}
 
 
 def _fail(path: str, problem: str) -> OntologyValidationError:
@@ -246,7 +251,10 @@ def _parse_patterns(
     patterns = []
     for i, p in enumerate(raw):
         path = f"patterns[{i}]"
-        if isinstance(p, dict) and set(p) == {"source", "relationship", "target"}:
+        bounds: dict[str, int | None] = {}
+        if isinstance(p, dict) and {"source", "relationship", "target"} <= set(p):
+            _check_keys(path, p, _PATTERN_KEYS)
+            bounds = _parse_cardinality(f"{path}.cardinality", p.get("cardinality"))
             p = [p["source"], p["relationship"], p["target"]]
         if not (isinstance(p, list) and len(p) == 3 and all(isinstance(x, str) for x in p)):
             raise _fail(path, f"must be a [source, relationship type, target] triple, got {p!r}")
@@ -258,8 +266,39 @@ def _parse_patterns(
             raise _fail(
                 f"{path} {p}", f"relationship type {rel!r} is not declared in relationship_types"
             )
-        patterns.append(Pattern(source, rel, target))
+        patterns.append(Pattern(source, rel, target, **bounds))
     return patterns
+
+
+def _parse_cardinality(path: str, raw: Any) -> dict[str, int | None]:
+    """`{out: {min, max}, in: {min, max}}`, every part optional, as Pattern keyword arguments."""
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise _fail(path, "must be a mapping with out and/or in")
+    _check_keys(path, raw, {"out", "in"})
+    bounds: dict[str, int | None] = {}
+    for direction, d in raw.items():
+        d_path = f"{path}.{direction}"
+        if not isinstance(d, dict):
+            raise _fail(d_path, "must be a mapping with min and/or max")
+        _check_keys(d_path, d, {"min", "max"})
+        low = _bound(f"{d_path}.min", d.get("min"))
+        high = _bound(f"{d_path}.max", d.get("max"))
+        if low is not None and high is not None and low > high:
+            raise _fail(d_path, f"min {low} is greater than max {high}")
+        bounds[f"min_{direction}"] = low
+        bounds[f"max_{direction}"] = high
+    return bounds
+
+
+def _bound(path: str, value: Any) -> int | None:
+    # bool is an int subclass in Python; `true` is not a bound.
+    if value is not None and (not isinstance(value, int) or isinstance(value, bool)):
+        raise _fail(path, f"must be a whole number, got {value!r}")
+    if value is not None and value < 0:
+        raise _fail(path, f"must not be negative, got {value}")
+    return value
 
 
 def _parse_constraints(doc: dict[str, Any], nodes: list[dict[str, Any]]) -> list[Constraint]:

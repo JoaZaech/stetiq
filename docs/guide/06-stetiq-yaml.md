@@ -278,3 +278,29 @@ stetiq alias log support
 ```
 
 The `GATE` column of `stetiq alias log` shows `passed`, `failed`, or `-` for a version that was never gated.
+
+## The Ontology YAML
+
+The Declared Ontology is a separate YAML file (the one you pass to `stetiq kg create --ontology` and `stetiq ontology register`, and that a run receives as `{ontology}`). Its sections are `node_types`, `relationship_types`, `patterns` and `constraints`; see [Getting started](01-getting-started.md#create-a-knowledge-graph) for a complete example.
+
+### Cardinality
+
+A pattern may declare its **cardinality**: how many relations each node at one end must or may have to nodes at the other end. Write the pattern in its mapping form and add `cardinality`. `out` bounds how many `relationship` edges each `source` node has to `target` nodes; `in` bounds how many each `target` node has from `source` nodes. Every part is optional: leave out `min` for "at most", `max` for "at least", or a whole direction to leave it unbounded.
+
+```yaml
+node_types: [WorkOrder, Machine]
+relationship_types: [PERFORMED_ON]
+patterns:
+  # A WorkOrder is PERFORMED_ON exactly one Machine; a Machine has at most 50 WorkOrders.
+  - source: WorkOrder
+    relationship: PERFORMED_ON
+    target: Machine
+    cardinality:
+      out: {min: 1, max: 1}
+      in: {max: 50}
+```
+
+Bounds are whole numbers of 0 or more, and `min` may not exceed `max`. A pattern's cardinality is part of its Ontology Version; a pattern without one keeps the plain `[source, relationship, target]` form.
+
+- **Ontology Diff:** adding a bound or tightening one (raising a `min`, lowering a `max`) is *breaking*, because existing data may no longer conform. Loosening or removing one is *additive*. Each changed bound is its own change.
+- **Conformance:** each bound is one item in the score. When the observed out- or in-degree (taken over every node of that class, including those with no such relation) falls outside the bounds, the run reports a `cardinality_violation` on the pattern, once per direction, with the observed range against the declared bounds, for example `out-degree observed 0..2, declared min 1, max 1`. A declared pattern that is never observed gives every node of its class degree 0.

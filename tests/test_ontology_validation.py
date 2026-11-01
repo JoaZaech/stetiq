@@ -5,6 +5,12 @@ import yaml
 
 import stetiq
 
+_BOUNDED = (
+    "node_types: [WorkOrder, Machine]\nrelationship_types: [PERFORMED_ON]\npatterns:\n"
+    "  - {{source: WorkOrder, relationship: PERFORMED_ON, target: Machine,"
+    " cardinality: {cardinality}}}"
+)
+
 MALFORMED = {
     "not yaml": ("node_types: [Customer", "YAML"),
     "not a mapping": ("- Customer", "top level"),
@@ -125,6 +131,22 @@ MALFORMED = {
     "pattern not a triple": (
         "node_types: [Customer]\nrelationship_types: [KNOWS]\npatterns:\n  - [Customer, KNOWS]",
         "patterns[0]",
+    ),
+    "negative cardinality bound": (
+        _BOUNDED.format(cardinality="{in: {min: -1}}"),
+        "patterns[0].cardinality.in.min",
+    ),
+    "cardinality min greater than max": (
+        _BOUNDED.format(cardinality="{out: {min: 2, max: 1}}"),
+        "patterns[0].cardinality.out",
+    ),
+    "cardinality bound not an integer": (
+        _BOUNDED.format(cardinality="{out: {max: many}}"),
+        "patterns[0].cardinality.out.max",
+    ),
+    "unknown cardinality direction": (
+        _BOUNDED.format(cardinality="{both: {max: 1}}"),
+        "both",
     ),
 }
 

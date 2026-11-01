@@ -63,8 +63,40 @@ def _concept_to_dict(c: NodeType | RelationshipType, definition_key: str) -> dic
 
 
 def pattern_to_list(p: Pattern) -> list[str]:
-    """A Pattern's JSON form, `[source, relationship, target]`."""
+    """A Pattern's endpoints in JSON form, `[source, relationship, target]`."""
     return [p.source, p.relationship, p.target]
+
+
+def _pattern_to_json(p: Pattern) -> list[str] | dict[str, Any]:
+    """A Pattern's canonical form: the `[source, relationship, target]` triple, or, when it
+    declares a cardinality, the mapping form with a `cardinality` key. Unbounded patterns
+    keep the triple, so pre-cardinality hashes are unchanged."""
+    cardinality = p.cardinality
+    if not cardinality:
+        return pattern_to_list(p)
+    return {
+        "source": p.source,
+        "relationship": p.relationship,
+        "target": p.target,
+        "cardinality": cardinality,
+    }
+
+
+def _pattern_from_json(p: list[str] | dict[str, Any]) -> Pattern:
+    if isinstance(p, list):
+        source, relationship, target = p
+        return Pattern(source, relationship, target)
+    bounds = p.get("cardinality", {})
+    out, in_ = bounds.get("out", {}), bounds.get("in", {})
+    return Pattern(
+        p["source"],
+        p["relationship"],
+        p["target"],
+        min_out=out.get("min"),
+        max_out=out.get("max"),
+        min_in=in_.get("min"),
+        max_in=in_.get("max"),
+    )
 
 
 def to_dict(ontology: Ontology, definition_key: str = DEFINITION_KEY) -> dict[str, Any]:
@@ -79,7 +111,7 @@ def to_dict(ontology: Ontology, definition_key: str = DEFINITION_KEY) -> dict[st
             _concept_to_dict(r, definition_key)
             for r in sorted(ontology.relationship_types, key=lambda r: r.label)
         ],
-        "patterns": [pattern_to_list(p) for p in sorted(ontology.patterns)],
+        "patterns": [_pattern_to_json(p) for p in sorted(ontology.patterns)],
     }
     if ontology.constraints:  # omitted when empty, so pre-constraint hashes are unchanged
         d["constraints"] = [
@@ -123,7 +155,7 @@ def from_dict(d: dict[str, Any]) -> Ontology:
         relationship_types=tuple(
             RelationshipType(**_concept_kwargs(r)) for r in d.get("relationship_types", [])
         ),
-        patterns=tuple(Pattern(*p) for p in d.get("patterns", [])),
+        patterns=tuple(_pattern_from_json(p) for p in d.get("patterns", [])),
         constraints=tuple(Constraint(**c) for c in d.get("constraints", [])),
     )
 
