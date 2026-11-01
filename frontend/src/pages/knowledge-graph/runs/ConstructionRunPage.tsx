@@ -3,7 +3,6 @@ import { CircleX } from 'lucide-react'
 import { Outlet, useParams } from 'react-router'
 import { isNotFound } from '@/api/client'
 import { type ConstructionRun, useRun } from '@/api/runs'
-import { CopyButton } from '@/components/CopyButton'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { PageHeader } from '@/components/PageHeader'
 import { RouteTabs, type RouteTab } from '@/components/RouteTabs'
@@ -13,7 +12,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { formatDateTime } from '@/lib/format'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { useKnowledgeGraphName } from '../params'
-import { formatDuration, runDurationMs, runOutcome } from './runs'
+import { ParamChips } from './run-labels'
+import { formatDuration, runDurationMs, runOutcome, shortRunId } from './runs'
 
 /**
  * The run page's tabs. A tab is a child route of `runs/:runId` in `router.tsx` (`''` is
@@ -26,7 +26,10 @@ const TABS: readonly RouteTab[] = [
   { label: 'Evaluations', to: 'evaluations' },
 ]
 
-/** `/kg/:name/runs/:runId`: the run id, status and duration, then the tabs. */
+/**
+ * `/kg/:name/runs/:runId`: the short run id and params, status and duration, then the
+ * tabs. The full id is in the Overview tab's Details.
+ */
 export function ConstructionRunPage() {
   const name = useKnowledgeGraphName()
   const runId = useParams().runId ?? ''
@@ -46,9 +49,9 @@ export function ConstructionRunPage() {
   return (
     <>
       <PageHeader
-        title={run.data.id}
+        title={shortRunId(run.data.id)}
+        titleExtra={<ParamChips params={run.data.params} />}
         description={<RunSummary run={run.data} />}
-        actions={<CopyButton value={run.data.id} label="Copy run id" />}
       />
       <FailedRunAlert run={run.data} />
       <RouteTabs label="Construction Run" tabs={TABS} />

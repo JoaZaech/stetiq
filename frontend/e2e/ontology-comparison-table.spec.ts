@@ -25,14 +25,14 @@ test('the Changes tab lists the changes as a grid, documentation-only ones hidde
     'Stop.wheelchair_boarding',
     'Trip.bikes_allowed',
   ])
-  await expect(row(changes(page), 'Stop.wheelchairBoarding')).toHaveText(/attribute.*removed.*breaking/)
+  await expect(row(changes(page), 'Stop.wheelchairBoarding')).toHaveText(/Attribute.*removed.*breaking/)
   await expect(page.getByText('4 changes', { exact: true })).toBeVisible()
 
   // Only HAS_TRIP's definition changed: hidden, but counted, and one click away.
   await expect(page.getByText('1 documentation-only change hidden')).toBeVisible()
   await page.getByRole('button', { name: 'Show documentation-only changes' }).click()
   await expect(page).toHaveURL(/changes\.docs=1/)
-  await expect(row(changes(page), 'HAS_TRIP')).toHaveText(/relation.*changed.*documentation-only.*definition changed/)
+  await expect(row(changes(page), 'HAS_TRIP')).toHaveText(/Relation.*changed.*documentation-only.*definition changed/)
   await expect(page.getByText('5 changes', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Hide documentation-only changes' }).click()
   await expect(row(changes(page), 'HAS_TRIP')).toHaveCount(0)

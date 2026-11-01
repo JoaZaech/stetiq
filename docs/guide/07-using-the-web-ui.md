@@ -6,7 +6,7 @@ Open it with `stetiq ui` (local mode, see [Getting started](./01-getting-started
 
 ## Finding your way around
 
-The web UI opens on **Home**: a *Getting Started* block whose cards open the guide pages for each step of the workflow (collapse it once you know your way, and it stays collapsed in that browser), and your five most recently modified Knowledge Graphs, with **View all** leading to the full list. The stetiq logo at the top of the sidebar always leads back to Home.
+The web UI opens on **Home**: your five most recently modified Knowledge Graphs, with **View all** leading to the full list. The line *New to stetiq? Read the guide* under the title opens this guide's first page. The stetiq logo at the top of the sidebar always leads back to Home.
 
 The sidebar looks the same on every page:
 
@@ -63,7 +63,7 @@ The section lists every Ontology Version, newest first, with its origin, when it
 
 **An Ontology Version's page.** Click a version number to open it. It shows the version's Aliases and three tabs:
 
-- **Overview**: its number, origin, content hash (with a copy button), when it was created and, for a version produced by a Construction Run, a link to that run. Next to these, its Evaluator results (Evaluator, metric, value and the Use Case Version it was judged against) and its latest Gate result: *Passed*, *Failed* (naming the Gates that failed) or *None*.
+- **Overview**: first its latest **Gate result**, as a status with *n of m Gates failed* or *All m Gates passed* and when it was evaluated. Each failed Gate is listed with its reasons; the passed ones fold under ***k* passed**. A version no Gate was evaluated on shows *Not gated*. Then its **Evaluator results**, one card per Evaluator: a readable title (e.g. *Concepts with a Definition*) over the Evaluator's own name, one or two headline metrics, ratios as percentages and counts as *a / b* where there is a total, and an ⓘ that explains it. Your own Evaluators get a card under their name with their first metric. **Show all metrics** opens the full table (Evaluator, metric, value and the Use Case Version it was judged against): the names there are the ones Gates use. **Details**, folded at the bottom, holds its number, origin, content hash (with a copy button), when it was created and, for a version produced by a Construction Run, a link to that run.
 - **Ontology**: the version's Concepts, on a Map or in a Table. See [The Ontology tab](#the-ontology-tab).
 - **Changes**: the Ontology Diff from the previous version. v1 has nothing to compare with. See [The Changes tab](#the-changes-tab).
 
@@ -79,7 +79,7 @@ The tab opens on a **Map**: each class is a box, wide enough for its whole name,
 
 - **Classes** lists each class in hierarchy order with its superclass, its attribute count (those it inherits in parentheses), its outgoing and incoming relations (`HAS_TRIP → Trip`), its constraints and description.
 - **Relations** lists each relation with its patterns, one per line, its attribute count and description.
-- **Attributes** lists every attribute with its owner, type, whether it is required or unique, and description; an inherited one is listed under each subclass and marked with the class it comes from (*from Person*). It is grouped by owner, each group headed by the owner, its kind, its superclass and its attribute count; **Group by** switches to grouping by type, or none.
+- **Attributes** lists every attribute with its owner, type, whether it is required or unique, and description; an inherited one is listed under each subclass and marked with the class it comes from (*from Person*). It is grouped by owner, each group headed by the owner, its kind (*Class* or *Relation*), its superclass and its attribute count; **Group by** switches to grouping by type, or none.
 
 Click a column's name to sort by it, and its filter button to filter it: by text for names and descriptions, by a list of values for types and kinds, or by a switch for required, unique and deprecated. Each grid says how many rows are left (*12 of 34 attributes*), and its column picker shows more columns, such as **Deprecated**, or an attribute's **Owner kind** and **Inherited from**. The sort, filters, grouping and columns are kept in the address, so a reload or a shared link keeps them. Every class and relation name is a link: click it to select that Concept and jump to its row, which is highlighted. An attribute count opens its owner's group of attributes. Each row's **Show on Map** button opens the Map with that Concept selected and centred (an attribute's, its owner). What you select in the Table is highlighted on the Map when you switch, and the other way round.
 
@@ -89,16 +89,16 @@ The tab opens on a **Map** of both versions laid over each other, each class in 
 
 **The change summary.** With nothing selected, the panel on the Map's right is the change summary. It starts with a count per classification (*2 breaking · 3 additive*), each with its colour's swatch, so the counts are also the colour key. Below, the changed classes and relations are grouped by their most severe change, in sections **Breaking**, **Deprecating**, **Additive** and **Documentation-only**, the last one collapsed until you open it. Each entry gives the name on its own line, whether it is a class or relation, then its changes in words (*attribute `wheelchairBoarding` removed*); a change names its classification only when it differs from its section's. A documentation-only entry previews its new Definition in one line. Point at an entry to bring its class or relation forward on the Map, and click it to select it. A selection's details add its changes from the Diff, and for a documentation-only change, its Definition **Before** and **After**, removed words struck through and added ones underlined. **← All changes** goes back to the summary, with the entry you came from highlighted. The panel's collapse button shrinks it to a thin rail of the counts; a new selection or search opens it again.
 
-**The Table.** The **Table / Map** toggle switches to the Diff as a grid: the overall classification and a count per level, then a row per change with its Concept, Concept kind, change (added, removed, changed or deprecated), severity and detail, most severe first. It sorts, filters and searches like the Ontology Table, and each row's **Show on Map** shows the class or relation it changed. Documentation-only changes are hidden until you click **Show documentation-only changes**.
+**The Table.** The **Table / Map** toggle switches to the Diff as a grid: the overall classification and a count per level, then a row per change with its Concept, Concept kind (*Class*, *Relation*, *Attribute* or *Vocabulary*), change (added, removed, changed or deprecated), severity and detail, most severe first. It sorts, filters and searches like the Ontology Table, and each row's **Show on Map** shows the class or relation it changed. Documentation-only changes are hidden until you click **Show documentation-only changes**.
 
-**Consumer impact.** Above the changes, **Consumer impact** lists the Consumers of the latest Use Case Version the changes hit, in sections: **Affected** (a breaking change to a Concept one of their Tasks' Competency Questions needs), **Will be affected** (a deprecating one) and **Impact unknown** (a question with neither a Concept mapping nor a query). Each Consumer shows the Tasks hit, most severe first, and under each its questions with the Concepts whose changes hit them, in their classification's colour. Questions no Task needs are listed under **No Consumer**. A Consumer the changes don't touch is left out. Without a Use Case the section says there is none, so no Consumers are declared. See [Consumer impact](./03-python-sdk.md#consumer-impact) for how changes are followed to Consumers.
+**Consumer impact.** Above the changes, **Consumer impact** lists one item per Task of the latest Use Case Version the changes hit. Each item shows an icon for how it is hit: red when it is *affected* (a breaking change to a Concept one of its Competency Questions needs), amber when it *will be affected* (a deprecating one), and a grey dashed circle when its impact is *unknown* (a question with neither a Concept mapping nor a query). Next to it are the Task, its Consumer's name, and one line on why, such as "breaks Ticket.opened_at", "deprecates Agent" or "can't tell: no Concept mapping or query". Click an item to see the questions it hits, each followed by the Concepts whose changes hit it, in their classification's colour. Items are listed the most severe first, then by Consumer and Task. Hit questions no Task needs come last, titled by the question, with a **No Consumer** chip. A Consumer the changes don't touch is left out, and when nothing is hit the section says **No Consumer is affected**. Without a Use Case the section says there is none, so no Consumers are declared. See [Consumer impact](./03-python-sdk.md#consumer-impact) for how changes are followed to Consumers.
 
 #### Promoting a version
 
 **Promote** on a version's page (needs edit access) moves an Alias to that version:
 
 1. Pick an existing Alias, or choose **New Alias** and type a name to create one.
-2. Check what changes: the dialog shows the Ontology Diff from the version the Alias points to now, its **Consumer impact** (the Consumers and their Tasks it affects or will affect, as on the Changes tab), and this version's latest Gate result. With no impact it says no Consumer, Task or Competency Question is hit; without a Use Case it says no Consumers are declared. Neither the impact nor the Gates block a Promotion: they show who downstream has to change, and the Gate result is recorded with it.
+2. Check what changes: the dialog shows the Ontology Diff from the version the Alias points to now, its **Consumer impact** (an item per Task it affects or will affect, as on the Changes tab), and this version's latest Gate result. With no impact it says **No Consumer is affected**; without a Use Case it says no Consumers are declared. Neither the impact nor the Gates block a Promotion: they show who downstream has to change, and the Gate result is recorded with it.
 3. If you picked the Contract Alias, confirm **Switch Construction Runs and Drift to v*N***: new Construction Runs will declare this version, and Drift will be measured against it.
 4. Click **Promote to *alias***.
 
@@ -106,7 +106,10 @@ The Promotion is recorded with you as the actor and shows up under [Promotions](
 
 ### Construction Runs
 
-The section lists every Construction Run, newest first, with its status, start time, duration, Declared Ontology, Conformance score and the Candidate it produced, if any.
+The section lists every Construction Run, newest first. Each run shows its short id with up to three of its params as chips (`extractor: llm`), sorted by name; the rest count as *+n*, and pointing at that shows them. Then come its status, start time, duration, Declared Ontology, Conformance, its Gate verdict and the Candidate it produced, if any.
+
+- **Conformance** is a percentage, coloured by how close it is to 100 %: green from 95 %, amber from 80 %, red below.
+- **Gate** shows the run's latest recorded Gate result as **Passed** (green check) or **Failed** (red cross). A run CI never gated shows **Preview** (grey dashed circle) when it has a Gate Preview, whatever the preview judges: pointing at it says whether it passes or fails against current Gates, and that it is not recorded. Only a Gate result CI records counts. A Knowledge Graph that was never gated shows *—*.
 
 - **Status** filters by All, Running, Finished or Failed, and **Started** by All time or the last 24 hours, 7 days or 30 days.
 - **Columns** adds a column per param or metric the runs logged.
@@ -120,11 +123,11 @@ If the Knowledge Graph has been gated, each KPI a Gate covers (Conformance, or t
 
 **The KPI drill-down.** Click a KPI cell on the compare page, or a point on a run chart, to open a side sheet about that run's KPI: its value (or *no result*), its verdict marked *recorded* or *preview* with each covering Gate's pass or fail and reasons, and, for an Evaluator result metric, the Evaluator's detail items about that metric. A KPI no Gate covers says so. A link at the bottom opens the run page tab the KPI comes from: **Evaluations**, **Conformance**, or the **Overview** for a run metric.
 
-**A Construction Run's page.** Click a run id to open it. The header shows the full id (with a copy button), its status, when it started and how long it took. If it failed, a banner says why as far as stetiq knows: it observed Concepts its Declared Ontology does not have while the Evolution Mode is *strict*, or it failed before its Graph Source was observed. Three tabs follow:
+**A Construction Run's page.** Click a run id to open it. The title is the run's short id and its params as chips, as in the list; under it are its status, when it started and how long it took. If it failed, a banner says why as far as stetiq knows: it observed Concepts its Declared Ontology does not have while the Evolution Mode is *strict*, or it failed before its Graph Source was observed. Three tabs follow:
 
-- **Overview**: its Declared Ontology, Candidate, start and end time and duration; the Observation it ended with (when, which Graph Source, and how many classes, relations and patterns it saw); and its params and metrics.
+- **Overview**: its **Details**: the full run id (with a copy button), Declared Ontology, Candidate, start and end time and duration; the Observation it ended with (when, which Graph Source, and how many classes, relations and patterns it saw); and its params and metrics.
 - **Conformance**: the Conformance score, then the Concepts **Declared but not observed**, those **Observed but not declared**, and **Other mismatches**, each with its kind: *Undeclared value type*, *Required but not always set*, *Outside the declared cardinality* (a pattern whose observed out- or in-degree falls outside its declared bounds), *Value outside the Vocabulary* (a value of a Vocabulary-bound attribute that its Vocabulary does not have, with how many times it was observed) and *Deprecated value (conforms)* (a deprecated Vocabulary Value still in the graph, which is reported but does not lower the score).
-- **Evaluations**: every run Evaluator's metrics and, when the Use Case's Competency Questions were executed against the graph, each one's result (*Passed*, *Failed* or *Error*), which check judged it and any error type. Only the verdict is kept, never the rows the query returned.
+- **Evaluations**: one card per run Evaluator, as on an Ontology Version's Overview (e.g. *Conformance* with its score as a percentage, *Questions executed* with *Passed 1 / 2*), and **Show all metrics** for the full table. When the Use Case's Competency Questions were executed against the graph, **Competency Questions** lists each one by its text with its result: **Passed**, **Failed** or **Error**. Click a question to open its side sheet, as on the Use Case page, with an **In this run** part: the result, which check judged it (*non-empty result* or *expected answer*) and any error type. The sheet shows the question as it was in the Use Case Version the run executed, and is part of the URL. Only the verdict is kept, never the rows the query returned.
 
 ### Use Case and Competency Questions
 
@@ -163,15 +166,15 @@ If no Use Case has been registered yet, add a Competency Question here or regist
 
 ### Observations
 
-The section lists every Observation of the Graph Source, newest first, with its Graph Source scope and the Construction Run it ended, or *None (on demand)* for an Observation taken between runs. Each one is marked **Drift** or **No Drift**.
+The section is a timeline of every Observation of the Graph Source, newest first, one row each: **No Drift** or **Drift**, when it was taken, and *from run* with the short id of the Construction Run it ended (a link to the run), or *on demand* for an Observation taken between runs.
 
-An Observation with Drift lists what diverged from the Ontology Version of the Contract Alias: the Contract Alias and its version, the Drift thresholds, and each finding with its kind, Concept and detail. It also shows **Pending Migration** as [planned](#planned-features), and, when it found undeclared or vanished Concepts, a disabled **Adopt into a Candidate** (Adoption, planned). An *undeclared value* finding is a value of a Vocabulary-bound attribute that the Contract Alias's Vocabulary does not have: its Concept is the attribute (`Owner.attribute`), and its detail names the value and how many times it was observed.
+Only a row with Drift expands: click its arrow to see what diverged from the Ontology Version of the Contract Alias. It shows the Contract Alias and its version, the Drift thresholds, **Pending Migration** as [planned](#planned-features), and, when it found undeclared or vanished Concepts, a disabled **Adopt into a Candidate** (Adoption, planned). Then each finding is an item: an icon for what happened, the Concept with its kind (**Class**, **Relation** or **Attribute**), and the detail, such as "count rose from 1 to 4 (+300%)" or "observed but not declared". An *undeclared value* finding is a value of a Vocabulary-bound Attribute that the Contract Alias's Vocabulary does not have: its Concept is the Attribute (`Owner.attribute`), and its detail names the value and how many times it was observed.
 
 This section is read-only: an Observation needs your graph database credentials, which never leave your own process. Take one with `stetiq observe` (see [CLI](./04-cli.md)) or by ending a Construction Run.
 
 ### Promotions
 
-The section is the Promotion audit, newest first: which Alias moved, from which version to which, who moved it, when, and the version's latest Gate result at that moment (*Passed*, *Failed* or *None*). Promote an Ontology Version from [its page](#ontology-versions) to add a row.
+The section is the Promotion audit, newest first: which Alias moved, from which version to which, who moved it, when, and the version's latest Gate result at that moment, as a status: ✓ *Passed*, ✗ *Failed* or a grey *Not gated*. Promote an Ontology Version from [its page](#ontology-versions) to add a row.
 
 ## Planned features
 

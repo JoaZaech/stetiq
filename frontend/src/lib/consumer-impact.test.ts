@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { ConsumerImpact, QuestionImpact, UseCaseImpact } from '@/api/consumer-impact'
+import type { ConsumerImpact, QuestionImpact, TaskImpact, UseCaseImpact } from '@/api/consumer-impact'
 import type { NodeTypeChange } from '@/api/ontology-diff'
-import { causesOf, impactSections } from './consumer-impact'
+import { causesOf, impactItems, reasonOf } from './consumer-impact'
 
 const removed = (label: string): NodeTypeChange => ({
   concept: label,
@@ -33,44 +33,77 @@ const consumer = (id: string, level: ConsumerImpact['level']): ConsumerImpact =>
   tasks: [{ id: `${id}-task`, description: 'Work', level, questions: [question(`${id}-q`, level)] }],
 })
 
-describe('impactSections', () => {
-  it('groups Consumers and unassigned questions by level, affected first, and leaves out empty levels', () => {
+describe('impactItems', () => {
+  const task = (description: string, level: TaskImpact['level'], questions: QuestionImpact[] = []): TaskImpact => ({
+    id: description.toLowerCase(),
+    description,
+    level,
+    questions,
+  })
+  const withTasks = (name: string, ...tasks: TaskImpact[]): ConsumerImpact => ({
+    ...consumer(name, tasks[0].level),
+    tasks,
+  })
+
+  it('lists one item per hit Task, by level, then Consumer name, then Task, and the questions no Task needs last', () => {
     const impact: UseCaseImpact = {
-      consumers: [consumer('dashboard', 'will_be_affected'), consumer('bot', 'affected'), consumer('crm', 'affected')],
-      no_consumer: [question('loyal', 'unknown'), question('names', 'will_be_affected', [deprecated('Agent')])],
+      consumers: [
+        withTasks('Dashboard', task('Chart', 'will_be_affected')),
+        withTasks('Bot', task('Route', 'affected'), task('Guess', 'unknown'), task('Assign', 'affected')),
+        withTasks('Agent', task('Sort', 'affected')),
+      ],
+      no_consumer: [question('names', 'will_be_affected', [deprecated('Agent')]), question('loyal', 'unknown')],
     }
 
-    expect(
-      impactSections(impact).map((s) => ({
-        level: s.level,
-        consumers: s.consumers.map((c) => c.id),
-        noConsumer: s.noConsumer.map((q) => q.id),
-      })),
-    ).toEqual([
-      { level: 'affected', consumers: ['bot', 'crm'], noConsumer: [] },
-      { level: 'will_be_affected', consumers: ['dashboard'], noConsumer: ['names'] },
-      { level: 'unknown', consumers: [], noConsumer: ['loyal'] },
+    expect(impactItems(impact).map((i) => [i.level, i.consumer, i.title])).toEqual([
+      ['affected', 'Agent', 'Sort'],
+      ['affected', 'Bot', 'Assign'],
+      ['affected', 'Bot', 'Route'],
+      ['will_be_affected', 'Dashboard', 'Chart'],
+      ['unknown', 'Bot', 'Guess'],
+      ['will_be_affected', null, 'names?'],
+      ['unknown', null, 'loyal?'],
     ])
   })
 
-  it("lists a Consumer's Tasks the most severe first, keeping their order otherwise", () => {
-    const bot: ConsumerImpact = {
-      ...consumer('bot', 'affected'),
-      tasks: [
-        { id: 'assign', description: 'Assign', level: 'will_be_affected', questions: [] },
-        { id: 'guess', description: 'Guess', level: 'unknown', questions: [] },
-        { id: 'route', description: 'Route', level: 'affected', questions: [] },
-        { id: 'sort', description: 'Sort', level: 'affected', questions: [] },
-      ],
+  it("gives a Task's item its questions and the reason they are hit", () => {
+    const dates = question('dates', 'affected', [removed('Ticket.opened_at')])
+    const names = question('names', 'will_be_affected', [deprecated('Agent')])
+    const impact: UseCaseImpact = {
+      consumers: [withTasks('Bot', task('Route', 'affected', [dates, names]))],
+      no_consumer: [],
     }
 
-    const [section] = impactSections({ consumers: [bot], no_consumer: [] })
+    const [item] = impactItems(impact)
 
-    expect(section.consumers[0].tasks.map((t) => t.id)).toEqual(['route', 'sort', 'assign', 'guess'])
+    expect(item.questions).toEqual([dates, names])
+    expect(item.reason).toBe('breaks Ticket.opened_at; deprecates Agent')
   })
 
-  it('has no sections when the Diff hits nothing', () => {
-    expect(impactSections({ consumers: [], no_consumer: [] })).toEqual([])
+  it('has no items when the Diff hits nothing', () => {
+    expect(impactItems({ consumers: [], no_consumer: [] })).toEqual([])
+  })
+})
+
+describe('reasonOf', () => {
+  it('names each Concept once, under its most severe classification', () => {
+    expect(
+      reasonOf([
+        question('a', 'affected', [removed('WorkOrder'), deprecated('PERFORMED_ON')]),
+        question('b', 'affected', [removed('PERFORMED_ON'), removed('WorkOrder')]),
+      ]),
+    ).toBe('breaks WorkOrder, PERFORMED_ON')
+  })
+
+  it('names the deprecated Concepts', () => {
+    expect(reasonOf([question('names', 'will_be_affected', [deprecated('Agent')])])).toBe('deprecates Agent')
+  })
+
+  it("says it can't tell for a question with neither a Concept mapping nor a query", () => {
+    expect(reasonOf([question('loyal', 'unknown')])).toBe("can't tell: no Concept mapping or query")
+    expect(reasonOf([question('dates', 'affected', [removed('Ticket')]), question('loyal', 'unknown')])).toBe(
+      "breaks Ticket; can't tell: no Concept mapping or query",
+    )
   })
 })
 

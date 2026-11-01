@@ -7,16 +7,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { conceptKindLabel } from '@/lib/concept-kind'
 import { formatMetric } from '@/lib/format'
 import { Panel } from '../versions/OverviewTab'
 import { useConstructionRunTab } from './run-context'
-
-const SUBJECT_KIND: Record<Mismatch['subject_kind'], string> = {
-  node_type: 'class',
-  relationship_type: 'relation',
-  property: 'attribute',
-  pattern: 'pattern',
-}
 
 const MISMATCH_KIND: Record<Mismatch['kind'], string> = {
   absent: 'Declared but not observed',
@@ -94,7 +88,7 @@ function MismatchTable({
               .map((m, i) => (
                 <TableRow key={`${m.subject_kind}/${m.subject}/${m.kind}/${m.value ?? ''}/${i}`}>
                   <TableCell className="font-mono text-xs">{m.subject}</TableCell>
-                  <TableCell>{SUBJECT_KIND[m.subject_kind]}</TableCell>
+                  <TableCell>{conceptKindLabel(m.subject_kind)}</TableCell>
                   {showKind && <TableCell>{MISMATCH_KIND[m.kind]}</TableCell>}
                   <TableCell className="text-muted-foreground">{m.detail}</TableCell>
                 </TableRow>
