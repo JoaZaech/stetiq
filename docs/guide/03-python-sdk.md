@@ -32,11 +32,12 @@ The CLI resolves the tracking URI the same way (see [CLI](./04-cli.md#tracking-u
 Other arguments:
 
 - `graph_source=`: the adapter that observes your Graph Source (see [Graph Source](#graph-source)).
+- `value_cap=`: how many distinct values an Observation reads per Vocabulary-bound attribute (default 100; see [Vocabulary values](#vocabulary-values)).
 - `actor=`: who the audit log records when this Client moves an Alias in local mode. Default `$STETIQ_ACTOR`, else your OS user. In remote mode the server records the API Token's user and ignores it.
 
 ## What runs where
 
-Your graph database credentials and your own code never leave your process. The SDK reads the Graph Source itself and sends only aggregates to the tracking service: the Observed Schema (labels, counts, fill rates, cardinalities) and Evaluator results, never an individual node or relationship. In remote mode the server never connects to your graph database.
+Your graph database credentials and your own code never leave your process. The SDK reads the Graph Source itself and sends only aggregates to the tracking service: the Observed Schema (labels, counts, fill rates, cardinalities, and the capped values of Vocabulary-bound attributes) and Evaluator results, never an individual node or relationship. In remote mode the server never connects to your graph database.
 
 ```mermaid
 flowchart LR
@@ -146,6 +147,21 @@ client = stetiq.Client(
 The credentials stay in this process: they are never sent to the tracking service or stored, only the scope is. For tests, `stetiq.InMemoryGraphSource()` is an in-memory graph you fill with `add_node` and `add_relationship`.
 
 Starting a Construction Run or taking an Observation without an adapter fails with `GraphSourceUnavailableError`.
+
+### Vocabulary values
+
+An Observation reads instance values for one kind of attribute only: one bound to a Vocabulary (see [Vocabularies](./06-stetiq-yaml.md#vocabularies)). When a run ends, the bound attributes are those of its Declared Ontology; for `client.observe` and `stetiq observe`, those of the Contract Alias's version. The SDK works them out in your process and asks the adapter for exactly those attributes, so no other attribute's values are read.
+
+For each bound attribute the Observed Schema records the distinct string values it takes, most frequent first, each with the number of nodes or relationships holding it. At most `value_cap` distinct values are kept per attribute (100 unless you pass `stetiq.Client(value_cap=...)`), so a free-text attribute bound by mistake can't send its contents to stetiq. When the attribute has more distinct values than the cap, only the most frequent are kept and `truncated` is set:
+
+```python
+work_order = outcome.observation.schema.node_type("WorkOrder")
+status = next(p for p in work_order.properties if p.name == "status")
+status.values.counts     # (ValueCount(value="open", count=2), ValueCount(value="closed", count=1))
+status.values.truncated  # False: these are all the values
+```
+
+`values` is `None` for every attribute that isn't bound to a Vocabulary. An adapter you write yourself receives the bound attributes as `(owner kind, owner label, attribute)` triples, plus `value_cap`; for an Ontology without Vocabularies it is called with the scope alone, as before.
 
 ## Construction Runs
 

@@ -47,7 +47,7 @@ A **Construction Run** is one execution of your extraction workflow against a De
 
 The **Declared Ontology** is the structure a run is given as input. Unless you choose a version, it is the Ontology Version the Contract Alias points to (see [Aliases and Promotion](#aliases-and-promotion)).
 
-When a run ends, stetiq makes an **Observation**: it captures the Graph Source's **Observed Schema**, the Ontology as it actually appears in the graph plus aggregate statistics (counts per class and relation, cardinalities, attribute fill rates). It never contains instance data. stetiq then measures the run's **Conformance**: how closely the Observed Schema matches the Declared Ontology.
+When a run ends, stetiq makes an **Observation**: it captures the Graph Source's **Observed Schema**, the Ontology as it actually appears in the graph plus aggregate statistics (counts per class and relation, cardinalities, attribute fill rates). It never contains instance data, with one exception: for an attribute bound to a Vocabulary it records the distinct values the attribute takes, each with a count, up to a cap (100 by default), since those values are what the Vocabulary permits. stetiq then measures the run's **Conformance**: how closely the Observed Schema matches the Declared Ontology.
 
 ## Evolution Mode and Candidates
 

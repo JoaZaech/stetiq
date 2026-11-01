@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal, NamedTuple
 
-from stetiq.ontology.model import Pattern
+from stetiq.ontology.model import Ontology, Pattern
 
 # A namespace scope selects nodes whose property of this name equals the namespace.
 NAMESPACE_PROPERTY = "namespace"
@@ -30,12 +31,80 @@ class GraphSourceScope:
         return cls(database=d["database"], label=d.get("label"), namespace=d.get("namespace"))
 
 
+#: How many distinct values Observation reads per Vocabulary-bound Attribute by default.
+DEFAULT_VALUE_CAP = 100
+
+
+class BoundAttribute(NamedTuple):
+    """A Vocabulary-bound Attribute whose values Observation reads, as an
+    `(owner kind, owner label, attribute)` triple."""
+
+    owner_kind: Literal["node_type", "relationship_type"]
+    owner: str
+    attribute: str
+
+
+def bound_attributes(ontology: Ontology) -> tuple[BoundAttribute, ...]:
+    """Every Attribute of `ontology` bound to a Vocabulary: the only Attributes whose
+    instance values Observation may read (ADR 0001)."""
+    return tuple(
+        BoundAttribute("node_type", n.label, p.name)
+        for n in ontology.node_types
+        for p in n.properties
+        if p.vocabulary is not None
+    ) + tuple(
+        BoundAttribute("relationship_type", r.label, p.name)
+        for r in ontology.relationship_types
+        for p in r.properties
+        if p.vocabulary is not None
+    )
+
+
+@dataclass(frozen=True)
+class ValueCount:
+    """One distinct string value of an Attribute and how many nodes or relationships of
+    the owning type hold it."""
+
+    value: str
+    count: int
+
+
+@dataclass(frozen=True)
+class ObservedValues:
+    """The distinct string values a Vocabulary-bound Attribute takes, most frequent first
+    (ties by value), at most the cap of them. `truncated` says more distinct values exist
+    than the cap let through, so the list is incomplete."""
+
+    counts: tuple[ValueCount, ...]
+    truncated: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "counts": [{"value": c.value, "count": c.count} for c in self.counts],
+            "truncated": self.truncated,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> ObservedValues:
+        return cls(
+            tuple(ValueCount(c["value"], c["count"]) for c in d["counts"]), bool(d["truncated"])
+        )
+
+    @classmethod
+    def capped(cls, counts: Iterable[tuple[str, int]], cap: int) -> ObservedValues:
+        """The `cap` most frequent of `counts`, flagged `truncated` when there were more."""
+        ordered = sorted(counts, key=lambda c: (-c[1], c[0]))
+        return cls(tuple(ValueCount(v, n) for v, n in ordered[:cap]), len(ordered) > cap)
+
+
 @dataclass(frozen=True)
 class ObservedProperty:
     name: str
     types: tuple[str, ...]  # graphrag property type names (see ontology PROPERTY_TYPES), sorted
     count: int  # nodes or relationships of the owning type that have this property
     fill_rate: float  # count / owning type's count
+    # Only for a Vocabulary-bound Attribute that Observation was asked to read; else None.
+    values: ObservedValues | None = None
 
 
 @dataclass(frozen=True)
@@ -111,6 +180,7 @@ class ObservedSchema:
         def props(ps: tuple[ObservedProperty, ...]) -> list[dict[str, Any]]:
             return [
                 {"name": p.name, "types": list(p.types), "count": p.count, "fill_rate": p.fill_rate}
+                | ({} if p.values is None else {"values": p.values.to_dict()})
                 for p in ps
             ]
 
@@ -140,7 +210,13 @@ class ObservedSchema:
     def from_dict(cls, d: dict[str, Any]) -> ObservedSchema:
         def props(ps: list[dict[str, Any]]) -> tuple[ObservedProperty, ...]:
             return tuple(
-                ObservedProperty(p["name"], tuple(p["types"]), p["count"], float(p["fill_rate"]))
+                ObservedProperty(
+                    p["name"],
+                    tuple(p["types"]),
+                    p["count"],
+                    float(p["fill_rate"]),
+                    None if p.get("values") is None else ObservedValues.from_dict(p["values"]),
+                )
                 for p in ps
             )
 
