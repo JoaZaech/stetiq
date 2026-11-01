@@ -243,13 +243,13 @@ test('the Ontology tab lists Concepts grouped, with hierarchy and constraints, a
   await expect(relations.getByRole('row').nth(1)).toHaveText(/OPENED.*\(Customer\)-\[OPENED\]->\(Ticket\)/)
   await expect(attributes.getByRole('row')).toHaveText([
     /Owner.*Attribute.*Type.*Required.*Unique.*Description/,
-    /^Party · class/,
+    /^Party · Class/,
     /^name\s*STRING\s*Required/,
-    /^Agent · class/,
+    /^Agent · Class/,
     /^name\s*from Party/,
-    /^Customer · class/,
+    /^Customer · Class/,
     /^name\s*from Party\s*STRING\s*Required\s*Unique/,
-    /^Ticket · class/,
+    /^Ticket · Class/,
     /^opened_at\s*DATE/,
     /^priority\s*INTEGER/,
   ])
@@ -258,7 +258,7 @@ test('the Ontology tab lists Concepts grouped, with hierarchy and constraints, a
 
   await expect(classes.getByRole('row')).toHaveText([/Class/, /^Customer/, /^Ticket/])
   await expect(relations.getByRole('row')).toHaveText([/Relation/, /^No relations match\.$/])
-  await expect(attributes.getByRole('row')).toHaveText([/Owner/, /^Ticket · class · 2 attributes/, /^opened_at/, /^priority/])
+  await expect(attributes.getByRole('row')).toHaveText([/Owner/, /^Ticket · Class · 2 attributes/, /^opened_at/, /^priority/])
 })
 
 test('an unknown Knowledge Graph or version shows a not-found page', async ({ page }) => {

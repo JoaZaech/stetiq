@@ -110,12 +110,12 @@ test.describe('with Construction Runs', () => {
     await expect(page.getByRole('region', { name: 'Score' })).toContainText('0.5455')
     const absent = page.getByRole('table', { name: 'Declared but not observed' })
     await expect(absent.getByRole('row')).toHaveCount(3)
-    await expect(absent.getByRole('row').nth(1)).toHaveText(/Party\s*class/)
-    await expect(absent.getByRole('row').nth(2)).toHaveText(/Party\.name\s*attribute/)
+    await expect(absent.getByRole('row').nth(1)).toHaveText(/Party\s*Class/)
+    await expect(absent.getByRole('row').nth(2)).toHaveText(/Party\.name\s*Attribute/)
     const undeclared = page.getByRole('table', { name: 'Observed but not declared' })
     await expect(undeclared.getByRole('row')).toHaveCount(3)
-    await expect(undeclared.getByRole('row').nth(1)).toHaveText(/ESCALATED\s*relation/)
-    await expect(undeclared.getByRole('row').nth(2)).toHaveText(/Ticket\.priority\s*attribute/)
+    await expect(undeclared.getByRole('row').nth(1)).toHaveText(/ESCALATED\s*Relation/)
+    await expect(undeclared.getByRole('row').nth(2)).toHaveText(/Ticket\.priority\s*Attribute/)
     const patterns = page.getByRole('table', { name: 'Other mismatches' })
     await expect(patterns.getByRole('row').nth(1)).toHaveText(
       /\(Ticket\)-\[ESCALATED\]->\(Customer\)\s*pattern\s*Observed but not declared/,

@@ -16,7 +16,8 @@ import {
 } from '@/api/ontology-diff'
 import type { Ontology } from '@/api/ontology-versions'
 import { codePointOrder } from '@/lib/compare'
-import { type ClassOrRelation, CONCEPT_NOUN, patternId, relationOfPattern } from '../concepts'
+import { conceptKindLabel } from '@/lib/concept-kind'
+import { type ClassOrRelation, patternId, relationOfPattern } from '../concepts'
 import { ontologyMap, type OntologyMap, type PatternLink } from '../map/ontology-map'
 import { type MapSelection, relationSelection } from '../map/ontology-map-focus'
 
@@ -298,7 +299,7 @@ export interface ChangeStatement {
   level: Classification | null
   /** The attribute it changed, or null for a change to the class or relation itself. */
   attribute: string | null
-  /** What changed, e.g. "removed", "added, required", "class added", "definition changed". */
+  /** What changed, e.g. "removed", "added, required", "Class added", "definition changed". */
   text: string
 }
 
@@ -340,7 +341,7 @@ function statementOf(kind: OwnerKind, change: OntologyChange, section: Classific
           : change.detail
     return { change, level, attribute: change.attribute, text }
   }
-  const text = change.kind === 'added' || change.kind === 'removed' ? `${CONCEPT_NOUN[kind]} ${change.kind}` : change.detail
+  const text = change.kind === 'added' || change.kind === 'removed' ? `${conceptKindLabel(kind)} ${change.kind}` : change.detail
   return { change, level, attribute: null, text }
 }
 

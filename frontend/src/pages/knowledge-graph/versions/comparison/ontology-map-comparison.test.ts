@@ -703,11 +703,11 @@ describe('summarizeChanges', () => {
     )
 
     expect(said).toEqual({
-      Agency: ['class added'],
+      Agency: ['Class added'],
       Route: ['name: added, required', 'id: UNIQUENESS constraint added'],
-      Trip: ['class removed'],
-      HAS_TRIP: ['relation removed'],
-      OPERATES: ['relation added'],
+      Trip: ['Class removed'],
+      HAS_TRIP: ['Relation removed'],
+      OPERATES: ['Relation added'],
     })
   })
 
