@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { formatScope, useObservation } from '@/api/observations'
 import type { ConstructionRun } from '@/api/runs'
 import { kgUrl } from '@/app/knowledge-graph-sections'
+import { CopyButton } from '@/components/CopyButton'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -27,6 +28,14 @@ export function RunOverviewTab() {
       <div className="space-y-8">
         <Panel title="Details">
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2 text-sm">
+            <Fact label="Run id">
+              <span className="flex items-center gap-1">
+                <code className="truncate font-mono text-xs" title={run.id}>
+                  {run.id}
+                </code>
+                <CopyButton value={run.id} label="Copy run id" />
+              </span>
+            </Fact>
             <Fact label="Declared Ontology">
               <VersionLink kg={run.knowledge_graph} number={run.ontology_version} />
             </Fact>
