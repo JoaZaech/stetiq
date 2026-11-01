@@ -283,7 +283,7 @@ client.evaluate("support", 3, evaluators=[stetiq.GoldOntologyAlignment(gold)])
 client.evaluate_run(run.id, evaluators=[MyRunCheck()])
 ```
 
-If an Evaluator raises, the SDK raises `EvaluatorError`; the version or run it was evaluating is already recorded. The names of the built-in Evaluators (`hierarchy`, `isolated_node_types`, `orphan_concepts`, `redundancy`, `constraint_consistency`, `structural_answerability`, `competency_question_coverage`, `conformance`, `observed_schema`, `competency_question_execution`) are reserved.
+If an Evaluator raises, the SDK raises `EvaluatorError`; the version or run it was evaluating is already recorded. The names of the built-in Evaluators (`hierarchy`, `isolated_node_types`, `orphan_concepts`, `redundancy`, `constraint_consistency`, `definitions`, `structural_answerability`, `competency_question_coverage`, `conformance`, `observed_schema`, `competency_question_execution`) are reserved.
 
 ## Aliases, Promotion and Gates
 

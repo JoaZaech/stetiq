@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from stetiq.evaluation.framework import Detail, Evaluation, OntologyVersionEvaluator
 from stetiq.ontology import Ontology
-from stetiq.ontology.model import ConceptKind, NodeType, RelationshipType
+from stetiq.ontology.model import ConceptKind, live_concepts
 from stetiq.use_case.concepts import (
     ConceptRef,
     NodeTypeRef,
@@ -337,7 +337,7 @@ class CompetencyQuestionCoverage(OntologyVersionEvaluator):
         for _, required, _ in self.answerability.concept_mapping(ontology).values():
             for req in required:
                 traced |= index.referenced(req)
-        concepts = _live_concepts(ontology)
+        concepts = [(kind, identity) for kind, identity, _ in live_concepts(ontology)]
         untraced = [c for c in concepts if c not in traced]
         total = len(concepts)
         return Evaluation(
@@ -357,24 +357,6 @@ class CompetencyQuestionCoverage(OntologyVersionEvaluator):
                 for kind, identity in untraced
             ],
         )
-
-
-def _live_concepts(ontology: Ontology) -> list[tuple[ConceptKind, str]]:
-    """Every Concept that is not deprecated, in declaration order."""
-    out: list[tuple[ConceptKind, str]] = []
-    owners: list[tuple[ConceptKind, NodeType | RelationshipType]] = []
-    owners.extend(("node_type", n) for n in ontology.node_types)
-    owners.extend(("relationship_type", r) for r in ontology.relationship_types)
-    for kind, owner in owners:
-        if owner.deprecated or owner.replaced_by:
-            continue
-        out.append((kind, owner.label))
-        out.extend(
-            ("property", f"{owner.label}.{p.name}")
-            for p in owner.properties
-            if not (p.deprecated or p.replaced_by)
-        )
-    return out
 
 
 def _regression_message(contract_version: int, missing: list[str]) -> str:
