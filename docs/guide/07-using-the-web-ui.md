@@ -105,7 +105,10 @@ The Promotion is recorded with you as the actor and shows up under [Promotions](
 
 ### Construction Runs
 
-The section lists every Construction Run, newest first, with its status, start time, duration, Declared Ontology, Conformance score and the Candidate it produced, if any.
+The section lists every Construction Run, newest first. Each run shows its short id with up to three of its params as chips (`extractor: llm`), sorted by name; the rest count as *+n*, and pointing at that shows them. Then come its status, start time, duration, Declared Ontology, Conformance, its Gate verdict and the Candidate it produced, if any.
+
+- **Conformance** is a percentage, coloured by how close it is to 100 %: green from 95 %, amber from 80 %, red below.
+- **Gate** shows the run's latest recorded Gate result as **Passed** (green check) or **Failed** (red cross). A run CI never gated shows **Preview** (grey dashed circle) when it has a Gate Preview, whatever the preview judges: pointing at it says whether it passes or fails against current Gates, and that it is not recorded. Only a Gate result CI records counts. A Knowledge Graph that was never gated shows *—*.
 
 - **Status** filters by All, Running, Finished or Failed, and **Started** by All time or the last 24 hours, 7 days or 30 days.
 - **Columns** adds a column per param or metric the runs logged.
@@ -119,11 +122,11 @@ If the Knowledge Graph has been gated, each KPI a Gate covers (Conformance, or t
 
 **The KPI drill-down.** Click a KPI cell on the compare page, or a point on a run chart, to open a side sheet about that run's KPI: its value (or *no result*), its verdict marked *recorded* or *preview* with each covering Gate's pass or fail and reasons, and, for an Evaluator result metric, the Evaluator's detail items about that metric. A KPI no Gate covers says so. A link at the bottom opens the run page tab the KPI comes from: **Evaluations**, **Conformance**, or the **Overview** for a run metric.
 
-**A Construction Run's page.** Click a run id to open it. The header shows the full id (with a copy button), its status, when it started and how long it took. If it failed, a banner says why as far as stetiq knows: it observed Concepts its Declared Ontology does not have while the Evolution Mode is *strict*, or it failed before its Graph Source was observed. Three tabs follow:
+**A Construction Run's page.** Click a run id to open it. The title is the run's short id and its params as chips, as in the list; under it are its status, when it started and how long it took. If it failed, a banner says why as far as stetiq knows: it observed Concepts its Declared Ontology does not have while the Evolution Mode is *strict*, or it failed before its Graph Source was observed. Three tabs follow:
 
-- **Overview**: its Declared Ontology, Candidate, start and end time and duration; the Observation it ended with (when, which Graph Source, and how many classes, relations and patterns it saw); and its params and metrics.
+- **Overview**: its **Details**: the full run id (with a copy button), Declared Ontology, Candidate, start and end time and duration; the Observation it ended with (when, which Graph Source, and how many classes, relations and patterns it saw); and its params and metrics.
 - **Conformance**: the Conformance score, then the Concepts **Declared but not observed**, those **Observed but not declared**, and **Other mismatches**, each with its kind: *Undeclared value type*, *Required but not always set*, *Outside the declared cardinality* (a pattern whose observed out- or in-degree falls outside its declared bounds), *Value outside the Vocabulary* (a value of a Vocabulary-bound attribute that its Vocabulary does not have, with how many times it was observed) and *Deprecated value (conforms)* (a deprecated Vocabulary Value still in the graph, which is reported but does not lower the score).
-- **Evaluations**: every run Evaluator's metrics and, when the Use Case's Competency Questions were executed against the graph, each one's result (*Passed*, *Failed* or *Error*), which check judged it and any error type. Only the verdict is kept, never the rows the query returned.
+- **Evaluations**: one card per run Evaluator, as on an Ontology Version's Overview (e.g. *Conformance* with its score as a percentage, *Questions executed* with *Passed 1 / 2*), and **Show all metrics** for the full table. When the Use Case's Competency Questions were executed against the graph, **Competency Questions** lists each one by its text with its result: **Passed**, **Failed** or **Error**. Click a question to open its side sheet, as on the Use Case page, with an **In this run** part: the result, which check judged it (*non-empty result* or *expected answer*) and any error type. The sheet shows the question as it was in the Use Case Version the run executed, and is part of the URL. Only the verdict is kept, never the rows the query returned.
 
 ### Use Case and Competency Questions
 

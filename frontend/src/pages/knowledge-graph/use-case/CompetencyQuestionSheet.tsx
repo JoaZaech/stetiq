@@ -212,7 +212,8 @@ function MissingConcepts({ knowledgeGraph, useCaseVersion, questionId }: Questio
   )
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+/** One titled part of the sheet; also for what a caller adds as `children`. */
+export function Section({ title, children }: { title: string; children: ReactNode }) {
   const id = useId()
   return (
     <section aria-labelledby={id} className="space-y-2">
