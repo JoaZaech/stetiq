@@ -49,7 +49,7 @@ test('a class or relation name anywhere in the Table links to its row, and a rel
   await expect(row(classes(page), 'Product')).toBeInViewport()
 
   // An owner in an attribute group's header.
-  await attributes(page).getByRole('row', { name: /^Ticket · class/ }).getByRole('link', { name: 'Ticket' }).click()
+  await attributes(page).getByRole('row', { name: /^Ticket · Class/ }).getByRole('link', { name: 'Ticket' }).click()
   await expect(row(classes(page), 'Ticket')).toHaveAttribute('aria-current', 'true')
 
   await page.reload()
@@ -63,7 +63,7 @@ test('an attribute count opens its owner’s group', async ({ page }) => {
   await row(relations(page), 'OPENED').getByRole('link', { name: '1 attribute' }).click()
 
   await expect(page).toHaveURL(/^(?!.*attributes\.group)/)
-  const group = attributes(page).getByRole('button', { name: /^OPENED · relation · 1 attribute$/ })
+  const group = attributes(page).getByRole('button', { name: /^OPENED · Relation · 1 attribute$/ })
   await expect(group).toHaveAttribute('aria-expanded', 'true')
   await expect(group).toBeInViewport()
 
@@ -75,7 +75,7 @@ test('an attribute count opens its owner’s group', async ({ page }) => {
 
   // A class's count opens its group, inherited attributes included; no attributes, no link.
   await row(classes(page), 'Customer').getByRole('link', { name: '2 attributes' }).click()
-  await expect(attributes(page).getByRole('button', { name: /^Customer · class/ })).toBeInViewport()
+  await expect(attributes(page).getByRole('button', { name: /^Customer · Class/ })).toBeInViewport()
   await expect(row(classes(page), 'Product').getByRole('link', { name: /attribute/ })).toHaveCount(0)
 })
 

@@ -9,6 +9,7 @@ import {
   filterColumn,
   useDataTable,
 } from '@/lib/data-table'
+import { conceptKindLabel } from '@/lib/concept-kind'
 import { type DataTableParamsOptions, useDataTableParams } from '@/lib/data-table-params'
 import { formatCount } from '@/lib/format'
 import type { AttributeGridRow } from './attribute-rows'
@@ -27,7 +28,8 @@ const columns = column.columns([
       </span>
     ),
   }),
-  column.accessor('ownerKind', {
+  column.accessor((r) => conceptKindLabel(r.ownerKind), {
+    id: 'ownerKind',
     header: 'Owner kind',
     ...filterColumn('values'),
     enableGlobalFilter: false,
@@ -126,7 +128,7 @@ function groupHeader(row: Row<DataTableFeatures, AttributeGridRow>) {
   if (row.groupingColumnId === 'owner' && first) {
     const parts = [
       <ConceptLink concept={{ kind: first.ownerKind, label: first.owner }} />,
-      first.ownerKind,
+      conceptKindLabel(first.ownerKind),
       ...(first.ownerParent === undefined
         ? []
         : [

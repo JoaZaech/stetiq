@@ -29,9 +29,9 @@ test('selecting two versions and clicking Compare shows the classified Ontology 
     const rows = diff.getByRole('table', { name: 'Changes' }).getByRole('row')
     await expect(rows).toHaveCount(4)
     // Concept, Concept kind, Change, Severity, Detail: the most severe first.
-    await expect(rows.nth(1)).toHaveText(/Ticket\.opened_at.*attribute.*removed.*breaking/)
-    await expect(rows.nth(2)).toHaveText(/Agent.*class.*deprecated.*deprecating/)
-    await expect(rows.nth(3)).toHaveText(/ASSIGNED.*relation.*added.*additive/)
+    await expect(rows.nth(1)).toHaveText(/Ticket\.opened_at.*Attribute.*removed.*breaking/)
+    await expect(rows.nth(2)).toHaveText(/Agent.*Class.*deprecated.*deprecating/)
+    await expect(rows.nth(3)).toHaveText(/ASSIGNED.*Relation.*added.*additive/)
   }
   await expectDiff()
 
