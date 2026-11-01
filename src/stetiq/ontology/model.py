@@ -151,6 +151,9 @@ class Ontology:
     def relationship_type(self, label: str) -> RelationshipType:
         return next(r for r in self.relationship_types if r.label == label)
 
+    def vocabulary(self, label: str) -> Vocabulary | None:
+        return next((v for v in self.vocabularies if v.label == label), None)
+
 
 def is_deprecated(c: NodeType | RelationshipType | Property | VocabularyValue) -> bool:
     """Deprecated, either flagged so or by naming a replacement."""

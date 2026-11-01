@@ -95,7 +95,7 @@ drift:
 | `max_count_drop` | A node or relationship type's count falls by more than this fraction. |
 | `max_count_increase` | A node or relationship type's count rises by more than this fraction. |
 
-Both keys are optional, and each must be a non-negative number. A change exactly at the threshold isn't Drift. Without a `drift:` section, or without a key, that statistical check is off. Structural Drift (Concepts that are observed but not declared by the Contract Alias's Ontology Version, or declared but no longer observed) is always checked.
+Both keys are optional, and each must be a non-negative number. A change exactly at the threshold isn't Drift. Without a `drift:` section, or without a key, that statistical check is off. Structural Drift (Concepts that are observed but not declared by the Contract Alias's Ontology Version, or declared but no longer observed, and values outside a bound attribute's Vocabulary) is always checked.
 
 Any other key in `drift:` is an error. `stetiq observe` exits 3 on Drift and 1 on an error. If you run it without `--config` and there is no `./stetiq.yaml`, it uses an empty config. A `--config` file that doesn't exist is an error.
 
@@ -338,6 +338,9 @@ A Vocabulary has a `label`, an optional `definition` and `alternativeLabels`, an
 
 - **Ontology Diff:** a Vocabulary change names the Vocabulary (`Status`), and a value change names the value as `Vocabulary.value` (`Status.done`). Adding a value is *additive*, deprecating one *deprecating* and removing one *breaking*. Binding a Vocabulary to an existing attribute, or rebinding an attribute to a different Vocabulary, is *breaking*, because existing values may no longer conform; unbinding is *additive*. Adding or removing a Vocabulary is *additive*, since only a binding constrains data. Changing a Definition or Alternative Labels on a Vocabulary or a value is *cosmetic*.
 - **Observation:** a binding is the only thing that makes an Observation read an attribute's values. It records the distinct values each bound attribute takes in the Graph Source, with a count per value, up to 100 per attribute (see [Vocabulary values](./03-python-sdk.md#vocabulary-values) to change the cap). Unbound attributes are only counted, as before.
+- **Conformance:** each bound attribute whose values were observed is one item in the score. Each observed value outside the Vocabulary fails it and is reported as a `value_outside_vocabulary` mismatch with the value and its count, for example `'on_hold' observed 2 times, not a value of Status`. An observed deprecated value conforms, but is reported as a `deprecated_value` mismatch that names its replacement. Only a value's `label` conforms: an Alternative Label is documentation, not a permitted spelling. When an attribute has more distinct values than the cap, the values beyond it were not read, so the attribute fails its check even if every listed value conforms (reported as a `value_outside_vocabulary` mismatch without a value).
+- **Drift:** each observed value outside the Contract Alias's Vocabulary is an `undeclared_value` finding, so `stetiq observe` exits 3. A value beyond the cap can't be named and raises no Drift.
+- **Evolution Mode:** an *evolving* run that observes values outside a Vocabulary yields a Candidate whose Vocabulary has them as new values (an additive change); a *strict* run fails, as for other undeclared Concepts. Values beyond the cap are not added.
 
 ### Cardinality
 

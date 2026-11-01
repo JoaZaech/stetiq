@@ -47,13 +47,13 @@ A **Construction Run** is one execution of your extraction workflow against a De
 
 The **Declared Ontology** is the structure a run is given as input. Unless you choose a version, it is the Ontology Version the Contract Alias points to (see [Aliases and Promotion](#aliases-and-promotion)).
 
-When a run ends, stetiq makes an **Observation**: it captures the Graph Source's **Observed Schema**, the Ontology as it actually appears in the graph plus aggregate statistics (counts per class and relation, cardinalities, attribute fill rates). It never contains instance data, with one exception: for an attribute bound to a Vocabulary it records the distinct values the attribute takes, each with a count, up to a cap (100 by default), since those values are what the Vocabulary permits. stetiq then measures the run's **Conformance**: how closely the Observed Schema matches the Declared Ontology.
+When a run ends, stetiq makes an **Observation**: it captures the Graph Source's **Observed Schema**, the Ontology as it actually appears in the graph plus aggregate statistics (counts per class and relation, cardinalities, attribute fill rates). It never contains instance data, with one exception: for an attribute bound to a Vocabulary it records the distinct values the attribute takes, each with a count, up to a cap (100 by default), since those values are what the Vocabulary permits. stetiq then measures the run's **Conformance**: how closely the Observed Schema matches the Declared Ontology. It lists every mismatch (a Concept declared but not observed or observed but not declared, a wrong value type, a cardinality outside its bounds, a value outside its attribute's Vocabulary) and scores the share of checks that hold.
 
 ## Evolution Mode and Candidates
 
-A run can produce Concepts the Declared Ontology doesn't have. The Knowledge Graph's **Evolution Mode** decides what happens then:
+A run can produce Concepts the Declared Ontology doesn't have, or values a Vocabulary doesn't have. The Knowledge Graph's **Evolution Mode** decides what happens then:
 
-- *evolving* (the default): the run finishes, and stetiq registers a new Ontology Version that includes the new Concepts, linked to the run.
+- *evolving* (the default): the run finishes, and stetiq registers a new Ontology Version that includes the new Concepts, and the new values as new Vocabulary Values, linked to the run.
 - *strict*: the run fails.
 
 An Ontology Version no Alias has pointed to yet is a **Candidate**. A version registered by an evolving run is the typical Candidate, but a version you register yourself is one too until an Alias points to it.
@@ -82,7 +82,7 @@ A **Promotion** moves an Alias to an Ontology Version, typically to a Candidate 
 
 The graph can change between runs: someone edits it by hand, or another process writes to it. You can make an Observation on demand, outside any Construction Run, with `stetiq observe` or the SDK. Schedule it with cron, Airflow or CI.
 
-**Drift** is a divergence, found by an Observation, between the Graph Source's Observed Schema and the Contract Alias's Ontology Version. stetiq also compares the Observation's statistics with the previous Observation and reports changes beyond your thresholds. Drift raises an alert. It never creates an Ontology Version or moves an Alias: deciding what the structure should be stays a Promotion.
+**Drift** is a divergence, found by an Observation, between the Graph Source's Observed Schema and the Contract Alias's Ontology Version: a Concept observed but not declared, one declared but no longer observed, or a value outside its attribute's Vocabulary. stetiq also compares the Observation's statistics with the previous Observation and reports changes beyond your thresholds. Drift raises an alert. It never creates an Ontology Version or moves an Alias: deciding what the structure should be stays a Promotion.
 
 ## Where your data stays
 
