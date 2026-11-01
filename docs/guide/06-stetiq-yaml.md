@@ -190,18 +190,17 @@ gates:
     min: 1.0
 ```
 
-`gold_alignment` runs once per gold reference you pass it, and each result records its reference in its parameters. Name the reference to gate on it:
+A custom Evaluator can take parameters (see [Python SDK](./03-python-sdk.md)). It then runs once per configuration you pass it, and each result records its configuration in its parameters. Name the configuration to gate on it:
 
 ```yaml
 gates:
-  - name: matches-gold
+  - name: covers-the-billing-glossary
     check: metric
-    evaluator: gold_alignment
-    metric: recall
+    evaluator: glossary_coverage
+    metric: covered_ratio
     min: 0.9
     parameters:
-      reference_knowledge_graph: support-gold
-      reference_version: 3
+      glossary: billing
 ```
 
 #### Evaluators and their metrics
@@ -230,7 +229,7 @@ These Evaluator names are built in. stetiq computes their results itself, and a 
 
 `definitions` counts the Classes, Relations and Attributes (`concepts_without_definition`) and the Vocabulary Values (`vocabulary_values_without_definition`) that have no `definition`, with one detail per item, named `Label`, `Owner.attribute` or `Vocabulary.value`. A Definition that is only whitespace counts as missing. Deprecated items, and the Attributes of a deprecated Class or Relation, are not counted. `definition_ratio` is the share of the counted items that have a Definition, and 1 when there is nothing to count. A Gate with `metric: concepts_without_definition` and `max: 0` requires every Concept to be defined.
 
-`gold_alignment` ships with stetiq too, but you run it yourself with a reference of your choice. It reports `precision`, `recall`, `matched_concepts`, `unmatched_evaluated_concepts` and `unmatched_reference_concepts`. A custom Evaluator reports whatever metrics it returns.
+A custom Evaluator reports whatever metrics it returns.
 
 ### count_drop
 

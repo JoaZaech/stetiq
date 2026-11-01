@@ -47,8 +47,8 @@ describe('evaluatorMetrics', () => {
   })
 
   it('names parameters in key order, however the result lists them', () => {
-    expect(evaluatorMetrics([result('coverage', { ratio: 0.5 }, { min: 1, gold: 'v2' })])).toEqual({
-      'coverage (gold="v2", min=1)/ratio': 0.5,
+    expect(evaluatorMetrics([result('coverage', { ratio: 0.5 }, { min: 1, glossary: 'billing' })])).toEqual({
+      'coverage (glossary="billing", min=1)/ratio': 0.5,
     })
   })
 })

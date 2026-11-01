@@ -208,9 +208,9 @@ const reviewGate = {
   evaluator: 'review',
   metric: 'score',
   min: 0.8,
-  parameters: { min_confidence: 0.5, gold: 'v2' },
+  parameters: { min_confidence: 0.5, glossary: 'billing' },
 }
-const reviewKey = { kind: 'evaluator', key: 'review (gold="v2", min_confidence=0.5)/score' } as const
+const reviewKey = { kind: 'evaluator', key: 'review (glossary="billing", min_confidence=0.5)/score' } as const
 const diffGate = { name: 'no-breaking-changes', check: 'ontology_diff', max_classification: 'additive' }
 const dropGate = { name: 'no-count-drop', check: 'count_drop', max_drop: 0.5 }
 
@@ -387,7 +387,7 @@ describe('runChartSeries', () => {
     conformance: { score: 0.75, mismatches: [] },
   })
   const evaluations = [
-    evaluation('review', { score: 0.6 }, { subject_id: 'b', parameters: { min_confidence: 0.5, gold: 'v2' } }),
+    evaluation('review', { score: 0.6 }, { subject_id: 'b', parameters: { min_confidence: 0.5, glossary: 'billing' } }),
   ]
   const previews = [
     preview([outcome(conformanceGate, false), outcome(reviewGate, false), outcome(diffGate, true)], 'a'),
@@ -431,7 +431,7 @@ describe('runChartSeries', () => {
     })
     const clashSeries = runChartSeries(
       [clashing],
-      [evaluation('review', { score: 0.9 }, { subject_id: 'c', parameters: { min_confidence: 0.5, gold: 'v2' } })],
+      [evaluation('review', { score: 0.9 }, { subject_id: 'c', parameters: { min_confidence: 0.5, glossary: 'billing' } })],
       [],
       [preview([outcome(conformanceGate, true), outcome(reviewGate, true)], 'c')],
     )
@@ -460,7 +460,7 @@ describe('runChartSeries', () => {
 describe('kpiDrillDown', () => {
   const reviewed = run({ metrics: { precision: 0.85 }, conformance: { score: 0.5455, mismatches: [] } })
   const review = evaluation('review', { score: 0.6 }, {
-    parameters: { min_confidence: 0.5, gold: 'v2' },
+    parameters: { min_confidence: 0.5, glossary: 'billing' },
     details: [
       { item: 'CQ-open-tickets', message: 'no answer', metric: 'score' },
       { item: 'Ticket', message: 'unrelated', metric: 'coverage' },
@@ -475,7 +475,7 @@ describe('kpiDrillDown', () => {
   it("shows an Evaluator KPI's value, verdict with its Gate reasons, and its result's detail items for that metric only", () => {
     const gating = { preview: preview([outcome(reviewGate, false, reasons), outcome(diffGate, true)]) }
     expect(kpiDrillDown(reviewKey, reviewed, [other, review], gating)).toEqual({
-      name: 'review (gold="v2", min_confidence=0.5)/score',
+      name: 'review (glossary="billing", min_confidence=0.5)/score',
       value: 0.6,
       verdict: { verdict: 'fail', origin: 'preview', outcomes: [outcome(reviewGate, false, reasons)] },
       details: [{ item: 'CQ-open-tickets', message: 'no answer', metric: 'score' }],

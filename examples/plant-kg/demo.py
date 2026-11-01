@@ -33,12 +33,11 @@ from pipeline import (  # noqa: E402
 )
 
 import stetiq  # noqa: E402
-from stetiq import EntryPoint, GoldOntologyAlignment, GraphSourceScope  # noqa: E402
+from stetiq import EntryPoint, GraphSourceScope  # noqa: E402
 from stetiq.config import load_config  # noqa: E402
 from stetiq.drift import thresholds_from_config  # noqa: E402
 
 KG = "plant-maintenance"
-GOLD_KG = "plant-gold"
 SCOPE = GraphSourceScope(database=DEFAULT_DATABASE)
 CONFIG = EXAMPLE_DIR / "stetiq.yaml"
 ONTOLOGY = EXAMPLE_DIR / "ontology"
@@ -104,11 +103,9 @@ class Demo:
         client.create_knowledge_graph(KG, ontology=ONTOLOGY / "initial.yaml")
         client.set_knowledge_graph_description(KG, DESCRIPTION)
         client.bind_graph_source(KG, SCOPE)
-        client.create_knowledge_graph(GOLD_KG, ontology=ONTOLOGY / "gold.yaml")
         self.say(
             f"Created {KG} from ontology/initial.yaml (Ontology Version 1, production -> v1)",
             f"Bound it to the Graph Source scope database={SCOPE.database} of {self.graph.path}",
-            f"Created {GOLD_KG} from ontology/gold.yaml, the architecture team's reference",
         )
         use_case = client.register_use_case(KG, USE_CASE)
         self.say(
@@ -193,8 +190,7 @@ class Demo:
 
     def evaluate_candidate(self) -> None:
         self.act("3. Evaluate: what do the Evaluators and the Gates say about the Candidate?")
-        gold = self.priya.get_ontology_version(GOLD_KG, 1)
-        results = self.priya.evaluate(KG, 2, evaluators=[GoldOntologyAlignment(gold)])
+        results = self.priya.evaluate(KG, 2)
         self.show_version_evaluation(results)
         diff = self.priya.diff_ontology_versions(KG)  # contract (v1) -> latest Candidate (v2)
         self.say(f"Ontology Diff v1 -> v2: {diff.classification}")
@@ -213,7 +209,6 @@ class Demo:
             "redundancy": ("duplicate_structure_concepts",),
             "documented": ("undocumented",),
             "structural_answerability": ("answerable_ratio",),
-            "gold_alignment": ("precision", "recall"),
         }
         for name, metrics in wanted.items():
             r = by_name.get(name)
@@ -311,11 +306,8 @@ class Demo:
             values = comparison.evaluations.get(key, ())
             self.say(f"  {key}: {' | '.join(f'{v:.3f}' if v is not None else '-' for v in values)}")
 
-        self.say("", f"Evaluators on v{v3.number} (gold_alignment against {GOLD_KG} v1):")
-        gold = self.priya.get_ontology_version(GOLD_KG, 1)
-        self.show_version_evaluation(
-            self.priya.evaluate(KG, v3.number, evaluators=[GoldOntologyAlignment(gold)])
-        )
+        self.say("", f"Evaluators on v{v3.number}:")
+        self.show_version_evaluation(self.priya.evaluate(KG, v3.number))
 
         self.gates_revised = self.ci.evaluate_gates(KG, CONFIG, version=v3.number)
         self.show_gates(self.gates_revised)

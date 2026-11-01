@@ -261,8 +261,8 @@ class Client:
         """Re-run every Evaluator (built-in and this client's custom ones) on a version.
 
         `evaluators` are extra, one-off Evaluators for this call only (not
-        registered), e.g. a parameterised `GoldOntologyAlignment(gold_version)`
-        whose reference is chosen per evaluation.
+        registered), e.g. a parameterised Evaluator whose configuration is chosen
+        per evaluation.
 
         Structural answerability is judged against `use_case_version` (default: the
         Knowledge Graph's latest Use Case version), which its result records.

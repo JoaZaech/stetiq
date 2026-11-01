@@ -325,11 +325,24 @@ A registered Evaluator runs in your process, and only its results are sent to th
 - an `OntologyVersionEvaluator` on every Ontology Version this Client creates, and on `client.evaluate(...)`;
 - a `ConstructionRunEvaluator` at the end of every Construction Run this Client starts, and on `client.evaluate_run(...)`.
 
-Registration lasts as long as the Client and is not stored. To run an Evaluator once, without registering it, pass it as `evaluators=`. That is how the gold-standard comparison works:
+Registration lasts as long as the Client and is not stored. To run an Evaluator once, without registering it, pass it as `evaluators=`. That is how a parameterised Evaluator runs: its `parameters` property names the configuration it runs with, each result records it, and results with different parameters are kept side by side.
 
 ```python
-gold = client.get_ontology_version("support", 1)
-client.evaluate("support", 3, evaluators=[stetiq.GoldOntologyAlignment(gold)])
+class GlossaryCoverage(OntologyVersionEvaluator):
+    name = "glossary_coverage"
+
+    def __init__(self, glossary):
+        self.glossary = glossary
+
+    @property
+    def parameters(self):
+        return {"glossary": self.glossary}
+
+    def evaluate(self, version):
+        ...
+
+
+client.evaluate("support", 3, evaluators=[GlossaryCoverage("billing")])
 client.evaluate_run(run.id, evaluators=[MyRunCheck()])
 ```
 
