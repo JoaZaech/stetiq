@@ -33,11 +33,13 @@ node_types:
       - {name: status, type: STRING, definition: Where the work order is in its lifecycle}
 ```
 
+A **Vocabulary** is a named, flat set of **Vocabulary Values** that an attribute may take, such as the statuses of a WorkOrder. It is part of the Ontology and versioned with it. A STRING attribute is bound to a Vocabulary with `vocabulary: <label>`, and one Vocabulary can be bound to several attributes (a shared `Status`, say). Each Vocabulary Value is identified by its label and, like a Concept, has its own Definition and Alternative Labels (for example the spellings a source system uses) and can be deprecated in favour of another value of the same Vocabulary. In the Ontology Diff a Vocabulary Value is named `<Vocabulary>.<value>`, e.g. `Status.done`. See [stetiq.yaml](./06-stetiq-yaml.md#vocabularies) for how to write them.
+
 An **Ontology Version** is an immutable snapshot of a Knowledge Graph's Ontology. Versions are numbered per Knowledge Graph (v1, v2…). Registering an Ontology that is identical to an existing version returns that version instead of creating a new one.
 
 You create a Knowledge Graph from its Declared Ontology (see [Getting started](./01-getting-started.md#create-a-knowledge-graph)); it becomes v1, and the `production` Alias points to it.
 
-The **Ontology Diff** between two Ontology Versions lists each change and classes it as *cosmetic* (only Definitions, Alternative Labels or Deprecation reasons changed, never what data conforms), *additive*, *deprecating* or *breaking*.
+The **Ontology Diff** between two Ontology Versions lists each change and classes it as *cosmetic* (only Definitions, Alternative Labels or Deprecation reasons changed, never what data conforms), *additive*, *deprecating* or *breaking*. It covers Vocabularies too: removing a Vocabulary Value or binding a Vocabulary to an existing attribute is *breaking*, for example.
 
 ## Construction Runs and Conformance
 

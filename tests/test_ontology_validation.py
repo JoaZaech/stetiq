@@ -149,6 +149,61 @@ MALFORMED = {
         "      - {name: priority, type: FLOAT, deprecationReason: Unused}",
         "Ticket.priority.deprecationReason",
     ),
+    "binding to an unknown vocabulary": (
+        "vocabularies:\n  - {label: Status, values: [open]}\n"
+        "node_types:\n  - label: WorkOrder\n    properties:\n"
+        "      - {name: status, type: STRING, vocabulary: Stauts}",
+        "WorkOrder.status.vocabulary: 'Stauts' is not declared in vocabularies",
+    ),
+    "binding a vocabulary to a non-STRING attribute": (
+        "vocabularies:\n  - {label: Status, values: [open]}\n"
+        "node_types:\n  - label: WorkOrder\n    properties:\n"
+        "      - {name: status, type: INTEGER, vocabulary: Status}",
+        "WorkOrder.status.vocabulary: only a STRING property can be bound to a Vocabulary",
+    ),
+    "binding a relation's attribute to an unknown vocabulary": (
+        "node_types: [WorkOrder]\nrelationship_types:\n  - label: NEXT\n    properties:\n"
+        "      - {name: status, type: STRING, vocabulary: Status}",
+        "NEXT.status.vocabulary",
+    ),
+    "duplicate vocabulary value": (
+        "vocabularies:\n  - {label: Status, values: [open, closed, {label: open}]}\n"
+        "node_types: [WorkOrder]",
+        "Status.open: value is declared more than once",
+    ),
+    "empty vocabulary": (
+        "vocabularies:\n  - {label: Status, values: []}\nnode_types: [WorkOrder]",
+        "Status.values: a Vocabulary needs at least one value",
+    ),
+    "vocabulary without values": (
+        "vocabularies:\n  - {label: Status}\nnode_types: [WorkOrder]",
+        "Status.values",
+    ),
+    "vocabulary value replaced by a value outside its vocabulary": (
+        "vocabularies:\n  - {label: Status, values: [{label: done, replacedBy: low}]}\n"
+        "  - {label: Priority, values: [low]}\nnode_types: [WorkOrder]",
+        "Status.done.replacedBy: 'low' is not another Concept declared in Status's values",
+    ),
+    "duplicate vocabulary": (
+        "vocabularies:\n  - {label: Status, values: [open]}\n  - {label: Status, values: [closed]}\n"
+        "node_types: [WorkOrder]",
+        "Status: declared more than once in vocabularies",
+    ),
+    "unknown key on a vocabulary value": (
+        "vocabularies:\n  - {label: Status, values: [{label: open, colour: green}]}\n"
+        "node_types: [WorkOrder]",
+        "Status.open: unknown key(s) colour",
+    ),
+    "vocabulary value alternative label that is another value": (
+        "vocabularies:\n  - {label: Status, values: [{label: done, alternativeLabels: [closed]}, closed]}\n"
+        "node_types: [WorkOrder]",
+        "Status.done.alternativeLabels",
+    ),
+    "vocabulary value deprecation reason without a deprecation": (
+        "vocabularies:\n  - {label: Status, values: [{label: done, deprecationReason: Old}]}\n"
+        "node_types: [WorkOrder]",
+        "Status.done.deprecationReason",
+    ),
     "pattern with undeclared node type": (
         "node_types: [Customer]\nrelationship_types: [OPENED]\npatterns:\n  - [Customer, OPENED, Ticket]",
         "Ticket",

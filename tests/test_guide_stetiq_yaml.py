@@ -41,3 +41,13 @@ def test_the_page_documents_cardinality_with_an_ontology_that_parses():
     (pattern,) = parse_yaml(example).patterns
 
     assert (pattern.min_out, pattern.max_out) == (1, 1)
+
+
+def test_the_page_documents_vocabularies_with_an_ontology_that_parses():
+    (example,) = [body for body in EXAMPLES if "vocabularies:" in body]
+
+    ontology = parse_yaml(example)
+
+    (status,) = ontology.vocabularies
+    assert [v.label for v in status.values] == ["open", "in_review", "done", "closed"]
+    assert {p.vocabulary for n in ontology.node_types for p in n.properties} == {"Status"}

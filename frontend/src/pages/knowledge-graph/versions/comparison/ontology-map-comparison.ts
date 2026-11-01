@@ -246,13 +246,14 @@ export interface DescriptionChange {
 
 /**
  * What a cosmetic (documentation-only) change changed: the description of its class,
- * relation or attribute in the two Ontologies compared. Null for any other change.
+ * relation or attribute in the two Ontologies compared. Null for any other change, and for
+ * a Vocabulary's, which the Map does not show.
  */
 export function descriptionChangeOf(
   { base, target }: Pick<OntologyComparison, 'base' | 'target'>,
   change: OntologyChange,
 ): DescriptionChange | null {
-  if (!cosmetic(change)) return null
+  if (!cosmetic(change) || change.concept_kind === 'vocabulary') return null
   const describe = (ontology: Ontology) => {
     const concepts = (kind: OwnerKind) => (kind === 'node_type' ? ontology.node_types : ontology.relationship_types)
     if (change.concept_kind !== 'property') {

@@ -412,3 +412,94 @@ def test_fetched_yaml_spells_attribute_deprecations_and_reasons_as_written(clien
         "deprecationReason": "Merged into WorkOrder",
     } in fetched["node_types"]
     assert (again.number, again.content_hash) == (v2.number, v2.content_hash)
+
+
+WITH_VOCABULARIES = """
+vocabularies:
+  - label: Status
+    definition: Where a piece of work stands
+    alternativeLabels: [State]
+    values:
+      - open
+      - label: in_progress
+        definition: Someone is working on it
+        alternativeLabels: [In Progress, WIP]
+      - {label: done, replacedBy: closed, deprecationReason: Renamed for the MES}
+      - closed
+  - label: Priority
+    values: [low, high]
+node_types:
+  - label: WorkOrder
+    properties:
+      - {name: status, type: STRING, vocabulary: Status}
+      - {name: priority, type: STRING, vocabulary: Priority}
+  - label: Task
+    properties:
+      - {name: status, type: STRING, vocabulary: Status}
+      - {name: note, type: STRING}
+"""
+
+
+def test_vocabularies_and_their_bindings_round_trip_through_registration(client, kg):
+    v2 = client.register_ontology(kg.name, WITH_VOCABULARIES)
+
+    ontology = client.get_ontology_version(kg.name, v2.number).ontology
+    status = next(v for v in ontology.vocabularies if v.label == "Status")
+    values = {v.label: v for v in status.values}
+
+    assert sorted(v.label for v in ontology.vocabularies) == ["Priority", "Status"]
+    assert (status.definition, status.alternative_labels) == (
+        "Where a piece of work stands",
+        ("State",),
+    )
+    assert sorted(values) == ["closed", "done", "in_progress", "open"]
+    assert (values["in_progress"].definition, values["in_progress"].alternative_labels) == (
+        "Someone is working on it",
+        ("In Progress", "WIP"),
+    )
+    done = values["done"]
+    assert (done.deprecated, done.replaced_by, done.deprecation_reason) == (
+        False,
+        "closed",
+        "Renamed for the MES",
+    )
+    assert (values["open"].definition, values["open"].replaced_by) == (None, None)
+    bindings = {(n.label, p.name): p.vocabulary for n in ontology.node_types for p in n.properties}
+    assert bindings == {
+        ("WorkOrder", "status"): "Status",
+        ("WorkOrder", "priority"): "Priority",
+        ("Task", "status"): "Status",
+        ("Task", "note"): None,
+    }
+
+
+def test_fetched_yaml_spells_vocabularies_as_written_and_reregisters_to_the_same_version(
+    client, kg
+):
+    v2 = client.register_ontology(kg.name, WITH_VOCABULARIES)
+
+    text = client.get_ontology_yaml(kg.name, v2.number)
+    fetched = yaml.safe_load(text)
+    again = client.register_ontology(kg.name, text)
+
+    priority, status = fetched["vocabularies"]
+    assert priority == {"label": "Priority", "values": [{"label": "high"}, {"label": "low"}]}
+    assert status["definition"] == "Where a piece of work stands"
+    assert {
+        "label": "done",
+        "replacedBy": "closed",
+        "deprecationReason": "Renamed for the MES",
+    } in status["values"]
+    work_order = next(n for n in fetched["node_types"] if n["label"] == "WorkOrder")
+    assert {"name": "status", "type": "STRING", "vocabulary": "Status"} in work_order["properties"]
+    assert (again.number, again.content_hash) == (v2.number, v2.content_hash)
+
+
+def test_declaring_vocabulary_values_in_another_order_registers_the_same_version(client, kg):
+    v2 = client.register_ontology(kg.name, WITH_VOCABULARIES)
+
+    again = client.register_ontology(
+        kg.name, WITH_VOCABULARIES.replace("values: [low, high]", "values: [high, low]")
+    )
+
+    assert again.number == v2.number

@@ -491,6 +491,44 @@ def test_the_diff_route_states_what_each_change_concerns(http, database_url):
     ]
 
 
+def test_the_diff_route_states_the_vocabulary_and_value_a_vocabulary_change_concerns(
+    http, database_url
+):
+    sdk = stetiq.Client(database_url)
+    sdk.create_knowledge_graph(
+        "support",
+        ontology="vocabularies: [{label: Status, values: [open, closed]}]\nnode_types: [Ticket]\n",
+    )
+    sdk.register_ontology(
+        "support",
+        "vocabularies: [{label: Status, values: [open]}, {label: Priority, values: [low]}]\n"
+        "node_types: [Ticket]\n",
+    )
+
+    r = diff(http, "support", 1, 2, bearer(database_url, {"support": "read"}))
+
+    assert r.status_code == 200, r.text
+    assert r.json()["changes"] == [
+        {
+            "concept": "Priority",
+            "concept_kind": "vocabulary",
+            "kind": "added",
+            "classification": "additive",
+            "detail": "vocabulary Priority added",
+            "vocabulary": "Priority",
+        },
+        {
+            "concept": "Status.closed",
+            "concept_kind": "vocabulary",
+            "kind": "removed",
+            "classification": "breaking",
+            "detail": "value Status.closed removed",
+            "vocabulary": "Status",
+            "value": "closed",
+        },
+    ]
+
+
 def test_the_version_list_says_which_versions_are_candidates(http, database_url, two_versions):
     sdk = stetiq.Client(database_url)
     sdk.register_ontology("support", "node_types:\n  - label: Invoice\n")

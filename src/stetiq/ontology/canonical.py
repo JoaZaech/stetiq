@@ -7,7 +7,8 @@ always produce byte-identical JSON and therefore the same hash.
 A Concept's Definition is stored under the key `description`, the name it had
 before Definitions existed, and Alternative Labels and a Deprecation (with its
 reason) are omitted when unset, so Ontology Versions registered before any of
-them existed keep their hashes.
+them existed keep their hashes. For the same reason `vocabularies` is omitted when there
+are none, and an attribute's `vocabulary` when it is unbound.
 The stetiq YAML spells the Definition `definition` (`to_dict(definition_key=...)`).
 """
 
@@ -24,15 +25,20 @@ from stetiq.ontology.model import (
     Pattern,
     Property,
     RelationshipType,
+    Vocabulary,
+    VocabularyValue,
 )
 
 # The canonical key of a Concept's Definition; see the module docstring.
 DEFINITION_KEY = "description"
 
 
-def _documentation(
-    c: Property | NodeType | RelationshipType, definition_key: str
-) -> dict[str, Any]:
+# What carries a Definition and Alternative Labels, and what can be deprecated.
+Documented = Property | NodeType | RelationshipType | Vocabulary | VocabularyValue
+Deprecatable = Property | NodeType | RelationshipType | VocabularyValue
+
+
+def _documentation(c: Documented, definition_key: str) -> dict[str, Any]:
     d: dict[str, Any] = {}
     if c.definition is not None:
         d[definition_key] = c.definition
@@ -41,7 +47,7 @@ def _documentation(
     return d
 
 
-def _deprecation(c: Property | NodeType | RelationshipType) -> dict[str, Any]:
+def _deprecation(c: Deprecatable) -> dict[str, Any]:
     d: dict[str, Any] = {}
     if c.deprecated:
         d["deprecated"] = True
@@ -57,7 +63,20 @@ def _property_to_dict(p: Property, definition_key: str) -> dict[str, Any]:
     if p.required:
         d["required"] = True
     d.update(_deprecation(p))
+    if p.vocabulary is not None:
+        d["vocabulary"] = p.vocabulary
     return d
+
+
+def _vocabulary_to_dict(v: Vocabulary, definition_key: str) -> dict[str, Any]:
+    return {
+        "label": v.label,
+        **_documentation(v, definition_key),
+        "values": [
+            {"label": value.label, **_documentation(value, definition_key), **_deprecation(value)}
+            for value in sorted(v.values, key=lambda value: value.label)
+        ],
+    }
 
 
 def _concept_to_dict(c: NodeType | RelationshipType, definition_key: str) -> dict[str, Any]:
@@ -128,6 +147,11 @@ def to_dict(ontology: Ontology, definition_key: str = DEFINITION_KEY) -> dict[st
             {"type": c.type, "node_type": c.node_type, "property_name": c.property_name}
             for c in sorted(ontology.constraints)
         ]
+    if ontology.vocabularies:  # omitted when empty, so pre-Vocabulary hashes are unchanged
+        d["vocabularies"] = [
+            _vocabulary_to_dict(v, definition_key)
+            for v in sorted(ontology.vocabularies, key=lambda v: v.label)
+        ]
     return d
 
 
@@ -143,6 +167,24 @@ def _property_from_dict(d: dict[str, Any]) -> Property:
         required=d.get("required", False),
         alternative_labels=tuple(d.get("alternativeLabels", ())),
         **_deprecation_kwargs(d),
+        vocabulary=d.get("vocabulary"),
+    )
+
+
+def _vocabulary_from_dict(d: dict[str, Any]) -> Vocabulary:
+    return Vocabulary(
+        label=d["label"],
+        definition=_definition(d),
+        alternative_labels=tuple(d.get("alternativeLabels", ())),
+        values=tuple(
+            VocabularyValue(
+                label=v["label"],
+                definition=_definition(v),
+                alternative_labels=tuple(v.get("alternativeLabels", ())),
+                **_deprecation_kwargs(v),
+            )
+            for v in d["values"]
+        ),
     )
 
 
@@ -175,6 +217,7 @@ def from_dict(d: dict[str, Any]) -> Ontology:
         ),
         patterns=tuple(_pattern_from_json(p) for p in d.get("patterns", [])),
         constraints=tuple(Constraint(**c) for c in d.get("constraints", [])),
+        vocabularies=tuple(_vocabulary_from_dict(v) for v in d.get("vocabularies", [])),
     )
 
 
