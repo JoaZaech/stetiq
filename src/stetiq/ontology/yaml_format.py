@@ -8,6 +8,7 @@
         properties:
           - {name: opened_at, type: DATE, required: true}  # also definition, alternativeLabels,
             # deprecated, replacedBy (another property on the same owner), deprecationReason
+          - {name: state, type: STRING, vocabulary: Status}  # STRING only: takes Status's values
         deprecated: true              # optional
         replacedBy: Case              # optional, a Concept of the same kind
         deprecationReason: Merged into Case  # optional, needs deprecated or replacedBy
@@ -23,6 +24,13 @@
         cardinality: {out: {min: 0}, in: {min: 1, max: 1}}
     constraints:                      # optional, neo4j-graphrag's shape
       - {type: UNIQUENESS, node_type: Ticket, property_name: opened_at}
+    vocabularies:                     # optional; any STRING property may be bound to one
+      - label: Status
+        definition: Where a Ticket stands  # optional, as are alternativeLabels
+        values:                       # at least one
+          - open                      # bare label shorthand
+          - {label: done, replacedBy: closed}  # also definition, alternativeLabels, deprecated,
+          - closed                    # deprecationReason; replacedBy names a value of Status
 
 `parse_yaml` validates and raises `OntologyValidationError` naming the
 offending path; `to_yaml` emits the canonical (sorted, defaults omitted) form,
@@ -44,6 +52,8 @@ from stetiq.ontology.model import (
     Pattern,
     Property,
     RelationshipType,
+    Vocabulary,
+    VocabularyValue,
 )
 
 # neo4j-graphrag's property types.
@@ -64,7 +74,7 @@ PROPERTY_TYPES = frozenset(
     }
 )
 
-_TOP_LEVEL_KEYS = {"node_types", "relationship_types", "patterns", "constraints"}
+_TOP_LEVEL_KEYS = {"node_types", "relationship_types", "patterns", "constraints", "vocabularies"}
 _CONSTRAINT_KEYS = {"type", "node_type", "property_name"}
 CONSTRAINT_TYPES = frozenset({"UNIQUENESS"})
 # Every Concept's documentation; `description` is the older spelling of `definition`.
@@ -72,7 +82,11 @@ _DOCUMENTATION_KEYS = {"definition", "description", "alternativeLabels"}
 _DEPRECATION_KEYS = {"deprecated", "replacedBy", "deprecationReason"}
 _CONCEPT_KEYS = {"label", "properties"} | _DOCUMENTATION_KEYS | _DEPRECATION_KEYS
 _NODE_TYPE_KEYS = _CONCEPT_KEYS | {"parent"}
-_PROPERTY_KEYS = {"name", "type", "required"} | _DOCUMENTATION_KEYS | _DEPRECATION_KEYS
+_PROPERTY_KEYS = (
+    {"name", "type", "required", "vocabulary"} | _DOCUMENTATION_KEYS | _DEPRECATION_KEYS
+)
+_VOCABULARY_KEYS = {"label", "values"} | _DOCUMENTATION_KEYS
+_VOCABULARY_VALUE_KEYS = {"label"} | _DOCUMENTATION_KEYS | _DEPRECATION_KEYS
 _PATTERN_KEYS = {"source", "relationship", "target", "cardinality"}
 
 
@@ -191,7 +205,87 @@ def _parse_property(path: str, raw: Any) -> Property:
         required=_bool(f"{path}.required", raw.get("required", False)),
         alternative_labels=_alternative_labels(path, raw),
         **_deprecation(path, raw),
+        vocabulary=_optional_str(f"{path}.vocabulary", raw.get("vocabulary")),
     )
+
+
+def _parse_vocabularies(doc: dict[str, Any]) -> list[Vocabulary]:
+    raw = doc.get("vocabularies") or []
+    if not isinstance(raw, list):
+        raise _fail("vocabularies", "must be a list")
+    vocabularies = [_parse_vocabulary(f"vocabularies[{i}]", v) for i, v in enumerate(raw)]
+    seen: set[str] = set()
+    for v in vocabularies:
+        if v.label in seen:
+            raise _fail(v.label, "declared more than once in vocabularies")
+        seen.add(v.label)
+    return vocabularies
+
+
+def _parse_vocabulary(path: str, raw: Any) -> Vocabulary:
+    if not isinstance(raw, dict):
+        raise _fail(path, "must be a mapping with a label and values")
+    if "label" not in raw:
+        raise _fail(path, "needs a label")
+    label = _label(path, raw["label"])
+    _check_keys(label, raw, _VOCABULARY_KEYS)
+    raw_values = raw.get("values") or []
+    if not isinstance(raw_values, list):
+        raise _fail(f"{label}.values", "must be a list")
+    if not raw_values:
+        raise _fail(f"{label}.values", "a Vocabulary needs at least one value")
+    values = [_parse_vocabulary_value(f"{label}.values[{i}]", v) for i, v in enumerate(raw_values)]
+    seen: set[str] = set()
+    for v in values:
+        if v.label in seen:
+            raise _fail(f"{label}.{v.label}", "value is declared more than once")
+        seen.add(v.label)
+    section = f"{label}'s values"
+    _check_alternative_labels(
+        f"{label}.", [(v.label, v.alternative_labels) for v in values], section
+    )
+    _check_replacements(f"{label}.", [(v.label, v.replaced_by) for v in values], section)
+    return Vocabulary(
+        label=label,
+        values=tuple(values),
+        definition=_definition(label, raw),
+        alternative_labels=_alternative_labels(label, raw),
+    )
+
+
+def _parse_vocabulary_value(path: str, raw: Any) -> VocabularyValue:
+    if isinstance(raw, str):
+        raw = {"label": raw}
+    if not isinstance(raw, dict):
+        raise _fail(path, "must be a label or a mapping with a label")
+    if "label" not in raw:
+        raise _fail(path, "needs a label")
+    label = _label(path, raw["label"])
+    path = f"{path.rsplit('.values[', 1)[0]}.{label}"
+    _check_keys(path, raw, _VOCABULARY_VALUE_KEYS)
+    return VocabularyValue(
+        label=label,
+        definition=_definition(path, raw),
+        alternative_labels=_alternative_labels(path, raw),
+        **_deprecation(path, raw),
+    )
+
+
+def _check_bindings(concepts: list[dict[str, Any]], vocabularies: list[Vocabulary]) -> None:
+    """A property's `vocabulary` names a declared Vocabulary, and only a STRING property's
+    values can be checked against its labels."""
+    labels = {v.label for v in vocabularies}
+    for concept in concepts:
+        for p in concept["properties"]:
+            if p.vocabulary is None:
+                continue
+            path = f"{concept['label']}.{p.name}.vocabulary"
+            if p.vocabulary not in labels:
+                raise _fail(path, f"{p.vocabulary!r} is not declared in vocabularies")
+            if p.type != "STRING":
+                raise _fail(
+                    path, f"only a STRING property can be bound to a Vocabulary, not {p.type}"
+                )
 
 
 def _parse_concept(section: str, index: int, raw: Any) -> dict[str, Any]:
@@ -389,11 +483,14 @@ def parse_dict(doc: Any) -> Ontology:
     _check_hierarchy(nodes)
     rels = _parse_section(doc, "relationship_types")
     patterns = _parse_patterns(doc, {n["label"] for n in nodes}, {r["label"] for r in rels})
+    vocabularies = _parse_vocabularies(doc)
+    _check_bindings(nodes + rels, vocabularies)
     return Ontology(
         node_types=tuple(NodeType(**n) for n in nodes),
         relationship_types=tuple(RelationshipType(**r) for r in rels),
         patterns=tuple(patterns),
         constraints=tuple(_parse_constraints(doc, nodes)),
+        vocabularies=tuple(vocabularies),
     )
 
 

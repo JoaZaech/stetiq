@@ -67,7 +67,7 @@ Origin is decided by the server: `register_ontology` has no `origin` argument, a
 
 `SubjectKind` (`evaluation/framework.py`: `ontology_version` | `construction_run`) is the single subject type, used by evaluation results and Gate results. `ConceptKind` (`ontology/model.py`) is shared by Diff, Conformance and Drift. Reuse both rather than defining new literals.
 
-An Ontology Diff `Change` states what it concerns as fields: `owner`, `owner_kind` and `attribute` for an attribute, `required` for an added one, `pattern` for an endpoint change. Its `detail` is for people (the CLI, the web UI's Detail column) and no code may parse it; a consumer that needs a fact from the wording gets a new field instead. The wire sends each field only when it applies, so readers treat a missing one as absent.
+An Ontology Diff `Change` states what it concerns as fields: `owner`, `owner_kind` and `attribute` for an attribute, `required` for an added one, `pattern` for an endpoint change, `vocabulary` and `value` for a Vocabulary or Vocabulary Value change (`concept_kind` `vocabulary`). Its `detail` is for people (the CLI, the web UI's Detail column) and no code may parse it; a consumer that needs a fact from the wording gets a new field instead. The wire sends each field only when it applies, so readers treat a missing one as absent.
 
 ## Reserved Evaluator names
 

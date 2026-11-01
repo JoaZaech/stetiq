@@ -7,9 +7,10 @@ export const CONCEPT_NOUN = {
   node_type: 'class',
   relationship_type: 'relation',
   property: 'attribute',
+  vocabulary: 'vocabulary',
 } as const satisfies Record<ConceptKind, string>
 
-/** A kind of Concept in the Map's and the Table's words: class, relation or attribute. */
+/** A kind of Concept in the Map's and the Table's words: class, relation, attribute or vocabulary. */
 export type ConceptNoun = (typeof CONCEPT_NOUN)[ConceptKind]
 
 /**

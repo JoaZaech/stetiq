@@ -9,14 +9,16 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-# The kinds of Concept: classes (node types), relations and attributes.
-ConceptKind = Literal["node_type", "relationship_type", "property"]
+# The kinds of Concept: classes (node types), relations and attributes; and the Vocabularies
+# attributes draw values from, whose Vocabulary Values the Diff identifies as `Vocabulary.value`.
+ConceptKind = Literal["node_type", "relationship_type", "property", "vocabulary"]
 
 
 @dataclass(frozen=True)
 class Property:
     """An attribute Concept. Like every Concept it has a Definition and Alternative Labels.
-    Its `replaced_by` names another attribute on the same owner."""
+    Its `replaced_by` names another attribute on the same owner. A STRING attribute may be
+    bound to a Vocabulary by its label (`vocabulary`), and then takes only its values."""
 
     name: str
     type: str
@@ -26,6 +28,31 @@ class Property:
     deprecated: bool = False
     replaced_by: str | None = None
     deprecation_reason: str | None = None
+    vocabulary: str | None = None
+
+
+@dataclass(frozen=True)
+class VocabularyValue:
+    """One permitted value of a Vocabulary, identified by its label. Like a Concept it has a
+    Definition, Alternative Labels and a Deprecation; its `replaced_by` names another value
+    of the same Vocabulary."""
+
+    label: str
+    definition: str | None = None
+    alternative_labels: tuple[str, ...] = ()
+    deprecated: bool = False
+    replaced_by: str | None = None
+    deprecation_reason: str | None = None
+
+
+@dataclass(frozen=True)
+class Vocabulary:
+    """A named, flat set of Vocabulary Values that any attribute bound to it may take."""
+
+    label: str
+    values: tuple[VocabularyValue, ...]
+    definition: str | None = None
+    alternative_labels: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -116,6 +143,7 @@ class Ontology:
     relationship_types: tuple[RelationshipType, ...] = ()
     patterns: tuple[Pattern, ...] = field(default=())
     constraints: tuple[Constraint, ...] = ()
+    vocabularies: tuple[Vocabulary, ...] = ()
 
     def node_type(self, label: str) -> NodeType:
         return next(n for n in self.node_types if n.label == label)

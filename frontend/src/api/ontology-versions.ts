@@ -7,6 +7,15 @@ export interface OntologyProperty {
   type: string
   description?: string
   required?: boolean
+  /** The label of the Vocabulary this STRING attribute is bound to. */
+  vocabulary?: string
+}
+
+/** A Vocabulary and its Vocabulary Values, each identified by its label. */
+export interface OntologyVocabulary {
+  label: string
+  description?: string
+  values: { label: string; description?: string; deprecated?: boolean; replacedBy?: string }[]
 }
 
 export interface OntologyConcept {
@@ -31,6 +40,7 @@ export interface Ontology {
   /** `[source, relationship, target]` */
   patterns: [string, string, string][]
   constraints?: OntologyConstraint[]
+  vocabularies?: OntologyVocabulary[]
 }
 
 /** The mapping form the canonical dict uses for a pattern that declares a cardinality. */

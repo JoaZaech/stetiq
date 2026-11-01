@@ -477,3 +477,109 @@ def test_deprecating_with_a_reason_is_one_deprecating_change(client):
     )
 
     assert summary(d) == [("Agent", "deprecated", "deprecating")]
+
+
+def _with_vocabulary(values: str, binding: str = ", vocabulary: Status", extra: str = "") -> str:
+    return (
+        f"vocabularies:\n  - {{label: Status, values: [{values}]}}\n{extra}"
+        "node_types:\n  - label: WorkOrder\n    properties:\n"
+        f"      - {{name: status, type: STRING{binding}}}\n"
+    )
+
+
+def vocabulary_values(d: OntologyDiff) -> list[tuple[str | None, str | None]]:
+    """Each change's Vocabulary and Vocabulary Value as the Diff states them."""
+    return [(c.vocabulary, c.value) for c in d.changes]
+
+
+def test_adding_a_vocabulary_value_is_additive(client):
+    d = client.diff_ontologies(_with_vocabulary("open"), _with_vocabulary("open, closed"))
+
+    assert summary(d) == [("Status.closed", "added", "additive")]
+    assert [c.concept_kind for c in d.changes] == ["vocabulary"]
+    assert vocabulary_values(d) == [("Status", "closed")]
+
+
+def test_deprecating_a_vocabulary_value_is_deprecating(client):
+    d = client.diff_ontologies(
+        _with_vocabulary("done, closed"),
+        _with_vocabulary("{label: done, replacedBy: closed}, closed"),
+    )
+
+    assert summary(d) == [("Status.done", "deprecated", "deprecating")]
+    assert d.changes[0].detail == "deprecated; replaced by closed"
+    assert vocabulary_values(d) == [("Status", "done")]
+
+
+def test_removing_a_vocabulary_value_is_breaking(client):
+    d = client.diff_ontologies(_with_vocabulary("open, closed"), _with_vocabulary("open"))
+
+    assert summary(d) == [("Status.closed", "removed", "breaking")]
+    assert vocabulary_values(d) == [("Status", "closed")]
+
+
+def test_binding_a_vocabulary_to_an_existing_attribute_is_breaking(client):
+    d = client.diff_ontologies(_with_vocabulary("open", binding=""), _with_vocabulary("open"))
+
+    assert summary(d) == [("WorkOrder.status", "changed", "breaking")]
+    assert attributes(d) == [("WorkOrder", "node_type", "status")]
+    assert d.changes[0].detail == "bound to Vocabulary Status"
+
+
+def test_binding_an_attribute_to_another_vocabulary_is_breaking(client):
+    other = "  - {label: Phase, values: [open]}\n"
+    d = client.diff_ontologies(
+        _with_vocabulary("open", extra=other),
+        _with_vocabulary("open", binding=", vocabulary: Phase", extra=other),
+    )
+
+    assert summary(d) == [("WorkOrder.status", "changed", "breaking")]
+    assert d.changes[0].detail == "Vocabulary Status -> Phase"
+
+
+def test_unbinding_a_vocabulary_is_additive(client):
+    d = client.diff_ontologies(_with_vocabulary("open"), _with_vocabulary("open", binding=""))
+
+    assert summary(d) == [("WorkOrder.status", "changed", "additive")]
+    assert d.changes[0].detail == "no longer bound to Vocabulary Status"
+
+
+def test_adding_or_removing_an_unbound_vocabulary_is_additive(client):
+    without = "node_types: [WorkOrder]\n"
+    with_ = "vocabularies:\n  - {label: Status, values: [open]}\nnode_types: [WorkOrder]\n"
+
+    added, removed = client.diff_ontologies(without, with_), client.diff_ontologies(with_, without)
+
+    assert summary(added) == [("Status", "added", "additive")]
+    assert summary(removed) == [("Status", "removed", "additive")]
+    assert [c.concept_kind for c in added.changes + removed.changes] == ["vocabulary"] * 2
+    assert vocabulary_values(added) == [("Status", None)]
+
+
+def test_documentation_changes_on_a_vocabulary_or_its_values_are_cosmetic(client):
+    def ontology(definition: str, alternative: str) -> str:
+        return (
+            f"vocabularies:\n  - label: Status\n    definition: {definition}\n"
+            f"    alternativeLabels: [{alternative}]\n    values:\n"
+            f"      - {{label: open, definition: {definition}, alternativeLabels: [{alternative}]}}\n"
+            "node_types: [WorkOrder]\n"
+        )
+
+    d = client.diff_ontologies(ontology("Old", "A"), ontology("New", "B"))
+
+    assert [(c.concept, c.classification, c.detail) for c in d.changes] == [
+        ("Status", "cosmetic", "definition changed"),
+        ("Status", "cosmetic", "alternative labels changed"),
+        ("Status.open", "cosmetic", "definition changed"),
+        ("Status.open", "cosmetic", "alternative labels changed"),
+    ]
+    assert d.classification == "cosmetic"
+
+
+def test_changing_only_a_vocabulary_values_deprecation_reason_is_cosmetic(client):
+    def ontology(reason: str) -> str:
+        return _with_vocabulary(f"{{label: done, deprecated: true, deprecationReason: {reason}}}")
+
+    d = client.diff_ontologies(ontology("Old"), ontology("Unused"))
+
+    assert summary(d) == [("Status.done", "changed", "cosmetic")]

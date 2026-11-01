@@ -283,7 +283,7 @@ The `GATE` column of `stetiq alias log` shows `passed`, `failed`, or `-` for a v
 
 ## The Ontology YAML
 
-The Declared Ontology is a separate YAML file (the one you pass to `stetiq kg create --ontology` and `stetiq ontology register`, and that a run receives as `{ontology}`). Its sections are `node_types`, `relationship_types`, `patterns` and `constraints`; see [Getting started](01-getting-started.md#create-a-knowledge-graph) for a complete example.
+The Declared Ontology is a separate YAML file (the one you pass to `stetiq kg create --ontology` and `stetiq ontology register`, and that a run receives as `{ontology}`). Its sections are `node_types`, `relationship_types`, `patterns`, `constraints` and `vocabularies`; see [Getting started](01-getting-started.md#create-a-knowledge-graph) for a complete example.
 
 ### Deprecation
 
@@ -303,6 +303,34 @@ relationship_types:
 ```
 
 - **Ontology Diff:** deprecating a class, relation or attribute, or changing its replacement, is *deprecating*. A rename declared with `replacedBy` is a deprecation of the old name plus the addition of the new one, not a removal. Undeprecating is *additive*, and changing only the `deprecationReason` is *cosmetic*.
+
+### Vocabularies
+
+A **Vocabulary** is a named, flat set of **Vocabulary Values** that an attribute bound to it may take. Declare Vocabularies in the top-level `vocabularies` section and bind a STRING attribute to one with `vocabulary: <label>`. One Vocabulary can be bound to several attributes.
+
+```yaml
+vocabularies:
+  - label: Status
+    definition: Where a piece of work stands
+    values:
+      - open                                  # a bare label is shorthand for {label: open}
+      - label: in_review
+        definition: Waiting for a second pair of eyes
+        alternativeLabels: [In Review]        # spellings seen in source systems
+      - {label: done, replacedBy: closed, deprecationReason: Renamed to match the MES}
+      - closed
+node_types:
+  - label: WorkOrder
+    properties:
+      - {name: status, type: STRING, vocabulary: Status}
+  - label: Task
+    properties:
+      - {name: status, type: STRING, vocabulary: Status}
+```
+
+A Vocabulary has a `label`, an optional `definition` and `alternativeLabels`, and at least one value. A value is identified by its `label`, unique in its Vocabulary, and takes the same `definition`, `alternativeLabels` and Deprecation keys as an attribute (`deprecated`, `replacedBy`, `deprecationReason`); its `replacedBy` names another value of the same Vocabulary. Registration rejects a binding to an undeclared Vocabulary, a binding on an attribute whose type is not `STRING`, an empty Vocabulary, a value declared twice in one Vocabulary, and a `replacedBy` outside the value's Vocabulary.
+
+- **Ontology Diff:** a Vocabulary change names the Vocabulary (`Status`), and a value change names the value as `Vocabulary.value` (`Status.done`). Adding a value is *additive*, deprecating one *deprecating* and removing one *breaking*. Binding a Vocabulary to an existing attribute, or rebinding an attribute to a different Vocabulary, is *breaking*, because existing values may no longer conform; unbinding is *additive*. Adding or removing a Vocabulary is *additive*, since only a binding constrains data. Changing a Definition or Alternative Labels on a Vocabulary or a value is *cosmetic*.
 
 ### Cardinality
 

@@ -6,9 +6,11 @@ an undeclared rename is a removal plus an addition.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
+from stetiq.ontology.canonical import Deprecatable, Documented
 from stetiq.ontology.model import (
     ConceptKind,
     NodeType,
@@ -16,6 +18,7 @@ from stetiq.ontology.model import (
     Pattern,
     Property,
     RelationshipType,
+    Vocabulary,
 )
 
 
@@ -46,7 +49,8 @@ class Change:
     """One change to one Concept.
 
     `concept` is the Concept's identity: a node/relationship type label, or
-    `<owner label>.<property name>` for an attribute. `detail` says what changed in
+    `<owner label>.<property name>` for an attribute, a Vocabulary's label, or
+    `<Vocabulary label>.<value label>` for a Vocabulary Value. `detail` says what changed in
     words, for people only; the fields below state what code needs to know, so no code
     has to read `detail`.
     """
@@ -64,6 +68,9 @@ class Change:
     required: bool | None = None
     # The endpoint Pattern an endpoint change adds or removes.
     pattern: Pattern | None = None
+    # A Vocabulary change's Vocabulary, and the Vocabulary Value it concerns, if any.
+    vocabulary: str | None = None
+    value: str | None = None
 
 
 @dataclass(frozen=True)
@@ -105,6 +112,7 @@ _KIND_NAMES: dict[str, str] = {
     "node_type": "node type",
     "relationship_type": "relationship type",
     "property": "property",
+    "vocabulary": "vocabulary",
 }
 
 
@@ -116,7 +124,88 @@ def diff_ontologies(base: Ontology, target: Ontology) -> OntologyDiff:
         "relationship_type", base.relationship_types, target.relationship_types, base, target
     )
     changes += _diff_constraints(base, target)
+    changes += _diff_vocabularies(base.vocabularies, target.vocabularies)
     return OntologyDiff(tuple(changes))
+
+
+def _diff_vocabularies(
+    base: tuple[Vocabulary, ...], target: tuple[Vocabulary, ...]
+) -> list[Change]:
+    """Adding or removing a Vocabulary is additive: only a binding, diffed on its attribute,
+    makes data conform to it, and a removed one can no longer be bound. Within a kept one,
+    adding a value is additive and removing one breaking."""
+    old = {v.label: v for v in base}
+    new = {v.label: v for v in target}
+    changes: list[Change] = []
+    for label in sorted(old.keys() | new.keys()):
+        item = _VocabularyItem(label)
+        if label not in old:
+            changes.append(item.change(ChangeKind.ADDED, Classification.ADDITIVE, "added"))
+        elif label not in new:
+            changes.append(item.change(ChangeKind.REMOVED, Classification.ADDITIVE, "removed"))
+        else:
+            changes += [
+                item.change(ChangeKind.CHANGED, Classification.COSMETIC, detail, prefix=False)
+                for detail in _documentation_changes(old[label], new[label])
+            ]
+            changes += _diff_vocabulary_values(label, old[label], new[label])
+    return changes
+
+
+def _diff_vocabulary_values(
+    label: str, old_vocabulary: Vocabulary, new_vocabulary: Vocabulary
+) -> list[Change]:
+    old = {v.label: v for v in old_vocabulary.values}
+    new = {v.label: v for v in new_vocabulary.values}
+    changes: list[Change] = []
+    for value in sorted(old.keys() | new.keys()):
+        item = _VocabularyItem(label, value)
+        if value not in old:
+            changes.append(item.change(ChangeKind.ADDED, Classification.ADDITIVE, "added"))
+        elif value not in new:
+            changes.append(item.change(ChangeKind.REMOVED, Classification.BREAKING, "removed"))
+        else:
+            changes += [
+                item.change(change_kind, classification, detail, prefix=False)
+                for change_kind, classification, detail in _deprecation_changes(
+                    old[value], new[value]
+                )
+            ]
+            changes += [
+                item.change(ChangeKind.CHANGED, Classification.COSMETIC, detail, prefix=False)
+                for detail in _documentation_changes(old[value], new[value])
+            ]
+    return changes
+
+
+@dataclass(frozen=True)
+class _VocabularyItem:
+    """Vocabulary `vocabulary` itself, or its Vocabulary Value `value`."""
+
+    vocabulary: str
+    value: str | None = None
+
+    @property
+    def concept(self) -> str:
+        return self.vocabulary if self.value is None else f"{self.vocabulary}.{self.value}"
+
+    def change(
+        self, kind: ChangeKind, classification: Classification, detail: str, prefix: bool = True
+    ) -> Change:
+        """With `prefix`, `detail` follows the item's name (`value Status.done removed`);
+        a change to an item that is still there says only what changed."""
+        if prefix:
+            noun = "vocabulary" if self.value is None else "value"
+            detail = f"{noun} {self.concept} {detail}"
+        return Change(
+            self.concept,
+            "vocabulary",
+            kind,
+            classification,
+            detail,
+            vocabulary=self.vocabulary,
+            value=self.value,
+        )
 
 
 def _diff_constraints(base: Ontology, target: Ontology) -> list[Change]:
@@ -190,9 +279,7 @@ def _diff_concepts(
     return changes
 
 
-def _documentation_changes(
-    old: NodeType | RelationshipType | Property, new: NodeType | RelationshipType | Property
-) -> list[str]:
+def _documentation_changes(old: Documented, new: Documented) -> list[str]:
     """What changed in a Concept's documentation, each cosmetic: it never changes what data conforms."""
     details = []
     if old.definition != new.definition:
@@ -200,9 +287,6 @@ def _documentation_changes(
     if old.alternative_labels != new.alternative_labels:
         details.append("alternative labels changed")
     return details
-
-
-Deprecatable = NodeType | RelationshipType | Property
 
 
 def _is_deprecated(c: Deprecatable) -> bool:
@@ -412,4 +496,19 @@ def _diff_property(attribute: _Attribute, old: Property, new: Property) -> list[
                 "now required" if new.required else "now optional",
             )
         )
+    changes += _diff_binding(change, old.vocabulary, new.vocabulary)
     return changes
+
+
+def _diff_binding(
+    change: Callable[[Classification, str], Change], old: str | None, new: str | None
+) -> list[Change]:
+    """Binding an attribute to a Vocabulary (or to another one) may reject existing values
+    (breaking); unbinding only relaxes (additive)."""
+    if old == new:
+        return []
+    if new is None:
+        return [change(Classification.ADDITIVE, f"no longer bound to Vocabulary {old}")]
+    if old is None:
+        return [change(Classification.BREAKING, f"bound to Vocabulary {new}")]
+    return [change(Classification.BREAKING, f"Vocabulary {old} -> {new}")]
