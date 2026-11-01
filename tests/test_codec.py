@@ -117,6 +117,9 @@ DRIFT_EVENT = DriftEvent(
     findings=(
         DriftFinding(DriftKind.COUNT_DROP, "Customer", "node_type", "fell", 10, 3),
         DriftFinding(DriftKind.UNDECLARED, "Invoice", "node_type"),
+        DriftFinding(
+            DriftKind.UNDECLARED_VALUE, "Ticket.status", "property", "2 times", value="on_hold"
+        ),
     ),
     thresholds=DriftThresholds(max_count_drop=0.5, max_count_increase=2.0),
 )
@@ -150,7 +153,17 @@ SAMPLES: dict[type, Any] = {
         observation_id="obs-1",
         conformance=Conformance(
             score=0.5,
-            mismatches=(Mismatch("Ticket", "node_type", MismatchKind.ABSENT, "not observed"),),
+            mismatches=(
+                Mismatch("Ticket", "node_type", MismatchKind.ABSENT, "not observed"),
+                Mismatch(
+                    "Ticket.status",
+                    "property",
+                    MismatchKind.VALUE_OUTSIDE_VOCABULARY,
+                    "2 times",
+                    "on_hold",
+                    2,
+                ),
+            ),
         ),
         candidate_version=2,
     ),

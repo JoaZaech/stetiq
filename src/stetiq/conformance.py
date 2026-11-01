@@ -2,7 +2,7 @@
 
 No I/O. `assess_conformance` scores how well an Observed Schema matches its Declared
 Ontology and lists every mismatch; `candidate_ontology` builds the Declared Ontology
-extended with the newly observed Concepts (what an evolving Construction Run proposes
+extended with the newly observed Concepts and Vocabulary Values (what an evolving Construction Run proposes
 as a Candidate).
 """
 
@@ -21,7 +21,7 @@ from stetiq.graph_source import (
 )
 from stetiq.ontology import NodeType, Ontology, Pattern, Property, RelationshipType
 from stetiq.ontology.diff import WIDENING_TYPE_CHANGES
-from stetiq.ontology.model import ConceptKind
+from stetiq.ontology.model import ConceptKind, Vocabulary, VocabularyValue, is_deprecated
 
 # What a mismatch is about. Concepts are node types, relationship types and properties
 # (identity `Owner.property`, as in the Ontology Diff); patterns are endpoint patterns
@@ -36,6 +36,10 @@ class MismatchKind(StrEnum):
     REQUIRED_MISSING = "required_missing"  # a required property is not set everywhere
     # an endpoint pattern's observed out- or in-degree is outside its declared cardinality
     CARDINALITY_VIOLATION = "cardinality_violation"
+    # a Vocabulary-bound property holds a value its Vocabulary does not have (one per value)
+    VALUE_OUTSIDE_VOCABULARY = "value_outside_vocabulary"
+    # a Vocabulary-bound property holds a deprecated value: reported, but it conforms
+    DEPRECATED_VALUE = "deprecated_value"
 
 
 @dataclass(frozen=True)
@@ -44,12 +48,16 @@ class Mismatch:
     subject_kind: MismatchSubjectKind
     kind: MismatchKind
     detail: str = ""
+    # For a value mismatch: the observed value and how many nodes or relationships hold it.
+    value: str | None = None
+    count: int | None = None
 
 
 @dataclass(frozen=True)
 class Conformance:
     """`score` in [0, 1] is the share of checks that hold (see `assess_conformance`);
-    `mismatches` lists every check that does not, in a deterministic order."""
+    `mismatches` lists every check that does not, in a deterministic order, plus the
+    observed deprecated Vocabulary Values (`deprecated_value`), which conform."""
 
     score: float
     mismatches: tuple[Mismatch, ...] = ()
@@ -72,7 +80,8 @@ class Conformance:
 
     @property
     def property_mismatches(self) -> tuple[Mismatch, ...]:
-        """Properties both declared and observed whose observed values break the declaration."""
+        """Properties both declared and observed whose observed values break the declaration,
+        and observed deprecated Vocabulary Values (which conform)."""
         return tuple(
             m
             for m in self.mismatches
@@ -86,15 +95,7 @@ class Conformance:
     def to_dict(self) -> dict[str, Any]:
         return {
             "score": self.score,
-            "mismatches": [
-                {
-                    "subject": m.subject,
-                    "subject_kind": m.subject_kind,
-                    "kind": str(m.kind),
-                    "detail": m.detail,
-                }
-                for m in self.mismatches
-            ],
+            "mismatches": [_mismatch_to_dict(m) for m in self.mismatches],
         }
 
     @classmethod
@@ -107,16 +108,32 @@ class Conformance:
                     m["subject_kind"],
                     MismatchKind(m["kind"]),
                     m["detail"],
+                    m.get("value"),
+                    m.get("count"),
                 )
                 for m in d["mismatches"]
             ),
         )
 
 
+def _mismatch_to_dict(m: Mismatch) -> dict[str, Any]:
+    d: dict[str, Any] = {
+        "subject": m.subject,
+        "subject_kind": m.subject_kind,
+        "kind": str(m.kind),
+        "detail": m.detail,
+    }
+    if m.value is not None:  # only value mismatches carry these
+        d["value"] = m.value
+        d["count"] = m.count
+    return d
+
+
 def assess_conformance(declared: Ontology, observed: ObservedSchema) -> Conformance:
     """Compare item by item. The checked items are node types, relationship types, their
     properties and endpoint patterns, taken from both sides: every declared one and every
-    observed one that is not declared; plus each declared cardinality bound.
+    observed one that is not declared; plus each declared cardinality bound, and each
+    Vocabulary-bound property whose values were observed (see `_check_values`).
 
     `score` = conforming items / all items, where an item conforms when it is
     both declared and observed and has no mismatch. Every item of an absent or
@@ -125,7 +142,9 @@ def assess_conformance(declared: Ontology, observed: ObservedSchema) -> Conforma
     Order: node types, then relationship types, each by label with its properties
     (by name) right after it; then patterns, sorted, each followed by its cardinality
     violations (out, then in). A cardinality bound counts as one item; a direction with a
-    failing bound is reported once."""
+    failing bound is reported once. A bound property's value mismatches follow its own
+    mismatches, in the observed values' order (most frequent first). A `deprecated_value`
+    is reported but is not a failing check."""
     checks = _Checks()
     _check_concepts(
         checks,
@@ -133,6 +152,7 @@ def assess_conformance(declared: Ontology, observed: ObservedSchema) -> Conforma
         declared.node_types,
         observed.node_types,
         _properties_of(declared),
+        declared,
     )
     _check_concepts(
         checks,
@@ -140,6 +160,7 @@ def assess_conformance(declared: Ontology, observed: ObservedSchema) -> Conforma
         declared.relationship_types,
         observed.relationship_types,
         _own_properties,
+        declared,
     )
     _check_patterns(checks, declared, observed)
     return checks.result()
@@ -183,6 +204,7 @@ def _check_concepts(
     declared: tuple[NodeType, ...] | tuple[RelationshipType, ...],
     observed: tuple[ObservedNodeType, ...] | tuple[ObservedRelationshipType, ...],
     properties_of: PropertiesOf,
+    ontology: Ontology,
 ) -> None:
     declared_by_label = {c.label: c for c in declared}
     observed_by_label = {o.label: o for o in observed}
@@ -199,6 +221,7 @@ def _check_concepts(
             present = checks.presence(subject, "property", dp is not None, op is not None)
             if present and dp is not None and op is not None:
                 checks.record(subject, "property", _property_mismatches(subject, label, dp, op))
+                _check_values(checks, subject, ontology, dp, op)
 
 
 # The properties declared for a Concept (own, and for node types inherited ones too).
@@ -254,6 +277,64 @@ def _property_mismatches(
             )
         )
     return found
+
+
+def _check_values(
+    checks: _Checks,
+    subject: str,
+    ontology: Ontology,
+    declared: Property,
+    observed: ObservedProperty,
+) -> None:
+    """A Vocabulary-bound property whose values were observed is one item. Each observed
+    value outside the Vocabulary fails it and is reported with its count; a deprecated
+    value is reported but conforms. A truncated value list (more distinct values than the
+    cap) cannot show that every value conforms, so it fails the item too; the listed
+    values are still reported one by one."""
+    vocabulary = ontology.vocabulary(declared.vocabulary) if declared.vocabulary else None
+    if vocabulary is None or observed.values is None:
+        return
+    values = {v.label: v for v in vocabulary.values}
+    outside = False
+    for c in observed.values.counts:
+        value = values.get(c.value)
+        times = f"{c.count} time{'s' if c.count != 1 else ''}"
+        if value is None:
+            outside = True
+            checks.report(
+                Mismatch(
+                    subject,
+                    "property",
+                    MismatchKind.VALUE_OUTSIDE_VOCABULARY,
+                    f"{c.value!r} observed {times}, not a value of {vocabulary.label}",
+                    c.value,
+                    c.count,
+                )
+            )
+        elif is_deprecated(value):
+            replacement = f", replaced by {value.replaced_by!r}" if value.replaced_by else ""
+            checks.report(
+                Mismatch(
+                    subject,
+                    "property",
+                    MismatchKind.DEPRECATED_VALUE,
+                    f"{c.value!r} observed {times}, deprecated in {vocabulary.label}{replacement}",
+                    c.value,
+                    c.count,
+                )
+            )
+    if observed.values.truncated and not outside:
+        checks.report(
+            Mismatch(
+                subject,
+                "property",
+                MismatchKind.VALUE_OUTSIDE_VOCABULARY,
+                f"more than {len(observed.values.counts)} distinct values observed; "
+                "those beyond the cap were not checked against "
+                f"{vocabulary.label}",
+            )
+        )
+    checks.item(f"vocabulary {subject}", not outside and not observed.values.truncated)
 
 
 def _check_patterns(checks: _Checks, declared: Ontology, observed: ObservedSchema) -> None:
@@ -321,7 +402,9 @@ def candidate_ontology(declared: Ontology, observed: ObservedSchema) -> Ontology
     declared types). New properties are optional and typed from the observation, so the
     Candidate is an additive change of the Declared Ontology. Observed patterns are added
     only when they involve a new node or relationship type: an undeclared pattern between
-    declared Concepts is a pattern mismatch, not a new Concept, and is left out."""
+    declared Concepts is a pattern mismatch, not a new Concept, and is left out.
+    Observed values outside a bound Vocabulary are added to it as new Values, which is
+    additive too."""
     node_types, new_nodes, new_node_props = _extend(
         declared.node_types, observed.node_types, NodeType, _properties_of(declared)
     )
@@ -331,7 +414,10 @@ def candidate_ontology(declared: Ontology, observed: ObservedSchema) -> Ontology
         RelationshipType,
         _own_properties,
     )
-    if not (new_nodes or new_rels or new_node_props or new_rel_props):
+    vocabularies = _extend_vocabularies(declared, observed)
+    if not (new_nodes or new_rels or new_node_props or new_rel_props) and (
+        vocabularies == declared.vocabularies
+    ):
         return None
     # The declared patterns themselves (not their observed equals), so their cardinality stays.
     patterns = set(declared.patterns)
@@ -346,7 +432,37 @@ def candidate_ontology(declared: Ontology, observed: ObservedSchema) -> Ontology
         node_types=node_types,
         relationship_types=relationship_types,
         patterns=tuple(sorted(patterns)),
+        vocabularies=vocabularies,
     )
+
+
+def _extend_vocabularies(declared: Ontology, observed: ObservedSchema) -> tuple[Vocabulary, ...]:
+    """The declared Vocabularies, each with the observed values outside it appended as new
+    Values (sorted), whichever bound property they were observed on. Only listed values are
+    added: those beyond a truncated list's cap are unknown."""
+    new: dict[str, set[str]] = {}
+    owners = (
+        (declared.node_types, observed.node_type, _properties_of(declared)),
+        (declared.relationship_types, observed.relationship_type, _own_properties),
+    )
+    for concepts, observed_owner, properties_of in owners:
+        for concept in concepts:
+            o = observed_owner(concept.label)
+            observed_props = {p.name: p for p in (o.properties if o else ())}
+            for p in properties_of(concept):
+                op = observed_props.get(p.name)
+                if p.vocabulary and op is not None and op.values is not None:
+                    new.setdefault(p.vocabulary, set()).update(c.value for c in op.values.counts)
+    extended = []
+    for vocabulary in declared.vocabularies:
+        known = {v.label for v in vocabulary.values}
+        added = sorted(new.get(vocabulary.label, set()) - known)
+        extended.append(
+            replace(vocabulary, values=vocabulary.values + tuple(VocabularyValue(v) for v in added))
+            if added
+            else vocabulary
+        )
+    return tuple(extended)
 
 
 def _extend(declared, observed, concept_type, properties_of: PropertiesOf):

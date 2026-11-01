@@ -84,7 +84,11 @@ class RunConformance(ConstructionRunEvaluator):
                 item=m.subject,
                 message=m.detail or str(m.kind),
                 metric=metric,
-                data={"subject_kind": m.subject_kind, "kind": str(m.kind)},
+                data={
+                    "subject_kind": m.subject_kind,
+                    "kind": str(m.kind),
+                    **({} if m.value is None else {"value": m.value, "count": m.count}),
+                },
             )
             for metric, mismatches in groups.items()
             for m in mismatches

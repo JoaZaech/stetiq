@@ -213,7 +213,7 @@ if outcome.drift is not None:
         print(finding.kind, finding.subject, finding.detail)
 ```
 
-The Observation is compared with the Contract Alias's Ontology Version (structural Drift) and with the previous Observation (statistical Drift, only for count changes beyond the thresholds, as fractions: `0.2` is 20 %). Drift raises a Drift event; it never creates an Ontology Version. `client.list_observations("support")` and `client.list_drift_events("support")` list them, oldest first. `stetiq observe` does the same from the command line.
+The Observation is compared with the Contract Alias's Ontology Version (structural Drift: `undeclared`, `vanished`, and `undeclared_value` for each value of a Vocabulary-bound attribute outside its Vocabulary, named in `finding.value`) and with the previous Observation (statistical Drift, only for count changes beyond the thresholds, as fractions: `0.2` is 20 %). Drift raises a Drift event; it never creates an Ontology Version. `client.list_observations("support")` and `client.list_drift_events("support")` list them, oldest first. `stetiq observe` does the same from the command line.
 
 ## Use Cases and Competency Questions
 
