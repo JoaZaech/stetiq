@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import ipaddress
+import json
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Annotated
@@ -970,6 +971,36 @@ def consumer_gate_results(
             f"(Ontology Version {r.baseline_ontology_version})"
         )
         _echo_outcomes(r.outcomes, indent="  ")
+
+
+# --- The run context ---------------------------------------------------------------------
+
+
+@app.command("context")
+def context(
+    knowledge_graph: Annotated[
+        str | None, typer.Argument(help="Default: `knowledge_graph` from the repo config")
+    ] = None,
+    version: Annotated[
+        int | None,
+        typer.Option("--version", help="Ontology Version (default: the Contract Alias's)"),
+    ] = None,
+    config: ConfigPath = None,
+    tracking_uri: TrackingUri = None,
+) -> None:
+    """Print the run context as JSON: the Ontology Version to extract against, the latest
+    Use Case Version, that version's evaluation results and the executed Competency
+    Questions of the latest finished run standing for it. No instance data. Needs read."""
+    try:
+        kg = knowledge_graph or _repo_config(config).get("knowledge_graph")
+        if not kg:
+            raise StetiqError(
+                "no Knowledge Graph given (argument or `knowledge_graph` in the repo config)"
+            )
+        data = _client(tracking_uri).run_context(kg, version=version).to_dict()
+    except StetiqError as e:
+        raise _fail(e) from None
+    typer.echo(json.dumps(data, indent=2, ensure_ascii=False))
 
 
 # --- Construction Runs and Observations -------------------------------------------------

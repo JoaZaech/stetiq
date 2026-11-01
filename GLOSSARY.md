@@ -59,7 +59,7 @@ The Ontology as it actually appears in a Graph Source, together with its aggrega
 _Avoid_: Inferred ontology, actual schema
 
 **Conformance**:
-The degree to which an Observed Schema satisfies its Declared Ontology's Axioms.
+The degree to which an Observed Schema satisfies its Declared Ontology's Axioms; for a Construction Run that gives rise to a Candidate, that Candidate's Axioms, so what the run added is the Candidate's Ontology Diff rather than a mismatch.
 _Avoid_: Compliance, validity
 
 **Knowledge Graph**:

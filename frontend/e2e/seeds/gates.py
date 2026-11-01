@@ -41,7 +41,8 @@ REVIEW_DETAILS = (
 
 def _graph(*, escalated: bool) -> stetiq.InMemoryGraphSource:
     """Ada and a Ticket; with `escalated`, a Ticket.priority and an `ESCALATED`
-    relationship that SUPPORT_V1 lacks (Conformance 0.5455), else none (Conformance 0.75)."""
+    relationship that SUPPORT_V1 lacks (Conformance 0.5455 under strict Evolution Mode,
+    which fails the run), else none (Conformance 0.75)."""
     graph = stetiq.InMemoryGraphSource()
     ada, ticket = add_ada_and_ticket(graph, priority=2 if escalated else None)
     if escalated:
@@ -69,8 +70,9 @@ def _run(tracking_uri: str, *, escalated: bool, review: float | None, precision:
 
 
 def gates(client: stetiq.Client) -> dict[str, Any]:
-    """`support` (Contract Alias `production` on v1), gated by GATES (`gates`, the YAML),
-    with four finished runs, oldest first:
+    """`support` (Contract Alias `production` on v1, strict Evolution Mode, so an
+    escalated run is judged against v1 and fails), gated by GATES (`gates`, the YAML),
+    with four runs that reached their Observation, oldest first:
 
     - `baseline`: escalated graph (Conformance 0.5455 < 0.6, fail), review 0.9 (pass),
       no earlier Observation (count drop passes). The only run with a recorded Gate
@@ -91,6 +93,9 @@ def gates(client: stetiq.Client) -> dict[str, Any]:
     """
     client.create_knowledge_graph("support", ontology=SUPPORT_V1)
     client.bind_graph_source("support", GraphSourceScope(database="neo4j"))
+    # Strict: an evolving run would be judged against the Candidate absorbing what the
+    # escalated graph adds, and every run would pass the Conformance floor.
+    client.set_evolution_mode("support", "strict")
     client.set_alias("support", "production", 1)
     uri = client.tracking_uri
     baseline = _run(uri, escalated=True, review=0.9, precision=0.9)
@@ -108,9 +113,11 @@ def gates(client: stetiq.Client) -> dict[str, Any]:
 
 
 def never_gated(client: stetiq.Client) -> dict[str, Any]:
-    """`support` with two reviewed runs and no Gate result ever: `first`, `second`."""
+    """`support` (strict, as in `gates`) with two reviewed runs and no Gate result ever:
+    `first`, `second`."""
     client.create_knowledge_graph("support", ontology=SUPPORT_V1)
     client.bind_graph_source("support", GraphSourceScope(database="neo4j"))
+    client.set_evolution_mode("support", "strict")
     uri = client.tracking_uri
     first = _run(uri, escalated=True, review=0.9, precision=0.9)
     second = _run(uri, escalated=False, review=0.6, precision=0.8)

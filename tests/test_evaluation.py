@@ -354,3 +354,8 @@ def test_a_built_in_name_is_refused_with_one_message_however_the_evaluator_is_gi
         client.evaluate(kg.name, 1, evaluators=[impostor])
 
     assert str(registered.value) == str(one_off.value) == BUILT_IN_NAME_MESSAGE
+
+
+def test_no_custom_evaluator_can_shadow_unjustified_additions(client, kg):
+    with pytest.raises(stetiq.EvaluatorError, match="'unjustified_additions' is a built-in"):
+        client.register_evaluator(Returns("unjustified_additions", {}))

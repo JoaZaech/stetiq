@@ -60,8 +60,9 @@ def construction_runs(_client: stetiq.Client) -> dict[str, Any]:
     `Ticket.priority` and an `ESCALATED` relationship no Ontology declares:
 
     - `support` (evolving), with a Use Case whose Competency Questions have queries:
-      `finished`, a run with params and metrics that ended and produced Candidate v2
-      (`customer-names` passes, `open-tickets` errors: its query has no result), also
+      `finished`, a run with params and metrics that ended and produced Candidate v2,
+      against which its Conformance is judged (0.8182: Party and Party.name are absent;
+      what it added is v2's Ontology Diff, not a mismatch) (`customer-names` passes, `open-tickets` errors: its query has no result), also
       evaluated by a custom `review` Evaluator in two configurations
       (`min_confidence=0.5` scores 0.9, `min_confidence=0.8` 0.6);
       `aborted`, a run that failed before observing anything;

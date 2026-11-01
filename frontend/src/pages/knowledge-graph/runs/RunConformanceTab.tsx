@@ -1,4 +1,6 @@
+import { Link } from 'react-router'
 import type { Mismatch } from '@/api/runs'
+import { kgUrl } from '@/app/knowledge-graph-sections'
 import {
   Table,
   TableBody,
@@ -32,7 +34,8 @@ const MISMATCH_KIND: Record<Mismatch['kind'], string> = {
  * The run page's Conformance tab: the score, then each mismatch. Concepts declared
  * but not observed and observed but not declared get a table each (as
  * `Conformance.declared_absent` / `undeclared` split them); endpoint patterns and
- * attribute value mismatches are listed after them.
+ * attribute value mismatches are listed after them. A run that gave rise to a Candidate
+ * is judged against that Candidate, and the Score panel says so.
  */
 export function RunConformanceTab() {
   const run = useConstructionRunTab()
@@ -57,6 +60,19 @@ export function RunConformanceTab() {
           The share of checked classes, relations, attributes and patterns that are both declared
           and observed, with no mismatch.
         </p>
+        {run.candidate_version !== null && (
+          <p className="text-sm text-muted-foreground" role="note" aria-label="Judged against">
+            Judged against Candidate{' '}
+            <Link
+              to={kgUrl(run.knowledge_graph, 'versions', run.candidate_version)}
+              className="text-primary underline-offset-4 hover:underline"
+            >
+              v{run.candidate_version}
+            </Link>
+            , the version this run gave rise to: what it added is that Candidate's Ontology Diff,
+            not a mismatch.
+          </p>
+        )}
       </Panel>
       <MismatchTable title="Declared but not observed" mismatches={absent} />
       <MismatchTable title="Observed but not declared" mismatches={undeclared} />

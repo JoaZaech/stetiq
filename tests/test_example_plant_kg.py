@@ -53,14 +53,16 @@ def test_the_first_run_shows_the_gaps_and_proposes_a_candidate(demo):
     run = demo.run1
     assert run.status == "finished"
     assert run.ontology_version == 1
-    assert run.conformance.score == pytest.approx(30 / 33)
+    # Judged against Candidate v2, which adds the undeclared WorkOrder.downtime_minutes.
+    assert run.conformance.score == pytest.approx(31 / 33)
     assert {(str(m.kind), m.subject) for m in run.conformance.mismatches} == {
         ("required_missing", "Technician.badge"),
-        ("undeclared", "WorkOrder.downtime_minutes"),
         ("absent", "SUPPLIED_BY"),
     }
     assert run.candidate_version == 2
     assert demo.priya.get_ontology_version(KG, 2).origin == "run"
+    added = demo.priya.diff_ontology_versions(KG, 1, 2).changes
+    assert [c.concept for c in added] == ["WorkOrder.downtime_minutes"]
 
     results = demo.priya.get_run_evaluation_results(run.id)
     execution = result(results, "competency_question_execution")

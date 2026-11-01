@@ -3,7 +3,8 @@
 Built-in run Evaluators, by stable name (Gates refer to these names and metrics):
 
 - `conformance` (`RUN_CONFORMANCE_EVALUATOR`, server-side): the run's Conformance as
-  metrics. Metrics `score`, `mismatches`, `declared_absent`, `undeclared`,
+  metrics (against its Candidate for an evolving run that gave rise to one, else
+  against its Declared Ontology). Metrics `score`, `mismatches`, `declared_absent`, `undeclared`,
   `pattern_mismatches`, `property_mismatches`; one Detail per mismatch.
 - `observed_schema` (`OBSERVED_SCHEMA_EVALUATOR`, server-side): Observed Schema
   statistics (aggregates only).
@@ -72,7 +73,11 @@ class RunConformance(ConstructionRunEvaluator):
     name = RUN_CONFORMANCE_EVALUATOR
 
     def evaluate(self, run: ConstructionRunSubject) -> Evaluation:
-        conformance = assess_conformance(run.declared_ontology.ontology, run.observation.schema)
+        # The run's recorded Conformance: `end_run` judges an evolving run against its
+        # Candidate, any other run against its Declared Ontology.
+        conformance = run.run.conformance or assess_conformance(
+            run.declared_ontology.ontology, run.observation.schema
+        )
         groups = {
             "declared_absent": conformance.declared_absent,
             "undeclared": conformance.undeclared,

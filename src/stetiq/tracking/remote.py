@@ -156,6 +156,11 @@ class RemoteTrackingService:
         data = self._call("GET", self._kg_path(knowledge_graph) + "/runs")
         return [codec.run_from_json(r) for r in data]
 
+    def latest_finished_run(self, knowledge_graph: str, version: int) -> ConstructionRun | None:
+        path = f"{self._kg_path(knowledge_graph)}/ontology-versions/{version}/latest-finished-run"
+        data = self._call("GET", path)
+        return None if data is None else codec.run_from_json(data)
+
     def log_params(self, run_id: str, params: dict[str, str]) -> None:
         self._call("POST", self._run_path(run_id) + "/params", {"params": params})
 
