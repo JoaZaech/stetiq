@@ -3,6 +3,8 @@
 from stetiq.evaluation.alignment import GoldOntologyAlignment
 from stetiq.evaluation.answerability import (
     ANSWERABILITY_EVALUATOR,
+    COVERAGE_EVALUATOR,
+    CompetencyQuestionCoverage,
     CompetencyQuestionMapper,
     StructuralAnswerability,
 )
@@ -26,9 +28,11 @@ from stetiq.evaluation.run import (
 
 __all__ = [
     "ANSWERABILITY_EVALUATOR",
+    "COVERAGE_EVALUATOR",
     "CQ_EXECUTION_EVALUATOR",
     "OBSERVED_SCHEMA_EVALUATOR",
     "RUN_CONFORMANCE_EVALUATOR",
+    "CompetencyQuestionCoverage",
     "CompetencyQuestionMapper",
     "ConstructionRunEvaluator",
     "ConstructionRunSubject",

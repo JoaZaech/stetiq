@@ -17,6 +17,10 @@ all stand in for each other (a pattern on `Party` serves a question about
 A question is "regressed" when the Contract Alias's Ontology Version answers it but
 the judged version does not, so a Gate can block a Promotion that would stop
 answering it.
+
+`competency_question_coverage` reads the same Concept mapping the other way round: which
+Concepts of the version no Competency Question references. It shares the mapping (and
+so the mapper's answers) with `structural_answerability`, so the two always agree.
 """
 
 from __future__ import annotations
@@ -26,6 +30,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from stetiq.evaluation.framework import Detail, Evaluation, OntologyVersionEvaluator
 from stetiq.ontology import Ontology
+from stetiq.ontology.model import ConceptKind, NodeType, RelationshipType
 from stetiq.use_case.concepts import (
     ConceptRef,
     NodeTypeRef,
@@ -42,6 +47,7 @@ if TYPE_CHECKING:
     from stetiq.tracking.entities import OntologyVersion
 
 ANSWERABILITY_EVALUATOR = "structural_answerability"
+COVERAGE_EVALUATOR = "competency_question_coverage"
 
 
 class CompetencyQuestionMapper(Protocol):
@@ -118,6 +124,42 @@ class _OntologyIndex:
                 return [] if self._has_path(source, relationships, target, directed) else [req]
         raise TypeError(f"not a requirement: {req!r}")
 
+    def referenced(self, req: Requirement) -> set[tuple[ConceptKind, str]]:
+        """The Concepts of the Ontology that `req` names, as (kind, identity) pairs.
+
+        An attribute is identified as `Owner.name`; one named on a node type is found on
+        the node type, its ancestors or its descendants, as `missing` matches it."""
+        match req:
+            case ConceptRef(label) | NodeTypeRef(label):
+                out: set[tuple[ConceptKind, str]] = set()
+                if label in self.nodes:
+                    out.add(("node_type", label))
+                if isinstance(req, ConceptRef) and label in self.rels:
+                    out.add(("relationship_type", label))
+                return out
+            case RelationshipTypeRef(labels):
+                return {("relationship_type", label) for label in labels if label in self.rels}
+            case PropertyRef(owners, name):
+                out = set()
+                for owner in owners:
+                    if owner in self.rels:
+                        out.add(("relationship_type", owner))
+                        if any(p.name == name for p in self.rels[owner].properties):
+                            out.add(("property", f"{owner}.{name}"))
+                    elif owner in self.nodes:
+                        out.add(("node_type", owner))
+                        for node in self.related(owner):
+                            if node in self.nodes and any(
+                                p.name == name for p in self.nodes[node].properties
+                            ):
+                                out.add(("property", f"{node}.{name}"))
+                return out
+            case PathRef(source, relationships, target, _):
+                out = {("node_type", end) for end in (source, target) if end in self.nodes}
+                out.update(("relationship_type", r) for r in relationships if r in self.rels)
+                return out
+        raise TypeError(f"not a requirement: {req!r}")
+
     def _has_path(self, source, relationships, target, directed) -> bool:
         sources = self.related(source) if source else None
         targets = self.related(target) if target else None
@@ -163,6 +205,8 @@ class StructuralAnswerability(OntologyVersionEvaluator):
         self.use_case = use_case
         self.mapper = mapper
         self.contract = contract
+        # Each question is mapped once per Ontology, however many Evaluators read it.
+        self._mappings: dict[int, tuple[Ontology, dict]] = {}
 
     def evaluate(self, version) -> Evaluation:
         index = _OntologyIndex(version.ontology)
@@ -216,7 +260,20 @@ class StructuralAnswerability(OntologyVersionEvaluator):
             details=details + regressions,
         )
 
-    def _requirements(
+    def concept_mapping(
+        self, ontology: Ontology
+    ) -> dict[str, tuple[str | None, list[Requirement], str | None]]:
+        """Per question id: (source, requirements, mapper error) against `ontology`."""
+        cached = self._mappings.get(id(ontology))
+        if cached is None or cached[0] is not ontology:
+            mapping = {
+                q.id: self._map(q, ontology)
+                for q in sorted(self.use_case.competency_questions, key=lambda q: q.id)
+            }
+            cached = self._mappings[id(ontology)] = (ontology, mapping)
+        return cached[1]
+
+    def _map(
         self, question: CompetencyQuestion, ontology: Ontology
     ) -> tuple[str | None, list[Requirement], str | None]:
         if question.concepts:
@@ -237,7 +294,7 @@ class StructuralAnswerability(OntologyVersionEvaluator):
         return None, [], None
 
     def _judge(self, question: CompetencyQuestion, index: _OntologyIndex) -> dict:
-        source, required, error = self._requirements(question, index.ontology)
+        source, required, error = self.concept_mapping(index.ontology)[question.id]
         missing: list[str] = []
         for req in required:
             for m in index.missing(req):
@@ -256,6 +313,68 @@ class StructuralAnswerability(OntologyVersionEvaluator):
         if error:
             data["error"] = error
         return data
+
+
+class CompetencyQuestionCoverage(OntologyVersionEvaluator):
+    """Which Concepts of the version no Competency Question references.
+
+    Metrics: `concepts`, `traced_concepts`, `untraced_concepts`, `traced_concept_ratio`
+    (1.0 for an Ontology without Concepts). One Detail per untraced Concept (`item` =
+    `Label` or `Owner.attribute`, `metric` = `untraced_concepts`, `data` = `{kind}`).
+    Deprecated Concepts, and the attributes of deprecated classes and relations, are
+    left out of every count. It reads `answerability`'s Concept mapping.
+    """
+
+    name = COVERAGE_EVALUATOR
+
+    def __init__(self, answerability: StructuralAnswerability) -> None:
+        self.answerability = answerability
+
+    def evaluate(self, version) -> Evaluation:
+        ontology = version.ontology
+        index = _OntologyIndex(ontology)
+        traced: set[tuple[ConceptKind, str]] = set()
+        for _, required, _ in self.answerability.concept_mapping(ontology).values():
+            for req in required:
+                traced |= index.referenced(req)
+        concepts = _live_concepts(ontology)
+        untraced = [c for c in concepts if c not in traced]
+        total = len(concepts)
+        return Evaluation(
+            metrics={
+                "concepts": total,
+                "traced_concepts": total - len(untraced),
+                "untraced_concepts": len(untraced),
+                "traced_concept_ratio": (total - len(untraced)) / total if total else 1.0,
+            },
+            details=[
+                Detail(
+                    item=identity,
+                    message="no Competency Question references it",
+                    metric="untraced_concepts",
+                    data={"kind": kind},
+                )
+                for kind, identity in untraced
+            ],
+        )
+
+
+def _live_concepts(ontology: Ontology) -> list[tuple[ConceptKind, str]]:
+    """Every Concept that is not deprecated, in declaration order."""
+    out: list[tuple[ConceptKind, str]] = []
+    owners: list[tuple[ConceptKind, NodeType | RelationshipType]] = []
+    owners.extend(("node_type", n) for n in ontology.node_types)
+    owners.extend(("relationship_type", r) for r in ontology.relationship_types)
+    for kind, owner in owners:
+        if owner.deprecated or owner.replaced_by:
+            continue
+        out.append((kind, owner.label))
+        out.extend(
+            ("property", f"{owner.label}.{p.name}")
+            for p in owner.properties
+            if not (p.deprecated or p.replaced_by)
+        )
+    return out
 
 
 def _regression_message(contract_version: int, missing: list[str]) -> str:
