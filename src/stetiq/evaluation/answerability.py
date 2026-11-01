@@ -29,12 +29,11 @@ Concepts the Candidate adds to the version its run consumed that no question nee
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 from stetiq.evaluation.framework import Detail, Evaluation, OntologyVersionEvaluator
 from stetiq.ontology import Ontology
-from stetiq.ontology.diff import ChangeKind, diff_ontologies
+from stetiq.ontology.diff import added_concepts
 from stetiq.ontology.model import ConceptKind, live_concepts
 from stetiq.use_case.concepts import (
     ConceptRef,
@@ -359,7 +358,7 @@ class UnjustifiedAdditions(OntologyVersionEvaluator):
 
     def evaluate(self, version) -> Evaluation:
         ontology = version.ontology
-        added = [] if self.base is None else _added_concepts(self.base, ontology)
+        added = [] if self.base is None else added_concepts(self.base, ontology)
         needed: set[tuple[ConceptKind, str]] = set()
         if self.answerability is not None:
             index = _OntologyIndex(ontology)
@@ -390,45 +389,6 @@ class UnjustifiedAdditions(OntologyVersionEvaluator):
                 for a in unjustified
             ],
         )
-
-
-@dataclass(frozen=True)
-class _AddedConcept:
-    """A Concept the Ontology Diff adds; `owner` is the (kind, identity) of the added
-    Class or Relation an Attribute belongs to, or of the declared one it was added to."""
-
-    kind: ConceptKind
-    identity: str
-    owner: tuple[ConceptKind, str] | None = None
-
-    @property
-    def key(self) -> tuple[ConceptKind, str]:
-        return (self.kind, self.identity)
-
-
-def _added_concepts(base: Ontology, target: Ontology) -> list[_AddedConcept]:
-    """Every Concept the diff from `base` to `target` adds; an added Class or Relation
-    brings its own Attributes, owned by it."""
-    owners = {
-        **{("node_type", n.label): n for n in target.node_types},
-        **{("relationship_type", r.label): r for r in target.relationship_types},
-    }
-    added: list[_AddedConcept] = []
-    for change in diff_ontologies(base, target).changes:
-        if change.kind != ChangeKind.ADDED:
-            continue
-        if change.concept_kind in ("node_type", "relationship_type"):
-            concept = _AddedConcept(change.concept_kind, change.concept)
-            added.append(concept)
-            added += [
-                _AddedConcept("property", f"{change.concept}.{p.name}", concept.key)
-                for p in owners[concept.key].properties
-            ]
-        elif change.concept_kind == "property" and change.owner and change.owner_kind:
-            added.append(
-                _AddedConcept("property", change.concept, (change.owner_kind, change.owner))
-            )
-    return added
 
 
 def _regression_message(contract_version: int, missing: list[str]) -> str:

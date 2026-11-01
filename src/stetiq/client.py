@@ -67,7 +67,7 @@ from stetiq.tracking import (
     UseCaseVersion,
 )
 from stetiq.tracking.entities import DriftEvent, EvolutionMode, ObservationOutcome
-from stetiq.tracking.service import check_not_built_in
+from stetiq.tracking.service import check_not_built_in, check_proposed_definitions
 from stetiq.use_case import (
     CompetencyQuestion,
     UseCase,
@@ -867,6 +867,7 @@ class ActiveRun:
         self.knowledge_graph = run.knowledge_graph
         self.ontology_version = run.ontology_version
         self.declared_ontology = declared_ontology
+        self._proposed_definitions: dict[str, str] = {}
 
     def log_param(self, key: str, value: object) -> None:
         self.log_params({key: value})
@@ -882,6 +883,15 @@ class ActiveRun:
         """Logging a key again replaces its value."""
         self._service.log_metrics(self.id, {k: float(v) for k, v in metrics.items()})
 
+    def propose_definitions(self, definitions: Mapping[str, str]) -> None:
+        """Propose a Definition for each Concept this run adds, by Concept reference
+        (`Supplier`, `SUPPLIED_BY`, `Supplier.name`). Calls merge; a later proposal for the
+        same Concept wins. They travel with the end of the run, where the tracking service
+        applies them only to Concepts the run's Candidate adds and lists the others in
+        `ConstructionRun.ignored_definitions`. Raises `OntologyValidationError` for a
+        reference that names no Class, Relation or Attribute, or an empty Definition."""
+        self._proposed_definitions.update(check_proposed_definitions(definitions))
+
     def end(self) -> ConstructionRun:
         """End the run: observe the whole bound Graph Source scope and store the
         Observed Schema. If the Observation fails, the run is marked failed.
@@ -896,7 +906,7 @@ class ActiveRun:
         except BaseException:
             self._service.fail_run(self.id)
             raise
-        run = self._service.end_run(self.id, (scope, schema))
+        run = self._service.end_run(self.id, (scope, schema), self._proposed_definitions or None)
         if self._on_end is not None:
             self._on_end(run)
         return run

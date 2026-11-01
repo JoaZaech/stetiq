@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 import threading
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -214,6 +214,15 @@ run_candidates = Table(
         ["knowledge_graph", "ontology_version"],
         ["ontology_versions.knowledge_graph", "ontology_versions.number"],
     ),
+)
+
+
+# The Concept references whose proposed Definitions a run's end ignored (a new table).
+run_ignored_definitions = Table(
+    "run_ignored_definitions",
+    metadata,
+    Column("run_id", Text, ForeignKey("construction_runs.id"), nullable=False),
+    Column("concept", Text, nullable=False),
 )
 
 
@@ -546,7 +555,12 @@ class SqlStore:
             metrics: dict[str, dict[str, float]] = {i: {} for i in ids}
             conformance: dict[str, Conformance] = {}
             candidates: dict[str, int] = {}
+            ignored: dict[str, list[str]] = {i: [] for i in ids}
             if ids:
+                for c in conn.execute(
+                    select(run_ignored_definitions).where(run_ignored_definitions.c.run_id.in_(ids))
+                ):
+                    ignored[c.run_id].append(c.concept)
                 for c in conn.execute(
                     select(run_conformance).where(run_conformance.c.run_id.in_(ids))
                 ):
@@ -574,6 +588,7 @@ class SqlStore:
                 observation_id=r["observation_id"],
                 conformance=conformance.get(r["id"]),
                 candidate_version=candidates.get(r["id"]),
+                ignored_definitions=tuple(sorted(ignored[r["id"]])),
             )
             for r in rows
         ]
@@ -632,6 +647,15 @@ class SqlStore:
                     knowledge_graph=knowledge_graph,
                     ontology_version=ontology_version,
                 )
+            )
+
+    def set_run_ignored_definitions(self, run_id: str, concepts: Sequence[str]) -> None:
+        if not concepts:
+            return
+        with self._connection() as conn:
+            conn.execute(
+                insert(run_ignored_definitions),
+                [{"run_id": run_id, "concept": c} for c in concepts],
             )
 
     # --- Evolution Mode -------------------------------------------------------------

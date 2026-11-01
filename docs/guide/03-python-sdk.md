@@ -203,6 +203,22 @@ client.set_evolution_mode("support", "evolving")  # or "strict"
 - *evolving* (the default): the run finishes and a Candidate Ontology Version is registered from what it observed, linked to the run. The run's Conformance is judged against that Candidate, so what it added is not a mismatch; `client.diff_ontology_versions("support", run.ontology_version, run.candidate_version)` shows what it added, and `unjustified_additions` on the Candidate counts the additions no Competency Question needs.
 - *strict*: the run is marked failed, with Conformance judged against its Declared Ontology.
 
+A Candidate is built from the Observed Schema, which carries no Definitions. When your upstream pipeline adds Concepts, it can say what they are, before the run ends:
+
+```python
+with client.start_run("plant") as run:
+    extract(...)  # adds Supplier and SUPPLIED_BY to the graph
+    run.propose_definitions({
+        "Supplier": "A company that supplies components",
+        "SUPPLIED_BY": "Links a component to the company that supplied it",
+        "Supplier.name": "The supplier's registered name",
+    })
+
+client.get_run(run.id).ignored_definitions   # e.g. ("Component",)
+```
+
+`propose_definitions` takes Concept references (`Label` for a Class or Relation, `Owner.attribute` for an attribute) mapped to their Definitions. Calls merge, and a later proposal for the same Concept wins. The proposals travel with the end of the run. The tracking service applies them only to the Concepts the Candidate adds, which includes the attributes of an added Class or Relation, so the Candidate is born documented and the `definitions` Evaluator counts them. It never changes a Concept that was already declared. A proposal for a declared Concept, for something the run didn't add, or for a run that gives rise to no Candidate (strict mode, or nothing added) is ignored, and `ConstructionRun.ignored_definitions` lists those references, sorted. A reference that names no Class, Relation or attribute, or a Definition that is empty, raises `OntologyValidationError` when you propose it. Definitions are part of the Ontology, so they count in the Candidate's content hash: runs that add the same Concepts with the same Definitions share one Candidate.
+
 Then read the result:
 
 ```python
