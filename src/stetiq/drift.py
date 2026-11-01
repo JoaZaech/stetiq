@@ -4,11 +4,11 @@ Schema, thresholds) -> Drift findings. No I/O.
 Drift is a divergence, found by an Observation, between a Graph Source's Observed Schema
 and the Contract Alias's Ontology Version. It has two parts:
 
-- **structural**: Concepts (node types, relationship types, properties) observed but not
-  declared by the contract (`undeclared`), or declared but no longer observed
-  (`vanished`); and values of a Vocabulary-bound property outside the contract's
-  Vocabulary (`undeclared_value`, one per value). This reuses the Conformance engine, so "is X declared" means exactly
-  what it means for a run's Conformance (inherited properties, etc.).
+- **structural**: Concepts (Classes, Relations, Attributes) observed but not declared by
+  the contract (`undeclared`), or declared but no longer observed (`vanished`); and values
+  of a Vocabulary-bound Attribute outside the contract's Vocabulary (`undeclared_value`,
+  one per value). This reuses the Conformance engine, so "is X declared" means exactly
+  what it means for a run's Conformance (inherited Attributes, etc.).
 - **statistical**: a node or relationship type's count changing, relative to the
   previous Observation, by more than the configured fraction (`count_drop`,
   `count_increase`). Off unless a threshold is set.
@@ -165,11 +165,7 @@ def assess_drift(
             value=m.value,
         )
         for m in conformance.mismatches
-        if m.kind in _STRUCTURAL
-        and m.subject_kind != "pattern"  # patterns are not Concepts
-        # Drift names each value; a truncated value list with no listed value outside the
-        # Vocabulary names none, so it is no Drift.
-        and (m.kind != MismatchKind.VALUE_OUTSIDE_VOCABULARY or m.value is not None)
+        if m.kind in _STRUCTURAL and m.subject_kind != "pattern"  # patterns are not Concepts
     ]
     if previous is not None and thresholds is not None:
         findings.extend(_statistical(observed, previous, thresholds))

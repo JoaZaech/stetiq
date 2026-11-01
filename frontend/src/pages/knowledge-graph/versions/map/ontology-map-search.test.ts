@@ -7,21 +7,21 @@ const RETAIL: Ontology = {
   node_types: [
     {
       label: 'Bin',
-      description: 'A storage location inside a Warehouse, added by the warehouse team',
+      definition: 'A storage location inside a Warehouse, added by the warehouse team',
       properties: [
         { name: 'code', type: 'STRING' },
         { name: 'warehouse', type: 'STRING' },
       ],
     },
     { label: 'Shipment' },
-    { label: 'Warehouse', description: 'A fulfilment site shipments leave from' },
+    { label: 'Warehouse', definition: 'A fulfilment site shipments leave from' },
     { label: 'WarehouseZone' },
   ],
   relationship_types: [
-    { label: 'SHIPPED_FROM', description: 'The warehouse a shipment left' },
+    { label: 'SHIPPED_FROM', definition: 'The warehouse a shipment left' },
     {
       label: 'STORED_IN',
-      properties: [{ name: 'since', type: 'DATE', description: 'When it moved to the warehouse' }],
+      properties: [{ name: 'since', type: 'DATE', definition: 'When it moved to the warehouse' }],
     },
   ],
   patterns: [

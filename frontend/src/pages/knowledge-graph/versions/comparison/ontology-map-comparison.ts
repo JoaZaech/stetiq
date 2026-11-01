@@ -257,10 +257,10 @@ export function descriptionChangeOf(
   const describe = (ontology: Ontology) => {
     const concepts = (kind: OwnerKind) => (kind === 'node_type' ? ontology.node_types : ontology.relationship_types)
     if (change.concept_kind !== 'property') {
-      return concepts(change.concept_kind).find((c) => c.label === change.concept)?.description ?? ''
+      return concepts(change.concept_kind).find((c) => c.label === change.concept)?.definition ?? ''
     }
     const owner = concepts(change.owner_kind).find((c) => c.label === change.owner)
-    return owner?.properties?.find((p) => p.name === change.attribute)?.description ?? ''
+    return owner?.properties?.find((p) => p.name === change.attribute)?.definition ?? ''
   }
   return { before: describe(base), after: describe(target) }
 }

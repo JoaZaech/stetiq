@@ -25,7 +25,7 @@ const V3: Ontology = {
     { label: 'Stop', properties: [{ name: 'wheelchair_boarding', type: 'INTEGER' }] },
     { label: 'Trip', properties: [{ name: 'bikes_allowed', type: 'INTEGER' }] },
   ],
-  relationship_types: [{ label: 'HAS_TRIP', description: 'The scheduled trips of a route' }, { label: 'SERVES' }],
+  relationship_types: [{ label: 'HAS_TRIP', definition: 'The scheduled trips of a route' }, { label: 'SERVES' }],
   patterns: [
     ['Route', 'HAS_TRIP', 'Trip'],
     ['Trip', 'SERVES', 'Stop'],

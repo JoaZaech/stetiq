@@ -20,18 +20,18 @@ export const PARTIES: Ontology = {
   node_types: [
     {
       label: 'Customer',
-      description: 'Someone who opens tickets',
+      definition: 'Someone who opens tickets',
       parent: 'Party',
       properties: [{ name: 'email', type: 'STRING' }],
     },
     { label: 'Party', properties: [{ name: 'name', type: 'STRING', required: true }] },
     { label: 'Ticket' },
-    { label: 'VipCustomer', parent: 'Customer', properties: [{ name: 'tier', type: 'INTEGER', description: '1 to 3' }] },
+    { label: 'VipCustomer', parent: 'Customer', properties: [{ name: 'tier', type: 'INTEGER', definition: '1 to 3' }] },
   ],
   relationship_types: [
     {
       label: 'OPENED',
-      description: 'The customer opened the ticket',
+      definition: 'The customer opened the ticket',
       properties: [{ name: 'at', type: 'DATE_TIME', required: true }],
     },
   ],
@@ -85,7 +85,7 @@ const TRANSIT_V3: Ontology = {
     { label: 'Trip', properties: [{ name: 'bikes_allowed', type: 'INTEGER' }] },
   ],
   relationship_types: [
-    { label: 'HAS_TRIP', description: 'The scheduled trips of a route' },
+    { label: 'HAS_TRIP', definition: 'The scheduled trips of a route' },
     { label: 'OPERATES' },
     { label: 'SERVES' },
   ],

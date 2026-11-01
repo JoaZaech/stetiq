@@ -1,11 +1,14 @@
 import { useQuery } from '@tanstack/react-query'
 import { api, kgPath } from './client'
 
-/** The canonical Ontology dict (ontology/canonical.py `to_dict`): defaults are omitted. */
+/**
+ * The Ontology on the wire (tracking/codec.py `ontology_to_json`): the canonical dict, with
+ * defaults omitted and each Definition under `definition`.
+ */
 export interface OntologyProperty {
   name: string
   type: string
-  description?: string
+  definition?: string
   required?: boolean
   /** The label of the Vocabulary this STRING attribute is bound to. */
   vocabulary?: string
@@ -14,13 +17,13 @@ export interface OntologyProperty {
 /** A Vocabulary and its Vocabulary Values, each identified by its label. */
 export interface OntologyVocabulary {
   label: string
-  description?: string
-  values: { label: string; description?: string; deprecated?: boolean; replacedBy?: string }[]
+  definition?: string
+  values: { label: string; definition?: string; deprecated?: boolean; replacedBy?: string }[]
 }
 
 export interface OntologyConcept {
   label: string
-  description?: string
+  definition?: string
   properties?: OntologyProperty[]
   deprecated?: boolean
   replacedBy?: string

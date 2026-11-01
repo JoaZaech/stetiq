@@ -127,7 +127,7 @@ export function conceptTables(ontology: Ontology): ConceptTables {
     for (const node of level) {
       classes.push({
         label: node.label,
-        description: node.description,
+        description: node.definition,
         deprecated: node.deprecated ?? false,
         parent: node.parent,
         depth,
@@ -150,7 +150,7 @@ export function conceptTables(ontology: Ontology): ConceptTables {
 
   const relations = ontology.relationship_types.map((rel): RelationRow => ({
     label: rel.label,
-    description: rel.description,
+    description: rel.definition,
     deprecated: rel.deprecated ?? false,
     patterns: ontology.patterns
       .filter(([, relationship]) => relationship === rel.label)

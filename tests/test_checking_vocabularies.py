@@ -102,7 +102,7 @@ def test_an_attribute_without_observed_values_is_not_checked(client, plant, grap
     assert run.conformance.score == 1 / 2
 
 
-def test_a_truncated_value_list_fails_the_check_even_when_every_listed_value_conforms(
+def test_a_truncated_value_list_conforms_when_every_listed_value_is_in_the_vocabulary(
     client_factory, graph_source
 ):
     client = client_factory(value_cap=2)
@@ -112,15 +112,8 @@ def test_a_truncated_value_list_fails_the_check_even_when_every_listed_value_con
 
     run = run_once(client, "plant")
 
-    assert [(m.kind, m.value, m.detail) for m in run.conformance.mismatches] == [
-        (
-            "value_outside_vocabulary",
-            None,
-            "more than 2 distinct values observed; those beyond the cap were not checked "
-            "against Status",
-        ),
-    ]
-    assert run.conformance.score == 2 / 3
+    assert run.conformance.mismatches == ()
+    assert run.conformance.score == 1.0
 
 
 # --- Drift --------------------------------------------------------------------------

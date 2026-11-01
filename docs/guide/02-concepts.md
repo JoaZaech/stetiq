@@ -20,6 +20,8 @@ flowchart TD
 
 A **Knowledge Graph** is a named, long-lived lineage of Ontology Versions, e.g. `customer-support-kg`. It is not the graph database itself: the database, or the part of it this Knowledge Graph lives in, is its **Graph Source**, which stetiq reads but never owns.
 
+A Knowledge Graph can name a **Steward**, who watches its Drift and keeps its Definitions and Competency Questions current, and an **Authority**, who decides changes to its Ontology. Both are free-text names for display and routing; they grant no permission (access comes from [API Tokens](./05-server-and-api-tokens.md)). Set or clear them with `stetiq kg steward` and `stetiq kg authority` (see [CLI](./04-cli.md)) or `client.set_knowledge_graph_governance`.
+
 The **Ontology** is the structure of the graph: its classes, relations, attributes, hierarchy and constraints, whatever formalism you write them in. Each class, relation or attribute is a **Concept**, identified across versions by its label (an attribute by its owner's label and its name). Renaming a Concept counts as removing one and adding another, unless you declare it as a replacement.
 
 Every Concept can carry a **Definition**: what it is and what it excludes, written as `definition` in the stetiq YAML (`description`, its older spelling, is still accepted). It can also list **Alternative Labels** (`alternativeLabels`): other names people use for it, such as synonyms or acronyms ("WO" for WorkOrder). An Alternative Label never identifies a Concept, so it may not be another Concept's label in the same section (another class, relation, or attribute of the same owner).
@@ -34,6 +36,10 @@ node_types:
 ```
 
 A **Vocabulary** is a named, flat set of **Vocabulary Values** that an attribute may take, such as the statuses of a WorkOrder. It is part of the Ontology and versioned with it. A STRING attribute is bound to a Vocabulary with `vocabulary: <label>`, and one Vocabulary can be bound to several attributes (a shared `Status`, say). Each Vocabulary Value is identified by its label and, like a Concept, has its own Definition and Alternative Labels (for example the spellings a source system uses) and can be deprecated in favour of another value of the same Vocabulary. In the Ontology Diff a Vocabulary Value is named `<Vocabulary>.<value>`, e.g. `Status.done`. See [stetiq.yaml](./06-stetiq-yaml.md#vocabularies) for how to write them.
+
+A Concept or Vocabulary Value can be **deprecated**: it stays in the Ontology but is on its way out, optionally naming its replacement and a **Deprecation reason** (`deprecationReason`) that tells Consumers why. The Ontology Version that introduces a Deprecation dates it. See [Deprecation](./06-stetiq-yaml.md#deprecation).
+
+A pattern can declare its **cardinality**: the minimum and maximum number of relations each source node has to target nodes (`out`), or each target node has from source nodes (`in`), e.g. "a WorkOrder is PERFORMED_ON exactly one Machine". Conformance reports a pattern whose observed degree falls outside these bounds. See [Cardinality](./06-stetiq-yaml.md#cardinality).
 
 An **Ontology Version** is an immutable snapshot of a Knowledge Graph's Ontology. Versions are numbered per Knowledge Graph (v1, v2…). Registering an Ontology that is identical to an existing version returns that version instead of creating a new one.
 

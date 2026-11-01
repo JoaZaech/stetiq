@@ -210,12 +210,11 @@ class StructuralAnswerability(OntologyVersionEvaluator):
 
     def evaluate(self, version) -> Evaluation:
         index = _OntologyIndex(version.ontology)
+        # Regressions are judged against the Contract Alias's version, unless this is it.
         contract = self.contract
-        contract_index = (
-            None
-            if contract is None or contract.number == version.number
-            else _OntologyIndex(contract.ontology)
-        )
+        if contract is not None and contract.number == version.number:
+            contract = None
+        contract_index = None if contract is None else _OntologyIndex(contract.ontology)
         counts = {"answerable": 0, "unanswerable": 0, "unmapped": 0}
         details = []
         regressions = []
@@ -231,7 +230,8 @@ class StructuralAnswerability(OntologyVersionEvaluator):
                 )
             )
             if (
-                contract_index is not None
+                contract is not None
+                and contract_index is not None
                 and data["status"] != "answerable"
                 and self._judge(question, contract_index)["status"] == "answerable"
             ):
