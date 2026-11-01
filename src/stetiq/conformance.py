@@ -32,13 +32,13 @@ MismatchSubjectKind = ConceptKind | Literal["pattern"]
 class MismatchKind(StrEnum):
     ABSENT = "absent"  # declared, not observed
     UNDECLARED = "undeclared"  # observed, not declared
-    TYPE_MISMATCH = "type_mismatch"  # a property holds values of an undeclared type
-    REQUIRED_MISSING = "required_missing"  # a required property is not set everywhere
+    TYPE_MISMATCH = "type_mismatch"  # an Attribute holds values of an undeclared type
+    REQUIRED_MISSING = "required_missing"  # a required Attribute is not set everywhere
     # an endpoint pattern's observed out- or in-degree is outside its declared cardinality
     CARDINALITY_VIOLATION = "cardinality_violation"
-    # a Vocabulary-bound property holds a value its Vocabulary does not have (one per value)
+    # a Vocabulary-bound Attribute holds a value its Vocabulary does not have (one per value)
     VALUE_OUTSIDE_VOCABULARY = "value_outside_vocabulary"
-    # a Vocabulary-bound property holds a deprecated value: reported, but it conforms
+    # a Vocabulary-bound Attribute holds a deprecated value: reported, but it conforms
     DEPRECATED_VALUE = "deprecated_value"
 
 
@@ -286,7 +286,7 @@ def _check_values(
     declared: Property,
     observed: ObservedProperty,
 ) -> None:
-    """A Vocabulary-bound property whose values were observed is one item. Each observed
+    """A Vocabulary-bound Attribute whose values were observed is one item. Each observed
     value outside the Vocabulary fails it and is reported with its count; a deprecated
     value is reported but conforms. A truncated value list (more distinct values than the
     cap) cannot show that every value conforms, so it fails the item too; the listed
@@ -438,7 +438,7 @@ def candidate_ontology(declared: Ontology, observed: ObservedSchema) -> Ontology
 
 def _extend_vocabularies(declared: Ontology, observed: ObservedSchema) -> tuple[Vocabulary, ...]:
     """The declared Vocabularies, each with the observed values outside it appended as new
-    Values (sorted), whichever bound property they were observed on. Only listed values are
+    Values (sorted), whichever bound Attribute they were observed on. Only listed values are
     added: those beyond a truncated list's cap are unknown."""
     new: dict[str, set[str]] = {}
     owners = (
