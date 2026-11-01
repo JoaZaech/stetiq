@@ -15,14 +15,14 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 EXAMPLE_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(EXAMPLE_DIR))
 
 from evaluators import Documented, ReportCoverage  # noqa: E402
-from graphdb import DEFAULT_DATABASE, LocalGraph  # noqa: E402
+from graphdb import DEFAULT_DATABASE, PARTS_SUPPLIERS, LocalGraph  # noqa: E402
 from pipeline import (  # noqa: E402
     DEFAULT_GRAPH_FILE,
     DEFAULT_MODEL,
@@ -31,7 +31,7 @@ from pipeline import (  # noqa: E402
 )
 
 import stetiq  # noqa: E402
-from stetiq import EntryPoint, GraphSourceScope  # noqa: E402
+from stetiq import CompetencyQuestion, EntryPoint, GraphSourceScope  # noqa: E402
 from stetiq.config import load_config  # noqa: E402
 from stetiq.drift import thresholds_from_config  # noqa: E402
 
@@ -169,7 +169,38 @@ class Demo:
         run = self.construct("v1")
         return self.gate("v1", run, consumers=False, promote=True)
 
+    def declare_parts_suppliers(self) -> stetiq.UseCaseVersion:
+        """Before prompt v2: the maintenance assistant's Task now needs to know which
+        suppliers' components keep failing, a reason for the pipeline to add Supplier."""
+        current = self.priya.get_use_case_version(KG).use_case
+        question = CompetencyQuestion(
+            id="parts-suppliers",
+            question="Which suppliers' components keep failing?",
+            query=PARTS_SUPPLIERS.strip(),
+        )
+        consumers = tuple(
+            replace(
+                c,
+                tasks=tuple(
+                    replace(t, competency_questions=(*t.competency_questions, question.id))
+                    if t.id == "explain-root-causes"
+                    else t
+                    for t in c.tasks
+                ),
+            )
+            for c in current.consumers
+        )
+        return self.priya.register_use_case(
+            KG,
+            replace(
+                current,
+                competency_questions=(*current.competency_questions, question),
+                consumers=consumers,
+            ),
+        )
+
     def round_v2(self) -> RoundResult:
+        self.declare_parts_suppliers()
         run = self.construct("v2")
         result = self.gate("v2", run, consumers=True, promote=False)
         self.say(*eval_lines(self.priya, self.rounds["v1"].run, run))

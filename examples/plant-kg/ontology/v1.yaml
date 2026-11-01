@@ -22,11 +22,11 @@ node_types:
       - {name: name, type: STRING, required: true}
       - {name: badge, type: STRING, description: "HR badge number, when known"}
   - label: WorkOrder
-    description: One maintenance job from the CMMS, breakdown or preventive
+    description: One maintenance job from the CMMS
     properties:
       - {name: id, type: STRING, required: true}
       - {name: title, type: STRING}
-      - {name: kind, type: STRING, description: breakdown or preventive}
+      - {name: kind, type: STRING}
       - {name: opened_at, type: DATE}
       - {name: downtime_minutes, type: INTEGER, description: Production time lost}
   - label: FollowUp

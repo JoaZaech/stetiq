@@ -49,6 +49,11 @@ gates:
     evaluator: report_coverage
     metric: coverage
     min: 1.0
+  - name: unjustified-additions  # an evolving run may only add what a Competency Question needs
+    check: metric
+    evaluator: unjustified_additions
+    metric: unjustified_additions
+    max: 0
   - name: no-type-collapses
     check: count_drop
     max_drop: 0.25
