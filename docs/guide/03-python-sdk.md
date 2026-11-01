@@ -203,6 +203,22 @@ client.set_evolution_mode("support", "evolving")  # or "strict"
 - *evolving* (the default): the run finishes and a Candidate Ontology Version is registered from what it observed, linked to the run. The run's Conformance is judged against that Candidate, so what it added is not a mismatch; `client.diff_ontology_versions("support", run.ontology_version, run.candidate_version)` shows what it added, and `unjustified_additions` on the Candidate counts the additions no Competency Question needs.
 - *strict*: the run is marked failed, with Conformance judged against its Declared Ontology.
 
+A Candidate is built from the Observed Schema, which carries no Definitions. When your upstream pipeline adds Concepts, it can say what they are, before the run ends:
+
+```python
+with client.start_run("plant") as run:
+    extract(...)  # adds Supplier and SUPPLIED_BY to the graph
+    run.propose_definitions({
+        "Supplier": "A company that supplies components",
+        "SUPPLIED_BY": "Links a component to the company that supplied it",
+        "Supplier.name": "The supplier's registered name",
+    })
+
+client.get_run(run.id).ignored_definitions   # e.g. ("Component",)
+```
+
+`propose_definitions` takes Concept references (`Label` for a Class or Relation, `Owner.attribute` for an attribute) mapped to their Definitions. Calls merge, and a later proposal for the same Concept wins. The proposals travel with the end of the run. The tracking service applies them only to the Concepts the Candidate adds, which includes the attributes of an added Class or Relation, so the Candidate is born documented and the `definitions` Evaluator counts them. It never changes a Concept that was already declared. A proposal for a declared Concept, for something the run didn't add, or for a run that gives rise to no Candidate (strict mode, or nothing added) is ignored, and `ConstructionRun.ignored_definitions` lists those references, sorted. A reference that names no Class, Relation or attribute, or a Definition that is empty, raises `OntologyValidationError` when you propose it. Definitions are part of the Ontology, so they count in the Candidate's content hash: runs that add the same Concepts with the same Definitions share one Candidate.
+
 Then read the result:
 
 ```python
@@ -333,7 +349,7 @@ A `ConsumerGateResult` has the `consumer`, the `use_case_version` judged by, the
 
 ## The run context
 
-Before your pipeline extracts, ask stetiq for its context: what to extract against, what the graph is for, and how the Ontology currently scores. Pass it to an LLM agent's prompt, or let a static pipeline read it.
+Before your upstream pipeline extracts, ask stetiq for its context: what to extract against, what the graph is for, and how the Ontology currently scores. Pass it to an LLM agent's prompt, or let a static upstream pipeline read it.
 
 ```python
 context = client.run_context("plant")             # the Contract Alias's version
@@ -341,13 +357,14 @@ context = client.run_context("plant", version=4)  # or another Ontology Version
 
 context.ontology_version         # the Ontology Version to extract against, as a suggestion
 context.use_case_version         # the latest Use Case Version (None without a Use Case)
-context.evaluation_results       # that Ontology Version's latest Evaluator results
+context.evaluation_results       # that Ontology Version's latest Evaluator results, metrics only
 context.run                      # the latest finished run standing for it, or None
-context.run_evaluation_results   # its run-level results, competency_question_execution included
+context.run_evaluation_results   # its run-level results, metrics only
+context.question_executions      # per Competency Question id: .status and .rows on that run
 data = context.to_dict()         # the JSON shape below
 ```
 
-The run context is built from what the tracking service already holds, so it needs only *read* permission in server mode. It carries Ontology, Use Case, metrics and counts, never instance data: executed Competency Questions appear as a status and a row count, not their rows. An unknown Knowledge Graph or Ontology Version raises `NotFoundError`.
+The run context is built from what the tracking service already holds, so it needs only *read* permission in server mode. It carries Ontology, Use Case, metrics and counts, never instance data. **Evaluation results come with their metrics only, never their details**, because details can quote values observed in the graph (a Conformance mismatch names the value it saw; a custom Evaluator's details can hold anything). Executed Competency Questions appear as a status and a row count, not their rows. For the details, read the results with `get_evaluation_results` and `get_run_evaluation_results`. An unknown Knowledge Graph or Ontology Version raises `NotFoundError`.
 
 `to_dict()` (and [`stetiq context`](./04-cli.md#the-run-context)) gives this shape:
 
@@ -364,18 +381,18 @@ The run context is built from what the tracking service already holds, so it nee
       "execution": {"status": "failed", "rows": 0}
     }
   ],
-  "evaluation_results": [{"evaluator": "structural_answerability", "metrics": {"answerable_ratio": 0.875}, "details": ["..."]}],
-  "run": {"id": "5d0c1f2e...", "evaluation_results": [{"evaluator": "competency_question_execution", "metrics": {"pass_ratio": 0.8}, "details": ["..."]}]}
+  "evaluation_results": [{"evaluator": "structural_answerability", "parameters": {}, "metrics": {"answerable_ratio": 0.875}, "use_case_version": 2}],
+  "run": {"id": "5d0c1f2e...", "evaluation_results": [{"evaluator": "competency_question_execution", "parameters": {}, "metrics": {"pass_ratio": 0.8}, "use_case_version": 2}]}
 }
 ```
 
 - `ontology_version.ontology` is the Ontology in its `stetiq.yaml` form, as a mapping: write it out as YAML and it registers as is.
 - `use_case_version` is null without a Use Case; `use_case` is the Use Case in its `use-case.yaml` form.
 - `competency_questions` lists every question of that Use Case Version with the Consumer and Task pairs it serves (empty when it serves none), and `execution`: its `status` (`passed`, `failed` or `error`) and `rows` on `run`, or null when it wasn't executed there (no `query`, or no run).
-- `evaluation_results` and `run.evaluation_results` are Evaluator results as the server's API sends them: `evaluator`, `metrics`, `details` and the subject they belong to.
+- `evaluation_results` and `run.evaluation_results` are the latest Evaluator results, **metrics only**: `evaluator`, `parameters`, `metrics` and the `use_case_version` judged against (null when none). There is no `details` key.
 - `run` is null when no finished Construction Run stands for that Ontology Version (a run stands for its Candidate, or else for the version it consumed).
 
-A pipeline that may extend the Ontology should do so only where a Competency Question needs it. Declare that question in the Use Case before the run; an evolving run's additions are then judged by `unjustified_additions` (see [Evaluators and their metrics](./06-stetiq-yaml.md#evaluators-and-their-metrics)).
+An upstream pipeline that may extend the Ontology should do so only where a Competency Question needs it. Declare that question in the Use Case before the run; an evolving run's additions are then judged by `unjustified_additions` (see [Evaluators and their metrics](./06-stetiq-yaml.md#evaluators-and-their-metrics)).
 
 ## Evaluators
 

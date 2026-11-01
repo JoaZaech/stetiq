@@ -164,12 +164,65 @@ def test_a_run_standing_for_another_version_is_not_the_contexts_run(client, plan
     assert context.run is not None and context.run.id == evolving.id
 
 
-def test_the_context_carries_no_instance_values(client, plant, graph_source):
-    finish_a_run(client, graph_source)
+VOCABULARY_ONTOLOGY = """
+node_types:
+  - label: WorkOrder
+    properties:
+      - {name: status, type: STRING, vocabulary: Status}
+vocabularies:
+  - label: Status
+    values:
+      - open
+      - {label: on_hold, deprecated: true}
+"""
 
-    text = json.dumps(client.run_context("plant").to_dict())
 
-    assert "Press 7" not in text
+class QuotesTheGraph(stetiq.ConstructionRunEvaluator):
+    """A custom run Evaluator whose details quote instance data, as one may."""
+
+    name = "quotes_the_graph"
+
+    def evaluate(self, run):
+        return stetiq.Evaluation(
+            metrics={"quoted": 1},
+            details=[stetiq.Detail("Press 7", "seen in the graph", data={"value": "Press 7"})],
+        )
+
+
+def keys(value):
+    if isinstance(value, dict):
+        return set(value) | {k for v in value.values() for k in keys(v)}
+    if isinstance(value, list):
+        return {k for v in value for k in keys(v)}
+    return set()
+
+
+def test_the_context_carries_metrics_only_never_values_from_the_graph(client, graph_source):
+    client.create_knowledge_graph("orders", ontology=VOCABULARY_ONTOLOGY)
+    client.set_evolution_mode("orders", "strict")
+    client.bind_graph_source("orders", GraphSourceScope(database="neo4j"))
+    graph_source.add_node(["WorkOrder"], {"status": "open"})
+    graph_source.add_node(["WorkOrder"], {"status": "on_hold"})  # deprecated: reported
+    with client.start_run("orders") as run:
+        pass
+    client.evaluate_run(run.id, evaluators=[QuotesTheGraph()])
+    recorded = client.get_run_evaluation_results(run.id)
+    # The recorded results do quote observed values: the context must drop them.
+    [conformance] = [r for r in recorded if r.evaluator == "conformance"]
+    assert [d.data["value"] for d in conformance.details if d.data] == ["on_hold"]
+
+    context = client.run_context("orders")
+    data = context.to_dict()
+
+    assert context.run is not None and context.run.id == run.id
+    assert all(r.details == () for r in context.run_evaluation_results)
+    assert all(r.details == () for r in context.evaluation_results)
+    assert {r["evaluator"] for r in data["run"]["evaluation_results"]} >= {
+        "conformance",
+        "quotes_the_graph",
+    }
+    assert {"details", "value", "count"}.isdisjoint(keys(data))
+    assert "Press 7" not in json.dumps(data)
 
 
 def test_without_a_use_case_the_context_has_none(client):

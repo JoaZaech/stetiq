@@ -16,11 +16,11 @@ Built-in run Evaluators, by stable name (Gates refer to these names and metrics)
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from stetiq.conformance import assess_conformance
+from stetiq.errors import EvaluatorError
 from stetiq.evaluation.framework import (
     ConstructionRunEvaluator,
     ConstructionRunSubject,
@@ -32,7 +32,12 @@ from stetiq.use_case import CompetencyQuestion, UseCase
 
 if TYPE_CHECKING:
     from stetiq.graph_source import GraphSource, GraphSourceScope
-    from stetiq.tracking.entities import ConstructionRun, Observation, OntologyVersion
+    from stetiq.tracking.entities import (
+        ConstructionRun,
+        EvaluationResult,
+        Observation,
+        OntologyVersion,
+    )
 
 RUN_CONFORMANCE_EVALUATOR = "conformance"
 OBSERVED_SCHEMA_EVALUATOR = "observed_schema"
@@ -73,11 +78,12 @@ class RunConformance(ConstructionRunEvaluator):
     name = RUN_CONFORMANCE_EVALUATOR
 
     def evaluate(self, run: ConstructionRunSubject) -> Evaluation:
-        # The run's recorded Conformance: `end_run` judges an evolving run against its
-        # Candidate, any other run against its Declared Ontology.
-        conformance = run.run.conformance or assess_conformance(
-            run.declared_ontology.ontology, run.observation.schema
-        )
+        # The run's recorded Conformance, never recomputed: `end_run` judges an evolving
+        # run against its Candidate, any other run against its Declared Ontology, and
+        # records it whenever it records the Observation this Evaluator needs.
+        conformance = run.run.conformance
+        if conformance is None:
+            raise EvaluatorError(f"Construction Run {run.run.id!r} has no recorded Conformance")
         groups = {
             "declared_absent": conformance.declared_absent,
             "undeclared": conformance.undeclared,
@@ -219,6 +225,32 @@ class CompetencyQuestionExecution(ConstructionRunEvaluator):
             metric=f"{status}_questions",
             data={"status": status, "rows": len(rows), "check": check},
         )
+
+
+@dataclass(frozen=True)
+class QuestionExecution:
+    """One executed Competency Question's verdict: `status` (passed, failed or error) and
+    the row count, never the rows."""
+
+    status: str
+    rows: int
+
+
+def executed_questions(results: Iterable[EvaluationResult]) -> dict[str, QuestionExecution]:
+    """Per question id, what the unparameterised `competency_question_execution` result
+    among a run's `results` recorded; empty when there is none."""
+    execution = next(
+        (r for r in results if r.evaluator == CQ_EXECUTION_EVALUATOR and not r.parameters),
+        None,
+    )
+    if execution is None:
+        return {}
+    executed = {}
+    for d in execution.details:
+        data = d.data or {}
+        if isinstance(data.get("rows"), int) and isinstance(data.get("status"), str):
+            executed[d.item] = QuestionExecution(status=data["status"], rows=data["rows"])
+    return executed
 
 
 def matches_expected_answer(rows: list[dict[str, Any]], expected: Any) -> bool:

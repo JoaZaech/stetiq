@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 from typing import Protocol, get_args
 
 from stetiq import use_case as use_case_format
-from stetiq.conformance import assess_conformance, candidate_ontology
+from stetiq.conformance import apply_definitions, assess_conformance, candidate_ontology
 from stetiq.drift import DriftThresholds, assess_drift
 from stetiq.errors import (
     ConflictingArgumentsError,
@@ -31,6 +31,7 @@ from stetiq.errors import (
     NoConsumerGatesError,
     NotFoundError,
     NoUseCaseError,
+    OntologyValidationError,
     RunNotActiveError,
     RunNotFinishedError,
 )
@@ -56,6 +57,7 @@ from stetiq.evaluation.run import (
     SERVER_RUN_EVALUATORS,
     NoGraphSource,
     RunSubject,
+    executed_questions,
 )
 from stetiq.evaluation.structural import BUILT_IN_EVALUATORS
 from stetiq.gates import Gate, GateInputs
@@ -88,6 +90,7 @@ from stetiq.tracking.entities import (
 )
 from stetiq.tracking.store import Store
 from stetiq.use_case import UseCase
+from stetiq.use_case.concepts import ConceptRef, PropertyRef, parse_concept_reference
 from stetiq.use_case.consumer_gates import ConsumerGateInputs, QuestionRows, evaluate_consumer_gate
 
 # What the SDK observed at the end of a run: the scope it read and the Observed Schema.
@@ -117,6 +120,31 @@ def check_not_built_in(evaluator: str) -> None:
         raise EvaluatorError(
             f"{evaluator!r} is a built-in Evaluator; its results are computed by stetiq"
         )
+
+
+def check_proposed_definitions(proposals: Mapping[str, str]) -> dict[str, str]:
+    """Proposed Definitions, checked: each key a Class, Relation or Attribute reference
+    (`Label`, `Owner.name`), each value a non-empty string. The service applies it to the
+    end call; the SDK also applies it in `propose_definitions`, so the message is the same
+    in every mode."""
+    if not isinstance(proposals, Mapping):
+        raise OntologyValidationError("proposed Definitions must map Concepts to Definitions")
+    checked = {}
+    for ref, text in proposals.items():
+        try:
+            parsed = parse_concept_reference(ref) if isinstance(ref, str) else None
+        except ValueError:
+            parsed = None
+        if not isinstance(parsed, ConceptRef | PropertyRef):
+            raise OntologyValidationError(
+                f"{ref!r} is not a Concept reference (expected Label or Owner.attribute)"
+            )
+        if not isinstance(text, str) or not text.strip():
+            raise OntologyValidationError(
+                f"the proposed Definition of {ref!r} must be a non-empty string"
+            )
+        checked[ref.strip()] = text
+    return checked
 
 
 # The audit-log actor for Alias moves stetiq makes itself (the Contract Alias on creation).
@@ -185,7 +213,16 @@ class TrackingService(Protocol):
 
     def log_metrics(self, run_id: str, metrics: dict[str, float]) -> None: ...
 
-    def end_run(self, run_id: str, observation: ObservationInput) -> ConstructionRun: ...
+    def end_run(
+        self,
+        run_id: str,
+        observation: ObservationInput,
+        definitions: Mapping[str, str] | None = None,
+    ) -> ConstructionRun:
+        """Finish the run with its ending Observation. `definitions` are the run's
+        proposed Definitions (Concept reference -> text), applied only to Concepts its
+        Candidate adds; the others are listed in `ignored_definitions`."""
+        ...
 
     def fail_run(self, run_id: str) -> ConstructionRun: ...
 
@@ -739,9 +776,15 @@ class LocalTrackingService:
             self._running(run_id)
             self._store.set_run_metrics(run_id, metrics)
 
-    def end_run(self, run_id: str, observation: ObservationInput) -> ConstructionRun:
+    def end_run(
+        self,
+        run_id: str,
+        observation: ObservationInput,
+        definitions: Mapping[str, str] | None = None,
+    ) -> ConstructionRun:
         """Finish the run with the Observation of its Graph Source made at its end."""
         scope, schema = observation
+        proposals = check_proposed_definitions(definitions or {})
         with self._store.transaction():
             run = self._running(run_id)
             ended = _now()
@@ -762,11 +805,14 @@ class LocalTrackingService:
             declared = self.get_ontology_version(run.knowledge_graph, run.ontology_version)
             judged_against = declared
             status: RunStatus = "finished"
+            ignored = tuple(sorted(proposals))
             candidate = candidate_ontology(declared.ontology, schema)
             if candidate is not None:
                 if self.get_evolution_mode(run.knowledge_graph) == "strict":
                     status = "failed"
                 else:
+                    # Proposed Definitions document only what the Candidate adds.
+                    candidate, ignored = apply_definitions(declared.ontology, candidate, proposals)
                     judged_against = self._register(
                         run.knowledge_graph, candidate, "run", base=declared
                     )
@@ -776,6 +822,7 @@ class LocalTrackingService:
             self._store.set_run_conformance(
                 run_id, assess_conformance(judged_against.ontology, schema)
             )
+            self._store.set_run_ignored_definitions(run_id, ignored)
             self._store.end_run(run_id, status, ended, obs.id)
             run = self.get_run(run_id)
             self._run_run_built_ins(run)
@@ -1176,14 +1223,13 @@ class LocalTrackingService:
                 )
             return subject
         if version is not None:
-            self.get_ontology_version(knowledge_graph, version)
-            runs = self._finished_runs_standing_for(knowledge_graph, version)
-            if not runs:
+            standing = self.latest_finished_run(knowledge_graph, version)
+            if standing is None:
                 raise NotFoundError(
                     f"No finished Construction Run of {knowledge_graph!r} stands for Ontology "
                     f"Version {version}"
                 )
-            return runs[-1]
+            return standing
         runs = [r for r in self.list_runs(knowledge_graph) if r.status == "finished"]
         if not runs:
             raise NotFoundError(
@@ -1203,18 +1249,10 @@ class LocalTrackingService:
     def _question_rows(self, knowledge_graph: str, run: ConstructionRun) -> dict[str, QuestionRows]:
         """The row count `competency_question_execution` recorded per question on the run."""
         results = self.get_evaluation_results(knowledge_graph, "construction_run", run.id)
-        execution = next(
-            (r for r in results if r.evaluator == CQ_EXECUTION_EVALUATOR and not r.parameters),
-            None,
-        )
-        if execution is None:
-            return {}
-        rows = {}
-        for d in execution.details:
-            data = d.data or {}
-            if isinstance(data.get("rows"), int):
-                rows[d.item] = QuestionRows(rows=data["rows"], error=data.get("status") == "error")
-        return rows
+        return {
+            question: QuestionRows(rows=e.rows, error=e.status == "error")
+            for question, e in executed_questions(results).items()
+        }
 
     def list_consumer_gate_results(
         self, knowledge_graph: str, *, consumer: str | None = None, version: int | None = None

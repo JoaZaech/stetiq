@@ -75,6 +75,13 @@ class UseCase:
     description: str | None = None
     consumers: tuple[Consumer, ...] = ()
 
+    def serving(self, question_id: str) -> tuple[tuple[Consumer, Task], ...]:
+        """The (Consumer, Task) pairs whose Task needs Competency Question `question_id`,
+        in declaration order; empty when the question serves no Task."""
+        return tuple(
+            (c, t) for c in self.consumers for t in c.tasks if question_id in t.competency_questions
+        )
+
     def competency_question(self, id: str) -> CompetencyQuestion:
         for q in self.competency_questions:
             if q.id == id:

@@ -173,6 +173,9 @@ def test_cli_context_takes_a_version_and_the_knowledge_graph_from_the_repo_confi
     monkeypatch.chdir(tmp_path)
 
     data = json.loads(_invoke("context", "--version", "2"))
+    assert json.loads(_invoke("context", "support", "--json")) == json.loads(
+        _invoke("context", "support")
+    )
 
     assert (data["knowledge_graph"], data["ontology_version"]["number"]) == ("support", 2)
 

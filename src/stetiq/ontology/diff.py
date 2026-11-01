@@ -557,3 +557,46 @@ def _bindings(
                 )
             ]
     return tuple(bindings)
+
+
+# --- Added Concepts ------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class AddedConcept:
+    """A Concept the Ontology Diff adds; `owner` is the (kind, identity) of the added
+    Class or Relation an Attribute belongs to, or of the declared one it was added to."""
+
+    kind: ConceptKind
+    identity: str
+    owner: tuple[ConceptKind, str] | None = None
+
+    @property
+    def key(self) -> tuple[ConceptKind, str]:
+        return (self.kind, self.identity)
+
+
+def added_concepts(base: Ontology, target: Ontology) -> list[AddedConcept]:
+    """Every Concept the diff from `base` to `target` adds: added Classes and Relations,
+    each followed by its own Attributes (owned by it), and Attributes added to a Class or
+    Relation `base` has. Vocabularies and their Values are not Concepts and are left out."""
+    owners = {
+        **{("node_type", n.label): n for n in target.node_types},
+        **{("relationship_type", r.label): r for r in target.relationship_types},
+    }
+    added: list[AddedConcept] = []
+    for change in diff_ontologies(base, target).changes:
+        if change.kind != ChangeKind.ADDED:
+            continue
+        if change.concept_kind in ("node_type", "relationship_type"):
+            concept = AddedConcept(change.concept_kind, change.concept)
+            added.append(concept)
+            added += [
+                AddedConcept("property", f"{change.concept}.{p.name}", concept.key)
+                for p in owners[concept.key].properties
+            ]
+        elif change.concept_kind == "property" and change.owner and change.owner_kind:
+            added.append(
+                AddedConcept("property", change.concept, (change.owner_kind, change.owner))
+            )
+    return added

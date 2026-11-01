@@ -86,6 +86,9 @@ class ConstructionRun:
     conformance: Conformance | None = None
     # The Candidate Ontology Version this run gave rise to (evolving mode, new Concepts).
     candidate_version: int | None = None
+    # Concept references whose proposed Definitions `end_run` did not apply: the Concept
+    # is not one the run's Candidate adds (or the run gave rise to no Candidate). Sorted.
+    ignored_definitions: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

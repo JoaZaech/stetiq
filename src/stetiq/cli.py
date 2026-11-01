@@ -985,12 +985,17 @@ def context(
         int | None,
         typer.Option("--version", help="Ontology Version (default: the Contract Alias's)"),
     ] = None,
+    as_json: Annotated[
+        bool, typer.Option("--json", help="Accepted for clarity; the output is always JSON")
+    ] = False,
     config: ConfigPath = None,
     tracking_uri: TrackingUri = None,
 ) -> None:
     """Print the run context as JSON: the Ontology Version to extract against, the latest
     Use Case Version, that version's evaluation results and the executed Competency
-    Questions of the latest finished run standing for it. No instance data. Needs read."""
+    Questions of the latest finished run standing for it. Metrics only, no instance data.
+    Needs read. `--json` changes nothing: the output is always JSON."""
+    del as_json  # the output is always JSON
     try:
         kg = knowledge_graph or _repo_config(config).get("knowledge_graph")
         if not kg:

@@ -8,7 +8,7 @@ as a Candidate).
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any, Literal
@@ -20,7 +20,7 @@ from stetiq.graph_source import (
     ObservedSchema,
 )
 from stetiq.ontology import NodeType, Ontology, Pattern, Property, RelationshipType
-from stetiq.ontology.diff import WIDENING_TYPE_CHANGES
+from stetiq.ontology.diff import WIDENING_TYPE_CHANGES, added_concepts
 from stetiq.ontology.model import ConceptKind, Vocabulary, VocabularyValue, is_deprecated
 
 # What a mismatch is about. Concepts are node types, relationship types and properties
@@ -422,6 +422,43 @@ def candidate_ontology(declared: Ontology, observed: ObservedSchema) -> Ontology
         relationship_types=relationship_types,
         patterns=tuple(sorted(patterns)),
         vocabularies=vocabularies,
+    )
+
+
+def apply_definitions(
+    base: Ontology, candidate: Ontology, proposals: Mapping[str, str]
+) -> tuple[Ontology, tuple[str, ...]]:
+    """`candidate` with each proposed Definition applied to the Concept it names, if that
+    Concept is one the candidate adds to `base` (a Class or Relation by `Label`, an
+    Attribute by `Owner.name`); also the proposals it ignored, sorted. Proposals never
+    touch a Concept `base` declares."""
+    added = {a.identity for a in added_concepts(base, candidate)}
+    applied = {ref: text for ref, text in proposals.items() if ref in added}
+    ignored = tuple(sorted(ref for ref in proposals if ref not in applied))
+    if not applied:
+        return candidate, ignored
+
+    def document(concept):
+        own = applied.get(concept.label)
+        properties = tuple(
+            replace(p, definition=applied[f"{concept.label}.{p.name}"])
+            if f"{concept.label}.{p.name}" in applied
+            else p
+            for p in concept.properties
+        )
+        return replace(
+            concept,
+            definition=concept.definition if own is None else own,
+            properties=properties,
+        )
+
+    return (
+        replace(
+            candidate,
+            node_types=tuple(document(n) for n in candidate.node_types),
+            relationship_types=tuple(document(r) for r in candidate.relationship_types),
+        ),
+        ignored,
     )
 
 

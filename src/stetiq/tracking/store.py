@@ -6,6 +6,7 @@ Implementation: `SqlStore` (SQLite or Postgres; used by local mode and the serve
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from contextlib import AbstractContextManager
 from datetime import datetime
 from typing import Protocol
@@ -92,6 +93,10 @@ class Store(Protocol):
 
     def set_run_candidate(self, run_id: str, knowledge_graph: str, ontology_version: int) -> None:
         """Link the run to the Candidate Ontology Version it gave rise to."""
+        ...
+
+    def set_run_ignored_definitions(self, run_id: str, concepts: Sequence[str]) -> None:
+        """Record the Concept references whose proposed Definitions the run ignored."""
         ...
 
     def set_evolution_mode(self, knowledge_graph: str, mode: EvolutionMode) -> None: ...

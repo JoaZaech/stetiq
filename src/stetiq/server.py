@@ -331,13 +331,17 @@ def create_app(
 
     @api.post("/runs/{run_id}/end")
     def end_run(
-        run_id: str, scope: dict[str, Any] = Body(), observed_schema: dict[str, Any] = Body()
+        run_id: str,
+        scope: dict[str, Any] = Body(),
+        observed_schema: dict[str, Any] = Body(),
+        definitions: dict[str, Any] | None = Body(None),
     ) -> dict[str, Any]:
         observation = (
             codec.graph_source_scope_from_json(scope),
             codec.observed_schema_from_json(observed_schema),
         )
-        return codec.run_to_json(tracking.end_run(run_id, observation))
+        # Older SDKs send no `definitions`; the service re-checks and applies them.
+        return codec.run_to_json(tracking.end_run(run_id, observation, definitions))
 
     @api.post("/runs/{run_id}/fail")
     def fail_run(run_id: str) -> dict[str, Any]:
