@@ -4,43 +4,51 @@ test.describe('with a Use Case that declares Consumers', () => {
   test.use({ seed: 'support_consumer_impact' })
 
   for (const view of ['map', 'table'] as const) {
-    test(`the ${view} comparison lists the Consumers and Tasks the Diff affects and will affect`, async ({
+    test(`the ${view} comparison lists an item per Task the Diff affects and will affect, the worst first`, async ({
       page,
     }) => {
       await page.goto(`/ui/kg/support/versions/compare?id=2&id=4${view === 'table' ? '&view=table' : ''}`)
 
       const impact = page.getByRole('region', { name: 'Consumer impact' })
-      const affected = impact.getByRole('region', { name: 'Affected', exact: true })
-      const later = impact.getByRole('region', { name: 'Will be affected' })
-      const unknown = impact.getByRole('region', { name: 'Impact unknown' })
+      const items = impact.getByRole('list', { name: 'Tasks and questions hit' }).locator(':scope > li')
 
-      // Triage bot is affected by the removed Ticket.opened_at; its other Task only will be.
-      const bot = affected.getByRole('listitem', { name: 'Triage bot' })
-      await expect(affected.getByRole('list', { name: 'Affected Consumers' }).locator(':scope > li')).toHaveCount(1)
-      await expect(bot.getByText('agent', { exact: true })).toBeVisible()
-      const tasks = bot.getByRole('list', { name: 'Tasks of Triage bot hit' }).locator(':scope > li')
-      await expect(tasks).toHaveText([
-        /Route a new ticket by its age.*route-ticket/,
-        /Assign the ticket to an agent.*assign-agent.*\(will be affected\)/,
+      // Triage bot is affected by the removed Ticket.opened_at; its other Task, and Workload
+      // dashboard's, only will be, by the deprecated Agent. A question nothing maps comes last.
+      await expect(items).toHaveText([
+        /^Affected: Route a new ticket by its age\s*Triage bot\s*breaks Ticket\.opened_at/,
+        /^Will be affected: Assign the ticket to an agent\s*Triage bot\s*deprecates Agent/,
+        /^Will be affected: Chart each agent's workload\s*Workload dashboard\s*deprecates Agent/,
+        /^Impact unknown: Which customers are the most loyal\?\s*No Consumer\s*can't tell: no Concept mapping or query$/,
       ])
-      await expect(bot.getByRole('list', { name: 'Competency Questions of route-ticket hit' })).toHaveText(
-        /ticket-dates.*When was each ticket opened\?.*Ticket\.opened_at \(breaking\)/,
-      )
-
-      await expect(later.getByRole('list', { name: 'Will be affected Consumers' }).locator(':scope > li')).toHaveCount(1)
-      const dashboard = later.getByRole('listitem', { name: 'Workload dashboard' })
-      await expect(dashboard).toContainText('Chart each agent')
-      await expect(dashboard.getByRole('list', { name: 'Competency Questions of workload-chart hit' })).toHaveText(
-        /agent-names.*Agent \(deprecating\)/,
-      )
-
-      // CRM sync needs nothing that changed; a question nothing maps is never called unaffected.
+      // CRM sync needs nothing that changed; no machine id is shown.
       await expect(impact.getByText('CRM sync')).toHaveCount(0)
-      await expect(unknown.getByRole('list', { name: 'Impact unknown questions no Task needs' })).toHaveText(
-        /loyal-customers.*Which customers are the most loyal\?/,
-      )
+      for (const id of ['triage-bot', 'route-ticket', 'ticket-dates', 'loyal-customers']) {
+        await expect(impact).not.toContainText(id)
+      }
+
+      // An item expands in place to the questions it hits and the Concepts that hit them.
+      const route = impact.getByRole('listitem', { name: 'Route a new ticket by its age' })
+      const questions = route.getByRole('list', { name: 'Competency Questions hit' })
+      await expect(questions).toBeHidden()
+      await route.getByRole('button').click()
+      await expect(route.getByRole('button')).toHaveAttribute('aria-expanded', 'true')
+      await expect(questions.locator(':scope > li')).toHaveText([
+        /^When was each ticket opened\?\s*Ticket\.opened_at \(breaking\)$/,
+      ])
+
+      // A question no Task needs is already its own title: it does not expand.
+      await expect(impact.getByRole('listitem', { name: 'Which customers are the most loyal?' }).getByRole('button')).toHaveCount(0)
     })
   }
+
+  test('the Changes tab says so when no Consumer is affected', async ({ page }) => {
+    // v1 -> v2 only adds, so nothing is hit.
+    await page.goto('/ui/kg/support/versions/2/changes')
+
+    const impact = page.getByRole('region', { name: 'Consumer impact' })
+    await expect(impact).toHaveText(/^Consumer impact\s*No Consumer is affected$/)
+    await expect(impact.getByRole('list')).toHaveCount(0)
+  })
 })
 
 test.describe('without a Use Case', () => {

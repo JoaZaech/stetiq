@@ -1,25 +1,31 @@
-import { type ReactNode, useId } from 'react'
+import { ChevronDown, ChevronRight, type LucideIcon } from 'lucide-react'
+import { type ReactNode, useId, useState } from 'react'
 import {
-  type ConsumerImpact,
   type ImpactLevel,
   isNoUseCase,
   type QuestionImpact,
   type UseCaseImpact,
   useConsumerImpact,
 } from '@/api/consumer-impact'
-import { CLASSIFICATION_LABEL, type Classification } from '@/api/ontology-diff'
+import { CLASSIFICATION_LABEL } from '@/api/ontology-diff'
 import { ErrorAlert } from '@/components/ErrorAlert'
-import { SeveritySwatch } from '@/components/SeveritySwatch'
+import { StatusLabel } from '@/components/StatusLabel'
+import { SEVERITY } from '@/components/severity-style'
+import { STATUS_TONES } from '@/components/status-tones'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { causesOf, IMPACT_LABEL, impactSections, type ImpactSection } from '@/lib/consumer-impact'
+import { causesOf, IMPACT_LABEL, type ImpactItem, impactItems } from '@/lib/consumer-impact'
 import { cn } from '@/lib/utils'
 
-/** The Diff colour each level is keyed by: what makes it affected, or will-be-affected. */
-const LEVEL_SEVERITY: Record<ImpactLevel, Classification | null> = {
-  affected: 'breaking',
-  will_be_affected: 'deprecating',
-  unknown: null,
+/** A level's mark: the Diff colour of what causes it (as `SEVERITY`), neutral when unknown. */
+const LEVEL_MARK: Record<ImpactLevel, { Icon: LucideIcon; className: string; border: string }> = {
+  affected: { Icon: STATUS_TONES.failure.Icon, className: SEVERITY.text.breaking, border: SEVERITY.border.breaking },
+  will_be_affected: {
+    Icon: STATUS_TONES.warning.Icon,
+    className: SEVERITY.text.deprecating,
+    border: SEVERITY.border.deprecating,
+  },
+  unknown: { ...STATUS_TONES.neutral, border: 'border-border' },
 }
 
 interface ConsumerImpactPanelProps {
@@ -51,19 +57,25 @@ export function ConsumerImpactPanel({ knowledgeGraph, base, target, className }:
 }
 
 /**
- * Consumer impact that is already loaded: a section per level (affected, will be affected,
- * impact unknown), each listing its Consumers with the Tasks and Competency Questions hit
- * and the Concepts that hit them, then the questions at that level no Task needs. A
- * region named "Consumer impact".
+ * Consumer impact that is already loaded, as a list of items: one per hit Task, with its
+ * level's icon, its Consumer and why it is hit, expanding to the Competency Questions hit
+ * and the Concepts that hit them; then the hit questions no Task needs. A region named
+ * "Consumer impact".
  */
 export function ConsumerImpactView({ impact, className }: { impact: UseCaseImpact; className?: string }) {
-  const sections = impactSections(impact)
+  const items = impactItems(impact)
   return (
     <ImpactRegion className={className}>
-      {sections.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No Consumer, Task or Competency Question is hit.</p>
+      {items.length === 0 ? (
+        <p className="text-sm">
+          <StatusLabel tone="success" label="No Consumer is affected" />
+        </p>
       ) : (
-        sections.map((section) => <Section key={section.level} section={section} />)
+        <ul aria-label="Tasks and questions hit" className="space-y-2">
+          {items.map((item) => (
+            <Item key={item.key} item={item} />
+          ))}
+        </ul>
       )}
     </ImpactRegion>
   )
@@ -81,81 +93,86 @@ function ImpactRegion({ className, children }: { className?: string; children: R
   )
 }
 
-function Section({ section }: { section: ImpactSection }) {
-  const titleId = useId()
-  const severity = LEVEL_SEVERITY[section.level]
-  return (
-    <section aria-labelledby={titleId} className="space-y-2">
-      <h4 id={titleId} className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-        {severity && <SeveritySwatch level={severity} />}
-        {IMPACT_LABEL[section.level]}
-      </h4>
-      {section.level === 'unknown' && (
-        <p className="text-xs text-muted-foreground">
-          These questions have neither a Concept mapping nor a query, so it cannot be told what they need.
-        </p>
-      )}
-      {section.consumers.length > 0 && (
-        <ul aria-label={`${IMPACT_LABEL[section.level]} Consumers`} className="space-y-2">
-          {section.consumers.map((consumer) => (
-            <ConsumerItem key={consumer.id} consumer={consumer} />
-          ))}
-        </ul>
-      )}
-      {section.noConsumer.length > 0 && (
-        <div className="space-y-1 rounded-lg border border-dashed p-3">
-          <p className="text-xs font-medium">No Consumer</p>
-          <Questions questions={section.noConsumer} label={`${IMPACT_LABEL[section.level]} questions no Task needs`} />
-        </div>
-      )}
-    </section>
+function Item({ item }: { item: ImpactItem }) {
+  const id = useId()
+  const [open, setOpen] = useState(false)
+  const { Icon, className, border } = LEVEL_MARK[item.level]
+  // A question no Task needs is already its own title: there is nothing to expand to.
+  const expands = item.consumer !== null
+  const Chevron = open ? ChevronDown : ChevronRight
+  const header = (
+    <>
+      <Icon aria-hidden className={cn('mt-0.5 size-4 shrink-0', className)} />
+      <span className="sr-only">{IMPACT_LABEL[item.level]}: </span>
+      <span className="min-w-0 flex-1 space-y-0.5">
+        <span className="flex flex-wrap items-center gap-2">
+          <span id={`${id}-title`} className="font-medium">
+            {item.title}
+          </span>
+          {item.consumer === null ? (
+            <Badge variant="outline" className="text-muted-foreground">
+              No Consumer
+            </Badge>
+          ) : (
+            <Badge variant="secondary">{item.consumer}</Badge>
+          )}
+        </span>
+        <span className="block text-xs text-muted-foreground">{item.reason}</span>
+      </span>
+    </>
   )
-}
-
-function ConsumerItem({ consumer }: { consumer: ConsumerImpact }) {
-  const titleId = useId()
   return (
     <li
-      aria-labelledby={titleId}
-      className="min-w-0 space-y-2 rounded-lg bg-card p-3 text-sm text-card-foreground ring-1 ring-foreground/10"
+      aria-labelledby={`${id}-title`}
+      className={cn(
+        'min-w-0 rounded-lg border-l-4 bg-card text-sm text-card-foreground ring-1 ring-foreground/10',
+        border,
+      )}
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <span id={titleId} className="font-semibold">
-          {consumer.name}
-        </span>
-        {consumer.kind && <Badge variant="secondary">{consumer.kind}</Badge>}
-        <code className="font-mono text-xs text-muted-foreground">{consumer.id}</code>
-      </div>
-      <ul aria-label={`Tasks of ${consumer.name} hit`} className="space-y-2">
-        {consumer.tasks.map((task) => (
-          <li key={task.id} className="space-y-1 border-l-2 pl-3">
-            <p>
-              {task.description} <code className="font-mono text-xs text-muted-foreground">{task.id}</code>
-              {task.level !== consumer.level && (
-                <span className="ml-2 text-xs text-muted-foreground">({IMPACT_LABEL[task.level].toLowerCase()})</span>
-              )}
-            </p>
-            <Questions questions={task.questions} label={`Competency Questions of ${task.id} hit`} />
-          </li>
-        ))}
-      </ul>
+      {expands ? (
+        <button
+          type="button"
+          className="flex w-full items-start gap-2 rounded-lg p-3 text-left outline-none hover:bg-muted/50 focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          aria-expanded={open}
+          aria-controls={`${id}-body`}
+          onClick={() => setOpen(!open)}
+        >
+          {header}
+          <Chevron aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+        </button>
+      ) : (
+        <div className="flex items-start gap-2 p-3">{header}</div>
+      )}
+      {expands && (
+        <div id={`${id}-body`} hidden={!open} className="px-3 pb-3 pl-9">
+          <Questions questions={item.questions} />
+        </div>
+      )}
     </li>
   )
 }
 
-function Questions({ questions, label }: { questions: QuestionImpact[]; label: string }) {
+/** Each question hit, followed by the Concepts that hit it, in their classification's colour. */
+function Questions({ questions }: { questions: QuestionImpact[] }) {
   return (
-    <ul aria-label={label} className="space-y-0.5 text-xs">
+    <ul aria-label="Competency Questions hit" className="space-y-1.5 text-xs">
       {questions.map((q) => (
-        <li key={q.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <code className="font-mono">{q.id}</code>
-          <span className="text-muted-foreground">{q.question}</span>
-          {causesOf(q).map((cause) => (
-            <span key={cause.concept} className="inline-flex items-center gap-1 font-mono">
-              <SeveritySwatch level={cause.classification} />
-              {cause.concept}
-              <span className="sr-only"> ({CLASSIFICATION_LABEL[cause.classification]})</span>
-            </span>
+        <li key={q.id} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span>{q.question}</span>
+          {causesOf(q).map(({ concept, classification }) => (
+            <Badge
+              key={concept}
+              variant="outline"
+              className={cn(
+                'font-mono',
+                SEVERITY.border[classification],
+                SEVERITY.fill[classification],
+                SEVERITY.text[classification],
+              )}
+            >
+              {concept}
+              <span className="sr-only"> ({CLASSIFICATION_LABEL[classification]})</span>
+            </Badge>
           ))}
         </li>
       ))}
