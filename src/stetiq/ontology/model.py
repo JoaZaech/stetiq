@@ -150,3 +150,30 @@ class Ontology:
 
     def relationship_type(self, label: str) -> RelationshipType:
         return next(r for r in self.relationship_types if r.label == label)
+
+
+def is_deprecated(c: NodeType | RelationshipType | Property | VocabularyValue) -> bool:
+    """Deprecated, either flagged so or by naming a replacement."""
+    return c.deprecated or c.replaced_by is not None
+
+
+def live_concepts(
+    ontology: Ontology,
+) -> list[tuple[ConceptKind, str, NodeType | RelationshipType | Property]]:
+    """Every Concept that is not deprecated, as (kind, identity, Concept), in declaration
+    order: each class, then each relation, followed by its attributes (`Owner.name`). The
+    attributes of a deprecated class or relation are left out with it."""
+    out: list[tuple[ConceptKind, str, NodeType | RelationshipType | Property]] = []
+    owners: list[tuple[ConceptKind, NodeType | RelationshipType]] = []
+    owners.extend(("node_type", n) for n in ontology.node_types)
+    owners.extend(("relationship_type", r) for r in ontology.relationship_types)
+    for kind, owner in owners:
+        if is_deprecated(owner):
+            continue
+        out.append((kind, owner.label, owner))
+        out.extend(
+            ("property", f"{owner.label}.{p.name}", p)
+            for p in owner.properties
+            if not is_deprecated(p)
+        )
+    return out

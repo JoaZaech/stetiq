@@ -130,6 +130,7 @@ def test_a_gate_result_needs_gate_definitions(server, support):
         "hierarchy",
         "structural_answerability",
         "competency_question_coverage",
+        "definitions",
         "conformance",
         "observed_schema",
     ],
@@ -221,6 +222,26 @@ def test_competency_question_coverage_is_computed_by_the_server(server, support)
     # v2: Customer, Customer.name, Ticket, Ticket.opened_at; only the first two are traced.
     assert coverage["metrics"]["traced_concept_ratio"] == 0.5
     assert sorted(d["item"] for d in coverage["details"]) == ["Ticket", "Ticket.opened_at"]
+
+
+def test_missing_definitions_are_computed_by_the_server(server, support):
+    _, http = server
+    editor = _headers(server, "mallory", {"support": "edit"})
+
+    forged = http.post(
+        f"{API}/knowledge-graphs/support/ontology-versions/2/evaluations",
+        headers=editor,
+        json={"evaluator": "definitions", "metrics": {"concepts_without_definition": 0}},
+    )
+    results = http.get(
+        f"{API}/knowledge-graphs/support/ontology-versions/2/evaluations", headers=editor
+    ).json()
+
+    assert forged.status_code == 422
+    definitions = next(r for r in results if r["evaluator"] == "definitions")
+    # v2: only Ticket has a Definition; Customer, Customer.name and Ticket.opened_at lack one.
+    assert definitions["metrics"]["concepts_without_definition"] == 3
+    assert definitions["metrics"]["definition_ratio"] == 0.25
 
 
 # --- Origin of hand registrations ------------------------------------------------------
