@@ -1,9 +1,10 @@
 # Repo config for the plant maintenance Knowledge Graph (see docs/guide/06-stetiq-yaml.md).
 knowledge_graph: plant-maintenance
 
-# The Construction Entry Point `stetiq run` (and the demo's nightly rebuild) starts.
-# pipeline.py reads PLANT_GRAPH_FILE, PLANT_EXTRACTOR and PLANT_EXTRACTION_MODEL
-# from the environment, the way a real pipeline reads its database credentials.
+# The Construction Entry Point `stetiq run` (and each round of demo.py) starts.
+# pipeline.py reads PLANT_ROUND (v1, v2 or fix: which prompt), PLANT_GRAPH_FILE,
+# PLANT_LLM and PLANT_EXTRACTION_MODEL from the environment, the way a real pipeline
+# reads its database credentials.
 entry_point:
   command: python pipeline.py --ontology {ontology} --scope {graph_source}
 

@@ -1,0 +1,154 @@
+{
+ "prompt_version": "v1",
+ "model": "claude-opus-5-5",
+ "recorded_at": "2026-11-01",
+ "report": "WO-2034.txt",
+ "response": {
+  "nodes": [
+   {
+    "label": "WorkOrder",
+    "key": "WO-2034",
+    "properties": {
+     "id": "WO-2034"
+    }
+   },
+   {
+    "label": "Machine",
+    "key": "Paint-01",
+    "properties": {
+     "name": "Paint-01"
+    }
+   },
+   {
+    "label": "Machine",
+    "key": "Packer-05",
+    "properties": {
+     "name": "Packer-05"
+    }
+   },
+   {
+    "label": "Technician",
+    "key": "Lena Okafor",
+    "properties": {
+     "name": "Lena Okafor"
+    }
+   },
+   {
+    "label": "Technician",
+    "key": "Diego Álvarez",
+    "properties": {
+     "name": "Diego Álvarez"
+    }
+   },
+   {
+    "label": "Component",
+    "key": "paint nozzle",
+    "properties": {
+     "name": "paint nozzle"
+    }
+   },
+   {
+    "label": "Component",
+    "key": "air filter",
+    "properties": {
+     "name": "air filter"
+    }
+   },
+   {
+    "label": "Fault",
+    "key": "WO-2034",
+    "properties": {
+     "description": "Clogged air filter that let overspray build up on the nozzle"
+    }
+   },
+   {
+    "label": "FollowUp",
+    "key": "WO-2034#1",
+    "properties": {
+     "description": "Shorten the air filter change interval on Paint-01",
+     "status": "open"
+    }
+   },
+   {
+    "label": "FollowUp",
+    "key": "WO-2034#2",
+    "properties": {
+     "description": "Add nozzle inspection to the shift checklist",
+     "status": "open"
+    }
+   }
+  ],
+  "relationships": [
+   {
+    "start_label": "WorkOrder",
+    "start_key": "WO-2034",
+    "type": "PERFORMED_ON",
+    "end_label": "Machine",
+    "end_key": "Paint-01"
+   },
+   {
+    "start_label": "WorkOrder",
+    "start_key": "WO-2034",
+    "type": "ASSIGNED_TO",
+    "end_label": "Technician",
+    "end_key": "Lena Okafor"
+   },
+   {
+    "start_label": "WorkOrder",
+    "start_key": "WO-2034",
+    "type": "INVOLVED",
+    "end_label": "Component",
+    "end_key": "paint nozzle"
+   },
+   {
+    "start_label": "WorkOrder",
+    "start_key": "WO-2034",
+    "type": "INVOLVED",
+    "end_label": "Component",
+    "end_key": "air filter"
+   },
+   {
+    "start_label": "WorkOrder",
+    "start_key": "WO-2034",
+    "type": "CAUSED_BY",
+    "end_label": "Fault",
+    "end_key": "WO-2034"
+   },
+   {
+    "start_label": "WorkOrder",
+    "start_key": "WO-2034",
+    "type": "HAS_FOLLOW_UP",
+    "end_label": "FollowUp",
+    "end_key": "WO-2034#1"
+   },
+   {
+    "start_label": "WorkOrder",
+    "start_key": "WO-2034",
+    "type": "HAS_FOLLOW_UP",
+    "end_label": "FollowUp",
+    "end_key": "WO-2034#2"
+   },
+   {
+    "start_label": "FollowUp",
+    "start_key": "WO-2034#1",
+    "type": "ASSIGNED_TO",
+    "end_label": "Technician",
+    "end_key": "Diego Álvarez"
+   },
+   {
+    "start_label": "FollowUp",
+    "start_key": "WO-2034#2",
+    "type": "ASSIGNED_TO",
+    "end_label": "Technician",
+    "end_key": "Lena Okafor"
+   },
+   {
+    "start_label": "Machine",
+    "start_key": "Paint-01",
+    "type": "FEEDS",
+    "end_label": "Machine",
+    "end_key": "Packer-05"
+   }
+  ]
+ }
+}

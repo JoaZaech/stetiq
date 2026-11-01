@@ -7,28 +7,37 @@ Sources, under data/:
 | assets/machines.csv         | structured   | Machine, Line, PART_OF                             |
 | assets/material_flow.json   | structured   | FEEDS, as drawn in the layout (can be stale)       |
 | cmms/work_orders.csv        | structured   | WorkOrder, PERFORMED_ON, ASSIGNED_TO, Technician   |
-| hr/technicians.csv          | structured   | Technician.badge (rules-v2 and claude only)        |
+| hr/technicians.csv          | structured   | Technician.badge                                   |
 | reports/*.txt, *.eml        | unstructured | Component, FollowUp, Fault, Supplier, FEEDS stated in prose |
 
-The structured sources load deterministically. The technicians' reports go through an
-extractor:
+The structured sources load deterministically. Claude reads the technicians' reports,
+one `claude -p` call per report, guided by the Declared Ontology stetiq hands the run.
+There are two prompt versions, and each round of the demo picks one:
 
-- `rules-v1`: the plant's original regex script. Reads the report header, the components
-  and the follow-ups. Cannot read the email format and ignores causes and suppliers.
-- `rules-v2`: the regex script after a fix round. Also reads root causes, replacement-part
-  suppliers, material-flow statements, and the email format.
-- `claude`: Claude, through the Claude Code CLI (`claude -p`), guided by the Declared
-  Ontology stetiq hands the run. The default when `claude` is on PATH.
+| Round | Prompt | Declared Ontology (chosen by the demo, or `stetiq run --version`) |
+| ----- | ------ | ------------------------------------------------------------------ |
+| v1    | v1     | ontology/v1.yaml                                                   |
+| v2    | v2     | production (v1)                                                    |
+| fix   | v2     | ontology/fix.yaml                                                  |
 
-Every extractor returns the same shape (`Draft`: nodes keyed by (label, key), plus
-relationships), so the writer and the rest of the pipeline do not care which produced it.
+Prompt v2 also pulls suppliers out of the reports and fills a work order's fields from
+its report where the report is more specific; the pipeline lets the report's `kind`
+override the CMMS export's.
+
+Claude's answers are cached by (prompt version, model, prompt). Three modes:
+
+- `replay` (default): read the committed cache in llm-cache/ only. A miss is an error,
+  so a changed prompt never calls Claude silently.
+- `live`: call the `claude` CLI on a miss and cache to the gitignored .graphdb/llm-cache/.
+- `record`: call the `claude` CLI for every report and overwrite the committed entries.
 
 Run it as the Construction Entry Point (see stetiq.yaml):
 
-    python pipeline.py --ontology declared.yaml --scope '{"database": "plant"}'
+    PLANT_ROUND=v2 python pipeline.py --ontology declared.yaml --scope '{"database": "plant"}'
 
-Environment: PLANT_GRAPH_FILE (where the local graph store lives), PLANT_EXTRACTOR
-(`auto`, `rules-v1`, `rules-v2` or `claude`), PLANT_EXTRACTION_MODEL and PLANT_LLM_CACHE.
+Environment: PLANT_ROUND (or --round), PLANT_GRAPH_FILE (where the local graph store
+lives), PLANT_LLM (`replay`, `live` or `record`), PLANT_EXTRACTION_MODEL and
+PLANT_LLM_CACHE (a cache folder other than the mode's own).
 """
 
 from __future__ import annotations
@@ -40,7 +49,6 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -48,7 +56,7 @@ from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
 from graphdb import DEFAULT_DATABASE, LocalGraph
 
@@ -57,8 +65,15 @@ from stetiq.ontology import Ontology, parse_yaml, to_yaml
 EXAMPLE_DIR = Path(__file__).resolve().parent
 DATA_DIR = EXAMPLE_DIR / "data"
 DEFAULT_GRAPH_FILE = EXAMPLE_DIR / ".graphdb" / "plant.json"
-DEFAULT_LLM_CACHE = EXAMPLE_DIR / ".graphdb" / "llm-cache"
+RECORDED_LLM_CACHE = EXAMPLE_DIR / "llm-cache"  # committed: the demo's recording
+SCRATCH_LLM_CACHE = EXAMPLE_DIR / ".graphdb" / "llm-cache"  # gitignored: --live
 DEFAULT_MODEL = "claude-opus-5-5"
+
+Round = Literal["v1", "v2", "fix"]
+ROUNDS: tuple[Round, ...] = ("v1", "v2", "fix")
+PROMPT_OF_ROUND: dict[Round, str] = {"v1": "v1", "v2": "v2", "fix": "v2"}
+LlmMode = Literal["replay", "live", "record"]
+LLM_MODES: tuple[LlmMode, ...] = ("replay", "live", "record")
 
 # --- The shape every source produces ---------------------------------------------------
 
@@ -82,7 +97,8 @@ class Draft:
     """Nodes and relationships one source contributes, merged by (label, key).
 
     The first value seen for a property wins, so the structured sources (loaded first)
-    are never overwritten by what a report says."""
+    are never overwritten by what a report says, unless the pipeline says otherwise
+    (see `build`)."""
 
     nodes: dict[Key, dict[str, Any]] = field(default_factory=dict)
     relationships: list[tuple[Key, str, Key]] = field(default_factory=list)
@@ -109,7 +125,7 @@ class Draft:
 # --- Structured sources ----------------------------------------------------------------
 
 
-def load_structured(data_dir: Path = DATA_DIR, *, join_technicians: bool) -> Draft:
+def load_structured(data_dir: Path = DATA_DIR) -> Draft:
     draft = Draft()
     for row in _csv(data_dir / "assets" / "machines.csv"):
         machine = draft.node(
@@ -129,14 +145,12 @@ def load_structured(data_dir: Path = DATA_DIR, *, join_technicians: bool) -> Dra
             title=row["title"],
             kind=row["kind"],
             opened_at=dt.date.fromisoformat(row["opened_at"]),
-            # The CMMS export gained this column last quarter; initial.yaml does not declare it.
             downtime_minutes=int(row["downtime_minutes"]),
         )
         draft.relate(order, "PERFORMED_ON", draft.node("Machine", row["machine_id"]))
         draft.relate(order, "ASSIGNED_TO", draft.node("Technician", row["technician"]))
-    if join_technicians:
-        for row in _csv(data_dir / "hr" / "technicians.csv"):
-            draft.node("Technician", row["name"], name=row["name"], badge=row["badge"])
+    for row in _csv(data_dir / "hr" / "technicians.csv"):
+        draft.node("Technician", row["name"], name=row["name"], badge=row["badge"])
     return draft
 
 
@@ -165,120 +179,23 @@ def read_reports(data_dir: Path = DATA_DIR) -> list[Report]:
 
 @dataclass(frozen=True)
 class Context:
-    """What the structured sources already know, handed to the extractors."""
+    """What the structured sources already know, handed to the extractor."""
 
     machines: tuple[str, ...]
     technicians: tuple[str, ...]
 
 
-class Extractor:
-    name: str
-    joins_technicians: bool = False
-    workers: int = 1
-
-    def extract(self, report: Report, ontology: Ontology, context: Context) -> Draft | None:
-        """The report's contribution, or None when the extractor cannot read it."""
-        raise NotImplementedError
-
-    def extract_all(
-        self, reports: Sequence[Report], ontology: Ontology, context: Context
-    ) -> list[Draft | None]:
-        if self.workers <= 1:
-            return [self.extract(r, ontology, context) for r in reports]
-        with ThreadPoolExecutor(max_workers=self.workers) as pool:
-            return list(pool.map(lambda r: self.extract(r, ontology, context), reports))
-
-
-_FOLLOW_UP = re.compile(r"^- \[( |x)\] (.+?) \(owner: (.+?)\)\s*$", re.M)
-_HEADER_V1 = re.compile(
-    r"^(?P<id>WO-\d{4}) / (?P<machine>\S+) / (?P<date>[^/\n]+?) / "
-    r"(?P<technician>[^(\n]+?)(?: \(badge (?P<badge>T-\d{3})\))?\s*$"
-)
-_INVOLVED_V1 = re.compile(r"The work involved (.+?)[.:]")
 _WORK_ORDER_ID = re.compile(r"\bWO-\d{4}\b")
-_BADGE = re.compile(r"([^\s/(][^/(\n]*?) \(badge (T-\d{3})\)")
-_INVOLVED_V2 = re.compile(r"(?:The work involved|Work involved:) (.+?)[.:\n]")
-_CAUSE_V2 = re.compile(r"[Rr]oot cause(?: was|:) (.+?)\.")
-_SUPPLIER_V2 = re.compile(
-    r"(?:A replacement (.+?) was ordered from|Replacement part: (.+?), ordered from) ([A-Z][\w&-]+)"
-)
-_FLOW_V2 = re.compile(
-    r"\b([A-Z][A-Za-z]*-\d{2}) (?:feeds|supplies [a-z ]+? to) ([A-Z][A-Za-z]*-\d{2})\b"
-)
-
-
-def _components(text: str) -> list[str]:
-    return [
-        c.strip().removeprefix("the ").strip() for c in re.split(r", | and ", text) if c.strip()
-    ]
-
-
-def _follow_ups(draft: Draft, order: Key, text: str) -> None:
-    for n, (done, description, owner) in enumerate(_FOLLOW_UP.findall(text), start=1):
-        follow_up = draft.node(
-            "FollowUp",
-            f"{order[1]}#{n}",
-            description=description,
-            status="done" if done == "x" else "open",
-        )
-        draft.relate(order, "HAS_FOLLOW_UP", follow_up)
-        draft.relate(follow_up, "ASSIGNED_TO", draft.node("Technician", owner, name=owner))
-
-
-class RulesV1(Extractor):
-    """The original regex script: header line, components and follow-ups only."""
-
-    name = "rules-v1"
-
-    def extract(self, report: Report, ontology: Ontology, context: Context) -> Draft | None:
-        header = _HEADER_V1.match(report.text.splitlines()[0])
-        if header is None:
-            return None  # not the report format the script was written for
-        draft = Draft()
-        order = draft.node("WorkOrder", header["id"])
-        draft.node("Technician", header["technician"].strip(), badge=header["badge"])
-        if found := _INVOLVED_V1.search(report.text):
-            for component in _components(found.group(1)):
-                draft.relate(order, "INVOLVED", draft.node("Component", component))
-        _follow_ups(draft, order, report.text)
-        return draft
-
-
-class RulesV2(Extractor):
-    """The regex script after the fix round: causes, suppliers, flow statements, emails."""
-
-    name = "rules-v2"
-    joins_technicians = True
-
-    def extract(self, report: Report, ontology: Ontology, context: Context) -> Draft | None:
-        found_id = _WORK_ORDER_ID.search(report.text)
-        if found_id is None:
-            return None
-        draft = Draft()
-        order = draft.node("WorkOrder", found_id.group())
-        for name, badge in _BADGE.findall(report.text):
-            draft.node("Technician", name.strip(), badge=badge)
-        if found := _INVOLVED_V2.search(report.text):
-            for component in _components(found.group(1)):
-                draft.relate(order, "INVOLVED", draft.node("Component", component))
-        if found := _CAUSE_V2.search(report.text):
-            draft.relate(
-                order, "CAUSED_BY", draft.node("Fault", order[1], description=found.group(1))
-            )
-        for part_a, part_b, supplier in _SUPPLIER_V2.findall(report.text):
-            component = draft.node("Component", part_a or part_b)
-            draft.relate(component, "SUPPLIED_BY", draft.node("Supplier", supplier))
-        for source, target in _FLOW_V2.findall(report.text):
-            draft.relate(draft.node("Machine", source), "FEEDS", draft.node("Machine", target))
-        _follow_ups(draft, order, report.text)
-        return draft
 
 
 class ExtractionError(Exception):
     """The Claude Code CLI could not produce an extraction."""
 
 
-_PROMPT_VERSION = "1"
+class CacheMissError(ExtractionError):
+    """Replay mode found no recorded answer for a prompt."""
+
+
 _SYSTEM_PROMPT = (
     "You are the extraction step of a knowledge-graph construction pipeline for a "
     "manufacturing plant. You read one maintenance report and return the nodes and "
@@ -323,46 +240,102 @@ _OUTPUT_SCHEMA = {
     "additionalProperties": False,
 }
 
+_KEYS_RULE = (
+    "- Keys: Machine, the asset id as written (e.g. CNC-04). WorkOrder, its id (e.g. "
+    'WO-2031). Technician, the full name. Component, the part name in lower case, singular, as written in the report (e.g. "spindle bearing"). '
+    'Supplier, the vendor name. Fault, the work order id (one root cause per work order). FollowUp, "<work order id>#<n>", numbered from 1 in the order they appear.'
+)
+_VALUES_RULE = (
+    "- Property values follow the declared type: DATE as YYYY-MM-DD, INTEGER as a number, "
+    'STRING as text. A FollowUp\'s status is "open" or "done".'
+)
 
-class ClaudeExtractor(Extractor):
+# Each prompt version's rules. v1 is the pipeline's first prompt; v2 is the change the
+# demo's second round makes.
+_RULES = {
+    "v1": f"""- Use only the node labels, property names, relationship types and patterns the ontology declares, and leave out facts it has no place for. Relationship direction follows the patterns.
+{_KEYS_RULE}
+{_VALUES_RULE}
+- The work order, its machine, its technician and its date already come from the CMMS export: emit those nodes with their key only. Attach what the report adds: the components the work involved, the follow-ups with their owner, the root cause, the supplier a replacement component was ordered from, and material-flow statements between machines (one machine feeding or supplying parts to another).""",
+    "v2": f"""- Use the node labels, property names, relationship types and patterns the ontology declares. One addition the ontology may not have yet: record the supplier a replacement component was ordered from as a Supplier node (property name) with a relationship (Component)-[SUPPLIED_BY]->(Supplier). Leave out other facts the ontology has no place for. Relationship direction follows the patterns.
+{_KEYS_RULE}
+{_VALUES_RULE}
+- Read the whole report, whatever its format (a form, a free-text note or an email), and pull out the root cause and the supplier of every replacement part wherever they are stated.
+- The work order, its machine, its technician and its date also come from the CMMS export, but the technician's report is the source of truth for the job. Emit the machine and the technician with their key only. Emit the work order with its key and every declared property the report states or clearly implies, taking the report's characterisation of the job over the CMMS export's wherever the report is more specific. Attach what the report adds: the components the work involved, the follow-ups with their owner, the root cause, the supplier a replacement component was ordered from, and material-flow statements between machines (one machine feeding or supplying parts to another).""",
+}
+
+
+class ClaudeExtractor:
     """Extraction by Claude through the Claude Code CLI, guided by the Declared Ontology.
 
     Each report is one `claude -p` call with a JSON schema for the output, no tools and
-    a replaced system prompt. Results are cached on disk by (prompt version, model,
-    ontology, report), so a rebuild with the same inputs costs nothing.
+    a replaced system prompt. Answers are cached by (prompt version, model, prompt); each
+    entry keeps the response as Claude returned it, with its model and recording date.
     """
 
-    name = "claude"
-    joins_technicians = True
     workers = 4
 
     def __init__(
         self,
-        model: str = DEFAULT_MODEL,
+        prompt_version: str,
         *,
-        cache_dir: Path = DEFAULT_LLM_CACHE,
+        model: str = DEFAULT_MODEL,
+        mode: LlmMode = "replay",
+        cache_dir: Path | None = None,
         effort: str = "low",
     ) -> None:
+        if prompt_version not in _RULES:
+            raise ValueError(f"unknown prompt version {prompt_version!r}")
+        self.prompt_version = prompt_version
         self.model = model
-        self.cache_dir = Path(cache_dir)
+        self.mode: LlmMode = mode
+        self.cache_dir = Path(
+            cache_dir or (SCRATCH_LLM_CACHE if mode == "live" else RECORDED_LLM_CACHE)
+        )
         self.effort = effort
         self.calls = 0
         self.cache_hits = 0
 
-    def extract(self, report: Report, ontology: Ontology, context: Context) -> Draft | None:
+    @property
+    def report_kind_overrides(self) -> bool:
+        """Whether a report's WorkOrder.kind replaces the CMMS export's (prompt v2)."""
+        return self.prompt_version == "v2"
+
+    def extract_all(
+        self, reports: Sequence[Report], ontology: Ontology, context: Context
+    ) -> list[Draft]:
+        with ThreadPoolExecutor(max_workers=self.workers) as pool:
+            return list(pool.map(lambda r: self.extract(r, ontology, context), reports))
+
+    def extract(self, report: Report, ontology: Ontology, context: Context) -> Draft:
         prompt = self._prompt(report, ontology, context)
-        key = hashlib.sha256(f"{_PROMPT_VERSION}\n{self.model}\n{prompt}".encode()).hexdigest()
+        key = hashlib.sha256(f"{self.prompt_version}\n{self.model}\n{prompt}".encode()).hexdigest()
         cached = self.cache_dir / f"{key}.json"
-        if cached.exists():
+        if self.mode != "record" and cached.exists():
             self.cache_hits += 1
-            output = json.loads(cached.read_text(encoding="utf-8"))
-        else:
-            print(f"  extracting {report.name} with {self.model} ...", file=sys.stderr)
-            output = self._call(prompt)
-            self.calls += 1
-            self.cache_dir.mkdir(parents=True, exist_ok=True)
-            cached.write_text(json.dumps(output, indent=1, ensure_ascii=False), encoding="utf-8")
-        return self._to_draft(output)
+            entry = json.loads(cached.read_text(encoding="utf-8"))
+            return self._to_draft(entry["response"])
+        if self.mode == "replay":
+            raise CacheMissError(
+                f"cache miss for {report.name} (prompt {self.prompt_version}, {self.model}) in "
+                f"{self.cache_dir}, rerun with --record"
+            )
+        print(
+            f"  extracting {report.name} with {self.model} (prompt {self.prompt_version}) ...",
+            file=sys.stderr,
+        )
+        response = self._call(prompt)
+        self.calls += 1
+        entry = {
+            "prompt_version": self.prompt_version,
+            "model": self.model,
+            "recorded_at": dt.date.today().isoformat(),
+            "report": report.name,
+            "response": response,
+        }
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        cached.write_text(json.dumps(entry, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+        return self._to_draft(response)
 
     def _prompt(self, report: Report, ontology: Ontology, context: Context) -> str:
         order = _WORK_ORDER_ID.search(report.text)
@@ -373,10 +346,7 @@ class ClaudeExtractor(Extractor):
 {to_yaml(ontology)}
 ## Rules
 
-- Use only the node labels, property names, relationship types and patterns the ontology declares, and leave out facts it has no place for. Relationship direction follows the patterns.
-- Keys: Machine, the asset id as written (e.g. CNC-04). WorkOrder, its id (e.g. WO-2031). Technician, the full name. Component, the part name in lower case, singular, as written in the report (e.g. "spindle bearing"). Supplier, the vendor name. Fault, the work order id (one root cause per work order). FollowUp, "<work order id>#<n>", numbered from 1 in the order they appear.
-- Property values follow the declared type: DATE as YYYY-MM-DD, INTEGER as a number, STRING as text. A FollowUp's status is "open" or "done".
-- The work order, its machine, its technician and its date already come from the CMMS export: emit those nodes with their key only. Attach what the report adds: the components the work involved, the follow-ups with their owner, the root cause, the supplier a replacement component was ordered from, and material-flow statements between machines (one machine feeding or supplying parts to another).
+{_RULES[self.prompt_version]}
 
 ## Context
 
@@ -444,18 +414,14 @@ Known technicians: {", ".join(context.technicians)}
         return draft
 
 
-def make_extractor(
-    name: str, *, model: str = DEFAULT_MODEL, cache_dir: Path = DEFAULT_LLM_CACHE
-) -> Extractor:
-    if name == "auto":
-        name = "claude" if shutil.which("claude") else "rules-v2"
-    if name == "rules-v1":
-        return RulesV1()
-    if name == "rules-v2":
-        return RulesV2()
-    if name == "claude":
-        return ClaudeExtractor(model, cache_dir=cache_dir)
-    raise ValueError(f"unknown extractor {name!r} (expected auto, rules-v1, rules-v2 or claude)")
+def extractor_for_round(
+    round_: Round,
+    *,
+    model: str = DEFAULT_MODEL,
+    mode: LlmMode = "replay",
+    cache_dir: Path | None = None,
+) -> ClaudeExtractor:
+    return ClaudeExtractor(PROMPT_OF_ROUND[round_], model=model, mode=mode, cache_dir=cache_dir)
 
 
 # --- Writing the graph ---------------------------------------------------------------
@@ -494,8 +460,6 @@ def write(graph: LocalGraph, draft: Draft, *, ontology: Ontology, database: str)
 @dataclass(frozen=True)
 class BuildStats:
     reports: int
-    reports_read: int
-    skipped: tuple[str, ...]  # reports the extractor could not read
     nodes: int
     relationships: int
 
@@ -504,40 +468,28 @@ def build(
     graph: LocalGraph,
     *,
     ontology: Ontology,
-    extractor: Extractor,
+    extractor: ClaudeExtractor,
     data_dir: Path = DATA_DIR,
     database: str = DEFAULT_DATABASE,
-    sensors: bool = False,
 ) -> BuildStats:
     """Rebuild `database` in `graph` from the data: structured sources first, then every
-    report through `extractor`. `sensors=True` also writes the experimental Sensor nodes
-    from the condition-monitoring feed (which no Ontology Version declares)."""
-    draft = load_structured(data_dir, join_technicians=extractor.joins_technicians)
+    report through `extractor`."""
+    draft = load_structured(data_dir)
     context = Context(
         machines=tuple(sorted(k for (label, k) in draft.nodes if label == "Machine")),
         technicians=tuple(sorted(k for (label, k) in draft.nodes if label == "Technician")),
     )
     reports = read_reports(data_dir)
-    skipped = []
-    for report, extracted in zip(
-        reports, extractor.extract_all(reports, ontology, context), strict=True
-    ):
-        if extracted is None:
-            skipped.append(report.name)
-        else:
-            draft.merge(extracted)
-    if sensors:
-        for machine in context.machines:
-            sensor = draft.node(
-                "Sensor", f"{machine}/vibration", name=f"{machine}/vibration", unit="mm/s"
-            )
-            draft.relate(draft.node("Machine", machine), "HAS_SENSOR", sensor)
+    for extracted in extractor.extract_all(reports, ontology, context):
+        draft.merge(extracted)
+        if extractor.report_kind_overrides:
+            for (label, key), props in extracted.nodes.items():
+                if label == "WorkOrder" and props.get("kind") is not None:
+                    draft.nodes[(label, key)]["kind"] = props["kind"]
     graph.clear(database)
     nodes, relationships = write(graph, draft, ontology=ontology, database=database)
     graph.save()
-    return BuildStats(
-        len(reports), len(reports) - len(skipped), tuple(skipped), nodes, relationships
-    )
+    return BuildStats(len(reports), nodes, relationships)
 
 
 # --- Command line (the Construction Entry Point) ----------------------------------------
@@ -548,20 +500,30 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--ontology", required=True, help="the Declared Ontology (stetiq YAML)")
     parser.add_argument("--scope", default='{"database": "plant"}', help="Graph Source scope JSON")
     parser.add_argument(
+        "--round",
+        choices=ROUNDS,
+        default=os.environ.get("PLANT_ROUND"),
+        help="which round's prompt to extract with (default: $PLANT_ROUND)",
+    )
+    parser.add_argument(
         "--graph", default=os.environ.get("PLANT_GRAPH_FILE", str(DEFAULT_GRAPH_FILE))
     )
-    parser.add_argument("--extractor", default=os.environ.get("PLANT_EXTRACTOR", "auto"))
     parser.add_argument("--model", default=os.environ.get("PLANT_EXTRACTION_MODEL", DEFAULT_MODEL))
-    parser.add_argument(
-        "--llm-cache", default=os.environ.get("PLANT_LLM_CACHE", str(DEFAULT_LLM_CACHE))
-    )
+    parser.add_argument("--llm", choices=LLM_MODES, default=os.environ.get("PLANT_LLM", "replay"))
+    parser.add_argument("--llm-cache", default=os.environ.get("PLANT_LLM_CACHE"))
     parser.add_argument("--data-dir", default=str(DATA_DIR))
-    parser.add_argument("--sensors", action="store_true", help="also write the Sensor nodes")
     args = parser.parse_args(argv)
+    if args.round is None:
+        parser.error("say which round to run: --round v1|v2|fix, or set PLANT_ROUND")
 
     ontology = parse_yaml(Path(args.ontology).read_text(encoding="utf-8"))
     database = json.loads(args.scope).get("database") or DEFAULT_DATABASE
-    extractor = make_extractor(args.extractor, model=args.model, cache_dir=Path(args.llm_cache))
+    extractor = extractor_for_round(
+        cast(Round, args.round),
+        model=args.model,
+        mode=cast(LlmMode, args.llm),
+        cache_dir=Path(args.llm_cache) if args.llm_cache else None,
+    )
     try:
         stats = build(
             LocalGraph(args.graph),
@@ -569,12 +531,23 @@ def main(argv: Sequence[str] | None = None) -> int:
             extractor=extractor,
             data_dir=Path(args.data_dir),
             database=database,
-            sensors=args.sensors,
         )
     except ExtractionError as e:
         print(f"pipeline: {e}", file=sys.stderr)
         return 1
-    print(json.dumps({"extractor": extractor.name, **stats.__dict__}))
+    print(
+        json.dumps(
+            {
+                "round": args.round,
+                "prompt": extractor.prompt_version,
+                "model": extractor.model,
+                "llm": extractor.mode,
+                "claude_calls": extractor.calls,
+                "cache_hits": extractor.cache_hits,
+                **stats.__dict__,
+            }
+        )
+    )
     return 0
 
 

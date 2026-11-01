@@ -1,0 +1,129 @@
+{
+ "prompt_version": "v2",
+ "model": "claude-opus-5-5",
+ "recorded_at": "2026-11-01",
+ "report": "WO-2033.txt",
+ "response": {
+  "nodes": [
+   {
+    "label": "WorkOrder",
+    "key": "WO-2033",
+    "properties": {
+     "id": "WO-2033",
+     "kind": "preventive",
+     "opened_at": "2026-02-09",
+     "downtime_minutes": 25,
+     "title": "Scheduled torch service on Weld-03"
+    }
+   },
+   {
+    "label": "Machine",
+    "key": "Weld-03",
+    "properties": {
+     "name": "Weld-03"
+    }
+   },
+   {
+    "label": "Machine",
+    "key": "Paint-01",
+    "properties": {
+     "name": "Paint-01"
+    }
+   },
+   {
+    "label": "Technician",
+    "key": "Tomasz Nowak",
+    "properties": {
+     "name": "Tomasz Nowak"
+    }
+   },
+   {
+    "label": "Component",
+    "key": "weld torch tip",
+    "properties": {
+     "name": "weld torch tip"
+    }
+   },
+   {
+    "label": "Component",
+    "key": "wire feeder",
+    "properties": {
+     "name": "wire feeder"
+    }
+   },
+   {
+    "label": "Fault",
+    "key": "WO-2033",
+    "properties": {
+     "description": "Routine wear of the contact tip"
+    }
+   },
+   {
+    "label": "FollowUp",
+    "key": "WO-2033#1",
+    "properties": {
+     "description": "Reorder contact tips",
+     "status": "done"
+    }
+   }
+  ],
+  "relationships": [
+   {
+    "start_label": "WorkOrder",
+    "start_key": "WO-2033",
+    "type": "PERFORMED_ON",
+    "end_label": "Machine",
+    "end_key": "Weld-03"
+   },
+   {
+    "start_label": "WorkOrder",
+    "start_key": "WO-2033",
+    "type": "ASSIGNED_TO",
+    "end_label": "Technician",
+    "end_key": "Tomasz Nowak"
+   },
+   {
+    "start_label": "WorkOrder",
+    "start_key": "WO-2033",
+    "type": "INVOLVED",
+    "end_label": "Component",
+    "end_key": "weld torch tip"
+   },
+   {
+    "start_label": "WorkOrder",
+    "start_key": "WO-2033",
+    "type": "INVOLVED",
+    "end_label": "Component",
+    "end_key": "wire feeder"
+   },
+   {
+    "start_label": "WorkOrder",
+    "start_key": "WO-2033",
+    "type": "CAUSED_BY",
+    "end_label": "Fault",
+    "end_key": "WO-2033"
+   },
+   {
+    "start_label": "WorkOrder",
+    "start_key": "WO-2033",
+    "type": "HAS_FOLLOW_UP",
+    "end_label": "FollowUp",
+    "end_key": "WO-2033#1"
+   },
+   {
+    "start_label": "FollowUp",
+    "start_key": "WO-2033#1",
+    "type": "ASSIGNED_TO",
+    "end_label": "Technician",
+    "end_key": "Tomasz Nowak"
+   },
+   {
+    "start_label": "Machine",
+    "start_key": "Weld-03",
+    "type": "FEEDS",
+    "end_label": "Machine",
+    "end_key": "Paint-01"
+   }
+  ]
+ }
+}
