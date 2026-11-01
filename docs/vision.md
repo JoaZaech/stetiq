@@ -102,7 +102,7 @@ The MVP **builds**:
 - **Consumers and Tasks** in the Use Case: who uses the Knowledge Graph, the Tasks they perform, and the Competency Questions each Task needs, versioned with the Use Case and editable in the web UI.
 - **Consumer impact** of an Ontology Diff, in the SDK, the CLI, the Ontology Diff view and the Promotion confirmation.
 - **Task readiness**: how many of a Task's Competency Questions the Ontology Version being viewed can answer, and which questions serve no Task.
-- **The Consumer Gate, checked in CI on a Candidate**: Consumer Gates declared on each Consumer in the Use Case (`row_count_drop`), evaluated and recorded by the server against the Contract Alias baseline, run by `stetiq consumer gate` in the upstream pipeline's CI, and shown on each Consumer tile with its latest verdict (in full in the Consumer's sheet) and in the pipeline strip on the Knowledge Graph overview.
+- **The Consumer Gate, checked in CI on a Candidate**: Consumer Gates declared on each Consumer in the Use Case (`row_count_drop`), evaluated and recorded by the server against the Contract Alias baseline, run by `stetiq consumer gate` in the upstream pipeline's CI, and shown on each Consumer tile with its latest verdict (in full in the Consumer's sheet).
 
 The MVP **shows, as "Planned"** (placeholders in the web UI that link to this page, or notes in the guide):
 

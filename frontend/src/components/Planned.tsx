@@ -7,7 +7,6 @@ import { helpUrl } from '@/pages/help/guide-index'
 
 /** The sections of the vision (`docs/vision.md`, at `/help/vision`) a placeholder can link to. */
 export type VisionSection =
-  | 'the-two-gate-pipeline'
   | 'consumer-gate'
   | 'connector'
   | 'consumer-impact-and-gates-over-it'
