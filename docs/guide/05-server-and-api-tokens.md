@@ -42,14 +42,15 @@ Each `--grant KNOWLEDGE_GRAPH=read|edit` gives the token one permission on one K
 
 | Permission | Allows |
 | --- | --- |
-| `read` | Every read: listing and opening the Knowledge Graph, its Ontology Versions, Construction Runs, Use Case, Observations, Promotions, Gate results and Gate Previews. |
-| `edit` | Everything `read` allows, plus every change: registering an Ontology Version, starting a Construction Run, editing the Use Case, recording an Observation, moving an Alias or promoting. |
+| `read` | Every read: listing and opening the Knowledge Graph, its Ontology Versions, Construction Runs, Use Case, Observations, Promotions, Gate results, Gate Previews and Consumer Gate results. |
+| `edit` | Everything `read` allows, plus every change: registering an Ontology Version, starting a Construction Run, editing the Use Case, recording an Observation, recording a Gate or Consumer Gate result, moving an Alias or promoting. |
 
 - `edit` includes `read`.
 - `*` grants every Knowledge Graph, including ones created later: `--grant '*=edit'`.
 - Creating a Knowledge Graph needs `edit` on its name (or on `*`).
 - Listing Knowledge Graphs shows only those the token can read. A Construction Run or Observation outside its grants answers exactly like one that doesn't exist.
 - Gate Previews (`GET /api/v1/knowledge-graphs/NAME/gate-previews`, `Client.preview_gates`) need only `read`: the server computes them from the results it stores, with the Gate definitions of the latest recorded Gate result, and records nothing. They are available through the SDK, this route and the web UI only, with no CLI command.
+- Consumer Gate verdicts: recording one (`POST /api/v1/knowledge-graphs/NAME/consumer-gate-results`, `stetiq consumer gate`, `Client.evaluate_consumer_gates`) needs `edit`, so give your pipeline's CI an `edit` token as for `stetiq gate`; listing them (`GET` on the same path, `stetiq consumer gate-results`) needs `read`. The request names only the run, version or Consumer to judge: the server takes the Consumer Gates from its stored Use Case Version and the row counts from its stored results.
 - The audit log records the token's user as the actor of every change. In server mode the actor the SDK sends (`$STETIQ_ACTOR`) is ignored.
 
 A "user" is just the name on a token: there is no user directory, and permissions live on each token. To change someone's permissions, issue a new token and revoke the old one.

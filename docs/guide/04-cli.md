@@ -40,7 +40,7 @@ Local mode needs no token. How to issue one is described in [Server & API Tokens
 | `0` | Success. |
 | `1` | An error, printed as `error: …` (unknown Knowledge Graph, missing permission, bad config file…). `stetiq run` also exits 1 when the Construction Run failed. |
 | `2` | A usage error: an unknown command or option, or a missing argument. |
-| `3` | A finding: `stetiq observe` found Drift, or `stetiq gate` had a Gate fail. |
+| `3` | A finding: `stetiq observe` found Drift, `stetiq gate` had a Gate fail, or `stetiq consumer gate` had a Consumer Gate fail. |
 
 ## Commands
 
@@ -55,6 +55,7 @@ Local mode needs no token. How to issue one is described in [Server & API Tokens
 | `stetiq observe` | Take an Observation now and check it for Drift. |
 | `stetiq observations`, `stetiq drift` | List Observations and Drift events. |
 | `stetiq gate`, `stetiq gate-results` | Evaluate the Gates in `stetiq.yaml`, and list past results. |
+| `stetiq consumer` | Evaluate the Consumer Gates the Use Case declares, and list past results. |
 | `stetiq ui` | The web UI over a local tracking database. |
 | `stetiq server` | The stetiq server. |
 | `stetiq token` | Issue, list and revoke API Tokens (on the server's database). |
@@ -157,6 +158,31 @@ stetiq gate-results support
 ```
 
 `stetiq gate` evaluates the Gates in `stetiq.yaml` (or `--config`) for an Ontology Version (default: the latest) or a Construction Run, and records the result. It prints `PASS` or `FAIL` per Gate with the reasons, and exits 3 if a Gate failed, so it fits a CI check. `gate-results` lists every recorded evaluation.
+
+### Consumer Gates
+
+```bash
+stetiq consumer gate
+stetiq consumer gate plant --run 5d0c1f2e9a7b4c3d8e6f1a2b3c4d5e6f
+stetiq consumer gate plant --version 4 --consumer reliability-dashboard
+stetiq consumer gate-results plant --consumer reliability-dashboard
+```
+
+`stetiq consumer gate` evaluates every Consumer's [Consumer Gates](./03-python-sdk.md#consumer-gates), declared in the latest Use Case Version, for a finished Construction Run: the latest by default, the one `--run` names, or the latest standing for the Ontology Version `--version` names. Each is judged against the latest finished run on the Contract Alias's version, and every verdict is recorded on the server. `--consumer` evaluates only that Consumer. The Knowledge Graph defaults to `knowledge_graph` in `stetiq.yaml` (or `--config`); Consumer Gates never live in `stetiq.yaml`. Run it in your pipeline's CI beside `stetiq gate`, with an API Token that has *edit* on the Knowledge Graph, so a pull request shows both checks.
+
+It prints, per Consumer, `PASS` or `FAIL` per Consumer Gate, and under a failure each Task / Competency Question with its row change; Consumers that declare no Consumer Gate are listed as skipped:
+
+```text
+maintenance-assistant
+  PASS  row_count_drop
+reliability-dashboard
+  FAIL  triage-rows-hold
+        triage-breakdowns / breakdown-technicians: 5 → 2 rows (−60.0%, limit −10%)
+safety-team: no Consumer Gate declared (skipped)
+1 of 2 Consumer Gates failed for plant run 81a4c0e2f3b5d6e7f8a9b0c1d2e3f4a5 (Ontology Version 4; baseline run 5d0c1f2e9a7b4c3d8e6f1a2b3c4d5e6f on Ontology Version 3)
+```
+
+It exits **0** when every Consumer Gate passed, **3** when one failed, including for a missing baseline or a question it could not measure, and **1** on an error: no Consumer declares a Consumer Gate, no finished run, an unknown Knowledge Graph, run or Consumer, or `--run` with `--version`. `consumer gate-results` lists the recorded verdicts, oldest first.
 
 ### Web UI, server and API Tokens
 
