@@ -165,11 +165,7 @@ def assess_drift(
             value=m.value,
         )
         for m in conformance.mismatches
-        if m.kind in _STRUCTURAL
-        and m.subject_kind != "pattern"  # patterns are not Concepts
-        # Drift names each value; a truncated value list with no listed value outside the
-        # Vocabulary names none, so it is no Drift.
-        and (m.kind != MismatchKind.VALUE_OUTSIDE_VOCABULARY or m.value is not None)
+        if m.kind in _STRUCTURAL and m.subject_kind != "pattern"  # patterns are not Concepts
     ]
     if previous is not None and thresholds is not None:
         findings.extend(_statistical(observed, previous, thresholds))

@@ -288,9 +288,9 @@ def _check_values(
 ) -> None:
     """A Vocabulary-bound Attribute whose values were observed is one item. Each observed
     value outside the Vocabulary fails it and is reported with its count; a deprecated
-    value is reported but conforms. A truncated value list (more distinct values than the
-    cap) cannot show that every value conforms, so it fails the item too; the listed
-    values are still reported one by one."""
+    value is reported but conforms. Only listed values are checked: a truncated list (more
+    distinct values than the cap) conforms when none of its values is outside the
+    Vocabulary, and the Observed Schema's `truncated` flag says the list is incomplete."""
     vocabulary = ontology.vocabulary(declared.vocabulary) if declared.vocabulary else None
     if vocabulary is None or observed.values is None:
         return
@@ -323,18 +323,7 @@ def _check_values(
                     c.count,
                 )
             )
-    if observed.values.truncated and not outside:
-        checks.report(
-            Mismatch(
-                subject,
-                "property",
-                MismatchKind.VALUE_OUTSIDE_VOCABULARY,
-                f"more than {len(observed.values.counts)} distinct values observed; "
-                "those beyond the cap were not checked against "
-                f"{vocabulary.label}",
-            )
-        )
-    checks.item(f"vocabulary {subject}", not outside and not observed.values.truncated)
+    checks.item(f"vocabulary {subject}", not outside)
 
 
 def _check_patterns(checks: _Checks, declared: Ontology, observed: ObservedSchema) -> None:
