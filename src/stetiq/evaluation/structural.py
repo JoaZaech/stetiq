@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections import Counter
 from typing import TYPE_CHECKING
 
+from stetiq.evaluation.definitions import Definitions
 from stetiq.evaluation.framework import Detail, Evaluation, OntologyVersionEvaluator, ratio
 from stetiq.ontology.model import NodeType, Ontology, Property, RelationshipType
 
@@ -286,6 +287,7 @@ class ConstraintConsistency(OntologyVersionEvaluator):
 
 BUILT_IN_EVALUATORS: tuple[OntologyVersionEvaluator, ...] = (
     ConstraintConsistency(),
+    Definitions(),
     Hierarchy(),
     IsolatedNodeTypes(),
     OrphanConcepts(),

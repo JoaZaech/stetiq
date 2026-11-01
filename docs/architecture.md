@@ -71,7 +71,7 @@ An Ontology Diff `Change` states what it concerns as fields: `owner`, `owner_kin
 
 ## Reserved Evaluator names
 
-`RESERVED_EVALUATOR_NAMES` (`tracking/service.py`) is the union of the version built-ins (`hierarchy`, `isolated_node_types`, `orphan_concepts`, `redundancy`, `constraint_consistency`), `structural_answerability`, `competency_question_coverage`, and the run Evaluators `conformance`, `observed_schema` and `competency_question_execution`.
+`RESERVED_EVALUATOR_NAMES` (`tracking/service.py`) is the union of the version built-ins (`hierarchy`, `isolated_node_types`, `orphan_concepts`, `redundancy`, `constraint_consistency`, `definitions`), `structural_answerability`, `competency_question_coverage`, and the run Evaluators `conformance`, `observed_schema` and `competency_question_execution`.
 
 - `Client.register_evaluator` and the one-off `evaluators=` reject these names, before running anything, through the service's `check_not_built_in`, so the message is the same as the service's. `record_evaluation` refuses them too, with one exception: `competency_question_execution` is accepted on a `construction_run` subject, because it is a built-in that has to run on the SDK side.
 - Gates name these Evaluators and their metrics in users' `stetiq.yaml`, so **renaming one is a breaking change**. A new built-in must be added to this set.
