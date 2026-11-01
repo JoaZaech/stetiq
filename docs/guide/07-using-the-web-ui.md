@@ -6,7 +6,7 @@ Open it with `stetiq ui` (local mode, see [Getting started](./01-getting-started
 
 ## Finding your way around
 
-The web UI opens on **Home**: a *Getting Started* block whose cards open the guide pages for each step of the workflow (collapse it once you know your way, and it stays collapsed in that browser), and your five most recently modified Knowledge Graphs, with **View all** leading to the full list. The stetiq logo at the top of the sidebar always leads back to Home.
+The web UI opens on **Home**: your five most recently modified Knowledge Graphs, with **View all** leading to the full list. The line *New to stetiq? Read the guide* under the title opens this guide's first page. The stetiq logo at the top of the sidebar always leads back to Home.
 
 The sidebar looks the same on every page:
 
@@ -107,14 +107,14 @@ The tab opens on a **Map** of both versions laid over each other, each class in 
 
 **The Table.** The **Table / Map** toggle switches to the Diff as a grid: the overall classification and a count per level, then a row per change with its Concept, Concept kind (*Class*, *Relation*, *Attribute* or *Vocabulary*), change (added, removed, changed or deprecated), severity and detail, most severe first. It sorts, filters and searches like the Ontology Table, and each row's **Show on Map** shows the class or relation it changed. Documentation-only changes are hidden until you click **Show documentation-only changes**.
 
-**Consumer impact.** Above the changes, **Consumer impact** lists the Consumers of the latest Use Case Version the changes hit, in sections: **Affected** (a breaking change to a Concept one of their Tasks' Competency Questions needs), **Will be affected** (a deprecating one) and **Impact unknown** (a question with neither a Concept mapping nor a query). Each Consumer shows the Tasks hit, most severe first, and under each its questions with the Concepts whose changes hit them, in their classification's colour. Questions no Task needs are listed under **No Consumer**. A Consumer the changes don't touch is left out. Without a Use Case the section says there is none, so no Consumers are declared. See [Consumer impact](./03-python-sdk.md#consumer-impact) for how changes are followed to Consumers.
+**Consumer impact.** Above the changes, **Consumer impact** lists one item per Task of the latest Use Case Version the changes hit. Each item shows an icon for how it is hit: red when it is *affected* (a breaking change to a Concept one of its Competency Questions needs), amber when it *will be affected* (a deprecating one), and a grey dashed circle when its impact is *unknown* (a question with neither a Concept mapping nor a query). Next to it are the Task, its Consumer's name, and one line on why, such as "breaks Ticket.opened_at", "deprecates Agent" or "can't tell: no Concept mapping or query". Click an item to see the questions it hits, each followed by the Concepts whose changes hit it, in their classification's colour. Items are listed the most severe first, then by Consumer and Task. Hit questions no Task needs come last, titled by the question, with a **No Consumer** chip. A Consumer the changes don't touch is left out, and when nothing is hit the section says **No Consumer is affected**. Without a Use Case the section says there is none, so no Consumers are declared. See [Consumer impact](./03-python-sdk.md#consumer-impact) for how changes are followed to Consumers.
 
 #### Promoting a version
 
 **Promote** on a version's page (needs edit access) moves an Alias to that version:
 
 1. Pick an existing Alias, or choose **New Alias** and type a name to create one.
-2. Check what changes: the dialog shows the Ontology Diff from the version the Alias points to now, its **Consumer impact** (the Consumers and their Tasks it affects or will affect, as on the Changes tab), and this version's latest Gate result. With no impact it says no Consumer, Task or Competency Question is hit; without a Use Case it says no Consumers are declared. Neither the impact nor the Gates block a Promotion: they show who downstream has to change, and the Gate result is recorded with it.
+2. Check what changes: the dialog shows the Ontology Diff from the version the Alias points to now, its **Consumer impact** (an item per Task it affects or will affect, as on the Changes tab), and this version's latest Gate result. With no impact it says **No Consumer is affected**; without a Use Case it says no Consumers are declared. Neither the impact nor the Gates block a Promotion: they show who downstream has to change, and the Gate result is recorded with it.
 3. If you picked the Contract Alias, confirm **Switch Construction Runs and Drift to v*N***: new Construction Runs will declare this version, and Drift will be measured against it.
 4. Click **Promote to *alias***.
 
@@ -122,7 +122,10 @@ The Promotion is recorded with you as the actor and shows up under [Promotions](
 
 ### Construction Runs
 
-The section lists every Construction Run, newest first, with its status, start time, duration, Declared Ontology, Conformance score and the Candidate it produced, if any.
+The section lists every Construction Run, newest first. Each run shows its short id with up to three of its params as chips (`extractor: llm`), sorted by name; the rest count as *+n*, and pointing at that shows them. Then come its status, start time, duration, Declared Ontology, Conformance, its Gate verdict and the Candidate it produced, if any.
+
+- **Conformance** is a percentage, coloured by how close it is to 100 %: green from 95 %, amber from 80 %, red below.
+- **Gate** shows the run's latest recorded Gate result as **Passed** (green check) or **Failed** (red cross). A run CI never gated shows **Preview** (grey dashed circle) when it has a Gate Preview, whatever the preview judges: pointing at it says whether it passes or fails against current Gates, and that it is not recorded. Only a Gate result CI records counts. A Knowledge Graph that was never gated shows *—*.
 
 - **Status** filters by All, Running, Finished or Failed, and **Started** by All time or the last 24 hours, 7 days or 30 days.
 - **Columns** adds a column per param or metric the runs logged.
@@ -136,11 +139,11 @@ If the Knowledge Graph has been gated, each KPI a Gate covers (Conformance, or t
 
 **The KPI drill-down.** Click a KPI cell on the compare page, or a point on a run chart, to open a side sheet about that run's KPI: its value (or *no result*), its verdict marked *recorded* or *preview* with each covering Gate's pass or fail and reasons, and, for an Evaluator result metric, the Evaluator's detail items about that metric. A KPI no Gate covers says so. A link at the bottom opens the run page tab the KPI comes from: **Evaluations**, **Conformance**, or the **Overview** for a run metric.
 
-**A Construction Run's page.** Click a run id to open it. The header shows the full id (with a copy button), its status, when it started and how long it took. If it failed, a banner says why as far as stetiq knows: it observed Concepts its Declared Ontology does not have while the Evolution Mode is *strict*, or it failed before its Graph Source was observed. Three tabs follow:
+**A Construction Run's page.** Click a run id to open it. The title is the run's short id and its params as chips, as in the list; under it are its status, when it started and how long it took. If it failed, a banner says why as far as stetiq knows: it observed Concepts its Declared Ontology does not have while the Evolution Mode is *strict*, or it failed before its Graph Source was observed. Three tabs follow:
 
-- **Overview**: its Declared Ontology, Candidate, start and end time and duration; the Observation it ended with (when, which Graph Source, and how many classes, relations and patterns it saw); and its params and metrics.
+- **Overview**: its **Details**: the full run id (with a copy button), Declared Ontology, Candidate, start and end time and duration; the Observation it ended with (when, which Graph Source, and how many classes, relations and patterns it saw); and its params and metrics.
 - **Conformance**: the Conformance score, then the Concepts **Declared but not observed**, those **Observed but not declared**, and **Other mismatches**, each with its kind: *Undeclared value type*, *Required but not always set*, *Outside the declared cardinality* (a pattern whose observed out- or in-degree falls outside its declared bounds), *Value outside the Vocabulary* (a value of a Vocabulary-bound attribute that its Vocabulary does not have, with how many times it was observed) and *Deprecated value (conforms)* (a deprecated Vocabulary Value still in the graph, which is reported but does not lower the score).
-- **Evaluations**: every run Evaluator's metrics and, when the Use Case's Competency Questions were executed against the graph, each one's result (*Passed*, *Failed* or *Error*), which check judged it and any error type. Only the verdict is kept, never the rows the query returned.
+- **Evaluations**: one card per run Evaluator, as on an Ontology Version's Overview (e.g. *Conformance* with its score as a percentage, *Questions executed* with *Passed 1 / 2*), and **Show all metrics** for the full table. When the Use Case's Competency Questions were executed against the graph, **Competency Questions** lists each one by its text with its result: **Passed**, **Failed** or **Error**. Click a question to open its side sheet, as on the Use Case page, with an **In this run** part: the result, which check judged it (*non-empty result* or *expected answer*) and any error type. The sheet shows the question as it was in the Use Case Version the run executed, and is part of the URL. Only the verdict is kept, never the rows the query returned.
 
 ### Use Case and Competency Questions
 
@@ -156,7 +159,7 @@ Click a question to open its **side sheet**, which shows the question and its st
 
 Below the Competency Questions:
 
-- **Consumers**: a tile per Consumer the Use Case declares, with an icon for its kind (an application, an agent, a dashboard and a team each have their own; any other kind gets a generic one), its name and the first line of its description. Each tile has one **readiness** line: "*n* of *m* Tasks ready", green when all are and red otherwise. A Task is ready when the latest Ontology Version answers every Competency Question it needs. Readiness is always shown for the latest Ontology Version: the page has no version selector. It reads **Not checked yet** (grey) until that Ontology Version has been judged against this Use Case Version, or when the Knowledge Graph has no Ontology Version, and **No Tasks** (grey) for a Consumer that declares none. A Consumer that declares a Consumer Gate also has a **Consumer Gate** line with its latest verdict: *Consumer Gate passed*, *Consumer Gate failed* or *Consumer Gate not evaluated yet*; a Consumer without one has no such line. You can edit Consumers and Tasks here (see below) or declare them in the Use Case you register from the [Python SDK](./03-python-sdk.md#use-cases-and-competency-questions) or the [CLI](./04-cli.md#use-cases).
+- **Consumers**: a tile per Consumer the Use Case declares, with an icon for its kind (an application, an agent, a dashboard and a team each have their own; any other kind gets a generic one), its name and the first line of its description. Each tile has one **readiness** line: "*n* of *m* Tasks ready", green when all are and red otherwise. A Task is ready when the latest Ontology Version answers every Competency Question it needs. Readiness is always shown for the latest Ontology Version: the page has no version selector. It reads **Not checked yet** (grey) until that Ontology Version has been judged against this Use Case Version, or when the Knowledge Graph has no Ontology Version, and **No Tasks** (grey) for a Consumer that declares none. A Consumer that declares a Consumer Gate also has a **Consumer Gate** line with its latest verdict: *Consumer Gate passed*, *Consumer Gate failed* or *Consumer Gate not evaluated yet*; a Consumer without one has no such line. Each tile ends with **Connect**, which opens a picker of example Connectors ([planned](#planned-features)) instead of the sheet. You can edit Consumers and Tasks here (see below) or declare them in the Use Case you register from the [Python SDK](./03-python-sdk.md#use-cases-and-competency-questions) or the [CLI](./04-cli.md#use-cases).
 
   Click a tile to open the Consumer's **side sheet**. It shows the Consumer's kind, name, id, contact and description, with **Edit** and **Remove** in its header, then:
 
@@ -194,6 +197,7 @@ The section is the Promotion audit, newest first: which Alias moved, from which 
 Some parts of stetiq's [vision](../vision.md) are shown in the web UI but not built yet. Each is muted or disabled and carries a **Planned** badge: point at the badge for what it will do, and click it to read about it in the vision.
 
 - **Evaluated on each Observation**, beside the Consumer Gate in each Consumer's sheet: today the pipeline's CI enforces it.
+- **Connect**, on each Consumer tile: it opens the Consumer's Connector picker, which shows example tools a Connector could link the Consumer through, grouped as **Enforce in CI**, **Get notified** and **In the Consumer's code**. Every tool's **Connect** is disabled and carries its own **Planned** badge.
 - **Pending Migration** and **Adoption**, on an Observation's Drift.
 - **Gate on Consumer impact**, under an Ontology Version's latest Gate result.
 - **Draft Tasks & questions with AI**, beside **Add Consumer** on the Use Case page.

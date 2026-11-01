@@ -4,6 +4,7 @@ import { consumerGateResultsQuery, latestConsumerGateResult } from '@/api/consum
 import type { Consumer, UseCaseVersion } from '@/api/use-cases'
 import { StatusLabel, type StatusTone } from '@/components/StatusLabel'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ConnectorPicker } from './ConnectorPicker'
 import { consumerGateLine } from './consumer-gate'
 import { CONSUMER_KIND_ICONS, consumerKindIcon } from './consumer-kind'
 import { useLatestAnswerability, type LatestAnswerability } from './latest-answerability'
@@ -19,7 +20,8 @@ interface ConsumerTilesProps {
 /**
  * A Use Case Version's Consumers as compact tiles: each one's kind icon, name, one line of
  * description, how many of its Tasks the latest Ontology Version is ready for, and its
- * Consumer Gate's latest verdict when it declares one. A tile opens the Consumer's sheet.
+ * Consumer Gate's latest verdict when it declares one, and Connect (Planned). A tile opens
+ * the Consumer's sheet.
  */
 export function ConsumerTiles({ knowledgeGraph, version, onOpen }: ConsumerTilesProps) {
   const consumers = version.use_case.consumers ?? []
@@ -68,7 +70,8 @@ interface ConsumerTileProps {
 
 /**
  * One Consumer's tile. Its name is the button that opens the sheet, stretched over the
- * whole tile; a control added to the tile must sit above it (`relative z-10`).
+ * whole tile; a control added to the tile must sit above it (`relative z-10`), as Connect
+ * does, so that it opens the Connector picker and not the sheet.
  */
 function ConsumerTile({ consumer, onOpen, readiness, gate }: ConsumerTileProps) {
   const titleId = useId()
@@ -76,7 +79,7 @@ function ConsumerTile({ consumer, onOpen, readiness, gate }: ConsumerTileProps) 
   return (
     <article
       aria-labelledby={titleId}
-      className="relative flex h-full min-w-0 gap-3 rounded-xl bg-card p-4 text-sm text-card-foreground ring-1 ring-foreground/10 hover:bg-muted/40 has-[button:focus-visible]:ring-2 has-[button:focus-visible]:ring-ring"
+      className="relative flex h-full min-w-0 gap-3 rounded-xl bg-card p-4 text-sm text-card-foreground ring-1 ring-foreground/10 hover:bg-muted/40 has-[h4>button:focus-visible]:ring-2 has-[h4>button:focus-visible]:ring-ring"
     >
       <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted">
         <span role="img" aria-label={consumer.kind ?? 'Consumer'} title={consumer.kind}>
@@ -101,6 +104,9 @@ function ConsumerTile({ consumer, onOpen, readiness, gate }: ConsumerTileProps) 
         <div className="space-y-0.5 pt-1 text-xs">
           {readiness}
           {gate}
+        </div>
+        <div className="relative z-10 pt-2">
+          <ConnectorPicker consumer={consumer} />
         </div>
       </div>
     </article>

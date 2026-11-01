@@ -44,6 +44,24 @@ test.describe('a gated Knowledge Graph', () => {
     await expect(page.getByRole('table', { name: 'Metrics' })).not.toContainText(/pass|fail/)
   })
 
+  test('the run list shows each run’s recorded Gate result, else its Gate Preview, and Conformance as a percentage', async ({
+    page,
+    stetiq,
+  }) => {
+    const { baseline, regressed, unreviewed, improved } = stetiq.seeded
+    await page.goto('/ui/kg/support/runs')
+    const table = page.getByRole('table', { name: 'Construction Runs' })
+    const row = (id: unknown) => table.getByRole('row').filter({ hasText: short(id) })
+    await expect(row(baseline)).toHaveText(/54\.5%\s*Failed/)
+    await expect(row(regressed)).toHaveText(/54\.5%\s*Preview/)
+    await expect(row(unreviewed)).toHaveText(/75%\s*Preview/)
+    await expect(row(improved)).toHaveText(/75%\s*Preview/)
+
+    // A preview is neutral whatever it judges, and says it is not recorded.
+    await row(regressed).getByText('Preview').hover()
+    await expect(page.getByRole('tooltip')).toContainText(/fails when judged against current Gates\. Not recorded/)
+  })
+
   test('the Gates section lists every Gate and whether all passed, per run', async ({ page, stetiq }) => {
     const { baseline, regressed, unreviewed, improved } = stetiq.seeded
     await page.goto(compareUrl(baseline, regressed, unreviewed, improved))

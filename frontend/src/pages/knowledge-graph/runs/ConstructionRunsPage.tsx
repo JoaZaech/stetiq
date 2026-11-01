@@ -135,7 +135,17 @@ function RunTable({
   const [shownColumns, setShownColumn] = useShownColumns()
   // Every key over all runs, so a filter never drops a column.
   const keys = useMemo(() => runKeys(runs), [runs])
-  const table = useRunTable({ runs: filtered, ...keys, visible: shownColumns, now })
+  const gateResults = useQuery(gateResultsQuery(name))
+  const gatePreviews = useGatePreviews(name)
+  const table = useRunTable({
+    runs: filtered,
+    ...keys,
+    visible: shownColumns,
+    now,
+    gateResults: gateResults.data,
+    gatePreviews: gatePreviews.data,
+  })
+  const failed = [gateResults, gatePreviews].find((q) => q.isError)
   const navigate = useNavigate()
   const selected = table.getSelectedRowModel().rows.map((row) => row.original.run)
   const compare = () => {
@@ -164,6 +174,7 @@ function RunTable({
           />
         </div>
       </CompareToolbar>
+      {failed && <ErrorAlert error={failed.error} />}
       <DataTable table={table} label="Construction Runs" empty="No Construction Run matches these filters." />
     </div>
   )
