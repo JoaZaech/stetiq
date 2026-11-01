@@ -28,7 +28,8 @@ class ChangeKind(StrEnum):
 
 class Classification(StrEnum):
     """Consumer impact, ordered from least to most severe. A cosmetic change touches only
-    documentation (a Definition or Alternative Labels), never what data conforms."""
+    documentation (a Definition, Alternative Labels or a Deprecation reason), never what
+    data conforms."""
 
     COSMETIC = "cosmetic"
     ADDITIVE = "additive"
@@ -201,51 +202,48 @@ def _documentation_changes(
     return details
 
 
-def _is_deprecated(c: NodeType | RelationshipType) -> bool:
+Deprecatable = NodeType | RelationshipType | Property
+
+
+def _is_deprecated(c: Deprecatable) -> bool:
     # Declaring a replacement implies the Concept is on its way out.
     return c.deprecated or c.replaced_by is not None
+
+
+def _deprecation_changes(
+    old: Deprecatable, new: Deprecatable
+) -> list[tuple[ChangeKind, Classification, str]]:
+    """Deprecating (incl. a rename declared via `replacedBy`) is deprecating; undeprecating is
+    additive; rewording only the Deprecation reason is cosmetic.
+
+    Like every change to a Concept that is still there, the detail says what changed without
+    repeating the Concept, which the change names beside it."""
+    replacement = f"; replaced by {new.replaced_by}" if new.replaced_by else ""
+    if _is_deprecated(new) and not _is_deprecated(old):
+        return [(ChangeKind.DEPRECATED, Classification.DEPRECATING, f"deprecated{replacement}")]
+    if _is_deprecated(old) and not _is_deprecated(new):
+        return [(ChangeKind.CHANGED, Classification.ADDITIVE, "no longer deprecated")]
+    changes = []
+    if old.replaced_by != new.replaced_by:
+        changes.append(
+            (
+                ChangeKind.DEPRECATED,
+                Classification.DEPRECATING,
+                f"replacement changed {old.replaced_by or '(none)'} -> {new.replaced_by or '(none)'}",
+            )
+        )
+    if old.deprecation_reason != new.deprecation_reason:
+        changes.append((ChangeKind.CHANGED, Classification.COSMETIC, "deprecation reason changed"))
+    return changes
 
 
 def _diff_deprecation(
     kind: ConceptKind, old: NodeType | RelationshipType, new: NodeType | RelationshipType
 ) -> list[Change]:
-    """Deprecating (incl. a rename declared via `replacedBy`) is deprecating; undeprecating is additive.
-
-    Like every change to a Concept that is still there, the detail says what changed without
-    repeating the Concept, which the change names beside it."""
-    label = new.label
-    replacement = f"; replaced by {new.replaced_by}" if new.replaced_by else ""
-    if _is_deprecated(new) and not _is_deprecated(old):
-        return [
-            Change(
-                label,
-                kind,
-                ChangeKind.DEPRECATED,
-                Classification.DEPRECATING,
-                f"deprecated{replacement}",
-            )
-        ]
-    if _is_deprecated(old) and not _is_deprecated(new):
-        return [
-            Change(
-                label,
-                kind,
-                ChangeKind.CHANGED,
-                Classification.ADDITIVE,
-                "no longer deprecated",
-            )
-        ]
-    if old.replaced_by != new.replaced_by:
-        return [
-            Change(
-                label,
-                kind,
-                ChangeKind.DEPRECATED,
-                Classification.DEPRECATING,
-                f"replacement changed {old.replaced_by or '(none)'} -> {new.replaced_by or '(none)'}",
-            )
-        ]
-    return []
+    return [
+        Change(new.label, kind, change_kind, classification, detail)
+        for change_kind, classification, detail in _deprecation_changes(old, new)
+    ]
 
 
 def _patterns(ontology: Ontology, relationship: str) -> set[Pattern]:
@@ -393,6 +391,10 @@ def _diff_property(attribute: _Attribute, old: Property, new: Property) -> list[
         return attribute.change(ChangeKind.CHANGED, classification, detail)
 
     changes = [
+        attribute.change(change_kind, classification, detail)
+        for change_kind, classification, detail in _deprecation_changes(old, new)
+    ]
+    changes += [
         change(Classification.COSMETIC, detail) for detail in _documentation_changes(old, new)
     ]
     if old.type != new.type:

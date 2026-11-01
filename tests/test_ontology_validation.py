@@ -120,6 +120,35 @@ MALFORMED = {
         "node_types:\n  - {label: Customer, alternativeLabels: Client}",
         "Customer.alternativeLabels",
     ),
+    "attribute replaced by an attribute on another owner": (
+        "node_types:\n  - label: Ticket\n    properties:\n"
+        "      - {name: priority, type: FLOAT, replacedBy: urgency}\n"
+        "  - label: Case\n    properties:\n      - {name: urgency, type: FLOAT}",
+        "Ticket.priority.replacedBy: 'urgency' is not another Concept declared in Ticket's properties",
+    ),
+    "attribute replaced by itself": (
+        "node_types:\n  - label: Ticket\n    properties:\n"
+        "      - {name: priority, type: FLOAT, replacedBy: priority}",
+        "Ticket.priority.replacedBy",
+    ),
+    "attribute deprecated not a boolean": (
+        "node_types:\n  - label: Ticket\n    properties:\n"
+        "      - {name: priority, type: FLOAT, deprecated: soon}",
+        "Ticket.priority.deprecated",
+    ),
+    "deprecation reason not a string": (
+        "node_types:\n  - {label: Customer, deprecated: true, deprecationReason: [a]}",
+        "Customer.deprecationReason",
+    ),
+    "deprecation reason without a deprecation": (
+        "node_types:\n  - {label: Customer, deprecationReason: Unused}",
+        "Customer.deprecationReason: a Deprecation reason needs deprecated: true or a replacedBy",
+    ),
+    "attribute deprecation reason without a deprecation": (
+        "node_types:\n  - label: Ticket\n    properties:\n"
+        "      - {name: priority, type: FLOAT, deprecationReason: Unused}",
+        "Ticket.priority.deprecationReason",
+    ),
     "pattern with undeclared node type": (
         "node_types: [Customer]\nrelationship_types: [OPENED]\npatterns:\n  - [Customer, OPENED, Ticket]",
         "Ticket",

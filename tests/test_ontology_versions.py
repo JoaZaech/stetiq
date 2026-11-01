@@ -347,3 +347,68 @@ def test_an_unchanged_ontology_written_with_definition_deduplicates_to_its_older
     )
 
     assert again.number == 1
+
+
+WITH_DEPRECATIONS = """
+node_types:
+  - label: WorkOrder
+    properties:
+      - {name: state, type: STRING, replacedBy: status, deprecationReason: Renamed for the MES}
+      - {name: status, type: STRING}
+      - {name: legacy_id, type: STRING, deprecated: true}
+  - {label: Job, replacedBy: WorkOrder, deprecationReason: Merged into WorkOrder}
+  - Machine
+relationship_types:
+  - {label: PERFORMED_ON, deprecated: true, deprecationReason: Use RUNS_ON}
+  - RUNS_ON
+patterns:
+  - [WorkOrder, RUNS_ON, Machine]
+"""
+
+
+def test_attribute_deprecations_and_deprecation_reasons_round_trip_through_registration(client, kg):
+    v2 = client.register_ontology(kg.name, WITH_DEPRECATIONS)
+
+    ontology = client.get_ontology_version(kg.name, v2.number).ontology
+    properties = {p.name: p for p in ontology.node_type("WorkOrder").properties}
+    state, status, legacy_id = properties["state"], properties["status"], properties["legacy_id"]
+
+    assert (state.deprecated, state.replaced_by, state.deprecation_reason) == (
+        False,
+        "status",
+        "Renamed for the MES",
+    )
+    assert (legacy_id.deprecated, legacy_id.replaced_by, legacy_id.deprecation_reason) == (
+        True,
+        None,
+        None,
+    )
+    assert (status.deprecated, status.replaced_by) == (False, None)
+    assert ontology.node_type("Job").deprecation_reason == "Merged into WorkOrder"
+    assert ontology.node_type("Machine").deprecation_reason is None
+    assert ontology.relationship_type("PERFORMED_ON").deprecation_reason == "Use RUNS_ON"
+
+
+def test_fetched_yaml_spells_attribute_deprecations_and_reasons_as_written(client, kg):
+    v2 = client.register_ontology(kg.name, WITH_DEPRECATIONS)
+
+    fetched = yaml.safe_load(client.get_ontology_yaml(kg.name, v2.number))
+    again = client.register_ontology(kg.name, client.get_ontology_yaml(kg.name, v2.number))
+
+    work_order = next(n for n in fetched["node_types"] if n["label"] == "WorkOrder")
+    assert work_order["properties"] == [
+        {"name": "legacy_id", "type": "STRING", "deprecated": True},
+        {
+            "name": "state",
+            "type": "STRING",
+            "replacedBy": "status",
+            "deprecationReason": "Renamed for the MES",
+        },
+        {"name": "status", "type": "STRING"},
+    ]
+    assert {
+        "label": "Job",
+        "replacedBy": "WorkOrder",
+        "deprecationReason": "Merged into WorkOrder",
+    } in fetched["node_types"]
+    assert (again.number, again.content_hash) == (v2.number, v2.content_hash)

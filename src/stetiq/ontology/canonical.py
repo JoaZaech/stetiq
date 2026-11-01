@@ -5,8 +5,9 @@ sorted) and omits default values, so two Ontologies with the same structure
 always produce byte-identical JSON and therefore the same hash.
 
 A Concept's Definition is stored under the key `description`, the name it had
-before Definitions existed, and Alternative Labels are omitted when there are
-none, so Ontology Versions registered before either existed keep their hashes.
+before Definitions existed, and Alternative Labels and a Deprecation (with its
+reason) are omitted when unset, so Ontology Versions registered before any of
+them existed keep their hashes.
 The stetiq YAML spells the Definition `definition` (`to_dict(definition_key=...)`).
 """
 
@@ -40,10 +41,22 @@ def _documentation(
     return d
 
 
+def _deprecation(c: Property | NodeType | RelationshipType) -> dict[str, Any]:
+    d: dict[str, Any] = {}
+    if c.deprecated:
+        d["deprecated"] = True
+    if c.replaced_by is not None:
+        d["replacedBy"] = c.replaced_by
+    if c.deprecation_reason is not None:
+        d["deprecationReason"] = c.deprecation_reason
+    return d
+
+
 def _property_to_dict(p: Property, definition_key: str) -> dict[str, Any]:
     d: dict[str, Any] = {"name": p.name, "type": p.type, **_documentation(p, definition_key)}
     if p.required:
         d["required"] = True
+    d.update(_deprecation(p))
     return d
 
 
@@ -53,10 +66,7 @@ def _concept_to_dict(c: NodeType | RelationshipType, definition_key: str) -> dic
         d["properties"] = [
             _property_to_dict(p, definition_key) for p in sorted(c.properties, key=lambda p: p.name)
         ]
-    if c.deprecated:
-        d["deprecated"] = True
-    if c.replaced_by is not None:
-        d["replacedBy"] = c.replaced_by
+    d.update(_deprecation(c))
     if isinstance(c, NodeType) and c.parent is not None:
         d["parent"] = c.parent
     return d
@@ -132,7 +142,16 @@ def _property_from_dict(d: dict[str, Any]) -> Property:
         definition=_definition(d),
         required=d.get("required", False),
         alternative_labels=tuple(d.get("alternativeLabels", ())),
+        **_deprecation_kwargs(d),
     )
+
+
+def _deprecation_kwargs(d: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "deprecated": d.get("deprecated", False),
+        "replaced_by": d.get("replacedBy"),
+        "deprecation_reason": d.get("deprecationReason"),
+    }
 
 
 def _concept_kwargs(d: dict[str, Any]) -> dict[str, Any]:
@@ -141,8 +160,7 @@ def _concept_kwargs(d: dict[str, Any]) -> dict[str, Any]:
         "definition": _definition(d),
         "alternative_labels": tuple(d.get("alternativeLabels", ())),
         "properties": tuple(_property_from_dict(p) for p in d.get("properties", [])),
-        "deprecated": d.get("deprecated", False),
-        "replaced_by": d.get("replacedBy"),
+        **_deprecation_kwargs(d),
     }
 
 

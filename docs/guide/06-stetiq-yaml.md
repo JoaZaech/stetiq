@@ -131,7 +131,7 @@ No change in the Ontology Diff from the Contract Alias's Ontology Version to the
 | --- | --- |
 | `max_classification` | Required. `cosmetic`, `additive`, `deprecating` or `breaking`, from least to most severe. |
 
-With `max_classification: cosmetic`, only documentation changes (Definitions and Alternative Labels) pass, so the Ontology's structure is frozen; with `additive`, cosmetic and additive changes pass. `breaking` lets every change through, which is useful to record the diff without failing on it. When it fails, its reasons list each change that is too severe.
+With `max_classification: cosmetic`, only documentation changes (Definitions, Alternative Labels and Deprecation reasons) pass, so the Ontology's structure is frozen; with `additive`, cosmetic and additive changes pass. `breaking` lets every change through, which is useful to record the diff without failing on it. When it fails, its reasons list each change that is too severe.
 
 ```yaml
 gates:
@@ -284,6 +284,25 @@ The `GATE` column of `stetiq alias log` shows `passed`, `failed`, or `-` for a v
 ## The Ontology YAML
 
 The Declared Ontology is a separate YAML file (the one you pass to `stetiq kg create --ontology` and `stetiq ontology register`, and that a run receives as `{ontology}`). Its sections are `node_types`, `relationship_types`, `patterns` and `constraints`; see [Getting started](01-getting-started.md#create-a-knowledge-graph) for a complete example.
+
+### Deprecation
+
+A class, relation or attribute can be **deprecated**: it is still part of the Ontology, but on its way out. Write `deprecated: true`, or name what replaces it with `replacedBy`, which deprecates it too. A class's replacement is another class, a relation's another relation, and an attribute's another attribute on the same class or relation. Any Deprecation can carry a `deprecationReason`, a sentence for Consumers on why; a reason needs `deprecated: true` or a `replacedBy`.
+
+```yaml
+node_types:
+  - label: WorkOrder
+    properties:
+      - {name: state, type: STRING, replacedBy: status, deprecationReason: Renamed to match the MES}
+      - {name: status, type: STRING}
+      - {name: legacy_id, type: STRING, deprecated: true}
+  - {label: Job, replacedBy: WorkOrder, deprecationReason: Merged into WorkOrder}
+relationship_types:
+  - {label: PERFORMED_ON, deprecated: true, deprecationReason: Use RUNS_ON}
+  - RUNS_ON
+```
+
+- **Ontology Diff:** deprecating a class, relation or attribute, or changing its replacement, is *deprecating*. A rename declared with `replacedBy` is a deprecation of the old name plus the addition of the new one, not a removal. Undeprecating is *additive*, and changing only the `deprecationReason` is *cosmetic*.
 
 ### Cardinality
 
