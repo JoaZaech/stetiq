@@ -2,7 +2,8 @@ import { useEffect } from 'react'
 import { Navigate, NavLink, useLocation, useParams } from 'react-router'
 import { cn } from '@/lib/utils'
 import { NotFoundPage } from '@/pages/NotFoundPage'
-import { GUIDE, guidePage } from './guide'
+import { GUIDE, guidePage, VISION } from './guide'
+import type { GuidePage } from './guide-index'
 import { helpUrl } from './guide-index'
 import { GuideMarkdown } from './GuideMarkdown'
 
@@ -25,20 +26,32 @@ export function HelpPage() {
   return (
     <div className="flex flex-col-reverse gap-8 lg:flex-row lg:items-start">
       <article className="min-w-0 flex-1">
-        <GuideMarkdown>{page.markdown}</GuideMarkdown>
+        <GuideMarkdown from={page.path}>{page.markdown}</GuideMarkdown>
       </article>
       <GuideContents />
     </div>
   )
 }
 
-/** Every guide page, in order; the current one is highlighted (`aria-current`). */
+/**
+ * Every guide page, in order, then the vision; the current page is highlighted
+ * (`aria-current`).
+ */
 function GuideContents() {
   return (
-    <nav aria-label="Guide" className="shrink-0 lg:sticky lg:top-4 lg:w-56">
-      <p className="mb-2 text-xs font-medium text-muted-foreground">User guide</p>
+    <nav aria-label="Guide" className="shrink-0 space-y-4 lg:sticky lg:top-4 lg:w-56">
+      <ContentsList heading="User guide" pages={GUIDE} />
+      <ContentsList heading="Planned" pages={[VISION]} />
+    </nav>
+  )
+}
+
+function ContentsList({ heading, pages }: { heading: string; pages: GuidePage[] }) {
+  return (
+    <div>
+      <p className="mb-2 text-xs font-medium text-muted-foreground">{heading}</p>
       <ul className="space-y-0.5 text-sm">
-        {GUIDE.map(({ slug, title }) => (
+        {pages.map(({ slug, title }) => (
           <li key={slug}>
             <NavLink
               to={helpUrl(slug)}
@@ -54,7 +67,7 @@ function GuideContents() {
           </li>
         ))}
       </ul>
-    </nav>
+    </div>
   )
 }
 

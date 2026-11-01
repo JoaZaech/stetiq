@@ -22,7 +22,9 @@ MODULES = tuple(
     import_module(f".{name}", __name__)
     for name in (
         "auth",
+        "consumer_impact",
         "construction_runs",
+        "gates",
         "knowledge_graphs",
         "observations",
         "ontology_map",

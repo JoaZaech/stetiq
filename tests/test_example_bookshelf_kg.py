@@ -39,6 +39,41 @@ def result(results, evaluator):
     return found
 
 
+def consumers_of(use_case_version):
+    return {
+        c.id: (c.name, c.kind, {t.id: set(t.competency_questions) for t in c.tasks})
+        for c in use_case_version.use_case.consumers
+    }
+
+
+def test_the_use_case_names_the_consumers_and_the_tasks_they_need_answered(demo):
+    # popular-books and books-per-author each serve two Tasks; authors-who-are-members none.
+    latest = demo.client.get_use_case_version(KG)
+    assert latest.number == 1
+    assert consumers_of(latest) == {
+        "catalogue-search": (
+            "Online catalogue",
+            "application",
+            {"find-books": {"books-by-subject", "books-per-author"}},
+        ),
+        "overdue-reminders": (
+            "Overdue reminder bot",
+            "agent",
+            {"send-reminders": {"overdue-loans"}},
+        ),
+        "lending-report": (
+            "Monthly lending report",
+            "report",
+            {"report-to-council": {"members-per-branch", "popular-books"}},
+        ),
+        "acquisitions-team": (
+            "Acquisitions",
+            "team",
+            {"choose-new-stock": {"popular-books", "books-per-author"}},
+        ),
+    }
+
+
 def test_registering_the_same_yaml_twice_returns_the_same_version(demo):
     first = demo.client.get_ontology_version(KG, 1)
     assert demo.v1_again.number == 1

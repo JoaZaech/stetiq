@@ -30,6 +30,8 @@ from stetiq.tracking.entities import (
     ConstructionRun,
     DriftEvent,
     EvaluationResult,
+    GatePreview,
+    GatePreviewSource,
     GateResult,
     KnowledgeGraph,
     KnowledgeGraphSummary,
@@ -68,7 +70,21 @@ ONTOLOGY = parse_dict(
     }
 )
 USE_CASE = parse_use_case_dict(
-    {"competency_questions": [{"id": "q1", "question": "Which customers opened tickets?"}]}
+    {
+        "competency_questions": [{"id": "q1", "question": "Which customers opened tickets?"}],
+        "consumers": [
+            {
+                "id": "triage-bot",
+                "name": "Triage bot",
+                "kind": "agent",
+                "contact": "Ada",
+                "description": "Routes tickets",
+                "tasks": [
+                    {"id": "route", "description": "Route a ticket", "competency_questions": ["q1"]}
+                ],
+            }
+        ],
+    }
 )
 SCOPE = GraphSourceScope(database="kgs", label="KG_support", namespace="support")
 SCHEMA = ObservedSchema(
@@ -122,6 +138,10 @@ DRIFT_EVENT = DriftEvent(
         ),
     ),
     thresholds=DriftThresholds(max_count_drop=0.5, max_count_increase=2.0),
+)
+
+GATE_PREVIEW_SOURCE = GatePreviewSource(
+    subject_kind="ontology_version", subject_id="2", evaluated_at=LATER
 )
 
 SAMPLES: dict[type, Any] = {
@@ -202,6 +222,15 @@ SAMPLES: dict[type, Any] = {
         outcomes=(GateOutcome(ConformanceGate("conformant", 0.8), False, ("0.5 < 0.8",)),),
         evaluated_at=AT,
     ),
+    GatePreviewSource: GATE_PREVIEW_SOURCE,
+    GatePreview: GatePreview(
+        knowledge_graph="support",
+        subject_kind="construction_run",
+        subject_id="run-2",
+        ontology_version=3,
+        outcomes=(GateOutcome(ConformanceGate("conformant", 0.8), True, ("0.9 >= 0.8",)),),
+        source=GATE_PREVIEW_SOURCE,
+    ),
     Detail: DETAIL,
     Evaluation: Evaluation(metrics={"score": 1.0}, details=(DETAIL,)),
 }
@@ -260,3 +289,18 @@ def test_an_observed_schema_stored_before_vocabulary_values_still_parses():
 
 def test_the_entity_list_is_found_automatically():
     assert {KnowledgeGraph, OntologyVersion, GateResult, ObservationOutcome} <= set(ENTITY_TYPES)
+
+
+def test_a_use_case_version_payload_from_before_consumers_still_parses():
+    data = {
+        "knowledge_graph": "support",
+        "number": 1,
+        "content_hash": "def456",
+        "created_at": AT.isoformat(),
+        "use_case": {"competency_questions": [{"id": "q1", "question": "Which customers?"}]},
+    }
+
+    version = codec.use_case_version_from_json(data)
+
+    assert version.use_case.consumers == ()
+    assert [q.id for q in version.use_case.competency_questions] == ["q1"]

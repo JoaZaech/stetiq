@@ -1,4 +1,5 @@
 import type { Element } from 'hast'
+import { useMemo } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import { Link } from 'react-router'
 import rehypeAutolinkHeadings from 'rehype-autolink-headings'
@@ -9,23 +10,26 @@ import { GuideDiagram } from './GuideDiagram'
 import { guideLink } from './guide-index'
 import './guide-highlight.css'
 
-const components: Components = {
-  a: ({ href = '', children }) => {
-    const route = guideLink(href)
-    if (route !== undefined) return <Link to={route}>{children}</Link>
-    // Heading anchors and other in-page links stay on this page.
-    if (href.startsWith('#')) return <a href={href}>{children}</a>
-    return (
-      <a href={href} target="_blank" rel="noreferrer">
-        {children}
-      </a>
-    )
-  },
-  pre: ({ node, children }) => {
-    const diagram = node && mermaidSource(node)
-    if (diagram !== undefined) return <GuideDiagram source={diagram} />
-    return <pre>{children}</pre>
-  },
+/** How a Help page whose source is `from` (a repository path) renders links and code blocks. */
+function guideComponents(from: string): Components {
+  return {
+    a: ({ href = '', children }) => {
+      const target = guideLink(href, from)
+      if ('route' in target) return <Link to={target.route}>{children}</Link>
+      // Heading anchors and other in-page links stay on this page.
+      if (target.url.startsWith('#')) return <a href={target.url}>{children}</a>
+      return (
+        <a href={target.url} target="_blank" rel="noreferrer">
+          {children}
+        </a>
+      )
+    },
+    pre: ({ node, children }) => {
+      const diagram = node && mermaidSource(node)
+      if (diagram !== undefined) return <GuideDiagram source={diagram} />
+      return <pre>{children}</pre>
+    },
+  }
 }
 
 /** The source of a fenced `mermaid` block (`<pre><code class="language-mermaid">`). */
@@ -38,14 +42,16 @@ function mermaidSource(pre: Element): string | undefined {
 }
 
 /**
- * Renders a user guide page (`docs/guide/`) as docs: GFM tables, headings with stable
- * anchors that link to themselves, highlighted code, and fenced `mermaid` blocks drawn as
- * diagrams (`GuideDiagram`). Links to other guide files navigate inside the app, other
- * links open in a new tab, and raw HTML is not rendered.
+ * Renders a Help page (`docs/guide/`, `docs/vision.md`) as docs: GFM tables, headings with
+ * stable anchors that link to themselves, highlighted code, and fenced `mermaid` blocks
+ * drawn as diagrams (`GuideDiagram`). Links to other Help pages navigate inside the app;
+ * links to other repository files, resolved from the page's source path `from`, open on
+ * GitHub in a new tab, as do external links. Raw HTML is not rendered.
  *
  * Not for user-written text such as a Knowledge Graph description: that is `Markdown`.
  */
-export function GuideMarkdown({ children }: { children: string }) {
+export function GuideMarkdown({ from, children }: { from: string; children: string }) {
+  const components = useMemo(() => guideComponents(from), [from])
   return (
     <div
       className={

@@ -41,8 +41,10 @@ and circulation files). Loaded, this is 41 nodes and 58 relationships.
 **1. Declare.** `ontology/v1.yaml` is deliberately minimal: `Book`, `Author`, `WROTE`.
 It becomes Ontology Version 1 of the Knowledge Graph `town-library`, with `production`
 pointing at it. Registering the identical file again returns the same version with the
-same content hash: nothing new. `use-case.yaml` holds the librarian's six Competency
-Questions; judged structurally against v1, 1 of 6 is answerable (ratio 0.167), four miss
+same content hash: nothing new. `use-case.yaml` names four Consumers: the online
+catalogue, the overdue reminder bot, the monthly lending report to the town council and
+the acquisitions team. `popular-books` and `books-per-author` each serve two Tasks;
+`authors-who-are-members` serves none. Their Tasks need six Competency Questions; judged structurally against v1, 1 of 6 is answerable (ratio 0.167), four miss
 Concepts v1 lacks, one is unmapped on purpose. Before registering anything else,
 `client.diff_ontologies` compares two files in the repo, `v1.yaml` and
 `v2-hierarchy.yaml`: 16 changes, overall **breaking**, because lifting `name` from `Author`
@@ -127,7 +129,7 @@ uv run stetiq alias log town-library
 | --- | --- |
 | `demo.py` | The walkthrough, act by act, including the loader. `run_demo()` returns the state for the test |
 | `stetiq.yaml` | Knowledge Graph name and the five Gates (Ontology Diff, Conformance, three metric Gates) |
-| `use-case.yaml` | The six Competency Questions |
+| `use-case.yaml` | The four Consumers, their Tasks and the six Competency Questions |
 | `ontology/` | `v1`, `v2-hierarchy`, `v3-deprecate-genre`, `v4-remove-genre` |
 | `data/` | The four source files and a README on their provenance |
 

@@ -15,10 +15,35 @@ export interface CompetencyQuestion {
   concepts?: string[]
 }
 
+/** A piece of work one Consumer performs with the Knowledge Graph. */
+export interface Task {
+  /** Unique among all Tasks of the Use Case. */
+  id: string
+  description: string
+  /** Ids of the Competency Questions the Task needs, sorted; omitted when there are none. */
+  competency_questions?: string[]
+}
+
+/** Anyone or anything that uses the Knowledge Graph downstream. Unset fields are omitted. */
+export interface Consumer {
+  /** Stable across Use Case Versions. */
+  id: string
+  name: string
+  /** Free text: an application, an agent, a dashboard, a team, ... */
+  kind?: string
+  /** A name only. */
+  contact?: string
+  description?: string
+  /** Sorted by id. */
+  tasks?: Task[]
+}
+
 export interface UseCase {
   description?: string
   /** Sorted by id. */
   competency_questions: CompetencyQuestion[]
+  /** Sorted by id; omitted when the Use Case declares none. */
+  consumers?: Consumer[]
 }
 
 /** wire.use_case_version_to_json */

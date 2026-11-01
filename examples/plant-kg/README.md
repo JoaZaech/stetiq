@@ -64,9 +64,12 @@ becomes a date, an `INTEGER` a number).
 ## The story
 
 **1. Declare.** `ontology/initial.yaml` becomes Ontology Version 1 of the Knowledge Graph
-`plant-maintenance`, with `production` pointing at it. `use-case.yaml` holds the lead's eight
-Competency Questions: some with a Cypher query, one with an explicit Concept mapping, one with
-neither. stetiq judges them structurally against v1 at once: five are answerable, two need
+`plant-maintenance`, with `production` pointing at it. `use-case.yaml` names the graph's
+three Consumers and their Tasks: the maintenance assistant (an agent that triages breakdowns
+and chases follow-ups), the shop-floor downtime dashboard, and the reliability engineering
+team's weekly review. `root-causes` serves both the assistant and the review; `repeat-faults`
+serves no Task yet. The Tasks need eight Competency Questions: some with a Cypher query, one
+with an explicit Concept mapping, one with neither. stetiq judges them structurally against v1 at once: five are answerable, two need
 Concepts v1 lacks (`Fault`, `WorkOrder.downtime_minutes`), one is unmapped. The architecture
 team's reference ontology (`ontology/gold.yaml`) becomes a second Knowledge Graph,
 `plant-gold`.
@@ -111,7 +114,7 @@ nodes is failed instead of yielding a Candidate. Finally a pull request's propos
 | `graphdb.py` | `LocalGraph`, the file-backed stand-in for Neo4j implementing stetiq's `GraphSource` protocol, and the Cypher queries it can answer |
 | `evaluators.py` | `Documented` (Ontology Version) and `ReportCoverage` (Construction Run), both named by Gates |
 | `stetiq.yaml` | Knowledge Graph name, Entry Point, Drift thresholds and the nine Gates |
-| `use-case.yaml` | The Competency Questions |
+| `use-case.yaml` | The Consumers, their Tasks and the Competency Questions |
 | `ontology/` | `initial`, `revised`, `gold` and the breaking `proposal-rename-work-order` |
 
 The local graph store does not run Cypher. It answers the fixed set of queries in

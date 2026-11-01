@@ -1,18 +1,7 @@
-import { useState, type ReactNode } from 'react'
-import { useSaveUseCase, type CompetencyQuestion, type SavedUseCase, type UseCase } from '@/api/use-cases'
-import { ErrorAlert } from '@/components/ErrorAlert'
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog'
-import { Button } from '@/components/ui/button'
-import { withoutQuestion } from './question-form'
+import type { ReactNode } from 'react'
+import type { CompetencyQuestion, SavedUseCase, UseCase } from '@/api/use-cases'
+import { ConfirmRemoveDialog, TaskList } from './ConfirmRemoveDialog'
+import { tasksNeeding, withoutQuestion } from './question-form'
 
 interface RemoveCompetencyQuestionDialogProps {
   knowledgeGraph: string
@@ -23,7 +12,10 @@ interface RemoveCompetencyQuestionDialogProps {
   onSaved: (saved: SavedUseCase) => void
 }
 
-/** Confirm, then save the Use Case without `question` as a new Use Case Version. */
+/**
+ * Confirm, naming the Tasks that need `question`, then save the Use Case without it (and
+ * without it on those Tasks) as a new Use Case Version.
+ */
 export function RemoveCompetencyQuestionDialog({
   knowledgeGraph,
   useCase,
@@ -31,40 +23,29 @@ export function RemoveCompetencyQuestionDialog({
   trigger,
   onSaved,
 }: RemoveCompetencyQuestionDialogProps) {
-  const [open, setOpen] = useState(false)
-  const saving = useSaveUseCase(knowledgeGraph, (saved) => {
-    setOpen(false)
-    onSaved(saved)
-  })
-
-  const onOpenChange = (next: boolean) => {
-    if (next) saving.reset()
-    setOpen(next)
-  }
-
+  const losing = tasksNeeding(useCase, question.id)
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Remove {question.id}?</AlertDialogTitle>
-          <AlertDialogDescription>
-            “{question.question}” will not be in the new Use Case Version. Earlier versions, and the
-            results judged against them, keep it.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        {saving.isError && <ErrorAlert error={saving.error} title="Could not remove the question" />}
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <Button
-            variant="destructive"
-            disabled={saving.isPending}
-            onClick={() => saving.mutate(withoutQuestion(useCase, question.id))}
-          >
-            {saving.isPending ? 'Removing…' : 'Remove'}
-          </Button>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <ConfirmRemoveDialog
+      knowledgeGraph={knowledgeGraph}
+      title={`Remove ${question.id}?`}
+      description={
+        <>
+          “{question.question}” will not be in the new Use Case Version. Earlier versions, and the
+          results judged against them, keep it.
+        </>
+      }
+      next={() => withoutQuestion(useCase, question.id)}
+      trigger={trigger}
+      onSaved={onSaved}
+    >
+      {losing.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-sm">
+            {losing.length === 1 ? 'This Task needs it and loses it:' : 'These Tasks need it and lose it:'}
+          </p>
+          <TaskList label="Tasks that lose it" tasks={losing} />
+        </div>
+      )}
+    </ConfirmRemoveDialog>
   )
 }

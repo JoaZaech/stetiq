@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 import stetiq
 from stetiq.auth import TokenRegistry
+from stetiq.gates import gate_from_dict
 from stetiq.graph_source import InMemoryGraphSource
 from stetiq.server import create_app
 from stetiq.tracking import RemoteTrackingService, wire
@@ -119,6 +120,32 @@ def test_a_gate_result_needs_gate_definitions(server, support):
     )
 
     assert response.status_code == 422
+
+
+def test_gate_previews_are_computed_by_the_server_for_a_reader_and_never_recorded(
+    server, admin, support
+):
+    _, http = server
+    admin.evaluate_gates(support, [gate_from_dict(NO_BREAKING)], version=2)
+    [recorded] = admin.list_gate_results(support)
+    reader = _headers(server, "rita", {"support": "read"})
+
+    response = http.get(f"{API}/knowledge-graphs/support/gate-previews", headers=reader)
+
+    assert response.status_code == 200, response.text
+    [preview] = response.json()
+    # The run consumed v1, the Contract Alias's version: no breaking change to find.
+    assert preview["subject_kind"] == "construction_run"
+    assert preview["subject_id"] == _run_id(admin, support)
+    assert (preview["ontology_version"], preview["passed"]) == (1, True)
+    assert preview["source"] == {
+        "subject_kind": "ontology_version",
+        "subject_id": "2",
+        "evaluated_at": recorded.evaluated_at.isoformat(),
+    }
+    assert admin.list_gate_results(support) == [recorded]
+    admin.set_alias(support, "staging", 1)
+    assert admin.list_promotions(support)[-1].gate_result is None
 
 
 # --- Built-in Evaluator names are reserved ---------------------------------------------

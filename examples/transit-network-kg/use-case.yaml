@@ -1,4 +1,12 @@
-# What the timetable team needs the city-transit Knowledge Graph to answer.
+# Who uses the city-transit Knowledge Graph, what they do with it, and the questions
+# that work needs answered.
+#
+# Four Consumers read the graph: the journey planner in the city's transit app, the
+# timetable team that publishes each season's timetable, the step-free access report
+# the city files with its accessibility office, and the operations dashboard in the
+# control room. stops-on-route and accessible-stops each serve two Tasks.
+# average-dwell-time serves no Task: the timetable team wants it to tune running times
+# next season, and nothing reads it yet.
 #
 # A question with a `query` is executed against the graph at the end of every
 # Construction Run (competency_question_execution). Every question is also judged
@@ -48,3 +56,40 @@ competency_questions:
     question: What is the average dwell time per stop?
     # Neither a query nor a Concept mapping yet: stetiq reports it as unmapped until a
     # question mapper (STETIQ_QUESTION_MAPPER) or a human maps it.
+consumers:
+  - id: journey-planner
+    name: Journey planner
+    kind: application
+    contact: Lucia Romano
+    description: Plans door-to-door trips in the city's transit app.
+    tasks:
+      - id: plan-journey
+        description: Route a passenger along a line, through its changes, step-free when asked
+        competency_questions: [stops-on-route, transfers-at-stop, accessible-stops]
+  - id: timetable-team
+    name: Timetable team
+    kind: team
+    contact: Lucia Romano
+    description: Publishes each season's timetable from the GTFS feed.
+    tasks:
+      - id: publish-timetable
+        description: Check each line's stops and the trips per service day before publishing
+        competency_questions: [trips-per-service, stops-on-route]
+  - id: step-free-report
+    name: Step-free access report
+    kind: report
+    contact: Ahmed Karimi
+    description: What the city files with its accessibility office every quarter.
+    tasks:
+      - id: audit-step-free-stops
+        description: Count the stops that are step-free and the ones that are not
+        competency_questions: [accessible-stops]
+  - id: operations-dashboard
+    name: Operations dashboard
+    kind: dashboard
+    contact: Ahmed Karimi
+    description: The control room's view of depots and fare zones.
+    tasks:
+      - id: depots-and-zones
+        description: Show which depot runs each route and how many stops lie in each fare zone
+        competency_questions: [depot-of-route, stops-per-zone]

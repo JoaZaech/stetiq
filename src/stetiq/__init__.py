@@ -35,12 +35,15 @@ from stetiq.evaluation import (
 )
 from stetiq.gates import Gate, GateOutcome, load_gates
 from stetiq.graph_source import GraphSource, GraphSourceScope, InMemoryGraphSource
+from stetiq.impact import ConsumerImpact, QuestionImpact, TaskImpact, UseCaseImpact
 from stetiq.ontology.diff import Change, ChangeKind, Classification, OntologyDiff
 from stetiq.tracking import (
     Alias,
     ConstructionRun,
     DriftEvent,
     EvaluationResult,
+    GatePreview,
+    GatePreviewSource,
     GateResult,
     KnowledgeGraph,
     KnowledgeGraphSummary,
@@ -51,7 +54,7 @@ from stetiq.tracking import (
     RunComparison,
     UseCaseVersion,
 )
-from stetiq.use_case import CompetencyQuestion, UseCase
+from stetiq.use_case import CompetencyQuestion, Consumer, Task, UseCase
 
 __all__ = [
     "ActiveRun",
@@ -66,6 +69,8 @@ __all__ = [
     "Conformance",
     "ConstructionRun",
     "ConstructionRunEvaluator",
+    "Consumer",
+    "ConsumerImpact",
     "Detail",
     "DriftEvent",
     "DriftFinding",
@@ -79,6 +84,8 @@ __all__ = [
     "Gate",
     "GateConfigError",
     "GateOutcome",
+    "GatePreview",
+    "GatePreviewSource",
     "GateResult",
     "GoldOntologyAlignment",
     "GraphSource",
@@ -108,10 +115,14 @@ __all__ = [
     "OntologyVersionEvaluator",
     "PermissionDeniedError",
     "Promotion",
+    "QuestionImpact",
     "RunComparison",
     "RunNotActiveError",
     "StetiqError",
+    "Task",
+    "TaskImpact",
     "UseCase",
+    "UseCaseImpact",
     "UseCaseValidationError",
     "UseCaseVersion",
     "load_gates",
