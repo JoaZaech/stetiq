@@ -26,7 +26,19 @@ async function expectPlaceholder(scope: Locator | Page, name: string, section: s
 test.describe('with a Use Case that declares Consumers', () => {
   test.use({ seed: 'support_use_case_consumers' })
 
-  test('the Consumer sheet shows evaluating its Consumer Gate on each Observation as planned; tiles show no Connector', async ({
+  test('the Consumer sheet shows evaluating its Consumer Gate on each Observation as planned', async ({
+    page,
+  }) => {
+    await page.goto('/ui/kg/support/use-case')
+
+    await page.getByRole('button', { name: 'Triage bot' }).click()
+    const gate = page.getByRole('dialog', { name: 'Triage bot' }).getByRole('region', { name: 'Consumer Gate' })
+    await expect(gate).toContainText('No Consumer Gate declared')
+    await expect(planned(gate, 'Evaluated on each Observation').standIn).toHaveText('Evaluated on each Observation')
+    await expectPlaceholder(gate, 'Evaluated on each Observation', 'consumer-gate')
+  })
+
+  test('every Consumer tile has Connect, badged Planned, which opens the Connector picker and not the sheet', async ({
     page,
   }) => {
     await page.goto('/ui/kg/support/use-case')
@@ -34,14 +46,45 @@ test.describe('with a Use Case that declares Consumers', () => {
     const tiles = page.getByRole('region', { name: 'Consumers' }).getByRole('article')
     await expect(tiles).toHaveCount(2)
     for (const tile of await tiles.all()) {
-      await expect(tile).not.toContainText('Connector')
-      await expect(tile.getByRole('link', { name: /^Planned/ })).toHaveCount(0)
+      await expect(tile.getByRole('button', { name: 'Connect', exact: true })).toBeEnabled()
+      const badge = tile.getByRole('link', { name: 'Planned: Connect', exact: true })
+      await expect(badge).toHaveText('Planned')
+      await expect(badge).toHaveAttribute('href', '/ui/help/vision#connector')
+      await expect(tile).not.toContainText('Integration')
     }
-    await page.getByRole('button', { name: 'Triage bot' }).click()
-    const gate = page.getByRole('dialog', { name: 'Triage bot' }).getByRole('region', { name: 'Consumer Gate' })
-    await expect(gate).toContainText('No Consumer Gate declared')
-    await expect(planned(gate, 'Evaluated on each Observation').standIn).toHaveText('Evaluated on each Observation')
-    await expectPlaceholder(gate, 'Evaluated on each Observation', 'consumer-gate')
+
+    const url = page.url()
+    await tiles
+      .filter({ has: page.getByRole('button', { name: 'Triage bot' }) })
+      .getByRole('button', { name: 'Connect', exact: true })
+      .click()
+    const picker = page.getByRole('dialog', { name: 'Connect Triage bot' })
+    await expect(picker).toBeVisible()
+    await expect(page.getByRole('dialog')).toHaveCount(1)
+    expect(page.url()).toBe(url)
+    await expect(picker).not.toContainText('Integration')
+
+    await expect(picker.getByRole('region').getByRole('heading', { level: 3 })).toHaveText([
+      'Enforce in CI',
+      'Get notified',
+      "In the Consumer's code",
+    ])
+    const tools = {
+      'Enforce in CI': ['GitHub Actions', 'GitLab CI'],
+      'Get notified': ['Webhook', 'Slack', 'GitHub Issues'],
+      "In the Consumer's code": ['LangChain', 'LlamaIndex'],
+    }
+    for (const [group, names] of Object.entries(tools)) {
+      const tiles = picker.getByRole('region', { name: group }).getByRole('article')
+      await expect(tiles.getByRole('heading')).toHaveText(names)
+      for (const name of names) {
+        const tool = tiles.filter({ has: page.getByRole('heading', { name, exact: true }) })
+        await expect(tool.getByRole('button', { name: 'Connect' })).toBeDisabled()
+        await expectPlaceholder(tool, name, 'connector')
+      }
+    }
+    await expect(picker.getByRole('button', { name: 'Connect' })).toHaveCount(7)
+    await expect(picker.locator('button:enabled', { hasText: 'Connect' })).toHaveCount(0)
   })
 
   test('the Use Case page offers drafting Tasks and questions with AI, disabled', async ({ page }) => {

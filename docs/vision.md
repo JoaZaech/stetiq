@@ -71,6 +71,20 @@ Like Graph Source adapters, a Connector runs outside the core: in the Consumer's
 
 The events, payload, delivery options and verdict request are specified in [the Consumer Connector spec](specs/consumer-connector.md).
 
+### Example Connectors
+
+The web UI's Connector picker (**Connect** on each Consumer tile) shows these example tools, grouped by what a Connector does. None is built, and each would run at the Consumer's edge.
+
+- **Enforce in CI**
+  - **GitHub Actions**: a check in the Consumer's repository that asks for a Consumer Gate verdict and fails the pull request that bumps the Consumer's Ontology Version when its Consumer Gate fails.
+  - **GitLab CI**: the same check as a job in the Consumer's GitLab pipeline, failing the merge request.
+- **Get notified**
+  - **Webhook**: a receiver at a URL the Consumer's team registers, which gets a signed event when an Ontology change affects the Consumer's Tasks.
+  - **Slack**: tells the Consumer's team in its channel when an Ontology change affects its Tasks.
+  - **GitHub Issues**: opens an issue in the Consumer's repository when an Ontology change affects its Tasks.
+- **In the Consumer's code**
+  - **LangChain** and **LlamaIndex**: a guard in the Consumer's code that asks for a Consumer Gate verdict before an agent uses a new Ontology Version, and keeps it on the version it takes if the verdict fails.
+
 ## Consumer impact, and Gates over it
 
 Consumer impact answers "which Consumers does this Ontology change hit?". It follows each change in an Ontology Diff through Concept → Competency Question → Task → Consumer. A breaking change makes a Task *affected*. A deprecating change makes it *will be affected*. A Competency Question that only the question mapper could map onto the Ontology gets impact *unknown*, and is never reported as unaffected.
@@ -107,6 +121,7 @@ The MVP **builds**:
 The MVP **shows, as "Planned"** (placeholders in the web UI that link to this page, or notes in the guide):
 
 - evaluating Consumer Gates on each scheduled Observation (monitoring), beside the Consumer Gate in each Consumer's sheet;
+- the Connector, as **Connect** on each Consumer tile, which opens a picker of the [example Connectors](#example-connectors), each disabled;
 - Pending Migration and Adoption, where an Observation's Drift is shown;
 - a Gate over Consumer impact, on the Gates view;
 - drafting Tasks and Competency Questions with AI, on the Use Case page;
