@@ -160,7 +160,7 @@ export type MapDetails = ClassDetails | LinkDetails
 const detailProperty = (p: OntologyProperty, inheritedFrom?: string): DetailProperty => ({
   name: p.name,
   type: p.type,
-  description: p.description,
+  description: p.definition,
   required: p.required ?? false,
   ...(inheritedFrom !== undefined && { inheritedFrom }),
 })
@@ -183,7 +183,7 @@ export function detailsOf(ontology: Ontology, selection: MapSelection | null): M
     return {
       kind: 'class',
       label: node.label,
-      description: node.description,
+      description: node.definition,
       deprecated: node.deprecated ?? false,
       parent: node.parent,
       properties,
@@ -200,7 +200,7 @@ export function detailsOf(ontology: Ontology, selection: MapSelection | null): M
       source: link.source,
       relation: link.relation,
       target: link.target,
-      description: relation?.description,
+      description: relation?.definition,
       deprecated: relation?.deprecated ?? false,
       properties: (relation?.properties ?? []).map((p) => detailProperty(p)),
     }

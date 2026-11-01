@@ -27,7 +27,9 @@ export function answerabilityOf(
   return {
     questions: result.metrics.questions ?? 0,
     answerable: result.metrics.answerable_questions ?? 0,
+    // A regressed question also has its own Detail; it is not a second row.
     rows: result.details
+      .filter((d) => d.metric !== 'regressed_questions')
       .map((d) => ({
         id: d.item,
         status: (d.data?.status ?? 'unmapped') as AnswerabilityStatus,

@@ -47,9 +47,22 @@ export interface Mismatch {
   /** e.g. `Ticket`, `Ticket.priority`, `(Customer)-[OPENED]->(Ticket)` */
   subject: string
   subject_kind: MismatchSubjectKind
-  /** `absent`: declared, not observed; `undeclared`: observed, not declared. */
-  kind: 'absent' | 'undeclared' | 'type_mismatch' | 'required_missing'
+  /**
+   * `absent`: declared, not observed; `undeclared`: observed, not declared;
+   * `deprecated_value` is reported but conforms.
+   */
+  kind:
+    | 'absent'
+    | 'undeclared'
+    | 'type_mismatch'
+    | 'required_missing'
+    | 'cardinality_violation'
+    | 'value_outside_vocabulary'
+    | 'deprecated_value'
   detail: string
+  /** Value mismatches only: the observed value and how many hold it. */
+  value?: string
+  count?: number
 }
 
 /** conformance.Conformance.to_dict */

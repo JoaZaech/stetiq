@@ -6,7 +6,8 @@ driver docs warn that read mode is not access control: for real enforcement conn
 least-privilege user (Enterprise/Aura: the built-in `reader` role).
 
 Observation computes only aggregates server-side (counts, fill rates, degree min/max/sum)
-so no individual entity crosses into stetiq (ADR 0001). No APOC is required; `valueType()`
+so no individual entity crosses into stetiq (ADR 0001). The one instance value it reads is
+that of a Vocabulary-bound Attribute it was asked for: distinct values with counts, capped. No APOC is required; `valueType()`
 needs Neo4j 5.13+.
 """
 
@@ -14,7 +15,7 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from typing import Any, LiteralString, cast
 from urllib.parse import unquote, urlsplit, urlunsplit
 
@@ -22,7 +23,9 @@ import neo4j
 
 from stetiq.errors import GraphSourceWriteRejectedError
 from stetiq.graph_source.model import (
+    DEFAULT_VALUE_CAP,
     NAMESPACE_PROPERTY,
+    BoundAttribute,
     Degree,
     GraphSourceScope,
     ObservedNodeType,
@@ -30,6 +33,7 @@ from stetiq.graph_source.model import (
     ObservedProperty,
     ObservedRelationshipType,
     ObservedSchema,
+    ObservedValues,
 )
 
 URI_ENV = "STETIQ_GRAPH_SOURCE_URI"
@@ -90,19 +94,45 @@ class Neo4jGraphSource:
         with self._session(scope) as session:
             return session.execute_read(work)
 
-    def observe(self, scope: GraphSourceScope) -> ObservedSchema:
+    def observe(
+        self,
+        scope: GraphSourceScope,
+        bound_attributes: Collection[BoundAttribute] = (),
+        *,
+        value_cap: int = DEFAULT_VALUE_CAP,
+    ) -> ObservedSchema:
         params = {"scope_label": scope.label, "namespace": scope.namespace}
-        with self._session(scope) as session:
-            rows = session.execute_read(
-                lambda tx: {
-                    name: tx.run(_cypher(q), params).data() for name, q in _queries(scope).items()
-                }
-            )
+        requested = sorted(set(bound_attributes))
 
+        def work(tx: neo4j.ManagedTransaction) -> tuple[dict[str, Any], list[list[Any]]]:
+            stats = {name: tx.run(_cypher(q), params).data() for name, q in _queries(scope).items()}
+            # One query per bound Attribute; LIMIT cap + 1 tells whether the cap was hit.
+            values = [
+                tx.run(
+                    _cypher(_values_query(scope, b)),
+                    {**params, "key": b.attribute, "limit": value_cap + 1},
+                ).values()
+                for b in requested
+            ]
+            return stats, values
+
+        with self._session(scope) as session:
+            rows, value_rows = session.execute_read(work)
+
+        observed_values = {
+            (b.owner_kind, b.owner, b.attribute): ObservedValues.capped(
+                ((v, n) for v, n in vs), value_cap
+            )
+            for b, vs in zip(requested, value_rows, strict=True)
+        }
         node_counts = {r["label"]: r["count"] for r in rows["node_counts"]}
         rel_counts = {r["type"]: r["count"] for r in rows["rel_counts"]}
-        node_props = _group_properties(rows["node_properties"], node_counts)
-        rel_props = _group_properties(rows["rel_properties"], rel_counts)
+        node_props = _group_properties(
+            rows["node_properties"], node_counts, "node_type", observed_values
+        )
+        rel_props = _group_properties(
+            rows["rel_properties"], rel_counts, "relationship_type", observed_values
+        )
         out_stats = {(r["source"], r["type"], r["target"]): r for r in rows["out_degrees"]}
         in_stats = {(r["source"], r["type"], r["target"]): r for r in rows["in_degrees"]}
 
@@ -221,15 +251,43 @@ def _queries(scope: GraphSourceScope) -> dict[str, str]:
     }
 
 
+def _values_query(scope: GraphSourceScope, attribute: BoundAttribute) -> str:
+    """The distinct string values of one bound Attribute in scope, with counts, most
+    frequent first. Only these aggregates leave the database (ADR 0001)."""
+    owner = _quote(attribute.owner)
+    if attribute.owner_kind == "node_type":
+        match = f"MATCH (n:{owner}) WHERE {_in_scope('n', scope)}"
+        value = "n[$key]"
+    else:
+        a, b = _in_scope("a", scope), _in_scope("b", scope)
+        match = f"MATCH (a)-[r:{owner}]->(b) WHERE {a} AND {b}"
+        value = "r[$key]"
+    return f"""
+        {match} AND valueType({value}) = 'STRING NOT NULL'
+        RETURN {value} AS value, count(*) AS count
+        ORDER BY count DESC, value ASC
+        LIMIT $limit
+    """
+
+
 def _group_properties(
-    rows: list[dict[str, Any]], owner_counts: Mapping[str, int]
+    rows: list[dict[str, Any]],
+    owner_counts: Mapping[str, int],
+    owner_kind: str,
+    observed_values: Mapping[tuple[str, str, str], ObservedValues],
 ) -> dict[str, tuple[ObservedProperty, ...]]:
     grouped: dict[str, list[ObservedProperty]] = {}
     for row in rows:
         owner, filled = row["owner"], row["filled"]
         types = tuple(sorted({_type_name(t) for t in row["types"]}))
         grouped.setdefault(owner, []).append(
-            ObservedProperty(row["key"], types, filled, filled / owner_counts[owner])
+            ObservedProperty(
+                row["key"],
+                types,
+                filled,
+                filled / owner_counts[owner],
+                observed_values.get((owner_kind, owner, row["key"])),
+            )
         )
     return {owner: tuple(sorted(ps, key=lambda p: p.name)) for owner, ps in grouped.items()}
 

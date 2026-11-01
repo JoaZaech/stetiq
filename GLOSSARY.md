@@ -166,10 +166,6 @@ _Avoid_: Integration, webhook, plugin, adapter
 Evaluating a Knowledge Graph's most recently used Gates against a Construction Run or Ontology Version without recording the outcome; Promotion's audit never counts it.
 _Avoid_: Dry run, simulated gate, gate check
 
-**Gate Preview**:
-Evaluating a Knowledge Graph's most recently used Gates against a Construction Run or Ontology Version without recording the outcome; Promotion's audit never counts it.
-_Avoid_: Dry run, simulated gate, gate check
-
 **Drift**:
 A divergence, found by an Observation, between a Graph Source's Observed Schema and the Contract Alias's Ontology Version; it raises an alert unless it is a Pending Migration, and never creates a new Ontology Version by itself.
 _Avoid_: Schema change, deviation

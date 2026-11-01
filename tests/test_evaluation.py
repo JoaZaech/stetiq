@@ -41,15 +41,15 @@ def test_built_in_evaluators_run_automatically_on_a_new_ontology_version(client,
 
 
 class UndescribedConcepts(OntologyVersionEvaluator):
-    """A domain rule: every node type needs a description."""
+    """A domain rule: every node type needs a Definition."""
 
     name = "undescribed_concepts"
 
     def evaluate(self, version):
-        missing = [n.label for n in version.ontology.node_types if not n.description]
+        missing = [n.label for n in version.ontology.node_types if not n.definition]
         return Evaluation(
             metrics={"undescribed": len(missing)},
-            details=[Detail(label, "has no description") for label in missing],
+            details=[Detail(label, "has no Definition") for label in missing],
         )
 
 

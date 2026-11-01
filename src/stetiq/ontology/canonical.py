@@ -3,6 +3,13 @@
 The canonical form is order-independent (Concepts, properties and patterns are
 sorted) and omits default values, so two Ontologies with the same structure
 always produce byte-identical JSON and therefore the same hash.
+
+A Concept's Definition is stored under the key `description`, the name it had
+before Definitions existed, and Alternative Labels and a Deprecation (with its
+reason) are omitted when unset, so Ontology Versions registered before any of
+them existed keep their hashes. For the same reason `vocabularies` is omitted when there
+are none, and an attribute's `vocabulary` when it is unbound.
+The stetiq YAML spells the Definition `definition` (`to_dict(definition_key=...)`).
 """
 
 from __future__ import annotations
@@ -18,73 +25,184 @@ from stetiq.ontology.model import (
     Pattern,
     Property,
     RelationshipType,
+    Vocabulary,
+    VocabularyValue,
 )
 
+# The canonical key of a Concept's Definition; see the module docstring.
+DEFINITION_KEY = "description"
 
-def _property_to_dict(p: Property) -> dict[str, Any]:
-    d: dict[str, Any] = {"name": p.name, "type": p.type}
-    if p.description is not None:
-        d["description"] = p.description
-    if p.required:
-        d["required"] = True
+
+# What carries a Definition and Alternative Labels, and what can be deprecated.
+Documented = Property | NodeType | RelationshipType | Vocabulary | VocabularyValue
+Deprecatable = Property | NodeType | RelationshipType | VocabularyValue
+
+
+def _documentation(c: Documented, definition_key: str) -> dict[str, Any]:
+    d: dict[str, Any] = {}
+    if c.definition is not None:
+        d[definition_key] = c.definition
+    if c.alternative_labels:
+        d["alternativeLabels"] = list(c.alternative_labels)
     return d
 
 
-def _concept_to_dict(c: NodeType | RelationshipType) -> dict[str, Any]:
-    d: dict[str, Any] = {"label": c.label}
-    if c.description is not None:
-        d["description"] = c.description
-    if c.properties:
-        d["properties"] = [_property_to_dict(p) for p in sorted(c.properties, key=lambda p: p.name)]
+def _deprecation(c: Deprecatable) -> dict[str, Any]:
+    d: dict[str, Any] = {}
     if c.deprecated:
         d["deprecated"] = True
     if c.replaced_by is not None:
         d["replacedBy"] = c.replaced_by
+    if c.deprecation_reason is not None:
+        d["deprecationReason"] = c.deprecation_reason
+    return d
+
+
+def _property_to_dict(p: Property, definition_key: str) -> dict[str, Any]:
+    d: dict[str, Any] = {"name": p.name, "type": p.type, **_documentation(p, definition_key)}
+    if p.required:
+        d["required"] = True
+    d.update(_deprecation(p))
+    if p.vocabulary is not None:
+        d["vocabulary"] = p.vocabulary
+    return d
+
+
+def _vocabulary_to_dict(v: Vocabulary, definition_key: str) -> dict[str, Any]:
+    return {
+        "label": v.label,
+        **_documentation(v, definition_key),
+        "values": [
+            {"label": value.label, **_documentation(value, definition_key), **_deprecation(value)}
+            for value in sorted(v.values, key=lambda value: value.label)
+        ],
+    }
+
+
+def _concept_to_dict(c: NodeType | RelationshipType, definition_key: str) -> dict[str, Any]:
+    d: dict[str, Any] = {"label": c.label, **_documentation(c, definition_key)}
+    if c.properties:
+        d["properties"] = [
+            _property_to_dict(p, definition_key) for p in sorted(c.properties, key=lambda p: p.name)
+        ]
+    d.update(_deprecation(c))
     if isinstance(c, NodeType) and c.parent is not None:
         d["parent"] = c.parent
     return d
 
 
 def pattern_to_list(p: Pattern) -> list[str]:
-    """A Pattern's JSON form, `[source, relationship, target]`."""
+    """A Pattern's endpoints in JSON form, `[source, relationship, target]`."""
     return [p.source, p.relationship, p.target]
 
 
-def to_dict(ontology: Ontology) -> dict[str, Any]:
-    """The canonical dict form; also the shape of the stetiq YAML."""
+def _pattern_to_json(p: Pattern) -> list[str] | dict[str, Any]:
+    """A Pattern's canonical form: the `[source, relationship, target]` triple, or, when it
+    declares a cardinality, the mapping form with a `cardinality` key. Unbounded patterns
+    keep the triple, so pre-cardinality hashes are unchanged."""
+    cardinality = p.cardinality
+    if not cardinality:
+        return pattern_to_list(p)
+    return {
+        "source": p.source,
+        "relationship": p.relationship,
+        "target": p.target,
+        "cardinality": cardinality,
+    }
+
+
+def _pattern_from_json(p: list[str] | dict[str, Any]) -> Pattern:
+    if isinstance(p, list):
+        source, relationship, target = p
+        return Pattern(source, relationship, target)
+    bounds = p.get("cardinality", {})
+    out, in_ = bounds.get("out", {}), bounds.get("in", {})
+    return Pattern(
+        p["source"],
+        p["relationship"],
+        p["target"],
+        min_out=out.get("min"),
+        max_out=out.get("max"),
+        min_in=in_.get("min"),
+        max_in=in_.get("max"),
+    )
+
+
+def to_dict(ontology: Ontology, definition_key: str = DEFINITION_KEY) -> dict[str, Any]:
+    """The canonical dict form; also the shape of the stetiq YAML, which passes
+    `definition_key="definition"`."""
     d: dict[str, Any] = {
         "node_types": [
-            _concept_to_dict(n) for n in sorted(ontology.node_types, key=lambda n: n.label)
+            _concept_to_dict(n, definition_key)
+            for n in sorted(ontology.node_types, key=lambda n: n.label)
         ],
         "relationship_types": [
-            _concept_to_dict(r) for r in sorted(ontology.relationship_types, key=lambda r: r.label)
+            _concept_to_dict(r, definition_key)
+            for r in sorted(ontology.relationship_types, key=lambda r: r.label)
         ],
-        "patterns": [pattern_to_list(p) for p in sorted(ontology.patterns)],
+        "patterns": [_pattern_to_json(p) for p in sorted(ontology.patterns)],
     }
     if ontology.constraints:  # omitted when empty, so pre-constraint hashes are unchanged
         d["constraints"] = [
             {"type": c.type, "node_type": c.node_type, "property_name": c.property_name}
             for c in sorted(ontology.constraints)
         ]
+    if ontology.vocabularies:  # omitted when empty, so pre-Vocabulary hashes are unchanged
+        d["vocabularies"] = [
+            _vocabulary_to_dict(v, definition_key)
+            for v in sorted(ontology.vocabularies, key=lambda v: v.label)
+        ]
     return d
+
+
+def _definition(d: dict[str, Any]) -> str | None:
+    return d.get(DEFINITION_KEY, d.get("definition"))
 
 
 def _property_from_dict(d: dict[str, Any]) -> Property:
     return Property(
         name=d["name"],
         type=d["type"],
-        description=d.get("description"),
+        definition=_definition(d),
         required=d.get("required", False),
+        alternative_labels=tuple(d.get("alternativeLabels", ())),
+        **_deprecation_kwargs(d),
+        vocabulary=d.get("vocabulary"),
     )
+
+
+def _vocabulary_from_dict(d: dict[str, Any]) -> Vocabulary:
+    return Vocabulary(
+        label=d["label"],
+        definition=_definition(d),
+        alternative_labels=tuple(d.get("alternativeLabels", ())),
+        values=tuple(
+            VocabularyValue(
+                label=v["label"],
+                definition=_definition(v),
+                alternative_labels=tuple(v.get("alternativeLabels", ())),
+                **_deprecation_kwargs(v),
+            )
+            for v in d["values"]
+        ),
+    )
+
+
+def _deprecation_kwargs(d: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "deprecated": d.get("deprecated", False),
+        "replaced_by": d.get("replacedBy"),
+        "deprecation_reason": d.get("deprecationReason"),
+    }
 
 
 def _concept_kwargs(d: dict[str, Any]) -> dict[str, Any]:
     return {
         "label": d["label"],
-        "description": d.get("description"),
+        "definition": _definition(d),
+        "alternative_labels": tuple(d.get("alternativeLabels", ())),
         "properties": tuple(_property_from_dict(p) for p in d.get("properties", [])),
-        "deprecated": d.get("deprecated", False),
-        "replaced_by": d.get("replacedBy"),
+        **_deprecation_kwargs(d),
     }
 
 
@@ -97,8 +215,9 @@ def from_dict(d: dict[str, Any]) -> Ontology:
         relationship_types=tuple(
             RelationshipType(**_concept_kwargs(r)) for r in d.get("relationship_types", [])
         ),
-        patterns=tuple(Pattern(*p) for p in d.get("patterns", [])),
+        patterns=tuple(_pattern_from_json(p) for p in d.get("patterns", [])),
         constraints=tuple(Constraint(**c) for c in d.get("constraints", [])),
+        vocabularies=tuple(_vocabulary_from_dict(v) for v in d.get("vocabularies", [])),
     )
 
 

@@ -7,7 +7,9 @@ Rules:
 - A field added to an existing entity is read with `.get` and a default, so older
   payloads and older Store rows still parse.
 - Ontologies and Use Cases travel in their canonical dict form (`ontology.to_dict`,
-  `use_case.to_dict`); their hashing goes through `stetiq.digest`, not through here.
+  `use_case.to_dict`), except that an Ontology spells the Definition `definition`, as the
+  model and the YAML do (`ontology_to_json`); their hashing goes through `stetiq.digest`,
+  over the canonical form, not through here.
 - The Ontology Diff is sent by `wire.ontology_diff_to_json`; it is a computed view, not stored.
 - `encode`/`decode` dispatch on the entity type. `tests/test_codec.py` round-trips every
   dataclass in `stetiq.tracking.entities` through them, so a new entity needs an entry
@@ -26,7 +28,7 @@ from stetiq.drift import DriftFinding, DriftThresholds
 from stetiq.evaluation.framework import Detail, Evaluation
 from stetiq.gates import GateOutcome, outcome_from_dict, outcome_to_dict
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
-from stetiq.ontology import from_dict, to_dict
+from stetiq.ontology import Ontology, from_dict, to_dict
 from stetiq.tracking.entities import (
     Alias,
     ConstructionRun,
@@ -57,15 +59,23 @@ def _iso(value: datetime | None) -> str | None:
 
 
 def knowledge_graph_to_json(kg: KnowledgeGraph) -> dict[str, Any]:
-    return {"name": kg.name, "created_at": kg.created_at.isoformat(), "description": kg.description}
+    return {
+        "name": kg.name,
+        "created_at": kg.created_at.isoformat(),
+        "description": kg.description,
+        "steward": kg.steward,
+        "authority": kg.authority,
+    }
 
 
 def knowledge_graph_from_json(d: dict[str, Any]) -> KnowledgeGraph:
-    # The description is optional: older servers do not send it.
+    # The description, steward and authority are optional: older servers do not send them.
     return KnowledgeGraph(
         name=d["name"],
         created_at=datetime.fromisoformat(d["created_at"]),
         description=d.get("description"),
+        steward=d.get("steward"),
+        authority=d.get("authority"),
     )
 
 
@@ -91,6 +101,12 @@ def knowledge_graph_summary_from_json(d: dict[str, Any]) -> KnowledgeGraphSummar
     )
 
 
+def ontology_to_json(ontology: Ontology) -> dict[str, Any]:
+    """An Ontology on the wire: its canonical dict, with the Definition under `definition`
+    rather than the canonical key. `from_dict` reads either."""
+    return to_dict(ontology, definition_key="definition")
+
+
 def ontology_version_to_json(
     v: OntologyVersion, *, candidate: bool | None = None
 ) -> dict[str, Any]:
@@ -101,7 +117,7 @@ def ontology_version_to_json(
         "content_hash": v.content_hash,
         "origin": v.origin,
         "created_at": v.created_at.isoformat(),
-        "ontology": to_dict(v.ontology),
+        "ontology": ontology_to_json(v.ontology),
     }
     if candidate is not None:
         out["candidate"] = candidate

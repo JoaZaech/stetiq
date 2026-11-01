@@ -20,13 +20,32 @@ flowchart TD
 
 A **Knowledge Graph** is a named, long-lived lineage of Ontology Versions, e.g. `customer-support-kg`. It is not the graph database itself: the database, or the part of it this Knowledge Graph lives in, is its **Graph Source**, which stetiq reads but never owns.
 
-The **Ontology** is the structure of the graph: its classes, relations, attributes, hierarchy and constraints, whatever formalism you write them in. Each class, relation or attribute is a **Concept**, identified by its name or IRI across versions. Renaming a Concept counts as removing one and adding another, unless you declare it as a replacement.
+A Knowledge Graph can name a **Steward**, who watches its Drift and keeps its Definitions and Competency Questions current, and an **Authority**, who decides changes to its Ontology. Both are free-text names for display and routing; they grant no permission (access comes from [API Tokens](./05-server-and-api-tokens.md)). Set or clear them with `stetiq kg steward` and `stetiq kg authority` (see [CLI](./04-cli.md)) or `client.set_knowledge_graph_governance`.
+
+The **Ontology** is the structure of the graph: its classes, relations, attributes, hierarchy and constraints, whatever formalism you write them in. Each class, relation or attribute is a **Concept**, identified across versions by its label (an attribute by its owner's label and its name). Renaming a Concept counts as removing one and adding another, unless you declare it as a replacement.
+
+Every Concept can carry a **Definition**: what it is and what it excludes, written as `definition` in the stetiq YAML (`description`, its older spelling, is still accepted). It can also list **Alternative Labels** (`alternativeLabels`): other names people use for it, such as synonyms or acronyms ("WO" for WorkOrder). An Alternative Label never identifies a Concept, so it may not be another Concept's label in the same section (another class, relation, or attribute of the same owner).
+
+```yaml
+node_types:
+  - label: WorkOrder
+    definition: A request to perform maintenance on one Machine
+    alternativeLabels: [WO]
+    properties:
+      - {name: status, type: STRING, definition: Where the work order is in its lifecycle}
+```
+
+A **Vocabulary** is a named, flat set of **Vocabulary Values** that an attribute may take, such as the statuses of a WorkOrder. It is part of the Ontology and versioned with it. A STRING attribute is bound to a Vocabulary with `vocabulary: <label>`, and one Vocabulary can be bound to several attributes (a shared `Status`, say). Each Vocabulary Value is identified by its label and, like a Concept, has its own Definition and Alternative Labels (for example the spellings a source system uses) and can be deprecated in favour of another value of the same Vocabulary. In the Ontology Diff a Vocabulary Value is named `<Vocabulary>.<value>`, e.g. `Status.done`. See [stetiq.yaml](./06-stetiq-yaml.md#vocabularies) for how to write them.
+
+A Concept or Vocabulary Value can be **deprecated**: it stays in the Ontology but is on its way out, optionally naming its replacement and a **Deprecation reason** (`deprecationReason`) that tells Consumers why. The Ontology Version that introduces a Deprecation dates it. See [Deprecation](./06-stetiq-yaml.md#deprecation).
+
+A pattern can declare its **cardinality**: the minimum and maximum number of relations each source node has to target nodes (`out`), or each target node has from source nodes (`in`), e.g. "a WorkOrder is PERFORMED_ON exactly one Machine". Conformance reports a pattern whose observed degree falls outside these bounds. See [Cardinality](./06-stetiq-yaml.md#cardinality).
 
 An **Ontology Version** is an immutable snapshot of a Knowledge Graph's Ontology. Versions are numbered per Knowledge Graph (v1, v2…). Registering an Ontology that is identical to an existing version returns that version instead of creating a new one.
 
 You create a Knowledge Graph from its Declared Ontology (see [Getting started](./01-getting-started.md#create-a-knowledge-graph)); it becomes v1, and the `production` Alias points to it.
 
-The **Ontology Diff** between two Ontology Versions lists each change and classes it as *cosmetic* (only a description changed), *additive*, *deprecating* or *breaking*. Its **Consumer impact** follows the breaking and deprecating changes through the Competency Questions that need their Concepts to the Tasks and Consumers of the Use Case (below): those are *affected* by a breaking change and *will be affected* by a deprecating one.
+The **Ontology Diff** between two Ontology Versions lists each change and classes it as *cosmetic* (only Definitions, Alternative Labels or Deprecation reasons changed, never what data conforms), *additive*, *deprecating* or *breaking*. It covers Vocabularies too: removing a Vocabulary Value or binding a Vocabulary to an existing attribute is *breaking*, for example. Its **Consumer impact** follows the breaking and deprecating changes through the Competency Questions that need their Concepts to the Tasks and Consumers of the Use Case (below): those are *affected* by a breaking change and *will be affected* by a deprecating one.
 
 ## Construction Runs and Conformance
 
@@ -34,13 +53,13 @@ A **Construction Run** is one execution of your extraction workflow against a De
 
 The **Declared Ontology** is the structure a run is given as input. Unless you choose a version, it is the Ontology Version the Contract Alias points to (see [Aliases and Promotion](#aliases-and-promotion)).
 
-When a run ends, stetiq makes an **Observation**: it captures the Graph Source's **Observed Schema**, the Ontology as it actually appears in the graph plus aggregate statistics (counts per class and relation, cardinalities, attribute fill rates). It never contains instance data. stetiq then measures the run's **Conformance**: how closely the Observed Schema matches the Declared Ontology.
+When a run ends, stetiq makes an **Observation**: it captures the Graph Source's **Observed Schema**, the Ontology as it actually appears in the graph plus aggregate statistics (counts per class and relation, cardinalities, attribute fill rates). It never contains instance data, with one exception: for an attribute bound to a Vocabulary it records the distinct values the attribute takes, each with a count, up to a cap (100 by default), since those values are what the Vocabulary permits. stetiq then measures the run's **Conformance**: how closely the Observed Schema matches the Declared Ontology. It lists every mismatch (a Concept declared but not observed or observed but not declared, a wrong value type, a cardinality outside its bounds, a value outside its attribute's Vocabulary) and scores the share of checks that hold.
 
 ## Evolution Mode and Candidates
 
-A run can produce Concepts the Declared Ontology doesn't have. The Knowledge Graph's **Evolution Mode** decides what happens then:
+A run can produce Concepts the Declared Ontology doesn't have, or values a Vocabulary doesn't have. The Knowledge Graph's **Evolution Mode** decides what happens then:
 
-- *evolving* (the default): the run finishes, and stetiq registers a new Ontology Version that includes the new Concepts, linked to the run.
+- *evolving* (the default): the run finishes, and stetiq registers a new Ontology Version that includes the new Concepts, and the new values as new Vocabulary Values, linked to the run.
 - *strict*: the run fails.
 
 An Ontology Version no Alias has pointed to yet is a **Candidate**. A version registered by an evolving run is the typical Candidate, but a version you register yourself is one too until an Alias points to it.
@@ -69,7 +88,7 @@ A **Promotion** moves an Alias to an Ontology Version, typically to a Candidate 
 
 The graph can change between runs: someone edits it by hand, or another process writes to it. You can make an Observation on demand, outside any Construction Run, with `stetiq observe` or the SDK. Schedule it with cron, Airflow or CI.
 
-**Drift** is a divergence, found by an Observation, between the Graph Source's Observed Schema and the Contract Alias's Ontology Version. stetiq also compares the Observation's statistics with the previous Observation and reports changes beyond your thresholds. Drift raises an alert. It never creates an Ontology Version or moves an Alias: deciding what the structure should be stays a Promotion.
+**Drift** is a divergence, found by an Observation, between the Graph Source's Observed Schema and the Contract Alias's Ontology Version: a Concept observed but not declared, one declared but no longer observed, or a value outside its attribute's Vocabulary. stetiq also compares the Observation's statistics with the previous Observation and reports changes beyond your thresholds. Drift raises an alert. It never creates an Ontology Version or moves an Alias: deciding what the structure should be stays a Promotion.
 
 ## Where your data stays
 

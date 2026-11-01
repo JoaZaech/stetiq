@@ -1,17 +1,29 @@
 import { useQuery } from '@tanstack/react-query'
 import { api, kgPath } from './client'
 
-/** The canonical Ontology dict (ontology/canonical.py `to_dict`): defaults are omitted. */
+/**
+ * The Ontology on the wire (tracking/codec.py `ontology_to_json`): the canonical dict, with
+ * defaults omitted and each Definition under `definition`.
+ */
 export interface OntologyProperty {
   name: string
   type: string
-  description?: string
+  definition?: string
   required?: boolean
+  /** The label of the Vocabulary this STRING attribute is bound to. */
+  vocabulary?: string
+}
+
+/** A Vocabulary and its Vocabulary Values, each identified by its label. */
+export interface OntologyVocabulary {
+  label: string
+  definition?: string
+  values: { label: string; definition?: string; deprecated?: boolean; replacedBy?: string }[]
 }
 
 export interface OntologyConcept {
   label: string
-  description?: string
+  definition?: string
   properties?: OntologyProperty[]
   deprecated?: boolean
   replacedBy?: string
@@ -31,7 +43,36 @@ export interface Ontology {
   /** `[source, relationship, target]` */
   patterns: [string, string, string][]
   constraints?: OntologyConstraint[]
+  vocabularies?: OntologyVocabulary[]
 }
+
+/** The mapping form the canonical dict uses for a pattern that declares a cardinality. */
+interface BoundedPattern {
+  source: string
+  relationship: string
+  target: string
+  cardinality: Partial<Record<'out' | 'in', { min?: number; max?: number }>>
+}
+
+/**
+ * An Ontology Version as the server sends it. The UI does not show cardinality yet, so
+ * `withPatternTriples` reduces every pattern to its triple before the UI sees it.
+ */
+export interface WireOntologyVersion extends Omit<OntologyVersion, 'ontology'> {
+  ontology: Omit<Ontology, 'patterns'> & { patterns: (Ontology['patterns'][number] | BoundedPattern)[] }
+}
+
+export const withPatternTriples = <V extends WireOntologyVersion>(
+  version: V,
+): Omit<V, 'ontology'> & { ontology: Ontology } => ({
+  ...version,
+  ontology: {
+    ...version.ontology,
+    patterns: version.ontology.patterns.map((p) =>
+      Array.isArray(p) ? p : ([p.source, p.relationship, p.target] as [string, string, string]),
+    ),
+  },
+})
 
 /** wire.ontology_version_to_json */
 export interface OntologyVersion {
@@ -79,7 +120,10 @@ export const ontologyVersionQueryKeys = {
 /** Oldest first, as the server returns them. */
 export const ontologyVersionsQuery = (kg: string) => ({
   queryKey: ontologyVersionQueryKeys.all(kg),
-  queryFn: () => api<ListedOntologyVersion[]>(versionsPath(kg)),
+  queryFn: async (): Promise<ListedOntologyVersion[]> =>
+    (await api<(WireOntologyVersion & { candidate?: boolean })[]>(versionsPath(kg))).map(
+      withPatternTriples,
+    ),
 })
 export const useOntologyVersions = (kg: string) => useQuery(ontologyVersionsQuery(kg))
 
@@ -95,7 +139,8 @@ export const useAllVersionEvaluations = (kg: string) => useQuery(allVersionEvalu
 
 export const ontologyVersionQuery = (kg: string, number: number) => ({
   queryKey: ontologyVersionQueryKeys.one(kg, number),
-  queryFn: () => api<OntologyVersion>(`${versionsPath(kg)}/${number}`),
+  queryFn: async (): Promise<OntologyVersion> =>
+    withPatternTriples(await api<WireOntologyVersion>(`${versionsPath(kg)}/${number}`)),
 })
 export const useOntologyVersion = (kg: string, number: number) =>
   useQuery({ ...ontologyVersionQuery(kg, number), enabled: Number.isInteger(number) })

@@ -5,6 +5,12 @@ import yaml
 
 import stetiq
 
+_BOUNDED = (
+    "node_types: [WorkOrder, Machine]\nrelationship_types: [PERFORMED_ON]\npatterns:\n"
+    "  - {{source: WorkOrder, relationship: PERFORMED_ON, target: Machine,"
+    " cardinality: {cardinality}}}"
+)
+
 MALFORMED = {
     "not yaml": ("node_types: [Customer", "YAML"),
     "not a mapping": ("- Customer", "top level"),
@@ -73,6 +79,131 @@ MALFORMED = {
         "node_types:\n  - label: Customer\n    replacedBy: Client",
         "Client",
     ),
+    "both definition and description": (
+        "node_types:\n  - label: Customer\n    definition: A buyer\n    description: A buyer",
+        "Customer.definition: give either definition or description",
+    ),
+    "both definition and description on a property": (
+        "node_types:\n  - label: Ticket\n    properties:\n"
+        "      - {name: title, type: STRING, definition: a, description: a}",
+        "Ticket.title.definition",
+    ),
+    "alternative label is another class's label": (
+        "node_types:\n  - {label: Customer, alternativeLabels: [Client]}\n  - Client",
+        "Customer.alternativeLabels: 'Client' is the label of another Concept in node_types",
+    ),
+    "alternative label is another relation's label": (
+        "node_types: [A]\nrelationship_types:\n  - {label: OPENED, alternativeLabels: [RAISED]}\n"
+        "  - RAISED",
+        "OPENED.alternativeLabels",
+    ),
+    "alternative label is another attribute's name": (
+        "node_types:\n  - label: Ticket\n    properties:\n"
+        "      - {name: title, type: STRING, alternativeLabels: [subject]}\n"
+        "      - {name: subject, type: STRING}",
+        "Ticket.title.alternativeLabels",
+    ),
+    "empty alternative label": (
+        "node_types:\n  - {label: Customer, alternativeLabels: ['']}",
+        "Customer.alternativeLabels",
+    ),
+    "duplicate alternative label": (
+        "node_types:\n  - {label: Customer, alternativeLabels: [Client, Client]}",
+        "Customer.alternativeLabels: Alternative Label 'Client' is given more than once",
+    ),
+    "duplicate alternative label on a property": (
+        "node_types:\n  - label: Ticket\n    properties:\n"
+        "      - {name: title, type: STRING, alternativeLabels: [subject, subject]}",
+        "Ticket.title.alternativeLabels",
+    ),
+    "alternative labels not a list": (
+        "node_types:\n  - {label: Customer, alternativeLabels: Client}",
+        "Customer.alternativeLabels",
+    ),
+    "attribute replaced by an attribute on another owner": (
+        "node_types:\n  - label: Ticket\n    properties:\n"
+        "      - {name: priority, type: FLOAT, replacedBy: urgency}\n"
+        "  - label: Case\n    properties:\n      - {name: urgency, type: FLOAT}",
+        "Ticket.priority.replacedBy: 'urgency' is not another Concept declared in Ticket's properties",
+    ),
+    "attribute replaced by itself": (
+        "node_types:\n  - label: Ticket\n    properties:\n"
+        "      - {name: priority, type: FLOAT, replacedBy: priority}",
+        "Ticket.priority.replacedBy",
+    ),
+    "attribute deprecated not a boolean": (
+        "node_types:\n  - label: Ticket\n    properties:\n"
+        "      - {name: priority, type: FLOAT, deprecated: soon}",
+        "Ticket.priority.deprecated",
+    ),
+    "deprecation reason not a string": (
+        "node_types:\n  - {label: Customer, deprecated: true, deprecationReason: [a]}",
+        "Customer.deprecationReason",
+    ),
+    "deprecation reason without a deprecation": (
+        "node_types:\n  - {label: Customer, deprecationReason: Unused}",
+        "Customer.deprecationReason: a Deprecation reason needs deprecated: true or a replacedBy",
+    ),
+    "attribute deprecation reason without a deprecation": (
+        "node_types:\n  - label: Ticket\n    properties:\n"
+        "      - {name: priority, type: FLOAT, deprecationReason: Unused}",
+        "Ticket.priority.deprecationReason",
+    ),
+    "binding to an unknown vocabulary": (
+        "vocabularies:\n  - {label: Status, values: [open]}\n"
+        "node_types:\n  - label: WorkOrder\n    properties:\n"
+        "      - {name: status, type: STRING, vocabulary: Stauts}",
+        "WorkOrder.status.vocabulary: 'Stauts' is not declared in vocabularies",
+    ),
+    "binding a vocabulary to a non-STRING attribute": (
+        "vocabularies:\n  - {label: Status, values: [open]}\n"
+        "node_types:\n  - label: WorkOrder\n    properties:\n"
+        "      - {name: status, type: INTEGER, vocabulary: Status}",
+        "WorkOrder.status.vocabulary: only a STRING property can be bound to a Vocabulary",
+    ),
+    "binding a relation's attribute to an unknown vocabulary": (
+        "node_types: [WorkOrder]\nrelationship_types:\n  - label: NEXT\n    properties:\n"
+        "      - {name: status, type: STRING, vocabulary: Status}",
+        "NEXT.status.vocabulary",
+    ),
+    "duplicate vocabulary value": (
+        "vocabularies:\n  - {label: Status, values: [open, closed, {label: open}]}\n"
+        "node_types: [WorkOrder]",
+        "Status.open: value is declared more than once",
+    ),
+    "empty vocabulary": (
+        "vocabularies:\n  - {label: Status, values: []}\nnode_types: [WorkOrder]",
+        "Status.values: a Vocabulary needs at least one value",
+    ),
+    "vocabulary without values": (
+        "vocabularies:\n  - {label: Status}\nnode_types: [WorkOrder]",
+        "Status.values",
+    ),
+    "vocabulary value replaced by a value outside its vocabulary": (
+        "vocabularies:\n  - {label: Status, values: [{label: done, replacedBy: low}]}\n"
+        "  - {label: Priority, values: [low]}\nnode_types: [WorkOrder]",
+        "Status.done.replacedBy: 'low' is not another Concept declared in Status's values",
+    ),
+    "duplicate vocabulary": (
+        "vocabularies:\n  - {label: Status, values: [open]}\n  - {label: Status, values: [closed]}\n"
+        "node_types: [WorkOrder]",
+        "Status: declared more than once in vocabularies",
+    ),
+    "unknown key on a vocabulary value": (
+        "vocabularies:\n  - {label: Status, values: [{label: open, colour: green}]}\n"
+        "node_types: [WorkOrder]",
+        "Status.open: unknown key(s) colour",
+    ),
+    "vocabulary value alternative label that is another value": (
+        "vocabularies:\n  - {label: Status, values: [{label: done, alternativeLabels: [closed]}, closed]}\n"
+        "node_types: [WorkOrder]",
+        "Status.done.alternativeLabels",
+    ),
+    "vocabulary value deprecation reason without a deprecation": (
+        "vocabularies:\n  - {label: Status, values: [{label: done, deprecationReason: Old}]}\n"
+        "node_types: [WorkOrder]",
+        "Status.done.deprecationReason",
+    ),
     "pattern with undeclared node type": (
         "node_types: [Customer]\nrelationship_types: [OPENED]\npatterns:\n  - [Customer, OPENED, Ticket]",
         "Ticket",
@@ -84,6 +215,22 @@ MALFORMED = {
     "pattern not a triple": (
         "node_types: [Customer]\nrelationship_types: [KNOWS]\npatterns:\n  - [Customer, KNOWS]",
         "patterns[0]",
+    ),
+    "negative cardinality bound": (
+        _BOUNDED.format(cardinality="{in: {min: -1}}"),
+        "patterns[0].cardinality.in.min",
+    ),
+    "cardinality min greater than max": (
+        _BOUNDED.format(cardinality="{out: {min: 2, max: 1}}"),
+        "patterns[0].cardinality.out",
+    ),
+    "cardinality bound not an integer": (
+        _BOUNDED.format(cardinality="{out: {max: many}}"),
+        "patterns[0].cardinality.out.max",
+    ),
+    "unknown cardinality direction": (
+        _BOUNDED.format(cardinality="{both: {max: 1}}"),
+        "both",
     ),
 }
 

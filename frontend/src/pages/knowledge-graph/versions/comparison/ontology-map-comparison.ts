@@ -246,20 +246,21 @@ export interface DescriptionChange {
 
 /**
  * What a cosmetic (documentation-only) change changed: the description of its class,
- * relation or attribute in the two Ontologies compared. Null for any other change.
+ * relation or attribute in the two Ontologies compared. Null for any other change, and for
+ * a Vocabulary's, which the Map does not show.
  */
 export function descriptionChangeOf(
   { base, target }: Pick<OntologyComparison, 'base' | 'target'>,
   change: OntologyChange,
 ): DescriptionChange | null {
-  if (!cosmetic(change)) return null
+  if (!cosmetic(change) || change.concept_kind === 'vocabulary') return null
   const describe = (ontology: Ontology) => {
     const concepts = (kind: OwnerKind) => (kind === 'node_type' ? ontology.node_types : ontology.relationship_types)
     if (change.concept_kind !== 'property') {
-      return concepts(change.concept_kind).find((c) => c.label === change.concept)?.description ?? ''
+      return concepts(change.concept_kind).find((c) => c.label === change.concept)?.definition ?? ''
     }
     const owner = concepts(change.owner_kind).find((c) => c.label === change.owner)
-    return owner?.properties?.find((p) => p.name === change.attribute)?.description ?? ''
+    return owner?.properties?.find((p) => p.name === change.attribute)?.definition ?? ''
   }
   return { before: describe(base), after: describe(target) }
 }
@@ -297,7 +298,7 @@ export interface ChangeStatement {
   level: Classification | null
   /** The attribute it changed, or null for a change to the class or relation itself. */
   attribute: string | null
-  /** What changed, e.g. "removed", "added, required", "class added", "description changed". */
+  /** What changed, e.g. "removed", "added, required", "class added", "definition changed". */
   text: string
 }
 

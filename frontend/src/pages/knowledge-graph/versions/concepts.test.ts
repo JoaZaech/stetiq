@@ -6,7 +6,7 @@ import { conceptTables } from './concepts'
 const ONTOLOGY: Ontology = {
   node_types: [
     { label: 'Agent', parent: 'Person' },
-    { label: 'Customer', parent: 'Person', description: 'Someone who opens tickets' },
+    { label: 'Customer', parent: 'Person', definition: 'Someone who opens tickets' },
     { label: 'Person', properties: [{ name: 'name', type: 'STRING', required: true }] },
     { label: 'Supervisor', parent: 'Agent' },
     { label: 'Ticket', properties: [{ name: 'opened_at', type: 'DATE' }] },

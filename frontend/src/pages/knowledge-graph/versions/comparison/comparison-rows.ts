@@ -17,12 +17,16 @@ export interface ComparisonRow {
   change: OntologyChange['kind']
   level: Classification
   detail: string
-  /** The class or relation to show on the Map: the Concept itself, or an attribute's owner. */
-  owner: ClassOrRelation
+  /**
+   * The class or relation to show on the Map: the Concept itself, or an attribute's owner.
+   * Null for a Vocabulary change, which the Map does not show.
+   */
+  owner: ClassOrRelation | null
 }
 
 /** Where `change` is on the Map: its class or relation, or the one the Diff says owns the attribute. */
-function ownerOf(change: OntologyChange): ClassOrRelation {
+function ownerOf(change: OntologyChange): ClassOrRelation | null {
+  if (change.concept_kind === 'vocabulary') return null
   return change.concept_kind === 'property'
     ? { kind: CONCEPT_NOUN[change.owner_kind], label: change.owner }
     : { kind: CONCEPT_NOUN[change.concept_kind], label: change.concept }

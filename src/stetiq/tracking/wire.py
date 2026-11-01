@@ -38,7 +38,8 @@ def ontology_diff_to_json(d: OntologyDiff) -> dict[str, Any]:
 
 def _change_to_json(c: Change) -> dict[str, Any]:
     """What a change concerns (an attribute and its owner, whether an added attribute is
-    required, an endpoint Pattern) only when it concerns one; a reader takes a missing
+    required, an endpoint Pattern, a Vocabulary and its Value) only when it concerns one; a
+    reader takes a missing
     field as None."""
     out: dict[str, Any] = {
         "concept": c.concept,
@@ -53,6 +54,8 @@ def _change_to_json(c: Change) -> dict[str, Any]:
         "attribute": c.attribute,
         "required": c.required,
         "pattern": c.pattern and pattern_to_list(c.pattern),
+        "vocabulary": c.vocabulary,
+        "value": c.value,
     }
     out.update({k: v for k, v in facts.items() if v is not None})
     return out

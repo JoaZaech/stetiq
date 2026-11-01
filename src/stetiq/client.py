@@ -29,7 +29,14 @@ from stetiq.evaluation.framework import (
 from stetiq.evaluation.llm_mapping import question_mapper_from_env
 from stetiq.evaluation.run import CompetencyQuestionExecution, RunSubject, ScopedGraphSource
 from stetiq.gates import GatesInput, load_gates
-from stetiq.graph_source import GraphSource, GraphSourceScope, graph_source_from_env
+from stetiq.graph_source import (
+    DEFAULT_VALUE_CAP,
+    GraphSource,
+    GraphSourceScope,
+    ObservedSchema,
+    bound_attributes,
+    graph_source_from_env,
+)
 from stetiq.impact import UseCaseImpact, consumer_impact
 from stetiq.ontology import Ontology, parse_yaml
 from stetiq.ontology.diff import OntologyDiff, diff_ontologies
@@ -169,6 +176,7 @@ class Client:
         graph_source: GraphSource | None = None,
         actor: str | None = None,
         token: str | None = None,
+        value_cap: int = DEFAULT_VALUE_CAP,
     ) -> None:
         """`graph_source` is the adapter (e.g. Neo4j, with its credentials) used to observe
         the bound Graph Source scope when a Construction Run ends. It runs in this
@@ -176,11 +184,15 @@ class Client:
         Neo4j adapter is built on first use from `$STETIQ_GRAPH_SOURCE_URI` (plus
         `$STETIQ_GRAPH_SOURCE_USER` / `$STETIQ_GRAPH_SOURCE_PASSWORD`).
 
+        Observation reads the values of Vocabulary-bound Attributes only, and at most
+        `value_cap` distinct values per Attribute.
+
         `token` (else $STETIQ_TOKEN) is the API token server mode requires; local mode
         ignores it. In server mode the audit log records the token's user, not `actor`."""
         self.tracking_uri = resolve_tracking_uri(tracking_uri)
         self._service = service or service_for_uri(self.tracking_uri, token=token)
         self._graph_source = graph_source
+        self.value_cap = value_cap
         self.actor = resolve_actor(actor)
         # Custom Evaluators run in this process (the user's code), in every mode;
         # only their results go to the tracking service.
@@ -202,6 +214,14 @@ class Client:
     def set_knowledge_graph_description(self, name: str, description: str | None) -> KnowledgeGraph:
         """Replace the Knowledge Graph's markdown description; None or blank clears it."""
         return self._service.set_knowledge_graph_description(name, description)
+
+    def set_knowledge_graph_governance(
+        self, name: str, *, steward: str | None = None, authority: str | None = None
+    ) -> KnowledgeGraph:
+        """Name the Knowledge Graph's Steward and Authority. A name left out stays as it
+        is; an empty string clears it. The names are for display and routing only and
+        grant no permission; setting them needs `edit`."""
+        return self._service.set_knowledge_graph_governance(name, steward, authority)
 
     def list_knowledge_graphs(self) -> list[KnowledgeGraphSummary]:
         """All Knowledge Graphs by name, each with a summary of its state (in server
@@ -533,6 +553,7 @@ class Client:
             graph_source,
             run,
             declared.ontology,
+            value_cap=self.value_cap,
             on_end=lambda ended: self._evaluate_run_sdk_side(ended, graph_source),
         )
 
@@ -728,12 +749,24 @@ class Client:
         `list_drift_events`; it never creates an Ontology Version."""
         graph_source = self._require_graph_source()
         scope = self._service.get_graph_source(knowledge_graph)
-        schema = graph_source.observe(scope)
+        contract = self._service.get_contract_version(knowledge_graph).ontology
+        schema = _observe(graph_source, scope, contract, self.value_cap)
         return self._service.record_observation(knowledge_graph, (scope, schema), thresholds)
 
     def list_drift_events(self, knowledge_graph: str) -> list[DriftEvent]:
         """The Knowledge Graph's Drift events, oldest first."""
         return self._service.list_drift_events(knowledge_graph)
+
+
+def _observe(
+    graph_source: GraphSource, scope: GraphSourceScope, ontology: Ontology, value_cap: int
+) -> ObservedSchema:
+    """Observe `scope`, reading values for `ontology`'s Vocabulary-bound Attributes only
+    (ADR 0001). Without such Attributes the adapter is called as before Vocabularies."""
+    bound = bound_attributes(ontology)
+    if not bound:
+        return graph_source.observe(scope)
+    return graph_source.observe(scope, bound, value_cap=value_cap)
 
 
 class ActiveRun:
@@ -746,10 +779,12 @@ class ActiveRun:
         run: ConstructionRun,
         declared_ontology: Ontology,
         *,
+        value_cap: int = DEFAULT_VALUE_CAP,
         on_end: Callable[[ConstructionRun], None] | None = None,
     ) -> None:
         self._service = service
         self._graph_source = graph_source
+        self._value_cap = value_cap
         self._on_end = on_end
         self.id = run.id
         self.knowledge_graph = run.knowledge_graph
@@ -780,7 +815,7 @@ class ActiveRun:
         and the other results stay)."""
         try:
             scope = self._service.get_graph_source(self.knowledge_graph)
-            schema = self._graph_source.observe(scope)
+            schema = _observe(self._graph_source, scope, self.declared_ontology, self._value_cap)
         except BaseException:
             self._service.fail_run(self.id)
             raise

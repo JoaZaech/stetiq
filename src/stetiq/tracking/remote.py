@@ -14,7 +14,7 @@ from stetiq.errors import EvaluatorError, StetiqError
 from stetiq.evaluation.framework import Evaluation, ParameterValue, SubjectKind
 from stetiq.gates import Gate
 from stetiq.graph_source import GraphSourceScope
-from stetiq.ontology import Ontology, to_dict
+from stetiq.ontology import Ontology
 from stetiq.tracking import codec, wire
 from stetiq.tracking.entities import (
     Alias,
@@ -76,7 +76,9 @@ class RemoteTrackingService:
     ) -> KnowledgeGraph:
         body = {
             "name": name,
-            "declared_ontology": None if declared_ontology is None else to_dict(declared_ontology),
+            "declared_ontology": None
+            if declared_ontology is None
+            else codec.ontology_to_json(declared_ontology),
         }
         return codec.knowledge_graph_from_json(self._call("POST", "/knowledge-graphs", body))
 
@@ -88,12 +90,19 @@ class RemoteTrackingService:
         data = self._call("PUT", self._kg_path(name) + "/description", body)
         return codec.knowledge_graph_from_json(data)
 
+    def set_knowledge_graph_governance(
+        self, name: str, steward: str | None, authority: str | None
+    ) -> KnowledgeGraph:
+        body = {"steward": steward, "authority": authority}
+        data = self._call("PUT", self._kg_path(name) + "/governance", body)
+        return codec.knowledge_graph_from_json(data)
+
     def list_knowledge_graphs(self) -> list[KnowledgeGraphSummary]:
         data = self._call("GET", "/knowledge-graphs")
         return [codec.knowledge_graph_summary_from_json(k) for k in data]
 
     def register_ontology(self, knowledge_graph: str, ontology: Ontology) -> OntologyVersion:
-        body = {"ontology": to_dict(ontology)}
+        body = {"ontology": codec.ontology_to_json(ontology)}
         data = self._call("POST", self._kg_path(knowledge_graph) + "/ontology-versions", body)
         return codec.ontology_version_from_json(data)
 

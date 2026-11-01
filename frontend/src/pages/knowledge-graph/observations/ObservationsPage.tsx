@@ -164,7 +164,9 @@ function DriftDetails({ name, drift }: { name: string; drift: DriftEvent }) {
         </TableHeader>
         <TableBody>
           {drift.findings.map((finding) => (
-            <TableRow key={`${finding.kind}/${finding.subject_kind}/${finding.subject}`}>
+            <TableRow
+              key={`${finding.kind}/${finding.subject_kind}/${finding.subject}/${finding.value ?? ''}`}
+            >
               <TableCell>{humanize(finding.kind)}</TableCell>
               <TableCell>
                 <span className="font-mono text-xs">{finding.subject}</span>{' '}

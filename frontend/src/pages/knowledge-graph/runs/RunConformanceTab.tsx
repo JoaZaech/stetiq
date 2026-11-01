@@ -23,6 +23,9 @@ const MISMATCH_KIND: Record<Mismatch['kind'], string> = {
   undeclared: 'Observed but not declared',
   type_mismatch: 'Undeclared value type',
   required_missing: 'Required but not always set',
+  cardinality_violation: 'Outside the declared cardinality',
+  value_outside_vocabulary: 'Value outside the Vocabulary',
+  deprecated_value: 'Deprecated value (conforms)',
 }
 
 /**
@@ -88,8 +91,8 @@ function MismatchTable({
           <TableBody>
             {[...mismatches]
               .sort((a, b) => a.subject.localeCompare(b.subject))
-              .map((m) => (
-                <TableRow key={`${m.subject_kind}/${m.subject}/${m.kind}`}>
+              .map((m, i) => (
+                <TableRow key={`${m.subject_kind}/${m.subject}/${m.kind}/${m.value ?? ''}/${i}`}>
                   <TableCell className="font-mono text-xs">{m.subject}</TableCell>
                   <TableCell>{SUBJECT_KIND[m.subject_kind]}</TableCell>
                   {showKind && <TableCell>{MISMATCH_KIND[m.kind]}</TableCell>}

@@ -38,6 +38,8 @@ The name of a Knowledge Graph, as a string. `stetiq run`, `stetiq observe` and `
 knowledge_graph: support
 ```
 
+The Knowledge Graph's Steward and Authority are not part of `stetiq.yaml`: they are stored with the Knowledge Graph itself, and set with `stetiq kg steward` and `stetiq kg authority` (see [CLI](./04-cli.md)). A Steward watches the Knowledge Graph's Drift and keeps its Definitions and Competency Questions current; an Authority decides changes to its Ontology. Neither grants any permission.
+
 Without it, those commands need the name as their first argument, or they exit with an error.
 
 ## entry_point
@@ -95,7 +97,7 @@ drift:
 | `max_count_drop` | A node or relationship type's count falls by more than this fraction. |
 | `max_count_increase` | A node or relationship type's count rises by more than this fraction. |
 
-Both keys are optional, and each must be a non-negative number. A change exactly at the threshold isn't Drift. Without a `drift:` section, or without a key, that statistical check is off. Structural Drift (Concepts that are observed but not declared by the Contract Alias's Ontology Version, or declared but no longer observed) is always checked.
+Both keys are optional, and each must be a non-negative number. A change exactly at the threshold isn't Drift. Without a `drift:` section, or without a key, that statistical check is off. Structural Drift (Concepts that are observed but not declared by the Contract Alias's Ontology Version, or declared but no longer observed, and values outside a bound attribute's Vocabulary) is always checked.
 
 Any other key in `drift:` is an error. `stetiq observe` exits 3 on Drift and 1 on an error. If you run it without `--config` and there is no `./stetiq.yaml`, it uses an empty config. A `--config` file that doesn't exist is an error.
 
@@ -131,7 +133,7 @@ No change in the Ontology Diff from the Contract Alias's Ontology Version to the
 | --- | --- |
 | `max_classification` | Required. `cosmetic`, `additive`, `deprecating` or `breaking`, from least to most severe. |
 
-With `max_classification: cosmetic`, only description changes pass; with `additive`, cosmetic and additive changes pass. `breaking` lets every change through, which is useful to record the diff without failing on it. When it fails, its reasons list each change that is too severe.
+With `max_classification: cosmetic`, only documentation changes (Definitions, Alternative Labels and Deprecation reasons) pass, so the Ontology's structure is frozen; with `additive`, cosmetic and additive changes pass. `breaking` lets every change through, which is useful to record the diff without failing on it. When it fails, its reasons list each change that is too severe.
 
 ```yaml
 gates:
@@ -215,12 +217,20 @@ These Evaluator names are built in. stetiq computes their results itself, and a 
 | `orphan_concepts` | Ontology Version | `orphan_concepts`, `orphan_node_types`, `orphan_relationship_types`, `orphan_concept_ratio` |
 | `redundancy` | Ontology Version | `redundant_patterns`, `redundant_properties`, `duplicate_structure_concepts` |
 | `constraint_consistency` | Ontology Version | `inconsistencies`, `inherited_duplicate_constraints`, `unique_optional_properties`, `constraints_on_deprecated`, `deprecated_replacements` |
-| `structural_answerability` | Ontology Version, when the Knowledge Graph has a Use Case | `questions`, `answerable_questions`, `unanswerable_questions`, `unmapped_questions`, `answerable_ratio`, `questions_serving_no_task` |
+| `definitions` | Ontology Version | `concepts_without_definition`, `vocabulary_values_without_definition`, `definition_ratio` |
+| `structural_answerability` | Ontology Version, when the Knowledge Graph has a Use Case | `questions`, `answerable_questions`, `unanswerable_questions`, `unmapped_questions`, `answerable_ratio`, `regressed_questions`, `questions_serving_no_task` |
+| `competency_question_coverage` | Ontology Version, when the Knowledge Graph has a Use Case | `concepts`, `traced_concepts`, `untraced_concepts`, `traced_concept_ratio` |
 | `conformance` | Construction Run | `score`, `mismatches` |
 | `observed_schema` | Construction Run | `node_types`, `relationship_types`, `patterns`, `nodes`, `relationships`, `properties`, `mean_fill_rate` |
 | `competency_question_execution` | Construction Run, recorded by the SDK | `questions`, `passed_questions`, `failed_questions`, `skipped_questions`, `pass_ratio` |
 
+`regressed_questions` counts the Competency Questions that the Contract Alias's Ontology Version answers but the evaluated version does not, with one detail per question naming the Concepts it is missing. It is 0 for the Contract Alias's own version. A Gate with `metric: regressed_questions` and `max: 0` blocks a Promotion that would stop answering a question.
+
 `questions_serving_no_task` counts the Competency Questions that no Consumer's Task needs: 0 when every question serves a Task, and every question in a Use Case without Consumers. A Gate with `metric: questions_serving_no_task` and `max: 0` fails while a question serves no Task.
+
+`competency_question_coverage` counts the Concepts that at least one Competency Question references, read from the same Concept mapping as `structural_answerability`, with one detail per Concept no question references. Deprecated Concepts, and the Attributes of a deprecated Class or Relation, are not counted. Like `structural_answerability`, it is judged again whenever you register a new Use Case Version. A Gate with `metric: traced_concept_ratio` and a `min` requires that share of the Ontology to be traceable to the Use Case.
+
+`definitions` counts the Classes, Relations and Attributes (`concepts_without_definition`) and the Vocabulary Values (`vocabulary_values_without_definition`) that have no `definition`, with one detail per item, named `Label`, `Owner.attribute` or `Vocabulary.value`. A Definition that is only whitespace counts as missing. Deprecated items, and the Attributes of a deprecated Class or Relation, are not counted. `definition_ratio` is the share of the counted items that have a Definition, and 1 when there is nothing to count. A Gate with `metric: concepts_without_definition` and `max: 0` requires every Concept to be defined.
 
 `gold_alignment` ships with stetiq too, but you run it yourself with a reference of your choice. It reports `precision`, `recall`, `matched_concepts`, `unmatched_evaluated_concepts` and `unmatched_reference_concepts`. A custom Evaluator reports whatever metrics it returns.
 
@@ -280,3 +290,80 @@ stetiq alias log support
 ```
 
 The `GATE` column of `stetiq alias log` shows `passed`, `failed`, or `-` for a version that was never gated.
+
+## The Ontology YAML
+
+The Declared Ontology is a separate YAML file (the one you pass to `stetiq kg create --ontology` and `stetiq ontology register`, and that a run receives as `{ontology}`). Its sections are `node_types`, `relationship_types`, `patterns`, `constraints` and `vocabularies`; see [Getting started](01-getting-started.md#create-a-knowledge-graph) for a complete example.
+
+### Deprecation
+
+A class, relation or attribute can be **deprecated**: it is still part of the Ontology, but on its way out. Write `deprecated: true`, or name what replaces it with `replacedBy`, which deprecates it too. A class's replacement is another class, a relation's another relation, and an attribute's another attribute on the same class or relation. Any Deprecation can carry a `deprecationReason`, a sentence for Consumers on why; a reason needs `deprecated: true` or a `replacedBy`.
+
+```yaml
+node_types:
+  - label: WorkOrder
+    properties:
+      - {name: state, type: STRING, replacedBy: status, deprecationReason: Renamed to match the MES}
+      - {name: status, type: STRING}
+      - {name: legacy_id, type: STRING, deprecated: true}
+  - {label: Job, replacedBy: WorkOrder, deprecationReason: Merged into WorkOrder}
+relationship_types:
+  - {label: PERFORMED_ON, deprecated: true, deprecationReason: Use RUNS_ON}
+  - RUNS_ON
+```
+
+- **Ontology Diff:** deprecating a class, relation or attribute, or changing its replacement, is *deprecating*. A rename declared with `replacedBy` is a deprecation of the old name plus the addition of the new one, not a removal. Undeprecating is *additive*, and changing only the `deprecationReason` is *cosmetic*.
+
+### Vocabularies
+
+A **Vocabulary** is a named, flat set of **Vocabulary Values** that an attribute bound to it may take. Declare Vocabularies in the top-level `vocabularies` section and bind a STRING attribute to one with `vocabulary: <label>`. One Vocabulary can be bound to several attributes.
+
+```yaml
+vocabularies:
+  - label: Status
+    definition: Where a piece of work stands
+    values:
+      - open                                  # a bare label is shorthand for {label: open}
+      - label: in_review
+        definition: Waiting for a second pair of eyes
+        alternativeLabels: [In Review]        # spellings seen in source systems
+      - {label: done, replacedBy: closed, deprecationReason: Renamed to match the MES}
+      - closed
+node_types:
+  - label: WorkOrder
+    properties:
+      - {name: status, type: STRING, vocabulary: Status}
+  - label: Task
+    properties:
+      - {name: status, type: STRING, vocabulary: Status}
+```
+
+A Vocabulary has a `label`, an optional `definition` and `alternativeLabels`, and at least one value. A value is identified by its `label`, unique in its Vocabulary, and takes the same `definition`, `alternativeLabels` and Deprecation keys as an attribute (`deprecated`, `replacedBy`, `deprecationReason`); its `replacedBy` names another value of the same Vocabulary. Registration rejects a binding to an undeclared Vocabulary, a binding on an attribute whose type is not `STRING`, an empty Vocabulary, a value declared twice in one Vocabulary, and a `replacedBy` outside the value's Vocabulary.
+
+- **Ontology Diff:** a Vocabulary change names the Vocabulary (`Status`), and a value change names the value as `Vocabulary.value` (`Status.done`). Adding a value is *additive*, deprecating one *deprecating* and removing one *breaking*. Binding a Vocabulary to an existing attribute, or rebinding an attribute to a different Vocabulary, is *breaking*, because existing values may no longer conform; unbinding is *additive*. Adding or removing a Vocabulary is *additive*, since only a binding constrains data. Changing a Definition or Alternative Labels on a Vocabulary or a value is *cosmetic*.
+- **Observation:** a binding is the only thing that makes an Observation read an attribute's values. It records the distinct values each bound attribute takes in the Graph Source, with a count per value, up to 100 per attribute (see [Vocabulary values](./03-python-sdk.md#vocabulary-values) to change the cap). Unbound attributes are only counted, as before.
+- **Conformance:** each bound attribute whose values were observed is one item in the score. Each observed value outside the Vocabulary fails it and is reported as a `value_outside_vocabulary` mismatch with the value and its count, for example `'on_hold' observed 2 times, not a value of Status`. An observed deprecated value conforms, but is reported as a `deprecated_value` mismatch that names its replacement. Only a value's `label` conforms: an Alternative Label is documentation, not a permitted spelling. When an attribute has more distinct values than the cap, the values beyond it were not read, so only the listed values are checked: the attribute conforms if none of them is outside the Vocabulary. The Observed Schema's `truncated` flag tells you the list is incomplete (see [Vocabulary values](./03-python-sdk.md#vocabulary-values)).
+- **Drift:** each observed value outside the Contract Alias's Vocabulary is an `undeclared_value` finding, so `stetiq observe` exits 3. A value beyond the cap can't be named and raises no Drift.
+- **Evolution Mode:** an *evolving* run that observes values outside a Vocabulary yields a Candidate whose Vocabulary has them as new values (an additive change); a *strict* run fails, as for other undeclared Concepts. Values beyond the cap are not added.
+
+### Cardinality
+
+A pattern may declare its **cardinality**: how many relations each node at one end must or may have to nodes at the other end. Write the pattern in its mapping form and add `cardinality`. `out` bounds how many `relationship` edges each `source` node has to `target` nodes; `in` bounds how many each `target` node has from `source` nodes. Every part is optional: leave out `min` for "at most", `max` for "at least", or a whole direction to leave it unbounded.
+
+```yaml
+node_types: [WorkOrder, Machine]
+relationship_types: [PERFORMED_ON]
+patterns:
+  # A WorkOrder is PERFORMED_ON exactly one Machine; a Machine has at most 50 WorkOrders.
+  - source: WorkOrder
+    relationship: PERFORMED_ON
+    target: Machine
+    cardinality:
+      out: {min: 1, max: 1}
+      in: {max: 50}
+```
+
+Bounds are whole numbers of 0 or more, and `min` may not exceed `max`. A pattern's cardinality is part of its Ontology Version; a pattern without one keeps the plain `[source, relationship, target]` form.
+
+- **Ontology Diff:** adding a bound or tightening one (raising a `min`, lowering a `max`) is *breaking*, because existing data may no longer conform. Loosening or removing one is *additive*. Each changed bound is its own change.
+- **Conformance:** each bound is one item in the score. When the observed out- or in-degree (taken over every node of that class, including those with no such relation) falls outside the bounds, the run reports a `cardinality_violation` on the pattern, once per direction, with the observed range against the declared bounds, for example `out-degree observed 0..2, declared min 1, max 1`. A declared pattern that is never observed gives every node of its class degree 0.

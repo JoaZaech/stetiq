@@ -32,11 +32,12 @@ The CLI resolves the tracking URI the same way (see [CLI](./04-cli.md#tracking-u
 Other arguments:
 
 - `graph_source=`: the adapter that observes your Graph Source (see [Graph Source](#graph-source)).
+- `value_cap=`: how many distinct values an Observation reads per Vocabulary-bound attribute (default 100; see [Vocabulary values](#vocabulary-values)).
 - `actor=`: who the audit log records when this Client moves an Alias in local mode. Default `$STETIQ_ACTOR`, else your OS user. In remote mode the server records the API Token's user and ignores it.
 
 ## What runs where
 
-Your graph database credentials and your own code never leave your process. The SDK reads the Graph Source itself and sends only aggregates to the tracking service: the Observed Schema (labels, counts, fill rates, cardinalities) and Evaluator results, never an individual node or relationship. In remote mode the server never connects to your graph database.
+Your graph database credentials and your own code never leave your process. The SDK reads the Graph Source itself and sends only aggregates to the tracking service: the Observed Schema (labels, counts, fill rates, cardinalities, and the capped values of Vocabulary-bound attributes) and Evaluator results, never an individual node or relationship. In remote mode the server never connects to your graph database.
 
 ```mermaid
 flowchart LR
@@ -80,6 +81,15 @@ from pathlib import Path
 kg = client.create_knowledge_graph("support", ontology=Path("support.yaml"))
 ```
 
+Name the Knowledge Graph's Steward (who watches its Drift and keeps its Definitions and Competency Questions current) and its Authority (who decides changes to its Ontology). Both are free strings for display and routing, for example to send Drift to the right person; they grant no permission, and setting them needs `edit`. A name you leave out stays as it is, and an empty string clears it.
+
+```python
+client.set_knowledge_graph_governance("support", steward="Ada", authority="Support ops board")
+kg = client.get_knowledge_graph("support")
+print(kg.steward, kg.authority)
+client.set_knowledge_graph_governance("support", steward="")  # clears the Steward only
+```
+
 Register a changed Ontology by hand. Registering content identical to an existing version returns that version instead of creating a new one.
 
 ```python
@@ -95,7 +105,7 @@ client.get_ontology_yaml("support", 2)          # stetiq YAML text
 client.get_ontology_version_by_alias("support", "production")
 ```
 
-Compare two versions with an Ontology Diff. Each change is classified as cosmetic (only a description changed), additive, deprecating or breaking. `detail` says what changed in words; to act on a change in code, read its fields instead: `owner`, `owner_kind` and `attribute` for a change to an attribute, `required` for an added attribute, and `pattern` for an added or removed endpoint Pattern (each `None` when it doesn't apply). Without version numbers, it compares the Contract Alias's version with the latest Candidate. `diff_ontologies` compares two Ontologies that need not be registered, such as two files in your repository.
+Compare two versions with an Ontology Diff. Each change is classified as cosmetic (only a Definition, Alternative Labels or a Deprecation reason changed), additive, deprecating or breaking. `detail` says what changed in words; to act on a change in code, read its fields instead: `owner`, `owner_kind` and `attribute` for a change to an attribute, `required` for an added attribute, `pattern` for an endpoint Pattern added, removed or given a different cardinality, and `vocabulary` and `value` for a change to a Vocabulary or one of its Vocabulary Values (each `None` when it doesn't apply). Without version numbers, it compares the Contract Alias's version with the latest Candidate. `diff_ontologies` compares two Ontologies that need not be registered, such as two files in your repository.
 
 ```python
 diff = client.diff_ontology_versions("support", 1, 2)
@@ -162,6 +172,21 @@ The credentials stay in this process: they are never sent to the tracking servic
 
 Starting a Construction Run or taking an Observation without an adapter fails with `GraphSourceUnavailableError`.
 
+### Vocabulary values
+
+An Observation reads instance values for one kind of attribute only: one bound to a Vocabulary (see [Vocabularies](./06-stetiq-yaml.md#vocabularies)). When a run ends, the bound attributes are those of its Declared Ontology; for `client.observe` and `stetiq observe`, those of the Contract Alias's version. The SDK works them out in your process and asks the adapter for exactly those attributes, so no other attribute's values are read.
+
+For each bound attribute the Observed Schema records the distinct string values it takes, most frequent first, each with the number of nodes or relationships holding it. At most `value_cap` distinct values are kept per attribute (100 unless you pass `stetiq.Client(value_cap=...)`), so a free-text attribute bound by mistake can't send its contents to stetiq. When the attribute has more distinct values than the cap, only the most frequent are kept and `truncated` is set:
+
+```python
+work_order = outcome.observation.schema.node_type("WorkOrder")
+status = next(p for p in work_order.properties if p.name == "status")
+status.values.counts     # (ValueCount(value="open", count=2), ValueCount(value="closed", count=1))
+status.values.truncated  # False: these are all the values
+```
+
+`values` is `None` for every attribute that isn't bound to a Vocabulary. An adapter you write yourself receives the bound attributes as `(owner kind, owner label, attribute)` triples, plus `value_cap`; for an Ontology without Vocabularies it is called with the scope alone, as before.
+
 ## Construction Runs
 
 A Construction Run is one execution of your extraction workflow. Start one with `start_run` and use it as a context manager:
@@ -212,7 +237,7 @@ if outcome.drift is not None:
         print(finding.kind, finding.subject, finding.detail)
 ```
 
-The Observation is compared with the Contract Alias's Ontology Version (structural Drift) and with the previous Observation (statistical Drift, only for count changes beyond the thresholds, as fractions: `0.2` is 20 %). Drift raises a Drift event; it never creates an Ontology Version. `client.list_observations("support")` and `client.list_drift_events("support")` list them, oldest first. `stetiq observe` does the same from the command line.
+The Observation is compared with the Contract Alias's Ontology Version (structural Drift: `undeclared`, `vanished`, and `undeclared_value` for each value of a Vocabulary-bound attribute outside its Vocabulary, named in `finding.value`) and with the previous Observation (statistical Drift, only for count changes beyond the thresholds, as fractions: `0.2` is 20 %). Drift raises a Drift event; it never creates an Ontology Version. `client.list_observations("support")` and `client.list_drift_events("support")` list them, oldest first. `stetiq observe` does the same from the command line.
 
 ## Use Cases and Competency Questions
 
@@ -270,7 +295,7 @@ client.add_competency_question(
 )
 ```
 
-`add_competency_question` adds one question to the latest Use Case Version, keeping its Consumers and Tasks, and registers the result as a new one. `client.get_use_case_version("support")` without a number returns the latest Use Case Version, and raises `NoUseCaseError` (a `NotFoundError`) when there is none. Every new Ontology Version is judged against the latest Use Case (`structural_answerability`: does the Ontology have the Concepts each question needs?). Its `questions_serving_no_task` metric counts the questions no Task needs, so a [metric Gate](./06-stetiq-yaml.md#evaluators-and-their-metrics) can require that every question serves a Task. At the end of a Construction Run, the SDK also executes the questions that have a `query` against your Graph Source (`competency_question_execution`). Their rows are judged and then dropped: only the result leaves your process.
+`add_competency_question` adds one question to the latest Use Case Version, keeping its Consumers and Tasks, and registers the result as a new one. `client.get_use_case_version("support")` without a number returns the latest Use Case Version, and raises `NoUseCaseError` (a `NotFoundError`) when there is none. Every new Ontology Version is judged against the latest Use Case (`structural_answerability`: does the Ontology have the Concepts each question needs?). Its `questions_serving_no_task` metric counts the questions no Task needs, so a [metric Gate](./06-stetiq-yaml.md#evaluators-and-their-metrics) can require that every question serves a Task. The same mapping also shows which Concepts no question references (`competency_question_coverage`). At the end of a Construction Run, the SDK also executes the questions that have a `query` against your Graph Source (`competency_question_execution`). Their rows are judged and then dropped: only the result leaves your process.
 
 ## Evaluators
 
@@ -294,10 +319,10 @@ class Documented(OntologyVersionEvaluator):
 
     def evaluate(self, version):
         node_types = version.ontology.node_types
-        missing = [n.label for n in node_types if not n.description]
+        missing = [n.label for n in node_types if not n.definition]
         return Evaluation(
             metrics={"undocumented": len(missing)},
-            details=[Detail(item=label, message="no description") for label in missing],
+            details=[Detail(item=label, message="no Definition") for label in missing],
         )
 
 
@@ -317,7 +342,7 @@ client.evaluate("support", 3, evaluators=[stetiq.GoldOntologyAlignment(gold)])
 client.evaluate_run(run.id, evaluators=[MyRunCheck()])
 ```
 
-If an Evaluator raises, the SDK raises `EvaluatorError`; the version or run it was evaluating is already recorded. The names of the built-in Evaluators (`hierarchy`, `isolated_node_types`, `orphan_concepts`, `redundancy`, `constraint_consistency`, `structural_answerability`, `conformance`, `observed_schema`, `competency_question_execution`) are reserved.
+If an Evaluator raises, the SDK raises `EvaluatorError`; the version or run it was evaluating is already recorded. The names of the built-in Evaluators (`hierarchy`, `isolated_node_types`, `orphan_concepts`, `redundancy`, `constraint_consistency`, `definitions`, `structural_answerability`, `competency_question_coverage`, `conformance`, `observed_schema`, `competency_question_execution`) are reserved.
 
 ## Aliases, Promotion and Gates
 

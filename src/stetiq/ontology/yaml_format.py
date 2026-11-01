@@ -3,22 +3,38 @@
     node_types:
       - Customer                      # bare label shorthand
       - label: Ticket
-        description: A support request
+        definition: A support request # optional; `description` is accepted as a synonym
+        alternativeLabels: [Case]     # optional; other names, never identifiers
         properties:
-          - {name: opened_at, type: DATE, required: true}
+          - {name: opened_at, type: DATE, required: true}  # also definition, alternativeLabels,
+            # deprecated, replacedBy (another property on the same owner), deprecationReason
+          - {name: state, type: STRING, vocabulary: Status}  # STRING only: takes Status's values
         deprecated: true              # optional
         replacedBy: Case              # optional, a Concept of the same kind
+        deprecationReason: Merged into Case  # optional, needs deprecated or replacedBy
         parent: Case                  # optional (node types only): superclass, single inheritance
     relationship_types:
       - OPENED
     patterns:
       - [Customer, OPENED, Ticket]    # (source, relationship type, target)
       # or neo4j-graphrag's mapping form: {source: ..., relationship: ..., target: ...}
+      - source: Customer              # the mapping form may add a cardinality, every part optional:
+        relationship: OPENED          # `out` bounds each source's edges to targets, `in` each
+        target: Ticket                # target's edges from sources
+        cardinality: {out: {min: 0}, in: {min: 1, max: 1}}
     constraints:                      # optional, neo4j-graphrag's shape
       - {type: UNIQUENESS, node_type: Ticket, property_name: opened_at}
+    vocabularies:                     # optional; any STRING property may be bound to one
+      - label: Status
+        definition: Where a Ticket stands  # optional, as are alternativeLabels
+        values:                       # at least one
+          - open                      # bare label shorthand
+          - {label: done, replacedBy: closed}  # also definition, alternativeLabels, deprecated,
+          - closed                    # deprecationReason; replacedBy names a value of Status
 
 `parse_yaml` validates and raises `OntologyValidationError` naming the
-offending path; `to_yaml` emits the canonical (sorted, defaults omitted) form.
+offending path; `to_yaml` emits the canonical (sorted, defaults omitted) form,
+spelling each Definition `definition`.
 """
 
 from __future__ import annotations
@@ -36,6 +52,8 @@ from stetiq.ontology.model import (
     Pattern,
     Property,
     RelationshipType,
+    Vocabulary,
+    VocabularyValue,
 )
 
 # neo4j-graphrag's property types.
@@ -56,12 +74,20 @@ PROPERTY_TYPES = frozenset(
     }
 )
 
-_TOP_LEVEL_KEYS = {"node_types", "relationship_types", "patterns", "constraints"}
+_TOP_LEVEL_KEYS = {"node_types", "relationship_types", "patterns", "constraints", "vocabularies"}
 _CONSTRAINT_KEYS = {"type", "node_type", "property_name"}
 CONSTRAINT_TYPES = frozenset({"UNIQUENESS"})
-_CONCEPT_KEYS = {"label", "description", "properties", "deprecated", "replacedBy"}
+# Every Concept's documentation; `description` is the older spelling of `definition`.
+_DOCUMENTATION_KEYS = {"definition", "description", "alternativeLabels"}
+_DEPRECATION_KEYS = {"deprecated", "replacedBy", "deprecationReason"}
+_CONCEPT_KEYS = {"label", "properties"} | _DOCUMENTATION_KEYS | _DEPRECATION_KEYS
 _NODE_TYPE_KEYS = _CONCEPT_KEYS | {"parent"}
-_PROPERTY_KEYS = {"name", "type", "description", "required"}
+_PROPERTY_KEYS = (
+    {"name", "type", "required", "vocabulary"} | _DOCUMENTATION_KEYS | _DEPRECATION_KEYS
+)
+_VOCABULARY_KEYS = {"label", "values"} | _DOCUMENTATION_KEYS
+_VOCABULARY_VALUE_KEYS = {"label"} | _DOCUMENTATION_KEYS | _DEPRECATION_KEYS
+_PATTERN_KEYS = {"source", "relationship", "target", "cardinality"}
 
 
 def _fail(path: str, problem: str) -> OntologyValidationError:
@@ -94,6 +120,71 @@ def _label(path: str, value: Any) -> str:
     return value
 
 
+def _definition(path: str, raw: dict[str, Any]) -> str | None:
+    if "definition" in raw and "description" in raw:
+        raise _fail(
+            f"{path}.definition",
+            "give either definition or description (its older spelling), not both",
+        )
+    key = "definition" if "definition" in raw else "description"
+    return _optional_str(f"{path}.{key}", raw.get(key))
+
+
+def _alternative_labels(path: str, raw: dict[str, Any]) -> tuple[str, ...]:
+    path = f"{path}.alternativeLabels"
+    labels = raw.get("alternativeLabels") or []
+    if not isinstance(labels, list):
+        raise _fail(path, "must be a list of labels")
+    seen: list[str] = []
+    for label in labels:
+        if not isinstance(label, str) or not label.strip():
+            raise _fail(path, f"an Alternative Label must be a non-empty string, got {label!r}")
+        if label in seen:
+            raise _fail(path, f"Alternative Label {label!r} is given more than once")
+        seen.append(label)
+    return tuple(seen)
+
+
+def _deprecation(path: str, raw: dict[str, Any]) -> dict[str, Any]:
+    """A Concept's Deprecation as model keyword arguments. Naming a replacement implies the
+    Concept is deprecated, so a reason needs `deprecated: true` or a `replacedBy`."""
+    deprecated = _bool(f"{path}.deprecated", raw.get("deprecated", False))
+    replaced_by = _optional_str(f"{path}.replacedBy", raw.get("replacedBy"))
+    reason = _optional_str(f"{path}.deprecationReason", raw.get("deprecationReason"))
+    if reason is not None and not (deprecated or replaced_by is not None):
+        raise _fail(
+            f"{path}.deprecationReason",
+            "a Deprecation reason needs deprecated: true or a replacedBy",
+        )
+    return {"deprecated": deprecated, "replaced_by": replaced_by, "deprecation_reason": reason}
+
+
+def _check_replacements(owner: str, concepts: list[tuple[str, str | None]], section: str) -> None:
+    """A `replacedBy` names another Concept in the same section."""
+    labels = {label for label, _ in concepts}
+    for label, target in concepts:
+        if target is not None and (target not in labels or target == label):
+            raise _fail(
+                f"{owner}{label}.replacedBy",
+                f"{target!r} is not another Concept declared in {section}",
+            )
+
+
+def _check_alternative_labels(
+    owner: str, concepts: list[tuple[str, tuple[str, ...]]], section: str
+) -> None:
+    """No Alternative Label may be another Concept's label in the same section: a synonym
+    must never be mistaken for a different Concept."""
+    labels = {label for label, _ in concepts}
+    for label, alternatives in concepts:
+        for alternative in alternatives:
+            if alternative in labels and alternative != label:
+                raise _fail(
+                    f"{owner}{label}.alternativeLabels",
+                    f"{alternative!r} is the label of another Concept in {section}",
+                )
+
+
 def _parse_property(path: str, raw: Any) -> Property:
     if not isinstance(raw, dict):
         raise _fail(path, "must be a mapping with name and type")
@@ -110,9 +201,91 @@ def _parse_property(path: str, raw: Any) -> Property:
     return Property(
         name=name,
         type=ptype,
-        description=_optional_str(f"{path}.description", raw.get("description")),
+        definition=_definition(path, raw),
         required=_bool(f"{path}.required", raw.get("required", False)),
+        alternative_labels=_alternative_labels(path, raw),
+        **_deprecation(path, raw),
+        vocabulary=_optional_str(f"{path}.vocabulary", raw.get("vocabulary")),
     )
+
+
+def _parse_vocabularies(doc: dict[str, Any]) -> list[Vocabulary]:
+    raw = doc.get("vocabularies") or []
+    if not isinstance(raw, list):
+        raise _fail("vocabularies", "must be a list")
+    vocabularies = [_parse_vocabulary(f"vocabularies[{i}]", v) for i, v in enumerate(raw)]
+    seen: set[str] = set()
+    for v in vocabularies:
+        if v.label in seen:
+            raise _fail(v.label, "declared more than once in vocabularies")
+        seen.add(v.label)
+    return vocabularies
+
+
+def _parse_vocabulary(path: str, raw: Any) -> Vocabulary:
+    if not isinstance(raw, dict):
+        raise _fail(path, "must be a mapping with a label and values")
+    if "label" not in raw:
+        raise _fail(path, "needs a label")
+    label = _label(path, raw["label"])
+    _check_keys(label, raw, _VOCABULARY_KEYS)
+    raw_values = raw.get("values") or []
+    if not isinstance(raw_values, list):
+        raise _fail(f"{label}.values", "must be a list")
+    if not raw_values:
+        raise _fail(f"{label}.values", "a Vocabulary needs at least one value")
+    values = [_parse_vocabulary_value(f"{label}.values[{i}]", v) for i, v in enumerate(raw_values)]
+    seen: set[str] = set()
+    for v in values:
+        if v.label in seen:
+            raise _fail(f"{label}.{v.label}", "value is declared more than once")
+        seen.add(v.label)
+    section = f"{label}'s values"
+    _check_alternative_labels(
+        f"{label}.", [(v.label, v.alternative_labels) for v in values], section
+    )
+    _check_replacements(f"{label}.", [(v.label, v.replaced_by) for v in values], section)
+    return Vocabulary(
+        label=label,
+        values=tuple(values),
+        definition=_definition(label, raw),
+        alternative_labels=_alternative_labels(label, raw),
+    )
+
+
+def _parse_vocabulary_value(path: str, raw: Any) -> VocabularyValue:
+    if isinstance(raw, str):
+        raw = {"label": raw}
+    if not isinstance(raw, dict):
+        raise _fail(path, "must be a label or a mapping with a label")
+    if "label" not in raw:
+        raise _fail(path, "needs a label")
+    label = _label(path, raw["label"])
+    path = f"{path.rsplit('.values[', 1)[0]}.{label}"
+    _check_keys(path, raw, _VOCABULARY_VALUE_KEYS)
+    return VocabularyValue(
+        label=label,
+        definition=_definition(path, raw),
+        alternative_labels=_alternative_labels(path, raw),
+        **_deprecation(path, raw),
+    )
+
+
+def _check_bindings(concepts: list[dict[str, Any]], vocabularies: list[Vocabulary]) -> None:
+    """A property's `vocabulary` names a declared Vocabulary, and only a STRING property's
+    values can be checked against its labels."""
+    labels = {v.label for v in vocabularies}
+    for concept in concepts:
+        for p in concept["properties"]:
+            if p.vocabulary is None:
+                continue
+            path = f"{concept['label']}.{p.name}.vocabulary"
+            if p.vocabulary not in labels:
+                raise _fail(path, f"{p.vocabulary!r} is not declared in vocabularies")
+            if p.type != "STRING":
+                raise _fail(
+                    path, f"only a STRING property can be bound to a Vocabulary, not {p.type}"
+                )
 
 
 def _parse_concept(section: str, index: int, raw: Any) -> dict[str, Any]:
@@ -136,12 +309,18 @@ def _parse_concept(section: str, index: int, raw: Any) -> dict[str, Any]:
         if p.name in seen:
             raise _fail(f"{label}.{p.name}", "property is declared more than once")
         seen.add(p.name)
+    _check_alternative_labels(
+        f"{label}.", [(p.name, p.alternative_labels) for p in properties], f"{label}'s properties"
+    )
+    _check_replacements(
+        f"{label}.", [(p.name, p.replaced_by) for p in properties], f"{label}'s properties"
+    )
     concept = {
         "label": label,
-        "description": _optional_str(f"{label}.description", raw.get("description")),
+        "definition": _definition(label, raw),
+        "alternative_labels": _alternative_labels(label, raw),
         "properties": properties,
-        "deprecated": _bool(f"{label}.deprecated", raw.get("deprecated", False)),
-        "replaced_by": _optional_str(f"{label}.replacedBy", raw.get("replacedBy")),
+        **_deprecation(label, raw),
     }
     if section == "node_types":
         concept["parent"] = _optional_str(f"{label}.parent", raw.get("parent"))
@@ -175,13 +354,10 @@ def _parse_section(doc: dict[str, Any], section: str) -> list[dict[str, Any]]:
         if c["label"] in seen:
             raise _fail(c["label"], f"declared more than once in {section}")
         seen.add(c["label"])
-    for c in concepts:
-        target = c["replaced_by"]
-        if target is not None and (target not in seen or target == c["label"]):
-            raise _fail(
-                f"{c['label']}.replacedBy",
-                f"{target!r} is not another Concept declared in {section}",
-            )
+    _check_alternative_labels(
+        "", [(c["label"], c["alternative_labels"]) for c in concepts], section
+    )
+    _check_replacements("", [(c["label"], c["replaced_by"]) for c in concepts], section)
     return concepts
 
 
@@ -194,7 +370,10 @@ def _parse_patterns(
     patterns = []
     for i, p in enumerate(raw):
         path = f"patterns[{i}]"
-        if isinstance(p, dict) and set(p) == {"source", "relationship", "target"}:
+        bounds: dict[str, int | None] = {}
+        if isinstance(p, dict) and {"source", "relationship", "target"} <= set(p):
+            _check_keys(path, p, _PATTERN_KEYS)
+            bounds = _parse_cardinality(f"{path}.cardinality", p.get("cardinality"))
             p = [p["source"], p["relationship"], p["target"]]
         if not (isinstance(p, list) and len(p) == 3 and all(isinstance(x, str) for x in p)):
             raise _fail(path, f"must be a [source, relationship type, target] triple, got {p!r}")
@@ -206,8 +385,39 @@ def _parse_patterns(
             raise _fail(
                 f"{path} {p}", f"relationship type {rel!r} is not declared in relationship_types"
             )
-        patterns.append(Pattern(source, rel, target))
+        patterns.append(Pattern(source, rel, target, **bounds))
     return patterns
+
+
+def _parse_cardinality(path: str, raw: Any) -> dict[str, int | None]:
+    """`{out: {min, max}, in: {min, max}}`, every part optional, as Pattern keyword arguments."""
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise _fail(path, "must be a mapping with out and/or in")
+    _check_keys(path, raw, {"out", "in"})
+    bounds: dict[str, int | None] = {}
+    for direction, d in raw.items():
+        d_path = f"{path}.{direction}"
+        if not isinstance(d, dict):
+            raise _fail(d_path, "must be a mapping with min and/or max")
+        _check_keys(d_path, d, {"min", "max"})
+        low = _bound(f"{d_path}.min", d.get("min"))
+        high = _bound(f"{d_path}.max", d.get("max"))
+        if low is not None and high is not None and low > high:
+            raise _fail(d_path, f"min {low} is greater than max {high}")
+        bounds[f"min_{direction}"] = low
+        bounds[f"max_{direction}"] = high
+    return bounds
+
+
+def _bound(path: str, value: Any) -> int | None:
+    # bool is an int subclass in Python; `true` is not a bound.
+    if value is not None and (not isinstance(value, int) or isinstance(value, bool)):
+        raise _fail(path, f"must be a whole number, got {value!r}")
+    if value is not None and value < 0:
+        raise _fail(path, f"must not be negative, got {value}")
+    return value
 
 
 def _parse_constraints(doc: dict[str, Any], nodes: list[dict[str, Any]]) -> list[Constraint]:
@@ -273,13 +483,20 @@ def parse_dict(doc: Any) -> Ontology:
     _check_hierarchy(nodes)
     rels = _parse_section(doc, "relationship_types")
     patterns = _parse_patterns(doc, {n["label"] for n in nodes}, {r["label"] for r in rels})
+    vocabularies = _parse_vocabularies(doc)
+    _check_bindings(nodes + rels, vocabularies)
     return Ontology(
         node_types=tuple(NodeType(**n) for n in nodes),
         relationship_types=tuple(RelationshipType(**r) for r in rels),
         patterns=tuple(patterns),
         constraints=tuple(_parse_constraints(doc, nodes)),
+        vocabularies=tuple(vocabularies),
     )
 
 
 def to_yaml(ontology: Ontology) -> str:
-    return yaml.safe_dump(canonical.to_dict(ontology), sort_keys=False, allow_unicode=True)
+    return yaml.safe_dump(
+        canonical.to_dict(ontology, definition_key="definition"),
+        sort_keys=False,
+        allow_unicode=True,
+    )

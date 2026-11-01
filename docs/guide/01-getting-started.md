@@ -51,7 +51,7 @@ node_types:
         type: STRING
         required: true
   - label: Ticket
-    description: A support request
+    definition: A support request
 relationship_types:
   - label: OPENED
 patterns:

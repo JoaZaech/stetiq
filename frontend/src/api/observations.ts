@@ -37,12 +37,14 @@ export interface DriftThresholds {
 
 /** drift.DriftFinding */
 export interface DriftFinding {
-  kind: 'undeclared' | 'vanished' | 'count_drop' | 'count_increase'
+  kind: 'undeclared' | 'vanished' | 'undeclared_value' | 'count_drop' | 'count_increase'
   subject: string
   subject_kind: 'node_type' | 'relationship_type' | 'property'
   detail: string
   previous_count: number | null
   observed_count: number | null
+  /** `undeclared_value` only: the value outside the contract's Vocabulary. */
+  value?: string
 }
 
 /** wire.drift_event_to_json */

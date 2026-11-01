@@ -254,6 +254,43 @@ def test_changing_only_a_description_is_cosmetic(diff):
     assert d.cosmetic == d.changes
 
 
+def test_changing_only_definitions_is_cosmetic(diff):
+    d = diff(
+        BASE.replace("  - Agent", "  - {label: Agent, definition: A support employee}")
+        .replace(
+            "relationship_types: [OPENED, HANDLES]",
+            "relationship_types:\n"
+            "  - OPENED\n  - {label: HANDLES, definition: The agent works the ticket}",
+        )
+        .replace(
+            "{name: priority, type: FLOAT}",
+            "{name: priority, type: FLOAT, definition: Higher is more urgent}",
+        )
+    )
+
+    assert [(c.concept, c.classification, c.detail) for c in d.changes] == [
+        ("Agent", "cosmetic", "definition changed"),
+        ("Ticket.priority", "cosmetic", "definition changed"),
+        ("HANDLES", "cosmetic", "definition changed"),
+    ]
+    assert d.classification == "cosmetic"
+
+
+def test_changing_only_alternative_labels_is_cosmetic(diff):
+    d = diff(
+        BASE.replace("  - Agent", "  - {label: Agent, alternativeLabels: [Rep]}").replace(
+            "{name: name, type: STRING, required: true}",
+            "{name: name, type: STRING, required: true, alternativeLabels: [full_name]}",
+        )
+    )
+
+    assert [(c.concept, c.classification, c.detail) for c in d.changes] == [
+        ("Agent", "cosmetic", "alternative labels changed"),
+        ("Customer.name", "cosmetic", "alternative labels changed"),
+    ]
+    assert d.classification == "cosmetic"
+
+
 def test_a_cosmetic_change_ranks_below_an_additive_one(diff):
     d = diff(
         BASE.replace(
@@ -298,6 +335,67 @@ def test_adding_a_constraint_is_breaking_and_dropping_one_is_additive(client):
     assert attributes(client.diff_ontologies(unique, plain)) == [("Customer", "node_type", "email")]
 
 
+def _performed_on(cardinality: str | None) -> str:
+    pattern = "{source: WorkOrder, relationship: PERFORMED_ON, target: Machine"
+    pattern += f", cardinality: {cardinality}}}" if cardinality else "}"
+    return (
+        "node_types: [WorkOrder, Machine]\nrelationship_types: [PERFORMED_ON]\n"
+        f"patterns:\n  - {pattern}\n"
+    )
+
+
+def test_adding_a_cardinality_bound_is_breaking_and_removing_one_is_additive(client):
+    unbounded = _performed_on(None)
+    exactly_one = _performed_on("{out: {min: 1, max: 1}}")
+
+    added = client.diff_ontologies(unbounded, exactly_one)
+    removed = client.diff_ontologies(exactly_one, unbounded)
+
+    assert summary(added) == [
+        ("PERFORMED_ON", "changed", "breaking"),
+        ("PERFORMED_ON", "changed", "breaking"),
+    ]
+    assert {c.pattern for c in added.changes} == {Pattern("WorkOrder", "PERFORMED_ON", "Machine")}
+    assert summary(removed) == [
+        ("PERFORMED_ON", "changed", "additive"),
+        ("PERFORMED_ON", "changed", "additive"),
+    ]
+
+
+def test_tightening_a_cardinality_bound_is_breaking_and_loosening_one_is_additive(client):
+    loose = _performed_on("{in: {min: 1, max: 5}}")
+    tight = _performed_on("{in: {min: 2, max: 3}}")
+    shifted = _performed_on("{in: {min: 0, max: 3}}")
+
+    assert summary(client.diff_ontologies(loose, tight)) == [
+        ("PERFORMED_ON", "changed", "breaking"),
+        ("PERFORMED_ON", "changed", "breaking"),
+    ]
+    assert summary(client.diff_ontologies(tight, loose)) == [
+        ("PERFORMED_ON", "changed", "additive"),
+        ("PERFORMED_ON", "changed", "additive"),
+    ]
+    assert summary(client.diff_ontologies(tight, shifted)) == [
+        ("PERFORMED_ON", "changed", "additive")
+    ]
+
+
+def test_a_cardinality_change_between_versions_says_which_bound_changed(client):
+    client.create_knowledge_graph(KG, ontology=_performed_on("{out: {max: 2}}"))
+    v2 = client.register_ontology(KG, _performed_on("{out: {max: 1}, in: {min: 1}}"))
+
+    d = client.diff_ontology_versions(KG, 1, v2.number)
+
+    assert summary(d) == [
+        ("PERFORMED_ON", "changed", "breaking"),
+        ("PERFORMED_ON", "changed", "breaking"),
+    ]
+    assert [c.detail for c in d.changes] == [
+        "(WorkOrder)-[PERFORMED_ON]->(Machine) out max 2 -> 1",
+        "(WorkOrder)-[PERFORMED_ON]->(Machine) in min (none) -> 1",
+    ]
+
+
 def _with_node_type(label: str) -> str:
     return BASE.replace("  - Agent\n", f"  - Agent\n  - {label}\n")
 
@@ -321,3 +419,167 @@ def test_a_bare_diff_without_candidates_compares_the_latest_version(client):
     d = client.diff_ontology_versions(KG)
 
     assert [(c.kind, c.concept) for c in d.changes] == [("added", "Team")]
+
+
+def test_deprecating_an_attribute_is_deprecating(diff):
+    d = diff(
+        BASE.replace(
+            "{name: opened_at, type: DATE}", "{name: opened_at, type: DATE, deprecated: true}"
+        )
+    )
+
+    assert summary(d) == [("Ticket.opened_at", "deprecated", "deprecating")]
+    assert attributes(d) == [("Ticket", "node_type", "opened_at")]
+    assert d.changes[0].detail == "deprecated"
+    assert d.classification == "deprecating"
+
+
+def test_an_attribute_rename_declared_via_replaced_by_is_a_replacement(diff):
+    d = diff(
+        BASE.replace(
+            "{name: priority, type: FLOAT}",
+            "{name: priority, type: FLOAT, replacedBy: urgency}\n"
+            "      - {name: urgency, type: FLOAT}",
+        )
+    )
+
+    assert summary(d) == [
+        ("Ticket.priority", "deprecated", "deprecating"),
+        ("Ticket.urgency", "added", "additive"),
+    ]
+    assert d.changes[0].detail == "deprecated; replaced by urgency"
+    assert d.classification == "deprecating"
+
+
+def test_changing_only_a_deprecation_reason_is_cosmetic(client):
+    def ontology(reason: str) -> str:
+        return (
+            f"node_types:\n  - {{label: Agent, deprecated: true, deprecationReason: {reason}}}\n"
+            "  - label: Ticket\n    properties:\n"
+            f"      - {{name: priority, type: FLOAT, deprecated: true, deprecationReason: {reason}}}\n"
+            f"relationship_types: [{{label: HANDLES, deprecated: true, deprecationReason: {reason}}}]\n"
+        )
+
+    d = client.diff_ontologies(ontology("Unused"), ontology("Nobody reads it"))
+
+    assert [(c.concept, c.classification, c.detail) for c in d.changes] == [
+        ("Agent", "cosmetic", "deprecation reason changed"),
+        ("Ticket.priority", "cosmetic", "deprecation reason changed"),
+        ("HANDLES", "cosmetic", "deprecation reason changed"),
+    ]
+    assert d.classification == "cosmetic"
+
+
+def test_deprecating_with_a_reason_is_one_deprecating_change(client):
+    d = client.diff_ontologies(
+        "node_types: [Agent]\n",
+        "node_types: [{label: Agent, deprecated: true, deprecationReason: Unused}]\n",
+    )
+
+    assert summary(d) == [("Agent", "deprecated", "deprecating")]
+
+
+def _with_vocabulary(values: str, binding: str = ", vocabulary: Status", extra: str = "") -> str:
+    return (
+        f"vocabularies:\n  - {{label: Status, values: [{values}]}}\n{extra}"
+        "node_types:\n  - label: WorkOrder\n    properties:\n"
+        f"      - {{name: status, type: STRING{binding}}}\n"
+    )
+
+
+def vocabulary_values(d: OntologyDiff) -> list[tuple[str | None, str | None]]:
+    """Each change's Vocabulary and Vocabulary Value as the Diff states them."""
+    return [(c.vocabulary, c.value) for c in d.changes]
+
+
+def test_adding_a_vocabulary_value_is_additive(client):
+    d = client.diff_ontologies(_with_vocabulary("open"), _with_vocabulary("open, closed"))
+
+    assert summary(d) == [("Status.closed", "added", "additive")]
+    assert [c.concept_kind for c in d.changes] == ["vocabulary"]
+    assert vocabulary_values(d) == [("Status", "closed")]
+
+
+def test_deprecating_a_vocabulary_value_is_deprecating(client):
+    d = client.diff_ontologies(
+        _with_vocabulary("done, closed"),
+        _with_vocabulary("{label: done, replacedBy: closed}, closed"),
+    )
+
+    assert summary(d) == [("Status.done", "deprecated", "deprecating")]
+    assert d.changes[0].detail == "deprecated; replaced by closed"
+    assert vocabulary_values(d) == [("Status", "done")]
+
+
+def test_removing_a_vocabulary_value_is_breaking(client):
+    d = client.diff_ontologies(_with_vocabulary("open, closed"), _with_vocabulary("open"))
+
+    assert summary(d) == [("Status.closed", "removed", "breaking")]
+    assert vocabulary_values(d) == [("Status", "closed")]
+
+
+def test_binding_a_vocabulary_to_an_existing_attribute_is_breaking(client):
+    d = client.diff_ontologies(_with_vocabulary("open", binding=""), _with_vocabulary("open"))
+
+    assert summary(d) == [("WorkOrder.status", "changed", "breaking")]
+    assert attributes(d) == [("WorkOrder", "node_type", "status")]
+    assert d.changes[0].detail == "bound to Vocabulary Status"
+
+
+def test_binding_an_attribute_to_another_vocabulary_is_breaking(client):
+    other = "  - {label: Phase, values: [open]}\n"
+    d = client.diff_ontologies(
+        _with_vocabulary("open", extra=other),
+        _with_vocabulary("open", binding=", vocabulary: Phase", extra=other),
+    )
+
+    assert summary(d) == [("WorkOrder.status", "changed", "breaking")]
+    assert d.changes[0].detail == "Vocabulary Status -> Phase"
+
+
+def test_unbinding_a_vocabulary_is_additive(client):
+    d = client.diff_ontologies(_with_vocabulary("open"), _with_vocabulary("open", binding=""))
+
+    assert summary(d) == [("WorkOrder.status", "changed", "additive")]
+    assert d.changes[0].detail == "no longer bound to Vocabulary Status"
+
+
+def test_adding_or_removing_an_unbound_vocabulary_is_additive(client):
+    without = "node_types: [WorkOrder]\n"
+    with_ = "vocabularies:\n  - {label: Status, values: [open]}\nnode_types: [WorkOrder]\n"
+
+    added, removed = client.diff_ontologies(without, with_), client.diff_ontologies(with_, without)
+
+    assert summary(added) == [("Status", "added", "additive")]
+    assert summary(removed) == [("Status", "removed", "additive")]
+    assert [c.concept_kind for c in added.changes + removed.changes] == ["vocabulary"] * 2
+    assert vocabulary_values(added) == [("Status", None)]
+
+
+def test_documentation_changes_on_a_vocabulary_or_its_values_are_cosmetic(client):
+    def ontology(definition: str, alternative: str) -> str:
+        return (
+            f"vocabularies:\n  - label: Status\n    definition: {definition}\n"
+            f"    alternativeLabels: [{alternative}]\n    values:\n"
+            f"      - {{label: open, definition: {definition}, alternativeLabels: [{alternative}]}}\n"
+            "node_types: [WorkOrder]\n"
+        )
+
+    d = client.diff_ontologies(ontology("Old", "A"), ontology("New", "B"))
+
+    assert [(c.concept, c.classification, c.detail) for c in d.changes] == [
+        ("Status", "cosmetic", "definition changed"),
+        ("Status", "cosmetic", "alternative labels changed"),
+        ("Status.open", "cosmetic", "definition changed"),
+        ("Status.open", "cosmetic", "alternative labels changed"),
+    ]
+    assert d.classification == "cosmetic"
+
+
+def test_changing_only_a_vocabulary_values_deprecation_reason_is_cosmetic(client):
+    def ontology(reason: str) -> str:
+        return _with_vocabulary(f"{{label: done, deprecated: true, deprecationReason: {reason}}}")
+
+    d = client.diff_ontologies(ontology("Old"), ontology("Unused"))
+
+    assert summary(d) == [("Status.done", "changed", "cosmetic")]

@@ -3,7 +3,7 @@ import type { OntologyDiff } from '@/api/ontology-diff'
 import type { Ontology } from '@/api/ontology-versions'
 import { compareOntologies } from './ontology-map-comparison'
 import { comparisonRows } from './comparison-rows'
-import { attributeChange, conceptDescribed } from './ontology-diff.fixtures'
+import { attributeChange, conceptDescribed, vocabularyChange } from './ontology-diff.fixtures'
 
 // Canonical form, as the server sends it: a city transit network, v2 → v3.
 const V2: Ontology = {
@@ -25,7 +25,7 @@ const V3: Ontology = {
     { label: 'Stop', properties: [{ name: 'wheelchair_boarding', type: 'INTEGER' }] },
     { label: 'Trip', properties: [{ name: 'bikes_allowed', type: 'INTEGER' }] },
   ],
-  relationship_types: [{ label: 'HAS_TRIP', description: 'The scheduled trips of a route' }, { label: 'SERVES' }],
+  relationship_types: [{ label: 'HAS_TRIP', definition: 'The scheduled trips of a route' }, { label: 'SERVES' }],
   patterns: [
     ['Route', 'HAS_TRIP', 'Trip'],
     ['Trip', 'SERVES', 'Stop'],
@@ -54,7 +54,7 @@ describe('comparisonRows', () => {
       ['Stop.wheelchair_boarding', 'attribute', 'added', 'additive', 'Stop.wheelchair_boarding added'],
       ['Trip.bikes_allowed', 'attribute', 'added', 'additive', 'Trip.bikes_allowed added'],
       // Only a description differs: cosmetic, the least weighty.
-      ['HAS_TRIP', 'relation', 'changed', 'cosmetic', 'description changed'],
+      ['HAS_TRIP', 'relation', 'changed', 'cosmetic', 'definition changed'],
     ])
   })
 
@@ -97,5 +97,19 @@ describe('comparisonRows', () => {
     const [row] = comparisonRows(compareOntologies(shared, shared, diff))
 
     expect(row.owner).toEqual({ kind: 'relation', label: 'Rating' })
+  })
+
+  it('lists a Vocabulary change as a vocabulary row with no place on the Map', () => {
+    const diff: OntologyDiff = {
+      classification: 'breaking',
+      changes: [vocabularyChange('Status', 'closed', 'removed', 'breaking'), vocabularyChange('Priority', null, 'added', 'additive')],
+    }
+
+    const rows = comparisonRows(compareOntologies(V2, V2, diff))
+
+    expect(rows.map(({ concept, conceptKind, change, level, owner }) => [concept, conceptKind, change, level, owner])).toEqual([
+      ['Status.closed', 'vocabulary', 'removed', 'breaking', null],
+      ['Priority', 'vocabulary', 'added', 'additive', null],
+    ])
   })
 })

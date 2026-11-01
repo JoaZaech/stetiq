@@ -4,10 +4,11 @@ Schema, thresholds) -> Drift findings. No I/O.
 Drift is a divergence, found by an Observation, between a Graph Source's Observed Schema
 and the Contract Alias's Ontology Version. It has two parts:
 
-- **structural**: Concepts (node types, relationship types, properties) observed but not
-  declared by the contract (`undeclared`), or declared but no longer observed
-  (`vanished`). This reuses the Conformance engine, so "is X declared" means exactly
-  what it means for a run's Conformance (inherited properties, etc.).
+- **structural**: Concepts (Classes, Relations, Attributes) observed but not declared by
+  the contract (`undeclared`), or declared but no longer observed (`vanished`); and values
+  of a Vocabulary-bound Attribute outside the contract's Vocabulary (`undeclared_value`,
+  one per value). This reuses the Conformance engine, so "is X declared" means exactly
+  what it means for a run's Conformance (inherited Attributes, etc.).
 - **statistical**: a node or relationship type's count changing, relative to the
   previous Observation, by more than the configured fraction (`count_drop`,
   `count_increase`). Off unless a threshold is set.
@@ -33,6 +34,7 @@ from stetiq.ontology.model import ConceptKind
 class DriftKind(StrEnum):
     UNDECLARED = "undeclared"  # observed, not declared by the contract
     VANISHED = "vanished"  # declared by the contract, not observed
+    UNDECLARED_VALUE = "undeclared_value"  # a value outside the contract's Vocabulary
     COUNT_DROP = "count_drop"  # count fell beyond `max_count_drop` since the previous Observation
     COUNT_INCREASE = "count_increase"  # count rose beyond `max_count_increase`
 
@@ -47,13 +49,14 @@ class DriftFinding:
     detail: str = ""
     previous_count: int | None = None
     observed_count: int | None = None
+    value: str | None = None  # set for `undeclared_value`: the value itself
 
     @property
     def structural(self) -> bool:
-        return self.kind in (DriftKind.UNDECLARED, DriftKind.VANISHED)
+        return self.kind in _STRUCTURAL.values()
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d: dict[str, Any] = {
             "kind": self.kind.value,
             "subject": self.subject,
             "subject_kind": self.subject_kind,
@@ -61,6 +64,9 @@ class DriftFinding:
             "previous_count": self.previous_count,
             "observed_count": self.observed_count,
         }
+        if self.value is not None:
+            d["value"] = self.value
+        return d
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> DriftFinding:
@@ -71,6 +77,7 @@ class DriftFinding:
             detail=d.get("detail", ""),
             previous_count=d.get("previous_count"),
             observed_count=d.get("observed_count"),
+            value=d.get("value"),
         )
 
 
@@ -136,6 +143,7 @@ def thresholds_from_config(config: Mapping[str, Any]) -> DriftThresholds:
 _STRUCTURAL = {
     MismatchKind.UNDECLARED: DriftKind.UNDECLARED,
     MismatchKind.ABSENT: DriftKind.VANISHED,
+    MismatchKind.VALUE_OUTSIDE_VOCABULARY: DriftKind.UNDECLARED_VALUE,
 }
 
 
@@ -154,6 +162,7 @@ def assess_drift(
             subject=m.subject,
             subject_kind=m.subject_kind,
             detail=m.detail,
+            value=m.value,
         )
         for m in conformance.mismatches
         if m.kind in _STRUCTURAL and m.subject_kind != "pattern"  # patterns are not Concepts

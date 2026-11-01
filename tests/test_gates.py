@@ -88,6 +88,29 @@ def test_a_cosmetic_only_diff_gate_lets_description_changes_through_and_nothing_
     assert any("OPENED" in reason and "breaking" in reason for reason in outcome.reasons)
 
 
+def test_a_cosmetic_only_diff_gate_passes_a_documentation_fix_and_fails_an_additive_change(
+    client, support_kg
+):
+    only_cosmetic = NO_BREAKING.replace(
+        "max_classification: deprecating", "max_classification: cosmetic"
+    )
+    client.set_alias(support_kg, "production", 2)
+    documented = client.register_ontology(  # v2 with a Definition and Alternative Labels
+        support_kg,
+        WITH_AGENT.replace(
+            "  - label: Agent\n",
+            "  - label: Agent\n    definition: Works tickets\n    alternativeLabels: [Rep]\n",
+        ),
+    )
+    extended = client.register_ontology(  # v2 plus a new class: additive
+        support_kg, WITH_AGENT.replace("  - label: Agent\n", "  - label: Agent\n  - label: Team\n")
+    )
+
+    assert client.evaluate_gates(support_kg, only_cosmetic, version=documented.number).passed
+    [outcome] = client.evaluate_gates(support_kg, only_cosmetic, version=extended.number).failed
+    assert any("Team" in reason and "additive" in reason for reason in outcome.reasons)
+
+
 def test_every_gate_evaluation_is_recorded_on_the_server_with_the_gate_definition_used(
     client_factory, support_ontology
 ):

@@ -34,6 +34,8 @@ from stetiq.errors import (
 )
 from stetiq.evaluation.answerability import (
     ANSWERABILITY_EVALUATOR,
+    COVERAGE_EVALUATOR,
+    CompetencyQuestionCoverage,
     CompetencyQuestionMapper,
     StructuralAnswerability,
 )
@@ -89,7 +91,7 @@ ObservationInput = tuple[GraphSourceScope, ObservedSchema]
 # Evaluator names stetiq computes itself; custom Evaluators cannot take them.
 RESERVED_EVALUATOR_NAMES = frozenset(
     {e.name for e in BUILT_IN_EVALUATORS}
-    | {ANSWERABILITY_EVALUATOR, CQ_EXECUTION_EVALUATOR}
+    | {ANSWERABILITY_EVALUATOR, COVERAGE_EVALUATOR, CQ_EXECUTION_EVALUATOR}
     | {e.name for e in SERVER_RUN_EVALUATORS}
 )
 
@@ -118,6 +120,13 @@ class TrackingService(Protocol):
 
     def set_knowledge_graph_description(self, name: str, description: str | None) -> KnowledgeGraph:
         """Replace the markdown description; a blank one clears it."""
+        ...
+
+    def set_knowledge_graph_governance(
+        self, name: str, steward: str | None, authority: str | None
+    ) -> KnowledgeGraph:
+        """Name the Steward and the Authority. None leaves a name as it is; a blank one
+        clears it. The names grant no permission."""
         ...
 
     def list_knowledge_graphs(self) -> list[KnowledgeGraphSummary]:
@@ -330,6 +339,18 @@ class LocalTrackingService:
             self._store.set_knowledge_graph_description(name, description or None)
             return self.get_knowledge_graph(name)
 
+    def set_knowledge_graph_governance(
+        self, name: str, steward: str | None, authority: str | None
+    ) -> KnowledgeGraph:
+        with self._store.transaction():
+            kg = self.get_knowledge_graph(name)
+            self._store.set_knowledge_graph_governance(
+                name,
+                kg.steward if steward is None else steward.strip() or None,
+                kg.authority if authority is None else authority.strip() or None,
+            )
+            return self.get_knowledge_graph(name)
+
     def list_knowledge_graphs(self) -> list[KnowledgeGraphSummary]:
         """All Knowledge Graphs by name, each with its summary."""
         with self._store.transaction():
@@ -373,18 +394,27 @@ class LocalTrackingService:
         )
         self._store.add_ontology_version(version)
         self._run_built_ins(version)
-        self._run_answerability(version)
+        self._run_use_case_evaluators(version)
         return version
 
-    def _run_answerability(
+    def _run_use_case_evaluators(
         self, version: OntologyVersion, use_case_version: int | None = None
     ) -> list[EvaluationResult]:
-        """Structural answerability against a Use Case version (default: the latest)."""
+        """Structural answerability and Competency Question coverage against a Use Case
+        version (default: the latest), with regressions judged against the Contract
+        Alias's version. Both read one Concept mapping, so the mapper runs once."""
         try:
             use_case = self.get_use_case_version(version.knowledge_graph, use_case_version)
         except NoUseCaseError:
             return []
-        evaluator = StructuralAnswerability(use_case.use_case, self._question_mapper)
+        kg = version.knowledge_graph
+        contract_alias = self._store.get_alias(kg, self._contract_alias(kg))
+        contract = (
+            None
+            if contract_alias is None
+            else self._store.get_ontology_version(kg, contract_alias.version)
+        )
+        answerability = StructuralAnswerability(use_case.use_case, self._question_mapper, contract)
         return [
             self._store_result(
                 version.knowledge_graph,
@@ -394,6 +424,7 @@ class LocalTrackingService:
                 check_evaluation(evaluator.name, evaluator.evaluate(version)),
                 use_case_version=use_case.number,
             )
+            for evaluator in (answerability, CompetencyQuestionCoverage(answerability))
         ]
 
     def _run_built_ins(self, version: OntologyVersion) -> list[EvaluationResult]:
@@ -486,7 +517,9 @@ class LocalTrackingService:
     ) -> list[EvaluationResult]:
         with self._store.transaction():
             version = self.get_ontology_version(knowledge_graph, number)
-            return self._run_built_ins(version) + self._run_answerability(version, use_case_version)
+            return self._run_built_ins(version) + self._run_use_case_evaluators(
+                version, use_case_version
+            )
 
     def record_evaluation(
         self,
@@ -716,7 +749,7 @@ class LocalTrackingService:
             # The latest Ontology Version is judged against the new questions at once.
             ontology_versions = self._store.list_ontology_versions(knowledge_graph)
             if ontology_versions:
-                self._run_answerability(ontology_versions[-1], version.number)
+                self._run_use_case_evaluators(ontology_versions[-1], version.number)
             return version
 
     def list_use_case_versions(self, knowledge_graph: str) -> list[UseCaseVersion]:

@@ -10,6 +10,7 @@ import type {
   OwnerKind,
   PropertyChange,
   RelationshipTypeChange,
+  VocabularyChange,
 } from '@/api/ontology-diff'
 import { type Pattern, patternId } from '../concepts'
 
@@ -58,10 +59,22 @@ export const endpointChange = (
   pattern,
 })
 
-/** A description changed on a class or relation itself, which the Diff classes cosmetic. */
-export const conceptDescribed = (kind: OwnerKind, label: string) =>
-  conceptChange(kind, label, 'changed', 'cosmetic', 'description changed')
+/** A change to Vocabulary `vocabulary` itself, or to its Vocabulary Value `value`. */
+export const vocabularyChange = (
+  vocabulary: string,
+  value: string | null,
+  change: VocabularyChange['kind'],
+  classification: Classification,
+): VocabularyChange => {
+  const concept = value === null ? vocabulary : `${vocabulary}.${value}`
+  const fields = { concept, concept_kind: 'vocabulary' as const, kind: change, classification, detail: `${concept} ${change}`, vocabulary }
+  return value === null ? fields : { ...fields, value }
+}
 
-/** A description changed on an attribute, which the Diff classes cosmetic. */
+/** A definition changed on a class or relation itself, which the Diff classes cosmetic. */
+export const conceptDescribed = (kind: OwnerKind, label: string) =>
+  conceptChange(kind, label, 'changed', 'cosmetic', 'definition changed')
+
+/** A definition changed on an attribute, which the Diff classes cosmetic. */
 export const attributeDescribed = (ownerKind: OwnerKind, owner: string, attribute: string) =>
-  attributeChange(ownerKind, owner, attribute, 'changed', 'cosmetic', { detail: 'description changed' })
+  attributeChange(ownerKind, owner, attribute, 'changed', 'cosmetic', { detail: 'definition changed' })
