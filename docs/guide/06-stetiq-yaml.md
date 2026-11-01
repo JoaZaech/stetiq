@@ -133,6 +133,8 @@ No change in the Ontology Diff from the Contract Alias's Ontology Version to the
 
 With `max_classification: cosmetic`, only documentation changes (Definitions, Alternative Labels and Deprecation reasons) pass, so the Ontology's structure is frozen; with `additive`, cosmetic and additive changes pass. `breaking` lets every change through, which is useful to record the diff without failing on it. When it fails, its reasons list each change that is too severe.
 
+One change is weighed against the data: binding an Attribute to a Vocabulary. The Ontology Diff classes it as breaking, because it may reject values the graph already holds. The Gate accepts it anyway when the gated Construction Run's Observation read that Attribute's values, the value list wasn't cut off at the cap, and every value is in the Vocabulary; its reasons then say `binding WorkOrder.kind -> WorkOrderKind accepted: all observed values are in the Vocabulary`. Without that evidence (no run, no values observed, a cut-off list, or a value outside the Vocabulary) the binding counts as breaking. A binding next to another breaking change still fails. The Diff view and Consumer impact keep showing the binding as breaking.
+
 ```yaml
 gates:
   - check: ontology_diff

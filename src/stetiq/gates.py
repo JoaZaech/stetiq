@@ -27,7 +27,13 @@ import yaml
 from stetiq.conformance import Conformance
 from stetiq.errors import GateConfigError
 from stetiq.graph_source import ObservedSchema
-from stetiq.ontology.diff import Classification, OntologyDiff
+from stetiq.ontology.diff import (
+    Classification,
+    OntologyDiff,
+    VocabularyBinding,
+    vocabulary_bindings,
+)
+from stetiq.ontology.model import Ontology
 
 if TYPE_CHECKING:
     from stetiq.tracking.entities import EvaluationResult
@@ -40,6 +46,9 @@ class GateInputs:
     ontology_version: int  # the version the subject stands for
     contract_version: int | None = None
     diff: OntologyDiff | None = None  # contract_version -> ontology_version
+    # The two ends of `diff`: the Contract Alias's Ontology and the subject's.
+    contract_ontology: Ontology | None = None
+    ontology: Ontology | None = None
     conformance: Conformance | None = None
     evaluations: Sequence[EvaluationResult] = ()  # latest per Evaluator (and parameters)
     observed: ObservedSchema | None = None  # the subject's Observed Schema
@@ -79,7 +88,12 @@ class Gate(ABC):
 @dataclass(frozen=True)
 class OntologyDiffGate(Gate):
     """No change in the Ontology Diff from the Contract Alias's version may be classed
-    more severe than `max_classification`."""
+    more severe than `max_classification`.
+
+    One exception weighs evidence: binding an Attribute to a Vocabulary is breaking in
+    the Diff (it may reject values), but the Gate accepts it when the subject's Observed
+    Schema lists that Attribute's values, the list is not truncated, and every value is
+    a Value of the new Vocabulary (ADR 0009). Missing evidence is never a pass."""
 
     name: str
     max_classification: Classification
@@ -93,17 +107,59 @@ class OntologyDiffGate(Gate):
             return self._outcome(False, "No Contract Alias version to diff against")
         limit = self.max_classification.severity
         worse = [c for c in inputs.diff.changes if c.classification.severity > limit]
-        if not worse:
-            return self._outcome(True)
+        bindings = (
+            {b.change: b for b in vocabulary_bindings(inputs.contract_ontology, inputs.ontology)}
+            if inputs.contract_ontology is not None and inputs.ontology is not None
+            else {}
+        )
+        accepted = [
+            c
+            for c in worse
+            if c in bindings and _observed_inside(bindings[c], inputs.ontology, inputs.observed)
+        ]
+        acceptances = tuple(
+            f"binding {bindings[c].owner}.{bindings[c].attribute} -> {bindings[c].vocabulary} "
+            "accepted: all observed values are in the Vocabulary"
+            for c in accepted
+        )
+        rejected = [c for c in worse if c not in accepted]
+        if not rejected:
+            return self._outcome(True, *acceptances)
         against = f"v{inputs.contract_version} -> v{inputs.ontology_version}"
         return self._outcome(
             False,
             *(
                 f"{c.classification} change ({against}): {c.kind} {c.concept}"
                 + (f": {c.detail}" if c.detail else "")
-                for c in worse
+                for c in rejected
             ),
+            *acceptances,
         )
+
+
+def _observed_inside(
+    binding: VocabularyBinding, ontology: Ontology | None, observed: ObservedSchema | None
+) -> bool:
+    """Whether `observed` proves every value of the bound Attribute is in its new
+    Vocabulary: the values were read, the list is complete, and none lies outside.
+    Reading them relies on ADR 0001's Vocabulary exception."""
+    vocabulary = None if ontology is None else ontology.vocabulary(binding.vocabulary)
+    if vocabulary is None or observed is None:
+        return False
+    owner = (
+        observed.node_type(binding.owner)
+        if binding.owner_kind == "node_type"
+        else observed.relationship_type(binding.owner)
+    )
+    prop = (
+        None
+        if owner is None
+        else next((p for p in owner.properties if p.name == binding.attribute), None)
+    )
+    if prop is None or prop.values is None or prop.values.truncated:
+        return False
+    allowed = {v.label for v in vocabulary.values}
+    return all(c.value in allowed for c in prop.values.counts)
 
 
 MAX_LISTED_REASONS = 20  # per Gate; the rest are summarised in one line

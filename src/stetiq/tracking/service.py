@@ -970,6 +970,8 @@ class LocalTrackingService:
             ontology_version=number,
             contract_version=contract.number,
             diff=diff_ontologies(contract.ontology, target.ontology),
+            contract_ontology=contract.ontology,
+            ontology=target.ontology,
             conformance=None if run is None else run.conformance,
             evaluations=tuple(
                 self.get_evaluation_results(knowledge_graph, "ontology_version", str(number))
