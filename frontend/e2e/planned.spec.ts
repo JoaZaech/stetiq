@@ -111,8 +111,7 @@ test.describe('with a Use Case that declares Consumers', () => {
     expect(page.url()).toBe(url)
     await expect(picker).not.toContainText('Integration')
 
-    const groups = picker.getByRole('region')
-    await expect(groups.getByRole('heading')).toHaveText([
+    await expect(picker.getByRole('region').getByRole('heading', { level: 3 })).toHaveText([
       'Enforce in CI',
       'Get notified',
       "In the Consumer's code",
