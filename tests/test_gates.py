@@ -230,6 +230,58 @@ def test_a_metric_gate_fails_when_the_evaluator_has_no_result(client, support_kg
     assert "No result of Evaluator 'competency_questions'" in result.failed[0].reasons[0]
 
 
+class MinimumNodeTypes(stetiq.OntologyVersionEvaluator):
+    """A parameterised Evaluator: whether the Ontology declares at least `minimum` node types."""
+
+    name = "minimum_node_types"
+
+    def __init__(self, minimum: int) -> None:
+        self.minimum = minimum
+
+    @property
+    def parameters(self):
+        return {"minimum": self.minimum}
+
+    def evaluate(self, version):
+        enough = len(version.ontology.node_types) >= self.minimum
+        return stetiq.Evaluation(metrics={"met": 1 if enough else 0})
+
+
+MEETS_MINIMUM = """
+gates:
+  - name: at-least-three-node-types
+    check: metric
+    evaluator: minimum_node_types
+    metric: met
+    min: 1
+"""
+
+
+def test_a_metric_gate_picks_one_configuration_of_a_parameterised_evaluator(client, support_kg):
+    # v2 declares three node types: it meets a minimum of 3 but not of 4.
+    client.evaluate(support_kg, 2, evaluators=[MinimumNodeTypes(3), MinimumNodeTypes(4)])
+
+    unpicked = client.evaluate_gates(support_kg, MEETS_MINIMUM, version=2)
+    three = client.evaluate_gates(
+        support_kg, MEETS_MINIMUM + "    parameters: {minimum: 3}\n", version=2
+    )
+    four = client.evaluate_gates(
+        support_kg, MEETS_MINIMUM + "    parameters: {minimum: 4}\n", version=2
+    )
+    five = client.evaluate_gates(
+        support_kg, MEETS_MINIMUM + "    parameters: {minimum: 5}\n", version=2
+    )
+
+    assert not unpicked.passed
+    assert "2 results with different parameters" in unpicked.failed[0].reasons[0]
+    assert three.passed
+    assert three.outcomes[0].gate.params()["parameters"] == {"minimum": 3}
+    assert not four.passed
+    assert "met = 0 < min 1" in four.failed[0].reasons[0]
+    assert not five.passed
+    assert "with parameters {'minimum': 5}" in five.failed[0].reasons[0]
+
+
 def test_a_metric_gate_supports_a_lower_bound(client, support_kg):
     gates = """
 gates:

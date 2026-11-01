@@ -278,6 +278,20 @@ def test_cli_run_exits_non_zero_when_strict_mode_fails_the_run(
     assert "Agent" in result.output
 
 
+def test_cli_run_names_the_candidate_a_run_registers(tmp_path, monkeypatch, support_ontology):
+    sdk, graph, repo = _repo_with_entry_point(tmp_path, monkeypatch, support_ontology, exit_code=0)
+    graph.add_node(["Agent"], {})  # undeclared: evolving Evolution Mode registers a Candidate
+
+    result = CliRunner().invoke(
+        app, ["run", "--config", str(repo / "stetiq.yaml"), "--ontology-version", "1"]
+    )
+
+    assert result.exit_code == 0, result.output
+    [run] = sdk.list_runs("kg")
+    assert run.candidate_version == 2
+    assert "Candidate: Ontology Version 2" in result.output
+
+
 def test_cli_run_reports_a_config_without_an_entry_point(tmp_path):
     config = tmp_path / "stetiq.yaml"
     config.write_text("gates: {}\n")

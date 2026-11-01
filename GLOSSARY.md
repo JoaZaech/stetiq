@@ -66,14 +66,6 @@ _Avoid_: Compliance, validity
 A named, long-lived lineage of Ontology Versions, e.g. "customer-support-kg".
 _Avoid_: Project, experiment, graph (unqualified)
 
-**Steward**:
-The person named on a Knowledge Graph as responsible for its Ontology's health: watching Drift and keeping Definitions and Competency Questions current. A name only; it grants no permission.
-_Avoid_: Owner (unqualified), maintainer
-
-**Authority**:
-The person or function named on a Knowledge Graph as the one who decides changes to its Ontology. A name only; edit permission comes from API Tokens.
-_Avoid_: Approver, admin, owner (unqualified)
-
 **Ontology Version**:
 An immutable snapshot of a Knowledge Graph's Ontology, numbered 1, 2, 3… within its Knowledge Graph; what changed since another version is told by their Ontology Diff, not by the number.
 _Avoid_: Revision, release, graph version

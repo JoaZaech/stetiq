@@ -371,3 +371,12 @@ def test_the_cli_diff_says_when_there_is_no_use_case_to_judge_impact_by(tmp_path
 
     assert result.exit_code == 0, result.output
     assert result.output.endswith("Consumer impact: no Use Case registered\n")
+
+
+def test_the_cli_diff_says_when_its_changes_hit_no_one(tmp_path, monkeypatch):
+    result = run_diff(
+        tmp_path, monkeypatch, BASE.replace("  - Agent\n", "  - Agent\n  - Product\n")
+    )
+
+    assert result.exit_code == 0, result.output
+    assert result.output.endswith("Overall: additive\nConsumer impact: none\n")

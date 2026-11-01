@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
 SubjectKind = Literal["ontology_version", "construction_run"]
 MetricValue = int | float
-# An Evaluator's configuration, e.g. which gold Ontology Version it compares against.
+# An Evaluator's configuration, e.g. the minimum a threshold check requires.
 ParameterValue = str | int | float
 
 
@@ -74,7 +74,7 @@ class OntologyVersionEvaluator(ABC):
         """Configuration this instance runs with; stored with its result.
 
         Results are kept per (name, parameters): evaluating with different
-        parameters (e.g. another reference Ontology) adds a separate result.
+        parameters (e.g. another minimum) adds a separate result.
         """
         return {}
 

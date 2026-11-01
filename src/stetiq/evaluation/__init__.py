@@ -1,6 +1,5 @@
 """Evaluator framework (plug-in interface) and the built-in Evaluators."""
 
-from stetiq.evaluation.alignment import GoldOntologyAlignment
 from stetiq.evaluation.answerability import (
     ANSWERABILITY_EVALUATOR,
     COVERAGE_EVALUATOR,
@@ -39,7 +38,6 @@ __all__ = [
     "Detail",
     "Evaluation",
     "Evaluator",
-    "GoldOntologyAlignment",
     "LlmMappingError",
     "LlmQuestionMapper",
     "OntologyVersionEvaluator",

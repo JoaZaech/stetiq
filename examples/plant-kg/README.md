@@ -70,9 +70,7 @@ and chases follow-ups), the shop-floor downtime dashboard, and the reliability e
 team's weekly review. `root-causes` serves both the assistant and the review; `repeat-faults`
 serves no Task yet. The Tasks need eight Competency Questions: some with a Cypher query, one
 with an explicit Concept mapping, one with neither. stetiq judges them structurally against v1 at once: five are answerable, two need
-Concepts v1 lacks (`Fault`, `WorkOrder.downtime_minutes`), one is unmapped. The architecture
-team's reference ontology (`ontology/gold.yaml`) becomes a second Knowledge Graph,
-`plant-gold`.
+Concepts v1 lacks (`Fault`, `WorkOrder.downtime_minutes`), one is unmapped.
 
 **2. Build.** The first Construction Run uses rules-v1 inside `client.start_run`, logging its
 params and metrics. stetiq observes the graph and finds three Conformance mismatches: the
@@ -83,9 +81,8 @@ the stale layout's answer, and the root-cause question returns nothing. The cust
 Evaluator `report_coverage` reports one work order without a readable report (the email).
 
 **3. Evaluate.** `client.evaluate` on the Candidate runs the built-in Evaluators again, the
-custom `documented` Evaluator, and `gold_alignment` against `plant-gold`: one orphan
-relationship type, one constraint inconsistency (uniqueness on an optional property), nine
-undocumented Concepts, recall 0.74 against gold. The Gates in `stetiq.yaml` reject the
+custom `documented` Evaluator: one orphan relationship type, one constraint inconsistency
+(uniqueness on an optional property), nine undocumented Concepts. The Gates in `stetiq.yaml` reject the
 Candidate, 7 of 9 failing.
 
 **4. Improve.** `ontology/revised.yaml` adopts the Candidate's discovery, adds `Fault` and
@@ -94,7 +91,7 @@ everything: v3, an additive change from v1. A ninth question is added with
 `add_competency_question` (Use Case Version 2). The second run reads the reports with Claude
 (or rules-v2) and reaches Conformance 1.0 with every executed question passing. A nightly
 rebuild goes through the Construction Entry Point in `stetiq.yaml`, the way `stetiq run`
-would. `compare_runs` lines the three runs up. Gold recall rises to 0.89. All nine Gates
+would. `compare_runs` lines the three runs up. All nine Gates
 pass, the engineer promotes `staging` and the CI user promotes `production`, and the audit
 log records who moved what, and that the Gates had passed.
 
@@ -115,7 +112,7 @@ nodes is failed instead of yielding a Candidate. Finally a pull request's propos
 | `evaluators.py` | `Documented` (Ontology Version) and `ReportCoverage` (Construction Run), both named by Gates |
 | `stetiq.yaml` | Knowledge Graph name, Entry Point, Drift thresholds and the nine Gates |
 | `use-case.yaml` | The Consumers, their Tasks and the Competency Questions |
-| `ontology/` | `initial`, `revised`, `gold` and the breaking `proposal-rename-work-order` |
+| `ontology/` | `initial`, `revised` and the breaking `proposal-rename-work-order` |
 
 The local graph store does not run Cypher. It answers the fixed set of queries in
 `use-case.yaml` and `evaluators.py` by text (`graphdb.QUERIES`); any other query fails the

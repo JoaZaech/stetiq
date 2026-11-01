@@ -54,6 +54,16 @@ def test_observe_captures_the_observed_schema_outside_a_run(client, support_kg, 
     assert client.list_runs(support_kg) == []
 
 
+def test_a_property_left_empty_on_a_node_is_not_observed_there(client, support_kg, graph_source):
+    graph_source.add_node(["Customer"], {"name": "Ada"})
+    graph_source.add_node(["Customer"], {"name": None})  # a graph database stores no null
+
+    outcome = client.observe(support_kg)
+
+    [name] = outcome.observation.schema.node_type("Customer").properties
+    assert (name.name, name.count, name.fill_rate) == ("name", 1, 0.5)
+
+
 def test_an_observation_matching_the_contract_raises_no_drift(client, support_kg, graph_source):
     seed_conforming_graph(graph_source)
 

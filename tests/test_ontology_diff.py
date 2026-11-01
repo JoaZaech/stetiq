@@ -191,6 +191,19 @@ def test_a_rename_declared_via_replaced_by_is_deprecating(diff):
     assert concerns_the_concept_itself(d)
 
 
+def test_a_diff_groups_its_changes_by_classification(diff):
+    d = diff(
+        BASE.replace(
+            "[OPENED, HANDLES]", "[OPENED, {label: HANDLES, replacedBy: RESOLVES}, RESOLVES]"
+        )
+        + "  - [Agent, RESOLVES, Ticket]\n"
+    )
+
+    assert [c.concept for c in d.deprecating] == ["HANDLES"]
+    assert [c.concept for c in d.additive] == ["RESOLVES"]
+    assert (d.breaking, d.cosmetic) == ((), ())
+
+
 def test_undeprecating_is_additive_and_changing_a_replacement_is_deprecating(client):
     deprecated = "node_types: [{label: Agent, deprecated: true}]\n"
     replaced = "node_types: [{label: Agent, replacedBy: Staff}, Staff, Worker]\n"

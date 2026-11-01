@@ -65,24 +65,11 @@ def test_cli_sets_and_shows_the_knowledge_graph_description(cli_env):
     assert CliRunner().invoke(app, ["kg", "description", "nope", "x"]).exit_code == 1
 
 
-def test_cli_sets_shows_and_clears_the_steward(cli_env):
-    _invoke("kg", "steward", "support", "Ada")
+@pytest.mark.parametrize("command", ["steward", "authority"])
+def test_cli_has_no_steward_or_authority_command(cli_env, command):
+    result = CliRunner().invoke(app, ["kg", command, "support", "Ada"])
 
-    assert cli_env.get_knowledge_graph("support").steward == "Ada"
-    assert _invoke("kg", "steward", "support").strip() == "Ada"
-    _invoke("kg", "steward", "support", "")
-    assert cli_env.get_knowledge_graph("support").steward is None
-    assert CliRunner().invoke(app, ["kg", "steward", "nope", "x"]).exit_code == 1
-
-
-def test_cli_sets_shows_and_clears_the_authority(cli_env):
-    _invoke("kg", "authority", "support", "Ops board")
-
-    assert cli_env.get_knowledge_graph("support").authority == "Ops board"
-    assert _invoke("kg", "authority", "support").strip() == "Ops board"
-    _invoke("kg", "authority", "support", "")
-    assert cli_env.get_knowledge_graph("support").authority is None
-    assert CliRunner().invoke(app, ["kg", "authority", "nope", "x"]).exit_code == 1
+    assert result.exit_code == 2  # Typer's usage error: no such command
 
 
 def _two_runs(sdk):

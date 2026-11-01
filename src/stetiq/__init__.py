@@ -32,7 +32,6 @@ from stetiq.evaluation import (
     ConstructionRunEvaluator,
     Detail,
     Evaluation,
-    GoldOntologyAlignment,
     LlmQuestionMapper,
     OntologyVersionEvaluator,
 )
@@ -102,7 +101,6 @@ __all__ = [
     "GatePreview",
     "GatePreviewSource",
     "GateResult",
-    "GoldOntologyAlignment",
     "GraphSource",
     "GraphSourceNotBoundError",
     "GraphSourceScope",

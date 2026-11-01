@@ -20,8 +20,6 @@ flowchart TD
 
 A **Knowledge Graph** is a named, long-lived lineage of Ontology Versions, e.g. `customer-support-kg`. It is not the graph database itself: the database, or the part of it this Knowledge Graph lives in, is its **Graph Source**, which stetiq reads but never owns.
 
-A Knowledge Graph can name a **Steward**, who watches its Drift and keeps its Definitions and Competency Questions current, and an **Authority**, who decides changes to its Ontology. Both are free-text names for display and routing; they grant no permission (access comes from [API Tokens](./05-server-and-api-tokens.md)). Set or clear them with `stetiq kg steward` and `stetiq kg authority` (see [CLI](./04-cli.md)) or `client.set_knowledge_graph_governance`.
-
 The **Ontology** is the structure of the graph: its classes, relations, attributes, hierarchy and constraints, whatever formalism you write them in. Each class, relation or attribute is a **Concept**, identified across versions by its label (an attribute by its owner's label and its name). Renaming a Concept counts as removing one and adding another, unless you declare it as a replacement.
 
 Every Concept can carry a **Definition**: what it is and what it excludes, written as `definition` in the stetiq YAML (`description`, its older spelling, is still accepted). It can also list **Alternative Labels** (`alternativeLabels`): other names people use for it, such as synonyms or acronyms ("WO" for WorkOrder). An Alternative Label never identifies a Concept, so it may not be another Concept's label in the same section (another class, relation, or attribute of the same owner).

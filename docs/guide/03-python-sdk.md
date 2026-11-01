@@ -81,15 +81,6 @@ from pathlib import Path
 kg = client.create_knowledge_graph("support", ontology=Path("support.yaml"))
 ```
 
-Name the Knowledge Graph's Steward (who watches its Drift and keeps its Definitions and Competency Questions current) and its Authority (who decides changes to its Ontology). Both are free strings for display and routing, for example to send Drift to the right person; they grant no permission, and setting them needs `edit`. A name you leave out stays as it is, and an empty string clears it.
-
-```python
-client.set_knowledge_graph_governance("support", steward="Ada", authority="Support ops board")
-kg = client.get_knowledge_graph("support")
-print(kg.steward, kg.authority)
-client.set_knowledge_graph_governance("support", steward="")  # clears the Steward only
-```
-
 Register a changed Ontology by hand. Registering content identical to an existing version returns that version instead of creating a new one.
 
 ```python
@@ -377,11 +368,25 @@ A registered Evaluator runs in your process, and only its results are sent to th
 - an `OntologyVersionEvaluator` on every Ontology Version this Client creates, and on `client.evaluate(...)`;
 - a `ConstructionRunEvaluator` at the end of every Construction Run this Client starts, and on `client.evaluate_run(...)`.
 
-Registration lasts as long as the Client and is not stored. To run an Evaluator once, without registering it, pass it as `evaluators=`. That is how the gold-standard comparison works:
+Registration lasts as long as the Client and is not stored. To run an Evaluator once, without registering it, pass it as `evaluators=`. That is how a parameterised Evaluator runs: its `parameters` property names the configuration it runs with, each result records it, and results with different parameters are kept side by side.
 
 ```python
-gold = client.get_ontology_version("support", 1)
-client.evaluate("support", 3, evaluators=[stetiq.GoldOntologyAlignment(gold)])
+class MinimumNodeTypes(stetiq.OntologyVersionEvaluator):
+    name = "minimum_node_types"
+
+    def __init__(self, minimum):
+        self.minimum = minimum
+
+    @property
+    def parameters(self):
+        return {"minimum": self.minimum}
+
+    def evaluate(self, version):
+        enough = len(version.ontology.node_types) >= self.minimum
+        return stetiq.Evaluation(metrics={"met": 1 if enough else 0})
+
+
+client.evaluate("support", 3, evaluators=[MinimumNodeTypes(3), MinimumNodeTypes(5)])
 client.evaluate_run(run.id, evaluators=[MyRunCheck()])
 ```
 
