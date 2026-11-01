@@ -240,8 +240,26 @@ class ObservationOutcome:
 # --- Gates ---------------------------------------------------------------------------
 
 
+class _HasGateOutcomes:
+    """The verdict views shared by a recorded Gate result and a Gate Preview."""
+
+    outcomes: tuple[GateOutcome, ...]
+
+    @property
+    def passed(self) -> bool:
+        return all(o.passed for o in self.outcomes)
+
+    @property
+    def failed(self) -> tuple[GateOutcome, ...]:
+        return tuple(o for o in self.outcomes if not o.passed)
+
+    @property
+    def gates(self) -> tuple[Gate, ...]:
+        return tuple(o.gate for o in self.outcomes)
+
+
 @dataclass(frozen=True)
-class GateResult:
+class GateResult(_HasGateOutcomes):
     """One recorded Gate evaluation: each Gate's outcome together with the Gate
     definition used (`outcome.gate`).
 
@@ -256,14 +274,25 @@ class GateResult:
     outcomes: tuple[GateOutcome, ...]
     evaluated_at: datetime
 
-    @property
-    def passed(self) -> bool:
-        return all(o.passed for o in self.outcomes)
 
-    @property
-    def failed(self) -> tuple[GateOutcome, ...]:
-        return tuple(o for o in self.outcomes if not o.passed)
+@dataclass(frozen=True)
+class GatePreviewSource:
+    """The recorded Gate result whose Gate definitions a Gate Preview used."""
 
-    @property
-    def gates(self) -> tuple[Gate, ...]:
-        return tuple(o.gate for o in self.outcomes)
+    subject_kind: SubjectKind
+    subject_id: str
+    evaluated_at: datetime
+
+
+@dataclass(frozen=True)
+class GatePreview(_HasGateOutcomes):
+    """A Gate Preview (ADR 0007): a Gate result's shape, computed on demand for a
+    subject from the Gate definitions of `source`, and never recorded. Promotion's
+    audit never counts it, and a recorded Gate result about the subject wins over it."""
+
+    knowledge_graph: str
+    subject_kind: SubjectKind
+    subject_id: str
+    ontology_version: int
+    outcomes: tuple[GateOutcome, ...]
+    source: GatePreviewSource
