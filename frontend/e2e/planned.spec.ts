@@ -135,7 +135,9 @@ test.describe('with Drift that finds an undeclared Concept', () => {
   test('the Drift event shows Pending Migration and Adoption as planned', async ({ page }) => {
     await page.goto('/ui/kg/support/observations')
 
-    const drift = page.getByRole('article').first().getByRole('region', { name: 'Drift' })
+    const row = page.getByRole('list', { name: 'Observations' }).getByRole('listitem').first()
+    await row.getByRole('button', { name: 'Drift details' }).click()
+    const drift = row.getByRole('region', { name: 'Drift' })
     await expect(planned(drift, 'Pending Migration').standIn).toHaveText('Pending Migration')
     await expectPlaceholder(drift, 'Pending Migration', 'pending-migration-and-adoption')
     await expect(drift.getByRole('button', { name: 'Adopt into a Candidate' })).toBeDisabled()

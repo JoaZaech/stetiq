@@ -88,21 +88,21 @@ test.describe('on support v3', () => {
     await page.goto('/ui/kg/support/versions/3/ontology?view=table')
     await expect(attributes(page).getByRole('row')).toHaveText([
       /^Owner\s*Attribute\s*Type\s*Required\s*Unique\s*Description$/,
-      /^Party · class · 1 attribute$/,
+      /^Party · Class · 1 attribute$/,
       // The owner is its group's header, not repeated on each row.
       /^name\s*STRING\s*Required$/,
-      /^Agent · class · subclass of Party · 1 attribute$/,
+      /^Agent · Class · subclass of Party · 1 attribute$/,
       /^name\s*from Party\s*STRING\s*Required$/,
-      /^Customer · class · subclass of Party · 1 attribute$/,
+      /^Customer · Class · subclass of Party · 1 attribute$/,
       /^name\s*from Party\s*STRING\s*Required\s*Unique$/,
-      /^Ticket · class · 2 attributes$/,
+      /^Ticket · Class · 2 attributes$/,
       /^opened_at\s*DATE$/,
       /^priority\s*INTEGER$/,
     ])
     await expect(page.getByText('5 attributes', { exact: true })).toBeVisible()
 
     // A group collapses to its header.
-    const ticket = attributes(page).getByRole('button', { name: /^Ticket · class/ })
+    const ticket = attributes(page).getByRole('button', { name: /^Ticket · Class/ })
     await ticket.click()
     await expect(ticket).toHaveAttribute('aria-expanded', 'false')
     await expect(attributes(page).getByRole('row')).toHaveCount(8)
@@ -112,7 +112,7 @@ test.describe('on support v3', () => {
     await attributes(page).getByRole('button', { name: 'Filter Unique' }).click()
     await page.getByRole('switch', { name: 'Only unique' }).click()
     await page.keyboard.press('Escape')
-    await expect(attributes(page).getByRole('row')).toHaveText([/^Owner/, /^Customer · class/, /^name/])
+    await expect(attributes(page).getByRole('row')).toHaveText([/^Owner/, /^Customer · Class/, /^name/])
     await expect(page.getByText('1 of 5 attributes')).toBeVisible()
     await attributes(page).getByRole('button', { name: 'Filter Unique (on)' }).click()
     await page.getByRole('button', { name: 'Clear filter' }).click()

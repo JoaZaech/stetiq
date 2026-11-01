@@ -1,4 +1,5 @@
 import { useId, type KeyboardEvent } from 'react'
+import { conceptKindLabel } from '@/lib/concept-kind'
 import type { ClassOrRelation } from '../concepts'
 import { MapSidePanel, type MapPanelNav } from './MapSidePanel'
 import type { SearchResults } from './ontology-map-search'
@@ -65,7 +66,7 @@ function ResultGroup({
               className="w-full rounded-sm px-2 py-1 text-left hover:bg-muted focus-visible:bg-muted focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
             >
               <span className="font-medium break-words">{r.label}</span>{' '}
-              <span className="text-xs text-muted-foreground">{r.kind}</span>
+              <span className="text-xs text-muted-foreground">{conceptKindLabel(r.kind)}</span>
               {r.reasons && (
                 <span className="block text-xs text-muted-foreground">
                   <Reason text={r.reasons.join('; ')} />
