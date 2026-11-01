@@ -215,10 +215,12 @@ These Evaluator names are built in. stetiq computes their results itself, and a 
 | `orphan_concepts` | Ontology Version | `orphan_concepts`, `orphan_node_types`, `orphan_relationship_types`, `orphan_concept_ratio` |
 | `redundancy` | Ontology Version | `redundant_patterns`, `redundant_properties`, `duplicate_structure_concepts` |
 | `constraint_consistency` | Ontology Version | `inconsistencies`, `inherited_duplicate_constraints`, `unique_optional_properties`, `constraints_on_deprecated`, `deprecated_replacements` |
-| `structural_answerability` | Ontology Version, when the Knowledge Graph has a Use Case | `questions`, `answerable_questions`, `unanswerable_questions`, `unmapped_questions`, `answerable_ratio` |
+| `structural_answerability` | Ontology Version, when the Knowledge Graph has a Use Case | `questions`, `answerable_questions`, `unanswerable_questions`, `unmapped_questions`, `answerable_ratio`, `regressed_questions` |
 | `conformance` | Construction Run | `score`, `mismatches` |
 | `observed_schema` | Construction Run | `node_types`, `relationship_types`, `patterns`, `nodes`, `relationships`, `properties`, `mean_fill_rate` |
 | `competency_question_execution` | Construction Run, recorded by the SDK | `questions`, `passed_questions`, `failed_questions`, `skipped_questions`, `pass_ratio` |
+
+`regressed_questions` counts the Competency Questions that the Contract Alias's Ontology Version answers but the evaluated version does not, with one detail per question naming the Concepts it is missing. It is 0 for the Contract Alias's own version. A Gate with `metric: regressed_questions` and `max: 0` blocks a Promotion that would stop answering a question.
 
 `gold_alignment` ships with stetiq too, but you run it yourself with a reference of your choice. It reports `precision`, `recall`, `matched_concepts`, `unmatched_evaluated_concepts` and `unmatched_reference_concepts`. A custom Evaluator reports whatever metrics it returns.
 

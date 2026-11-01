@@ -159,6 +159,33 @@ def test_executed_competency_questions_are_accepted_only_for_runs(server, admin,
     assert on_run.status_code == 201, on_run.text
 
 
+def test_regressed_questions_are_computed_by_the_server_from_a_bare_use_case(server, support):
+    _, http = server
+    editor = _headers(server, "mallory", {"support": "edit"})
+    use_case = {
+        "competency_questions": [
+            {
+                "id": "tickets-per-customer",
+                "question": "Which tickets did a customer open?",
+                "concepts": ["(Customer)-[OPENED]->(Ticket)"],
+            }
+        ]
+    }
+
+    posted = http.post(
+        f"{API}/knowledge-graphs/support/use-case-versions",
+        headers=editor,
+        json={"use_case": use_case},
+    )
+    results = http.get(
+        f"{API}/knowledge-graphs/support/ontology-versions/2/evaluations", headers=editor
+    ).json()
+
+    assert posted.status_code == 200, posted.text
+    answerability = next(r for r in results if r["evaluator"] == "structural_answerability")
+    assert answerability["metrics"]["regressed_questions"] == 1
+
+
 # --- Origin of hand registrations ------------------------------------------------------
 
 

@@ -13,12 +13,16 @@ A question none of these can map is "unmapped" (not counted as answerable).
 Matching is hierarchy-aware: a node type, its ancestors and its descendants can
 all stand in for each other (a pattern on `Party` serves a question about
 `Customer`, and vice versa). Deprecated Concepts still count as present.
+
+A question is "regressed" when the Contract Alias's Ontology Version answers it but
+the judged version does not, so a Gate can block a Promotion that would stop
+answering it.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from stetiq.evaluation.framework import Detail, Evaluation, OntologyVersionEvaluator
 from stetiq.ontology import Ontology
@@ -33,6 +37,9 @@ from stetiq.use_case.concepts import (
 )
 from stetiq.use_case.cypher import requirements_from_query
 from stetiq.use_case.model import CompetencyQuestion, UseCase
+
+if TYPE_CHECKING:
+    from stetiq.tracking.entities import OntologyVersion
 
 ANSWERABILITY_EVALUATOR = "structural_answerability"
 
@@ -137,18 +144,37 @@ class StructuralAnswerability(OntologyVersionEvaluator):
     question id, `metric` = the count it falls in) whose `data` is
     `{status, source, required, missing}` (Concept references as strings; plus
     `mapper` when a described mapper produced the mapping, and `error` when it failed).
+
+    `regressed_questions` counts the questions `contract` (the Contract Alias's
+    Ontology Version) answers but the judged version does not; it is 0 without a
+    `contract` or when the judged version is the contract. Each regressed question
+    gets a second Detail (`metric` = `regressed_questions`) whose `data` is
+    `{status: "regressed", contract_version, missing}`.
     """
 
     name = ANSWERABILITY_EVALUATOR
 
-    def __init__(self, use_case: UseCase, mapper: CompetencyQuestionMapper | None = None) -> None:
+    def __init__(
+        self,
+        use_case: UseCase,
+        mapper: CompetencyQuestionMapper | None = None,
+        contract: OntologyVersion | None = None,
+    ) -> None:
         self.use_case = use_case
         self.mapper = mapper
+        self.contract = contract
 
     def evaluate(self, version) -> Evaluation:
         index = _OntologyIndex(version.ontology)
+        contract = self.contract
+        contract_index = (
+            None
+            if contract is None or contract.number == version.number
+            else _OntologyIndex(contract.ontology)
+        )
         counts = {"answerable": 0, "unanswerable": 0, "unmapped": 0}
         details = []
+        regressions = []
         for question in sorted(self.use_case.competency_questions, key=lambda q: q.id):
             data = self._judge(question, index)
             counts[data["status"]] += 1
@@ -160,6 +186,23 @@ class StructuralAnswerability(OntologyVersionEvaluator):
                     data=data,
                 )
             )
+            if (
+                contract_index is not None
+                and data["status"] != "answerable"
+                and self._judge(question, contract_index)["status"] == "answerable"
+            ):
+                regressions.append(
+                    Detail(
+                        item=question.id,
+                        message=_regression_message(contract.number, data["missing"]),
+                        metric="regressed_questions",
+                        data={
+                            "status": "regressed",
+                            "contract_version": contract.number,
+                            "missing": data["missing"],
+                        },
+                    )
+                )
         total = len(self.use_case.competency_questions)
         return Evaluation(
             metrics={
@@ -168,8 +211,9 @@ class StructuralAnswerability(OntologyVersionEvaluator):
                 "unanswerable_questions": counts["unanswerable"],
                 "unmapped_questions": counts["unmapped"],
                 "answerable_ratio": counts["answerable"] / total if total else 1.0,
+                "regressed_questions": len(regressions),
             },
-            details=details,
+            details=details + regressions,
         )
 
     def _requirements(
@@ -212,6 +256,11 @@ class StructuralAnswerability(OntologyVersionEvaluator):
         if error:
             data["error"] = error
         return data
+
+
+def _regression_message(contract_version: int, missing: list[str]) -> str:
+    message = f"answered by Ontology Version {contract_version}"
+    return message + (", missing " + ", ".join(missing) if missing else "")
 
 
 def _message(data: dict) -> str:

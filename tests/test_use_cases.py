@@ -66,7 +66,11 @@ def answerability(results):
 
 
 def per_question(result):
-    return {d.item: d.data for d in result.details}
+    return {d.item: d.data for d in result.details if d.metric != "regressed_questions"}
+
+
+def regressed(result):
+    return {d.item: d for d in result.details if d.metric == "regressed_questions"}
 
 
 def test_an_existing_ontology_version_is_re_evaluated_against_a_new_use_case_version(client, kg):
@@ -81,6 +85,7 @@ def test_an_existing_ontology_version_is_re_evaluated_against_a_new_use_case_ver
         "unanswerable_questions": 0,
         "unmapped_questions": 0,
         "answerable_ratio": 1.0,
+        "regressed_questions": 0,
     }
     assert per_question(result)["tickets-per-customer"] == {
         "status": "answerable",
@@ -164,6 +169,84 @@ def test_a_new_ontology_version_reports_unanswerable_questions_with_the_missing_
     detail = next(d for d in result.details if d.item == "tickets-per-customer")
     assert detail.metric == "unanswerable_questions"
     assert detail.message == "missing OPENED, Ticket.opened_at"
+
+
+def test_a_candidate_that_drops_a_needed_concept_reports_the_question_as_regressed(client, kg):
+    client.register_use_case(kg.name, USE_CASE)
+
+    candidate = client.register_ontology(kg.name, WITHOUT_OPENED)
+
+    result = answerability(client.get_evaluation_results(kg.name, candidate.number))
+    assert result.metrics["regressed_questions"] == 1
+    detail = regressed(result)["tickets-per-customer"]
+    assert detail.data == {
+        "status": "regressed",
+        "contract_version": 1,
+        "missing": ["OPENED", "Ticket.opened_at"],
+    }
+    assert detail.message == "answered by Ontology Version 1, missing OPENED, Ticket.opened_at"
+
+
+def test_the_contract_aliass_own_version_has_no_regressed_questions(client, kg):
+    client.register_use_case(kg.name, USE_CASE)
+    client.register_ontology(kg.name, WITHOUT_OPENED)
+
+    result = answerability(client.get_evaluation_results(kg.name, 1))
+
+    assert result.metrics["regressed_questions"] == 0
+    assert regressed(result) == {}
+
+
+def test_regressed_questions_compare_against_wherever_the_contract_alias_points(client, kg):
+    client.register_use_case(kg.name, USE_CASE)
+    client.register_ontology(kg.name, WITHOUT_OPENED)
+    client.set_alias(kg.name, "production", 2)  # the contract now answers less
+
+    result = answerability(client.evaluate(kg.name, 1))
+
+    assert result.metrics["regressed_questions"] == 0
+
+
+ONLY_CUSTOMER_NAMES = """
+competency_questions:
+  - id: customer-names
+    question: What are our customers called?
+    concepts: [Customer.name]
+"""
+
+
+def test_registering_a_use_case_version_recomputes_regressed_questions(client, kg):
+    client.register_ontology(kg.name, WITHOUT_OPENED)
+
+    client.register_use_case(kg.name, USE_CASE)
+    with_question = answerability(client.get_evaluation_results(kg.name, 2))
+    client.register_use_case(kg.name, ONLY_CUSTOMER_NAMES)
+    without_question = answerability(client.get_evaluation_results(kg.name, 2))
+
+    assert with_question.metrics["regressed_questions"] == 1
+    assert without_question.metrics["regressed_questions"] == 0
+
+
+NO_REGRESSIONS = """
+gates:
+  - name: no-regressed-questions
+    check: metric
+    evaluator: structural_answerability
+    metric: regressed_questions
+    max: 0
+"""
+
+
+def test_a_gate_on_regressed_questions_fails_for_the_regressing_candidate(client, kg):
+    client.register_use_case(kg.name, USE_CASE)
+    client.register_ontology(kg.name, WITHOUT_OPENED)
+
+    contract = client.evaluate_gates(kg.name, NO_REGRESSIONS, version=1)
+    candidate = client.evaluate_gates(kg.name, NO_REGRESSIONS, version=2)
+
+    assert contract.passed
+    assert not candidate.passed
+    assert any("tickets-per-customer" in r for r in candidate.failed[0].reasons)
 
 
 HIERARCHY = """
