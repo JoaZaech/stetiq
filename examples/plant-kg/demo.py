@@ -13,7 +13,6 @@ is the file .graphdb/plant.json (see graphdb.py). README.md tells the story.
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -27,11 +26,14 @@ from pipeline import (  # noqa: E402
     DEFAULT_GRAPH_FILE,
     DEFAULT_MODEL,
     ROUNDS,
+    ExtractionError,
+    LlmMode,
     Round,
+    run_round,
 )
 
 import stetiq  # noqa: E402
-from stetiq import CompetencyQuestion, EntryPoint, GraphSourceScope  # noqa: E402
+from stetiq import CompetencyQuestion, GraphSourceScope  # noqa: E402
 from stetiq.config import load_config  # noqa: E402
 from stetiq.drift import thresholds_from_config  # noqa: E402
 
@@ -59,10 +61,6 @@ quietly shows fewer breakdowns, and the stand-up misses a repeat fault.
 With stetiq, three recorded Claude rounds:"""
 
 ROUND_LABEL: dict[Round, str] = {"v1": "v1", "v2": "prompt v2", "fix": "fix"}
-
-
-class DemoError(Exception):
-    """A round could not run (e.g. a cache miss in replay mode)."""
 
 
 @dataclass(frozen=True)
@@ -105,16 +103,7 @@ class Demo:
         self.priya.register_evaluator(Documented())
         self.priya.register_evaluator(ReportCoverage())
         self.ci = stetiq.Client(tracking_uri, graph_source=self.graph, actor="ci-bot")
-        self.entry_point = EntryPoint.from_config(load_config(CONFIG))
-        # What `stetiq run` / run_entry_point hands the pipeline process, the way a real
-        # pipeline gets its database credentials: from the environment, never from stetiq.
-        os.environ["PLANT_GRAPH_FILE"] = str(graph_file)
-        os.environ["PLANT_EXTRACTION_MODEL"] = model
-        os.environ.pop("PLANT_LLM_CACHE", None)
-        # stetiq.yaml says `python`: make sure that is this interpreter.
-        os.environ["PATH"] = (
-            f"{Path(sys.executable).parent}{os.pathsep}{os.environ.get('PATH', '')}"
-        )
+        self.model = model
 
     def say(self, *lines: str) -> None:
         if not self.quiet:
@@ -134,26 +123,33 @@ class Demo:
     def construct(
         self, round_: Round, *, ontology_version: int | None = None
     ) -> stetiq.ConstructionRun:
-        """Run the pipeline's `round_` through the Construction Entry Point (what
-        `PLANT_ROUND=<round> stetiq run` does). Its Declared Ontology is
-        `ontology_version`, else the Contract Alias's version."""
-        os.environ["PLANT_ROUND"] = round_
-        os.environ["PLANT_LLM"] = (
-            "record" if round_ in self.record else "live" if self.live else "replay"
+        """Run the pipeline's `round_` as an SDK-instrumented Construction Run (see
+        `pipeline.run_round`). Its Declared Ontology is `ontology_version`, else the
+        Contract Alias's version."""
+        mode: LlmMode = "record" if round_ in self.record else "live" if self.live else "replay"
+        run = run_round(
+            self.priya,
+            KG,
+            round_,
+            graph=self.graph,
+            ontology_version=ontology_version,
+            model=self.model,
+            mode=mode,
         )
-        run = self.priya.run_entry_point(
-            KG, self.entry_point, ontology_version=ontology_version, cwd=EXAMPLE_DIR
-        )
-        if run.status != "finished":
-            raise DemoError(
-                f"round {round_}: the pipeline run {run.id[:8]} {run.status} "
-                f"(exit code {run.params.get('entry_point.exit_code')}); see its output above"
+        if run.ignored_definitions:
+            self.say(
+                f"            ignored Definitions (not added by the run): "
+                f"{', '.join(run.ignored_definitions)}"
             )
         return run
 
     def gate(
         self, round_: Round, run: stetiq.ConstructionRun, *, consumers: bool, promote: bool
     ) -> RoundResult:
+        if run.candidate_version is not None:
+            # The custom Ontology Version Evaluator (`documented`) on the new Candidate;
+            # the built-ins ran when it was registered.
+            self.priya.evaluate(KG, run.candidate_version)
         gates = self.ci.evaluate_gates(KG, CONFIG, run=run.id)
         consumer_gates = tuple(self.ci.evaluate_consumer_gates(KG, run=run.id)) if consumers else ()
         result = RoundResult(round_, run, gates, consumer_gates, False)
@@ -430,7 +426,7 @@ def main(argv: list[str] | None = None) -> int:
             live=args.live,
             epilogue=args.epilogue,
         )
-    except (stetiq.StetiqError, DemoError) as e:
+    except (stetiq.StetiqError, ExtractionError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
     return 0

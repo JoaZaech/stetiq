@@ -11,8 +11,8 @@
     "properties": {
      "id": "WO-2035",
      "kind": "breakdown",
-     "opened_at": "2026-03-03",
      "downtime_minutes": 18,
+     "opened_at": "2026-03-03",
      "title": "Conveyor-07 belt slipping under full pallets"
     }
    },
@@ -124,6 +124,7 @@
     "end_label": "Machine",
     "end_key": "Packer-05"
    }
-  ]
+  ],
+  "definitions": []
  }
 }

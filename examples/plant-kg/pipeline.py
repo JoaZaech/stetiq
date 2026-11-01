@@ -8,21 +8,27 @@ Sources, under data/:
 | assets/material_flow.json   | structured   | FEEDS, as drawn in the layout (can be stale)       |
 | cmms/work_orders.csv        | structured   | WorkOrder, PERFORMED_ON, ASSIGNED_TO, Technician   |
 | hr/technicians.csv          | structured   | Technician.badge                                   |
-| reports/*.txt, *.eml        | unstructured | Component, FollowUp, Fault, Supplier, FEEDS stated in prose |
+| reports/*.txt, *.eml        | unstructured | Component, FollowUp, Fault, FEEDS stated in prose, and what Claude adds |
 
 The structured sources load deterministically. Claude reads the technicians' reports,
-one `claude -p` call per report, guided by the Declared Ontology stetiq hands the run.
+one `claude -p` call per report. Its prompt carries the run context stetiq hands the
+pipeline (`Client.run_context`): the Ontology Version as a suggestion, the Consumers'
+Tasks and Competency Questions with how each ran last time, and the version's
+evaluation results. Claude may extend the Ontology where a Competency Question needs it,
+and returns a Definition for every Concept it adds; the pipeline proposes those to the
+run (`ActiveRun.propose_definitions`), so the Candidate carries them.
+
 There are two prompt versions, and each round of the demo picks one:
 
-| Round | Prompt | Declared Ontology (chosen by the demo, or `stetiq run --version`) |
-| ----- | ------ | ------------------------------------------------------------------ |
-| v1    | v1     | ontology/v1.yaml                                                   |
-| v2    | v2     | production (v1)                                                    |
-| fix   | v2     | ontology/fix.yaml                                                  |
+| Round | Prompt | Declared Ontology                    |
+| ----- | ------ | ------------------------------------ |
+| v1    | v1     | ontology/v1.yaml                     |
+| v2    | v2     | production (v1)                      |
+| fix   | v2     | ontology/fix.yaml                    |
 
-Prompt v2 also pulls suppliers out of the reports and fills a work order's fields from
-its report where the report is more specific; the pipeline lets the report's `kind`
-override the CMMS export's.
+Prompt v2 also reads the email report for root causes and suppliers, and fills a work
+order's fields from its report where the report is more specific; the pipeline lets the
+report's `kind` override the CMMS export's.
 
 Claude's answers are cached by (prompt version, model, prompt). Three modes:
 
@@ -31,13 +37,18 @@ Claude's answers are cached by (prompt version, model, prompt). Three modes:
 - `live`: call the `claude` CLI on a miss and cache to the gitignored .graphdb/llm-cache/.
 - `record`: call the `claude` CLI for every report and overwrite the committed entries.
 
-Run it as the Construction Entry Point (see stetiq.yaml):
+Two ways to run a round:
 
-    PLANT_ROUND=v2 python pipeline.py --ontology declared.yaml --scope '{"database": "plant"}'
+- `run_round(client, ...)`, SDK instrumentation: starts the Construction Run, builds,
+  proposes Claude's Definitions and ends the run. demo.py uses it.
+- As the Construction Entry Point of stetiq.yaml (`PLANT_ROUND=v2 stetiq run`). The
+  run context comes from the tracking database read-only, but an entry point process
+  has no way to propose Definitions to the run, so Concepts Claude adds stay
+  undocumented in the Candidate.
 
 Environment: PLANT_ROUND (or --round), PLANT_GRAPH_FILE (where the local graph store
-lives), PLANT_LLM (`replay`, `live` or `record`), PLANT_EXTRACTION_MODEL and
-PLANT_LLM_CACHE (a cache folder other than the mode's own).
+lives), PLANT_LLM (`replay`, `live` or `record`), PLANT_EXTRACTION_MODEL,
+PLANT_LLM_CACHE (a cache folder other than the mode's own) and STETIQ_TRACKING_URI.
 """
 
 from __future__ import annotations
@@ -60,7 +71,9 @@ from typing import Any, Literal, cast
 
 from graphdb import DEFAULT_DATABASE, LocalGraph
 
-from stetiq.ontology import Ontology, parse_yaml, to_yaml
+import stetiq
+from stetiq.ontology import Ontology, to_yaml
+from stetiq.run_context import RunContext
 
 EXAMPLE_DIR = Path(__file__).resolve().parent
 DATA_DIR = EXAMPLE_DIR / "data"
@@ -94,7 +107,8 @@ KEY_PROPERTY: dict[str, str | None] = {
 
 @dataclass
 class Draft:
-    """Nodes and relationships one source contributes, merged by (label, key).
+    """Nodes and relationships one source contributes, merged by (label, key), plus the
+    Definitions Claude gives for Concepts it adds (by Concept reference).
 
     The first value seen for a property wins, so the structured sources (loaded first)
     are never overwritten by what a report says, unless the pipeline says otherwise
@@ -102,6 +116,7 @@ class Draft:
 
     nodes: dict[Key, dict[str, Any]] = field(default_factory=dict)
     relationships: list[tuple[Key, str, Key]] = field(default_factory=list)
+    definitions: dict[str, str] = field(default_factory=dict)
 
     def node(self, label: str, key: str, **properties: Any) -> Key:
         props = self.nodes.setdefault((label, key), {})
@@ -120,6 +135,8 @@ class Draft:
             self.node(label, key, **props)
         for start, type_, end in other.relationships:
             self.relate(start, type_, end)
+        for concept, definition in other.definitions.items():
+            self.definitions.setdefault(concept, definition)
 
 
 # --- Structured sources ----------------------------------------------------------------
@@ -179,10 +196,56 @@ def read_reports(data_dir: Path = DATA_DIR) -> list[Report]:
 
 @dataclass(frozen=True)
 class Context:
-    """What the structured sources already know, handed to the extractor."""
+    """What the structured sources already know, and the run context stetiq hands the
+    pipeline, as the prompt shows it."""
 
     machines: tuple[str, ...]
     technicians: tuple[str, ...]
+    run_context: str
+
+
+def describe_run_context(context: RunContext) -> str:
+    """The run context as prompt text: the Ontology Version as a suggestion, what each
+    Competency Question is for and how it ran last time, and the version's evaluation
+    metrics. Only Ontology, Use Case, metrics and counts (ADR 0001)."""
+    data = context.to_dict()
+    lines = [
+        f"## Ontology Version {context.ontology_version.number} (a suggestion, stetiq YAML)",
+        "",
+        to_yaml(context.ontology_version.ontology),
+        "## What the graph is for",
+        "",
+    ]
+    use_case = context.use_case_version.use_case if context.use_case_version else None
+    for consumer in use_case.consumers if use_case else ():
+        for task in consumer.tasks:
+            lines.append(
+                f"- {consumer.name} ({consumer.id}), Task {task.id}: {task.description}. "
+                f"Competency Questions: {', '.join(task.competency_questions)}"
+            )
+    lines += ["", "## Competency Questions, and how each ran on the latest run", ""]
+    for q in data["competency_questions"]:
+        serves = ", ".join(f"{s['consumer']}/{s['task']}" for s in q["serves"]) or "no Task"
+        execution = q["execution"]
+        ran = (
+            "not executed"
+            if execution is None
+            else f"{execution['status']}, {execution['rows']} rows"
+        )
+        lines.append(f'- {q["id"]}: "{q["question"]}" Serves: {serves}. Last run: {ran}.')
+    lines += [
+        "",
+        f"## Evaluation results of Ontology Version {context.ontology_version.number}",
+        "",
+    ]
+    for result in sorted(data["evaluation_results"], key=lambda r: r["evaluator"]):
+        metrics = ", ".join(f"{k}={_number(v)}" for k, v in sorted(result["metrics"].items()))
+        lines.append(f"- {result['evaluator']}: {metrics}")
+    return "\n".join(lines)
+
+
+def _number(value: float) -> str:
+    return f"{value:g}" if isinstance(value, float) else str(value)
 
 
 _WORK_ORDER_ID = re.compile(r"\bWO-\d{4}\b")
@@ -235,11 +298,34 @@ _OUTPUT_SCHEMA = {
                 "additionalProperties": False,
             },
         },
+        "definitions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "concept": {"type": "string"},
+                    "definition": {"type": "string"},
+                },
+                "required": ["concept", "definition"],
+                "additionalProperties": False,
+            },
+        },
     },
-    "required": ["nodes", "relationships"],
+    "required": ["nodes", "relationships", "definitions"],
     "additionalProperties": False,
 }
 
+_ONTOLOGY_RULE = (
+    "- The ontology is a suggestion. Use its node labels, property names, relationship "
+    "types and patterns. Where a Competency Question needs a Concept the ontology lacks "
+    "(a node label, a relationship type or a property), you may add it; add nothing no "
+    "Competency Question needs, and leave out facts that have no place. Relationship "
+    "direction follows the patterns.\n"
+    "- For every Concept you add, return a one-sentence Definition in `definitions`, "
+    "keyed by its reference: the label for a node label or relationship type, "
+    "`Label.property` for a property. Return no Definition for a Concept the ontology "
+    "already has."
+)
 _KEYS_RULE = (
     "- Keys: Machine, the asset id as written (e.g. CNC-04). WorkOrder, its id (e.g. "
     'WO-2031). Technician, the full name. Component, the part name in lower case, singular, as written in the report (e.g. "spindle bearing"). '
@@ -253,20 +339,20 @@ _VALUES_RULE = (
 # Each prompt version's rules. v1 is the pipeline's first prompt; v2 is the change the
 # demo's second round makes.
 _RULES = {
-    "v1": f"""- Use only the node labels, property names, relationship types and patterns the ontology declares, and leave out facts it has no place for. Relationship direction follows the patterns.
+    "v1": f"""{_ONTOLOGY_RULE}
 {_KEYS_RULE}
 {_VALUES_RULE}
-- The work order, its machine, its technician and its date already come from the CMMS export: emit those nodes with their key only. Attach what the report adds: the components the work involved, the follow-ups with their owner, the root cause, the supplier a replacement component was ordered from, and material-flow statements between machines (one machine feeding or supplying parts to another).""",
-    "v2": f"""- Use the node labels, property names, relationship types and patterns the ontology declares. One addition the ontology may not have yet: record the supplier a replacement component was ordered from as a Supplier node (property name) with a relationship (Component)-[SUPPLIED_BY]->(Supplier). Leave out other facts the ontology has no place for. Relationship direction follows the patterns.
+- The work order, its machine, its technician and its date already come from the CMMS export: emit those nodes with their key only. Attach what the report adds: the components the work involved, the follow-ups with their owner, the root cause, and material-flow statements between machines (one machine feeding or supplying parts to another).""",
+    "v2": f"""{_ONTOLOGY_RULE}
 {_KEYS_RULE}
 {_VALUES_RULE}
 - Read the whole report, whatever its format (a form, a free-text note or an email), and pull out the root cause and the supplier of every replacement part wherever they are stated.
-- The work order, its machine, its technician and its date also come from the CMMS export, but the technician's report is the source of truth for the job. Emit the machine and the technician with their key only. Emit the work order with its key and every declared property the report states or clearly implies, taking the report's characterisation of the job over the CMMS export's wherever the report is more specific. Attach what the report adds: the components the work involved, the follow-ups with their owner, the root cause, the supplier a replacement component was ordered from, and material-flow statements between machines (one machine feeding or supplying parts to another).""",
+- The work order, its machine, its technician and its date also come from the CMMS export, whose fields are filled in quickly and are often generic. Emit the machine and the technician with their key only. Emit the work order with its key, and fill in its properties from the report where the report is more specific than a generic CMMS entry. Attach what the report adds: the components the work involved, the follow-ups with their owner, the root cause, the supplier a replacement component was ordered from, and material-flow statements between machines (one machine feeding or supplying parts to another).""",
 }
 
 
 class ClaudeExtractor:
-    """Extraction by Claude through the Claude Code CLI, guided by the Declared Ontology.
+    """Extraction by Claude through the Claude Code CLI, guided by the run context.
 
     Each report is one `claude -p` call with a JSON schema for the output, no tools and
     a replaced system prompt. Answers are cached by (prompt version, model, prompt); each
@@ -301,14 +387,12 @@ class ClaudeExtractor:
         """Whether a report's WorkOrder.kind replaces the CMMS export's (prompt v2)."""
         return self.prompt_version == "v2"
 
-    def extract_all(
-        self, reports: Sequence[Report], ontology: Ontology, context: Context
-    ) -> list[Draft]:
+    def extract_all(self, reports: Sequence[Report], context: Context) -> list[Draft]:
         with ThreadPoolExecutor(max_workers=self.workers) as pool:
-            return list(pool.map(lambda r: self.extract(r, ontology, context), reports))
+            return list(pool.map(lambda r: self.extract(r, context), reports))
 
-    def extract(self, report: Report, ontology: Ontology, context: Context) -> Draft:
-        prompt = self._prompt(report, ontology, context)
+    def extract(self, report: Report, context: Context) -> Draft:
+        prompt = self._prompt(report, context)
         key = hashlib.sha256(f"{self.prompt_version}\n{self.model}\n{prompt}".encode()).hexdigest()
         cached = self.cache_dir / f"{key}.json"
         if self.mode != "record" and cached.exists():
@@ -337,13 +421,12 @@ class ClaudeExtractor:
         cached.write_text(json.dumps(entry, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
         return self._to_draft(response)
 
-    def _prompt(self, report: Report, ontology: Ontology, context: Context) -> str:
+    def _prompt(self, report: Report, context: Context) -> str:
         order = _WORK_ORDER_ID.search(report.text)
         return f"""Extract the property graph stated by the maintenance report below.
 
-## Declared Ontology (stetiq YAML)
+{context.run_context}
 
-{to_yaml(ontology)}
 ## Rules
 
 {_RULES[self.prompt_version]}
@@ -411,6 +494,9 @@ Known technicians: {", ".join(context.technicians)}
                 rel["type"],
                 draft.node(rel["end_label"], rel["end_key"]),
             )
+        for d in output.get("definitions", []):
+            if d["concept"].strip() and d["definition"].strip():
+                draft.definitions.setdefault(d["concept"].strip(), d["definition"].strip())
         return draft
 
 
@@ -462,25 +548,28 @@ class BuildStats:
     reports: int
     nodes: int
     relationships: int
+    definitions: dict[str, str]  # Claude's Definitions for the Concepts it added
 
 
 def build(
     graph: LocalGraph,
     *,
-    ontology: Ontology,
+    context: RunContext,
     extractor: ClaudeExtractor,
     data_dir: Path = DATA_DIR,
     database: str = DEFAULT_DATABASE,
 ) -> BuildStats:
     """Rebuild `database` in `graph` from the data: structured sources first, then every
-    report through `extractor`."""
+    report through `extractor`, prompted with the run context."""
+    ontology = context.ontology_version.ontology
     draft = load_structured(data_dir)
-    context = Context(
+    prompt_context = Context(
         machines=tuple(sorted(k for (label, k) in draft.nodes if label == "Machine")),
         technicians=tuple(sorted(k for (label, k) in draft.nodes if label == "Technician")),
+        run_context=describe_run_context(context),
     )
     reports = read_reports(data_dir)
-    for extracted in extractor.extract_all(reports, ontology, context):
+    for extracted in extractor.extract_all(reports, prompt_context):
         draft.merge(extracted)
         if extractor.report_kind_overrides:
             for (label, key), props in extracted.nodes.items():
@@ -489,7 +578,40 @@ def build(
     graph.clear(database)
     nodes, relationships = write(graph, draft, ontology=ontology, database=database)
     graph.save()
-    return BuildStats(len(reports), nodes, relationships)
+    return BuildStats(len(reports), nodes, relationships, dict(draft.definitions))
+
+
+def run_round(
+    client: stetiq.Client,
+    knowledge_graph: str,
+    round_: Round,
+    *,
+    graph: LocalGraph,
+    ontology_version: int | None = None,
+    model: str = DEFAULT_MODEL,
+    mode: LlmMode = "replay",
+    data_dir: Path = DATA_DIR,
+) -> stetiq.ConstructionRun:
+    """One round as an SDK-instrumented Construction Run: its Declared Ontology is
+    `ontology_version` (default the Contract Alias's). Claude's Definitions for the
+    Concepts it adds are proposed to the run before it ends."""
+    extractor = extractor_for_round(round_, model=model, mode=mode)
+    with client.start_run(knowledge_graph, ontology_version=ontology_version) as run:
+        context = client.run_context(knowledge_graph, version=run.ontology_version)
+        run.log_params(
+            {"round": round_, "prompt": extractor.prompt_version, "model": model, "llm": mode}
+        )
+        stats = build(
+            graph,
+            context=context,
+            extractor=extractor,
+            data_dir=data_dir,
+            database=client.get_graph_source(knowledge_graph).database,
+        )
+        run.log_metrics({"nodes": stats.nodes, "relationships": stats.relationships})
+        if stats.definitions:
+            run.propose_definitions(stats.definitions)
+    return client.get_run(run.id)
 
 
 # --- Command line (the Construction Entry Point) ----------------------------------------
@@ -497,7 +619,8 @@ def build(
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Build the plant maintenance graph.")
-    parser.add_argument("--ontology", required=True, help="the Declared Ontology (stetiq YAML)")
+    parser.add_argument("--knowledge-graph", required=True)
+    parser.add_argument("--ontology-version", type=int, required=True)
     parser.add_argument("--scope", default='{"database": "plant"}', help="Graph Source scope JSON")
     parser.add_argument(
         "--round",
@@ -516,7 +639,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.round is None:
         parser.error("say which round to run: --round v1|v2|fix, or set PLANT_ROUND")
 
-    ontology = parse_yaml(Path(args.ontology).read_text(encoding="utf-8"))
+    # Read-only: the run context of the version `stetiq run` declared for this run.
+    context = stetiq.Client().run_context(args.knowledge_graph, version=args.ontology_version)
     database = json.loads(args.scope).get("database") or DEFAULT_DATABASE
     extractor = extractor_for_round(
         cast(Round, args.round),
@@ -527,7 +651,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         stats = build(
             LocalGraph(args.graph),
-            ontology=ontology,
+            context=context,
             extractor=extractor,
             data_dir=Path(args.data_dir),
             database=database,
@@ -535,6 +659,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ExtractionError as e:
         print(f"pipeline: {e}", file=sys.stderr)
         return 1
+    if stats.definitions:
+        print(
+            "pipeline: an entry point cannot propose Definitions to its run; Concepts Claude "
+            f"added stay undocumented ({', '.join(sorted(stats.definitions))})",
+            file=sys.stderr,
+        )
     print(
         json.dumps(
             {
@@ -544,7 +674,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "llm": extractor.mode,
                 "claude_calls": extractor.calls,
                 "cache_hits": extractor.cache_hits,
-                **stats.__dict__,
+                "reports": stats.reports,
+                "nodes": stats.nodes,
+                "relationships": stats.relationships,
             }
         )
     )

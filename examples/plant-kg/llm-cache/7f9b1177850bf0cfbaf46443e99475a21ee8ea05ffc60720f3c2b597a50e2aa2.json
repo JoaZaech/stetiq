@@ -10,8 +10,9 @@
     "key": "WO-2032",
     "properties": {
      "id": "WO-2032",
-     "opened_at": "2026-01-27",
      "kind": "breakdown",
+     "opened_at": "2026-01-27",
+     "title": "Unplanned stop on Press-02: loss of hydraulic pressure",
      "downtime_minutes": 95
     }
    },
@@ -27,6 +28,13 @@
     "key": "Weld-03",
     "properties": {
      "name": "Weld-03"
+    }
+   },
+   {
+    "label": "Line",
+    "key": "Line 1",
+    "properties": {
+     "name": "Line 1"
     }
    },
    {
@@ -75,7 +83,7 @@
     "label": "Fault",
     "key": "WO-2032",
     "properties": {
-     "description": "Cracked hydraulic hose fitting that leaked under full load"
+     "description": "Cracked hydraulic hose fitting on the return line that leaked under full load"
     }
    },
    {
@@ -116,6 +124,13 @@
     "type": "FEEDS",
     "end_label": "Machine",
     "end_key": "Weld-03"
+   },
+   {
+    "start_label": "Machine",
+    "start_key": "Press-02",
+    "type": "PART_OF",
+    "end_label": "Line",
+    "end_key": "Line 1"
    },
    {
     "start_label": "WorkOrder",
@@ -179,6 +194,20 @@
     "type": "ASSIGNED_TO",
     "end_label": "Technician",
     "end_key": "Lena Okafor"
+   }
+  ],
+  "definitions": [
+   {
+    "concept": "Supplier",
+    "definition": "A vendor that a replacement component was ordered from."
+   },
+   {
+    "concept": "Supplier.name",
+    "definition": "The vendor's name as written in the report."
+   },
+   {
+    "concept": "SUPPLIED_BY",
+    "definition": "Links a component to the supplier its replacement was ordered from."
    }
   ]
  }

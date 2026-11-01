@@ -10,9 +10,9 @@
     "key": "WO-2035",
     "properties": {
      "id": "WO-2035",
+     "kind": "breakdown",
      "opened_at": "2026-03-03",
      "downtime_minutes": 18,
-     "kind": "breakdown",
      "title": "Conveyor-07 belt slipping under full pallets"
     }
    },
@@ -124,6 +124,7 @@
     "end_label": "Technician",
     "end_key": "Aisha Rahman"
    }
-  ]
+  ],
+  "definitions": []
  }
 }

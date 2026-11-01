@@ -6,7 +6,7 @@ knowledge_graph: plant-maintenance
 # PLANT_LLM and PLANT_EXTRACTION_MODEL from the environment, the way a real pipeline
 # reads its database credentials.
 entry_point:
-  command: python pipeline.py --ontology {ontology} --scope {graph_source}
+  command: python pipeline.py --knowledge-graph {knowledge_graph} --ontology-version {ontology_version} --scope {graph_source}
 
 drift:
   max_count_drop: 0.25

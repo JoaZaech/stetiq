@@ -1,5 +1,5 @@
 {
- "prompt_version": "v2",
+ "prompt_version": "v1",
  "model": "claude-opus-5-5",
  "recorded_at": "2026-11-01",
  "report": "WO-2036.txt",
@@ -9,9 +9,7 @@
     "label": "WorkOrder",
     "key": "WO-2036",
     "properties": {
-     "id": "WO-2036",
-     "kind": "preventive",
-     "opened_at": "2026-03-12"
+     "id": "WO-2036"
     }
    },
    {
@@ -47,13 +45,6 @@
     "key": "gripper",
     "properties": {
      "name": "gripper"
-    }
-   },
-   {
-    "label": "Supplier",
-    "key": "Haas",
-    "properties": {
-     "name": "Haas"
     }
    },
    {
@@ -123,19 +114,13 @@
     "end_key": "Diego Álvarez"
    },
    {
-    "start_label": "Component",
-    "start_key": "gripper",
-    "type": "SUPPLIED_BY",
-    "end_label": "Supplier",
-    "end_key": "Haas"
-   },
-   {
     "start_label": "Machine",
     "start_key": "Lathe-02",
     "type": "FEEDS",
     "end_label": "Machine",
     "end_key": "CNC-04"
    }
-  ]
+  ],
+  "definitions": []
  }
 }

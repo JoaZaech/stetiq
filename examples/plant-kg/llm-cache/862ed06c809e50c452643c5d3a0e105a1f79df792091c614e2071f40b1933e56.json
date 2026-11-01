@@ -50,13 +50,6 @@
     }
    },
    {
-    "label": "Supplier",
-    "key": "Haas",
-    "properties": {
-     "name": "Haas"
-    }
-   },
-   {
     "label": "Fault",
     "key": "WO-2036",
     "properties": {
@@ -69,6 +62,13 @@
     "properties": {
      "description": "Re-teach the tool changer positions on CNC-04",
      "status": "done"
+    }
+   },
+   {
+    "label": "Supplier",
+    "key": "Haas",
+    "properties": {
+     "name": "Haas"
     }
    }
   ],
@@ -123,18 +123,32 @@
     "end_key": "Diego Álvarez"
    },
    {
-    "start_label": "Component",
-    "start_key": "gripper",
-    "type": "SUPPLIED_BY",
-    "end_label": "Supplier",
-    "end_key": "Haas"
-   },
-   {
     "start_label": "Machine",
     "start_key": "Lathe-02",
     "type": "FEEDS",
     "end_label": "Machine",
     "end_key": "CNC-04"
+   },
+   {
+    "start_label": "Component",
+    "start_key": "gripper",
+    "type": "SUPPLIED_BY",
+    "end_label": "Supplier",
+    "end_key": "Haas"
+   }
+  ],
+  "definitions": [
+   {
+    "concept": "Supplier",
+    "definition": "A vendor that a replacement component was ordered from."
+   },
+   {
+    "concept": "Supplier.name",
+    "definition": "The vendor's name as written in the report."
+   },
+   {
+    "concept": "SUPPLIED_BY",
+    "definition": "Links a component to the supplier its replacement was ordered from."
    }
   ]
  }

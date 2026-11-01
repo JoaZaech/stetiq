@@ -72,7 +72,7 @@
     "label": "Fault",
     "key": "WO-2032",
     "properties": {
-     "description": "Cracked hydraulic hose fitting that leaked under full load"
+     "description": "Cracked hydraulic hose fitting on the return line that leaked under full load"
     }
    },
    {
@@ -177,6 +177,7 @@
     "end_label": "Technician",
     "end_key": "Lena Okafor"
    }
-  ]
+  ],
+  "definitions": []
  }
 }

@@ -12,7 +12,8 @@
      "id": "WO-2032",
      "kind": "breakdown",
      "opened_at": "2026-01-27",
-     "downtime_minutes": 95
+     "downtime_minutes": 95,
+     "title": "Unplanned stop on Press-02: loss of hydraulic pressure"
     }
    },
    {
@@ -194,6 +195,7 @@
     "end_label": "Technician",
     "end_key": "Lena Okafor"
    }
-  ]
+  ],
+  "definitions": []
  }
 }

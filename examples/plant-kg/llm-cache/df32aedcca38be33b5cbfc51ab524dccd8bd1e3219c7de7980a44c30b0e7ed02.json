@@ -10,10 +10,10 @@
     "key": "WO-2038",
     "properties": {
      "id": "WO-2038",
+     "title": "Lathe-02 chuck pressure fault",
      "kind": "breakdown",
      "opened_at": "2026-04-02",
-     "downtime_minutes": 15,
-     "title": "Lathe-02 chuck pressure fault"
+     "downtime_minutes": 15
     }
    },
    {
@@ -45,17 +45,17 @@
     }
    },
    {
-    "label": "Supplier",
-    "key": "Festo",
-    "properties": {
-     "name": "Festo"
-    }
-   },
-   {
     "label": "Fault",
     "key": "WO-2038",
     "properties": {
      "description": "A sticking pneumatic valve on the chuck supply"
+    }
+   },
+   {
+    "label": "Supplier",
+    "key": "Festo",
+    "properties": {
+     "name": "Festo"
     }
    },
    {
@@ -97,18 +97,18 @@
     "end_key": "pneumatic valve"
    },
    {
-    "start_label": "Component",
-    "start_key": "pneumatic valve",
-    "type": "SUPPLIED_BY",
-    "end_label": "Supplier",
-    "end_key": "Festo"
-   },
-   {
     "start_label": "WorkOrder",
     "start_key": "WO-2038",
     "type": "CAUSED_BY",
     "end_label": "Fault",
     "end_key": "WO-2038"
+   },
+   {
+    "start_label": "Component",
+    "start_key": "pneumatic valve",
+    "type": "SUPPLIED_BY",
+    "end_label": "Supplier",
+    "end_key": "Festo"
    },
    {
     "start_label": "WorkOrder",
@@ -123,6 +123,20 @@
     "type": "ASSIGNED_TO",
     "end_label": "Technician",
     "end_key": "Tomasz Nowak"
+   }
+  ],
+  "definitions": [
+   {
+    "concept": "Supplier",
+    "definition": "A vendor from which a replacement component was ordered."
+   },
+   {
+    "concept": "Supplier.name",
+    "definition": "The vendor's name as written in the report."
+   },
+   {
+    "concept": "SUPPLIED_BY",
+    "definition": "Links a replacement component to the supplier it was ordered from."
    }
   ]
  }

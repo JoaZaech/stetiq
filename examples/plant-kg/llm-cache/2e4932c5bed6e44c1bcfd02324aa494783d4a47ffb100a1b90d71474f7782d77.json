@@ -10,9 +10,9 @@
     "key": "WO-2037",
     "properties": {
      "id": "WO-2037",
-     "opened_at": "2026-03-25",
-     "downtime_minutes": 120,
      "kind": "breakdown",
+     "downtime_minutes": 120,
+     "opened_at": "2026-03-25",
      "title": "Packer-05 jammed with film wrapped around the sealing jaw"
     }
    },
@@ -55,7 +55,7 @@
     "label": "Fault",
     "key": "WO-2037",
     "properties": {
-     "description": "Failed heater band that let film stick to the sealing jaw"
+     "description": "Failed heater band (failed open) that let film stick to the sealing jaw"
     }
    },
    {
@@ -152,6 +152,20 @@
     "type": "ASSIGNED_TO",
     "end_label": "Technician",
     "end_key": "Marcus Webb"
+   }
+  ],
+  "definitions": [
+   {
+    "concept": "Supplier",
+    "definition": "A vendor from which a replacement component was ordered."
+   },
+   {
+    "concept": "Supplier.name",
+    "definition": "The vendor's name as written in the report."
+   },
+   {
+    "concept": "SUPPLIED_BY",
+    "definition": "Links a component to the supplier a replacement for it was ordered from."
    }
   ]
  }
