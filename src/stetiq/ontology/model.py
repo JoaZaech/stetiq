@@ -15,13 +15,17 @@ ConceptKind = Literal["node_type", "relationship_type", "property"]
 
 @dataclass(frozen=True)
 class Property:
-    """An attribute Concept. Like every Concept it has a Definition and Alternative Labels."""
+    """An attribute Concept. Like every Concept it has a Definition and Alternative Labels.
+    Its `replaced_by` names another attribute on the same owner."""
 
     name: str
     type: str
     definition: str | None = None
     required: bool = False
     alternative_labels: tuple[str, ...] = ()
+    deprecated: bool = False
+    replaced_by: str | None = None
+    deprecation_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -35,6 +39,7 @@ class NodeType:
     replaced_by: str | None = None
     parent: str | None = None
     alternative_labels: tuple[str, ...] = ()
+    deprecation_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -47,6 +52,7 @@ class RelationshipType:
     deprecated: bool = False
     replaced_by: str | None = None
     alternative_labels: tuple[str, ...] = ()
+    deprecation_reason: str | None = None
 
 
 @dataclass(frozen=True, order=True)

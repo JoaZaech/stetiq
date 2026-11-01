@@ -419,3 +419,61 @@ def test_a_bare_diff_without_candidates_compares_the_latest_version(client):
     d = client.diff_ontology_versions(KG)
 
     assert [(c.kind, c.concept) for c in d.changes] == [("added", "Team")]
+
+
+def test_deprecating_an_attribute_is_deprecating(diff):
+    d = diff(
+        BASE.replace(
+            "{name: opened_at, type: DATE}", "{name: opened_at, type: DATE, deprecated: true}"
+        )
+    )
+
+    assert summary(d) == [("Ticket.opened_at", "deprecated", "deprecating")]
+    assert attributes(d) == [("Ticket", "node_type", "opened_at")]
+    assert d.changes[0].detail == "deprecated"
+    assert d.classification == "deprecating"
+
+
+def test_an_attribute_rename_declared_via_replaced_by_is_a_replacement(diff):
+    d = diff(
+        BASE.replace(
+            "{name: priority, type: FLOAT}",
+            "{name: priority, type: FLOAT, replacedBy: urgency}\n"
+            "      - {name: urgency, type: FLOAT}",
+        )
+    )
+
+    assert summary(d) == [
+        ("Ticket.priority", "deprecated", "deprecating"),
+        ("Ticket.urgency", "added", "additive"),
+    ]
+    assert d.changes[0].detail == "deprecated; replaced by urgency"
+    assert d.classification == "deprecating"
+
+
+def test_changing_only_a_deprecation_reason_is_cosmetic(client):
+    def ontology(reason: str) -> str:
+        return (
+            f"node_types:\n  - {{label: Agent, deprecated: true, deprecationReason: {reason}}}\n"
+            "  - label: Ticket\n    properties:\n"
+            f"      - {{name: priority, type: FLOAT, deprecated: true, deprecationReason: {reason}}}\n"
+            f"relationship_types: [{{label: HANDLES, deprecated: true, deprecationReason: {reason}}}]\n"
+        )
+
+    d = client.diff_ontologies(ontology("Unused"), ontology("Nobody reads it"))
+
+    assert [(c.concept, c.classification, c.detail) for c in d.changes] == [
+        ("Agent", "cosmetic", "deprecation reason changed"),
+        ("Ticket.priority", "cosmetic", "deprecation reason changed"),
+        ("HANDLES", "cosmetic", "deprecation reason changed"),
+    ]
+    assert d.classification == "cosmetic"
+
+
+def test_deprecating_with_a_reason_is_one_deprecating_change(client):
+    d = client.diff_ontologies(
+        "node_types: [Agent]\n",
+        "node_types: [{label: Agent, deprecated: true, deprecationReason: Unused}]\n",
+    )
+
+    assert summary(d) == [("Agent", "deprecated", "deprecating")]

@@ -6,9 +6,11 @@
         definition: A support request # optional; `description` is accepted as a synonym
         alternativeLabels: [Case]     # optional; other names, never identifiers
         properties:
-          - {name: opened_at, type: DATE, required: true}  # also definition, alternativeLabels
+          - {name: opened_at, type: DATE, required: true}  # also definition, alternativeLabels,
+            # deprecated, replacedBy (another property on the same owner), deprecationReason
         deprecated: true              # optional
         replacedBy: Case              # optional, a Concept of the same kind
+        deprecationReason: Merged into Case  # optional, needs deprecated or replacedBy
         parent: Case                  # optional (node types only): superclass, single inheritance
     relationship_types:
       - OPENED
@@ -67,9 +69,10 @@ _CONSTRAINT_KEYS = {"type", "node_type", "property_name"}
 CONSTRAINT_TYPES = frozenset({"UNIQUENESS"})
 # Every Concept's documentation; `description` is the older spelling of `definition`.
 _DOCUMENTATION_KEYS = {"definition", "description", "alternativeLabels"}
-_CONCEPT_KEYS = {"label", "properties", "deprecated", "replacedBy"} | _DOCUMENTATION_KEYS
+_DEPRECATION_KEYS = {"deprecated", "replacedBy", "deprecationReason"}
+_CONCEPT_KEYS = {"label", "properties"} | _DOCUMENTATION_KEYS | _DEPRECATION_KEYS
 _NODE_TYPE_KEYS = _CONCEPT_KEYS | {"parent"}
-_PROPERTY_KEYS = {"name", "type", "required"} | _DOCUMENTATION_KEYS
+_PROPERTY_KEYS = {"name", "type", "required"} | _DOCUMENTATION_KEYS | _DEPRECATION_KEYS
 _PATTERN_KEYS = {"source", "relationship", "target", "cardinality"}
 
 
@@ -128,6 +131,31 @@ def _alternative_labels(path: str, raw: dict[str, Any]) -> tuple[str, ...]:
     return tuple(seen)
 
 
+def _deprecation(path: str, raw: dict[str, Any]) -> dict[str, Any]:
+    """A Concept's Deprecation as model keyword arguments. Naming a replacement implies the
+    Concept is deprecated, so a reason needs `deprecated: true` or a `replacedBy`."""
+    deprecated = _bool(f"{path}.deprecated", raw.get("deprecated", False))
+    replaced_by = _optional_str(f"{path}.replacedBy", raw.get("replacedBy"))
+    reason = _optional_str(f"{path}.deprecationReason", raw.get("deprecationReason"))
+    if reason is not None and not (deprecated or replaced_by is not None):
+        raise _fail(
+            f"{path}.deprecationReason",
+            "a Deprecation reason needs deprecated: true or a replacedBy",
+        )
+    return {"deprecated": deprecated, "replaced_by": replaced_by, "deprecation_reason": reason}
+
+
+def _check_replacements(owner: str, concepts: list[tuple[str, str | None]], section: str) -> None:
+    """A `replacedBy` names another Concept in the same section."""
+    labels = {label for label, _ in concepts}
+    for label, target in concepts:
+        if target is not None and (target not in labels or target == label):
+            raise _fail(
+                f"{owner}{label}.replacedBy",
+                f"{target!r} is not another Concept declared in {section}",
+            )
+
+
 def _check_alternative_labels(
     owner: str, concepts: list[tuple[str, tuple[str, ...]]], section: str
 ) -> None:
@@ -162,6 +190,7 @@ def _parse_property(path: str, raw: Any) -> Property:
         definition=_definition(path, raw),
         required=_bool(f"{path}.required", raw.get("required", False)),
         alternative_labels=_alternative_labels(path, raw),
+        **_deprecation(path, raw),
     )
 
 
@@ -189,13 +218,15 @@ def _parse_concept(section: str, index: int, raw: Any) -> dict[str, Any]:
     _check_alternative_labels(
         f"{label}.", [(p.name, p.alternative_labels) for p in properties], f"{label}'s properties"
     )
+    _check_replacements(
+        f"{label}.", [(p.name, p.replaced_by) for p in properties], f"{label}'s properties"
+    )
     concept = {
         "label": label,
         "definition": _definition(label, raw),
         "alternative_labels": _alternative_labels(label, raw),
         "properties": properties,
-        "deprecated": _bool(f"{label}.deprecated", raw.get("deprecated", False)),
-        "replaced_by": _optional_str(f"{label}.replacedBy", raw.get("replacedBy")),
+        **_deprecation(label, raw),
     }
     if section == "node_types":
         concept["parent"] = _optional_str(f"{label}.parent", raw.get("parent"))
@@ -232,13 +263,7 @@ def _parse_section(doc: dict[str, Any], section: str) -> list[dict[str, Any]]:
     _check_alternative_labels(
         "", [(c["label"], c["alternative_labels"]) for c in concepts], section
     )
-    for c in concepts:
-        target = c["replaced_by"]
-        if target is not None and (target not in seen or target == c["label"]):
-            raise _fail(
-                f"{c['label']}.replacedBy",
-                f"{target!r} is not another Concept declared in {section}",
-            )
+    _check_replacements("", [(c["label"], c["replaced_by"]) for c in concepts], section)
     return concepts
 
 
