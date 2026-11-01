@@ -163,10 +163,8 @@ def test_a_database_that_names_a_steward_and_authority_still_works(tmp_path, sup
     url = f"sqlite:///{tmp_path / 'stetiq.db'}"
     stetiq.Client(url).create_knowledge_graph("support", ontology=support_ontology)
     with sqlite3.connect(tmp_path / "stetiq.db") as db:
-        columns = {row[1] for row in db.execute("PRAGMA table_info(knowledge_graphs)")}
         for column in ("steward", "authority"):
-            if column not in columns:
-                db.execute(f"ALTER TABLE knowledge_graphs ADD COLUMN {column} TEXT")
+            db.execute(f"ALTER TABLE knowledge_graphs ADD COLUMN {column} TEXT")
         db.execute("UPDATE knowledge_graphs SET steward = 'Ada', authority = 'Ops board'")
 
     client = stetiq.Client(url)

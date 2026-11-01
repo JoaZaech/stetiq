@@ -328,21 +328,22 @@ A registered Evaluator runs in your process, and only its results are sent to th
 Registration lasts as long as the Client and is not stored. To run an Evaluator once, without registering it, pass it as `evaluators=`. That is how a parameterised Evaluator runs: its `parameters` property names the configuration it runs with, each result records it, and results with different parameters are kept side by side.
 
 ```python
-class GlossaryCoverage(OntologyVersionEvaluator):
-    name = "glossary_coverage"
+class MinimumNodeTypes(stetiq.OntologyVersionEvaluator):
+    name = "minimum_node_types"
 
-    def __init__(self, glossary):
-        self.glossary = glossary
+    def __init__(self, minimum):
+        self.minimum = minimum
 
     @property
     def parameters(self):
-        return {"glossary": self.glossary}
+        return {"minimum": self.minimum}
 
     def evaluate(self, version):
-        ...
+        enough = len(version.ontology.node_types) >= self.minimum
+        return stetiq.Evaluation(metrics={"met": 1 if enough else 0})
 
 
-client.evaluate("support", 3, evaluators=[GlossaryCoverage("billing")])
+client.evaluate("support", 3, evaluators=[MinimumNodeTypes(3), MinimumNodeTypes(5)])
 client.evaluate_run(run.id, evaluators=[MyRunCheck()])
 ```
 

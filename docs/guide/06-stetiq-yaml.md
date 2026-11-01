@@ -190,17 +190,17 @@ gates:
     min: 1.0
 ```
 
-A custom Evaluator can take parameters (see [Python SDK](./03-python-sdk.md)). It then runs once per configuration you pass it, and each result records its configuration in its parameters. Name the configuration to gate on it:
+Your own custom Evaluators can take parameters (see [Python SDK](./03-python-sdk.md)). Such an Evaluator runs once per configuration you pass it, and each result records its configuration in its parameters. Name the configuration to gate on it. In this example, `minimum_node_types` stands for your own parameterised Evaluator: stetiq ships nothing by that name.
 
 ```yaml
 gates:
-  - name: covers-the-billing-glossary
+  - name: at-least-three-node-types
     check: metric
-    evaluator: glossary_coverage
-    metric: covered_ratio
-    min: 0.9
+    evaluator: minimum_node_types
+    metric: met
+    min: 1
     parameters:
-      glossary: billing
+      minimum: 3
 ```
 
 #### Evaluators and their metrics
