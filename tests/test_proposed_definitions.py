@@ -149,3 +149,50 @@ def test_a_malformed_proposal_is_refused_before_the_run_ends(client, plant, prop
         run.propose_definitions(proposals)
 
     assert client.get_run(run.id).status == "running"
+
+
+COLLIDING = """
+node_types:
+  - label: Ticket
+    description: A support request
+    properties:
+      - {name: x, type: STRING, description: The declared Ticket.x}
+  - label: Customer
+"""
+
+
+def test_a_proposal_documents_the_added_concept_never_a_declared_one_sharing_its_label(
+    client, graph_source
+):
+    client.create_knowledge_graph("support", ontology=COLLIDING)
+    client.bind_graph_source("support", GraphSourceScope(database="neo4j"))
+    ticket = graph_source.add_node(["Ticket"], {"x": "a"})
+    customer = graph_source.add_node(["Customer"])
+    # The run adds a Relation also called Ticket, with an Attribute x of its own.
+    graph_source.add_relationship(customer, "Ticket", ticket, {"x": "b"})
+
+    with client.start_run("support") as run:
+        run.propose_definitions({"Ticket": "The added relation", "Ticket.x": "The added x"})
+    ended = client.get_run(run.id)
+
+    candidate = client.get_ontology_version("support", ended.candidate_version).ontology
+    declared = candidate.node_type("Ticket")
+    assert declared.definition == "A support request"
+    assert declared.properties[0].definition == "The declared Ticket.x"
+    added = candidate.relationship_type("Ticket")
+    assert added.definition == "The added relation"
+    assert added.properties[0].definition == "The added x"
+    assert ended.ignored_definitions == ()
+
+
+def test_an_attribute_added_to_a_declared_class_gets_its_definition(client, plant, graph_source):
+    graph_source.add_node(["Component"], {"name": "pump", "weight": 3})
+
+    with client.start_run(plant) as run:
+        run.propose_definitions({"Component.weight": "  The part's weight in kg  "})
+    ended = client.get_run(run.id)
+
+    component = client.get_ontology_version(plant, ended.candidate_version).ontology
+    weight = next(p for p in component.node_type("Component").properties if p.name == "weight")
+    assert weight.definition == "The part's weight in kg"  # stripped
+    assert component.node_type("Component").definition == "A part of a machine"

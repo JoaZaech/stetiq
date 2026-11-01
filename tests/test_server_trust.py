@@ -465,3 +465,15 @@ def test_malformed_proposed_definitions_are_refused_and_the_run_keeps_running(
 
     assert response.status_code == 422
     assert admin.get_run(run.id).status == "running"
+
+
+def test_ending_an_ended_run_is_not_active_before_its_proposals_are_judged(server, admin, support):
+    _, http = server
+    editor = _headers(server, "mallory", {"support": "edit"})
+    body = _end_body(admin, "support", ["Agent"])
+    body["definitions"] = {"Agent": ""}
+
+    response = http.post(f"{API}/runs/{_run_id(admin, 'support')}/end", json=body, headers=editor)
+
+    assert response.status_code == 409
+    assert response.json()["error"]["type"] == "RunNotActiveError"

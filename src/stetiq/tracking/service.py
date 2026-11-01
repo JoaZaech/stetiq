@@ -143,7 +143,7 @@ def check_proposed_definitions(proposals: Mapping[str, str]) -> dict[str, str]:
             raise OntologyValidationError(
                 f"the proposed Definition of {ref!r} must be a non-empty string"
             )
-        checked[ref.strip()] = text
+        checked[ref.strip()] = text.strip()
     return checked
 
 
@@ -784,9 +784,9 @@ class LocalTrackingService:
     ) -> ConstructionRun:
         """Finish the run with the Observation of its Graph Source made at its end."""
         scope, schema = observation
-        proposals = check_proposed_definitions(definitions or {})
         with self._store.transaction():
-            run = self._running(run_id)
+            run = self._running(run_id)  # an ended run is not active, whatever it proposes
+            proposals = check_proposed_definitions(definitions or {})
             ended = _now()
             obs = Observation(
                 id=uuid.uuid4().hex,
