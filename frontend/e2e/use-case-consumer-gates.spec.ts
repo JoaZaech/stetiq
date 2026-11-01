@@ -72,7 +72,7 @@ test('the Consumer sheet badges evaluation on each Observation as planned; the t
   await page.goto('/ui/kg/plant/use-case')
 
   for (const name of ['Reliability dashboard', 'Planning team']) {
-    await expect(tile(page, name).getByRole('link', { name: /^Planned/ })).toHaveCount(0)
+    await expect(tile(page, name).getByRole('link', { name: /^Planned: Evaluated/ })).toHaveCount(0)
     const gate = await gateSection(page, name)
     await expect(
       gate.getByRole('link', { name: 'Planned: Evaluated on each Observation', exact: true }),

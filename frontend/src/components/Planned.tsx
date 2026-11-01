@@ -44,18 +44,28 @@ export function Planned({ label, section, tooltip, children, className }: Planne
       <span role="group" aria-label={label} aria-disabled="true" className="text-muted-foreground">
         {children}
       </span>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Link
-            to={visionUrl(section)}
-            aria-label={`Planned: ${label}`}
-            className={cn(badgeVariants({ variant: 'outline' }), 'border-dashed text-muted-foreground')}
-          >
-            Planned
-          </Link>
-        </TooltipTrigger>
-        <TooltipContent>{tooltip} Not built yet: open the vision to read more.</TooltipContent>
-      </Tooltip>
+      <PlannedBadge label={label} section={section} tooltip={tooltip} />
     </span>
+  )
+}
+
+/**
+ * The "Planned" badge alone, for a control that works but leads only to planned things:
+ * the Consumer tile's Connect, which opens a picker of example Connectors.
+ */
+export function PlannedBadge({ label, section, tooltip }: Omit<PlannedProps, 'children' | 'className'>) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Link
+          to={visionUrl(section)}
+          aria-label={`Planned: ${label}`}
+          className={cn(badgeVariants({ variant: 'outline' }), 'border-dashed text-muted-foreground')}
+        >
+          Planned
+        </Link>
+      </TooltipTrigger>
+      <TooltipContent>{tooltip} Not built yet: open the vision to read more.</TooltipContent>
+    </Tooltip>
   )
 }

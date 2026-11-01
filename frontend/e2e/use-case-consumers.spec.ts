@@ -32,7 +32,7 @@ test.describe('with a Use Case that declares Consumers', () => {
     for (const hidden of ['triage-bot', 'Ada Lovelace', 'Consumer Gate', 'Connector', 'Greet the customer']) {
       await expect(bot).not.toContainText(hidden)
     }
-    await expect(bot.getByRole('button')).toHaveCount(1)
+    await expect(bot.getByRole('button')).toHaveText(['Triage bot', 'Connect'])
 
     const dashboard = tile(page, 'Workload dashboard')
     await expect(dashboard.getByRole('img', { name: 'Consumer' })).toBeVisible()
