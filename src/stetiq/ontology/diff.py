@@ -19,6 +19,7 @@ from stetiq.ontology.model import (
     Property,
     RelationshipType,
     Vocabulary,
+    is_deprecated,
 )
 
 
@@ -289,11 +290,6 @@ def _documentation_changes(old: Documented, new: Documented) -> list[str]:
     return details
 
 
-def _is_deprecated(c: Deprecatable) -> bool:
-    # Declaring a replacement implies the Concept is on its way out.
-    return c.deprecated or c.replaced_by is not None
-
-
 def _deprecation_changes(
     old: Deprecatable, new: Deprecatable
 ) -> list[tuple[ChangeKind, Classification, str]]:
@@ -303,9 +299,9 @@ def _deprecation_changes(
     Like every change to a Concept that is still there, the detail says what changed without
     repeating the Concept, which the change names beside it."""
     replacement = f"; replaced by {new.replaced_by}" if new.replaced_by else ""
-    if _is_deprecated(new) and not _is_deprecated(old):
+    if is_deprecated(new) and not is_deprecated(old):
         return [(ChangeKind.DEPRECATED, Classification.DEPRECATING, f"deprecated{replacement}")]
-    if _is_deprecated(old) and not _is_deprecated(new):
+    if is_deprecated(old) and not is_deprecated(new):
         return [(ChangeKind.CHANGED, Classification.ADDITIVE, "no longer deprecated")]
     changes = []
     if old.replaced_by != new.replaced_by:
