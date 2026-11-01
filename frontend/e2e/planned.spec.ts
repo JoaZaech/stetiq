@@ -105,7 +105,7 @@ test.describe('with a Use Case that declares Consumers', () => {
   test('the Gate result shows a Gate on Consumer impact as planned', async ({ page }) => {
     await page.goto('/ui/kg/support/versions/2')
 
-    const gates = page.getByRole('region', { name: 'Latest Gate result' })
+    const gates = page.getByRole('region', { name: 'Gate result' })
     await expect(planned(gates, 'Gate on Consumer impact').standIn).toHaveText(
       'Gate on Consumer impact',
     )
@@ -134,7 +134,9 @@ test.describe('with Drift that finds an undeclared Concept', () => {
   test('the Drift event shows Pending Migration and Adoption as planned', async ({ page }) => {
     await page.goto('/ui/kg/support/observations')
 
-    const drift = page.getByRole('article').first().getByRole('region', { name: 'Drift' })
+    const row = page.getByRole('list', { name: 'Observations' }).getByRole('listitem').first()
+    await row.getByRole('button', { name: 'Drift details' }).click()
+    const drift = row.getByRole('region', { name: 'Drift' })
     await expect(planned(drift, 'Pending Migration').standIn).toHaveText('Pending Migration')
     await expectPlaceholder(drift, 'Pending Migration', 'pending-migration-and-adoption')
     await expect(drift.getByRole('button', { name: 'Adopt into a Candidate' })).toBeDisabled()

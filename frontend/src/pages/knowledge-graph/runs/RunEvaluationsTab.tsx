@@ -11,7 +11,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { EvaluatorResultTable, Panel } from '../versions/OverviewTab'
+import { EvaluatorResultTable } from '../versions/EvaluatorResults'
+import { Panel } from '../versions/OverviewTab'
 import { useConstructionRunTab } from './run-context'
 
 /** `evaluation.run.CQ_EXECUTION_EVALUATOR`: executes the Use Case's Competency Questions. */

@@ -1,36 +1,44 @@
 import { useId, type ReactNode } from 'react'
 import { Link } from 'react-router'
-import { type EvaluationResult, useVersionEvaluations } from '@/api/ontology-versions'
+import { useVersionEvaluations } from '@/api/ontology-versions'
 import { useRuns } from '@/api/runs'
 import { kgUrl } from '@/app/knowledge-graph-sections'
 import { CopyButton } from '@/components/CopyButton'
+import { Disclosure } from '@/components/Disclosure'
 import { Planned } from '@/components/Planned'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { formatDateTime, formatMetric } from '@/lib/format'
+import { formatDateTime } from '@/lib/format'
 import { useKnowledgeGraphName } from '../params'
-import { metricRows } from './evaluator-metrics'
+import { EvaluatorResults } from './EvaluatorResults'
 import { LatestGateResult } from './LatestGateResult'
 import { useOntologyVersionTab } from './version-context'
 
 /**
- * The version page's Overview tab: metadata, Evaluator results and latest Gate result,
- * with the planned Gate on Consumer impact.
+ * The version page's Overview tab: its latest Gate result first (with the planned Gate
+ * on Consumer impact), then one card per Evaluator with every metric behind a toggle,
+ * then its Details, folded.
  */
 export function OverviewTab() {
   const name = useKnowledgeGraphName()
   const version = useOntologyVersionTab()
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-      <Panel title="Details">
+    <div className="space-y-8">
+      <Panel title="Gate result">
+        <LatestGateResult name={name} number={version.number} />
+        <Planned
+          label="Gate on Consumer impact"
+          section="consumer-impact-and-gates-over-it"
+          tooltip="A Gate that fails when a change in this version would affect a Consumer's Tasks."
+          className="text-sm"
+        >
+          Gate on Consumer impact
+        </Planned>
+      </Panel>
+      <Panel title="Evaluator results">
+        <VersionEvaluatorResults name={name} number={version.number} />
+      </Panel>
+      <Disclosure label="Details" heading>
         <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2 text-sm">
           <Fact label="Number">{version.number}</Fact>
           <Fact label="Origin">{version.origin}</Fact>
@@ -49,23 +57,7 @@ export function OverviewTab() {
             </Fact>
           )}
         </dl>
-      </Panel>
-      <div className="space-y-8">
-        <Panel title="Evaluator results">
-          <EvaluatorResults name={name} number={version.number} />
-        </Panel>
-        <Panel title="Latest Gate result">
-          <LatestGateResult name={name} number={version.number} />
-          <Planned
-            label="Gate on Consumer impact"
-            section="consumer-impact-and-gates-over-it"
-            tooltip="A Gate that fails when a change in this version would affect a Consumer's Tasks."
-            className="text-sm"
-          >
-            Gate on Consumer impact
-          </Planned>
-        </Panel>
-      </div>
+      </Disclosure>
     </div>
   )
 }
@@ -111,45 +103,9 @@ function SourceRun({ name, number }: { name: string; number: number }) {
   )
 }
 
-function EvaluatorResults({ name, number }: { name: string; number: number }) {
+function VersionEvaluatorResults({ name, number }: { name: string; number: number }) {
   const results = useVersionEvaluations(name, number)
   if (results.isPending) return <Skeleton className="h-32 w-full" />
   if (results.isError) return <ErrorAlert error={results.error} />
-  return <EvaluatorResultTable results={results.data} empty="No Evaluator results for this version." />
-}
-
-/** Evaluator results (of a version or a run), one row per metric. */
-export function EvaluatorResultTable({
-  results,
-  empty,
-}: {
-  results: readonly EvaluationResult[]
-  empty: string
-}) {
-  const rows = metricRows(results)
-  if (rows.length === 0) return <p className="text-sm text-muted-foreground">{empty}</p>
-  return (
-    <Table aria-label="Evaluator results">
-      <TableHeader>
-        <TableRow>
-          <TableHead>Evaluator</TableHead>
-          <TableHead>Metric</TableHead>
-          <TableHead className="text-right">Value</TableHead>
-          <TableHead className="text-right">Use Case Version</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((row) => (
-          <TableRow key={row.key}>
-            <TableCell>{row.evaluator}</TableCell>
-            <TableCell>{row.metric}</TableCell>
-            <TableCell className="text-right tabular-nums">{formatMetric(row.value)}</TableCell>
-            <TableCell className="text-right tabular-nums">
-              {row.useCaseVersion ?? <span className="text-muted-foreground">—</span>}
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  )
+  return <EvaluatorResults results={results.data} empty="No Evaluator results for this version." />
 }
