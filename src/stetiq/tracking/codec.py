@@ -63,19 +63,16 @@ def knowledge_graph_to_json(kg: KnowledgeGraph) -> dict[str, Any]:
         "name": kg.name,
         "created_at": kg.created_at.isoformat(),
         "description": kg.description,
-        "steward": kg.steward,
-        "authority": kg.authority,
     }
 
 
 def knowledge_graph_from_json(d: dict[str, Any]) -> KnowledgeGraph:
-    # The description, steward and authority are optional: older servers do not send them.
+    # The description is optional: older servers do not send it. Keys an older server
+    # sends that this release no longer reads are ignored.
     return KnowledgeGraph(
         name=d["name"],
         created_at=datetime.fromisoformat(d["created_at"]),
         description=d.get("description"),
-        steward=d.get("steward"),
-        authority=d.get("authority"),
     )
 
 
