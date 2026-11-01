@@ -73,10 +73,10 @@ with an explicit Concept mapping, one with neither. stetiq judges them structura
 Concepts v1 lacks (`Fault`, `WorkOrder.downtime_minutes`), one is unmapped.
 
 **2. Build.** The first Construction Run uses rules-v1 inside `client.start_run`, logging its
-params and metrics. stetiq observes the graph and finds three Conformance mismatches: the
-required `Technician.badge` is filled on a third of technicians, `WorkOrder.downtime_minutes`
-is undeclared (so evolving mode registers **Candidate v2**), and `SUPPLIED_BY` is declared but
-never observed. Executing the questions shows two failures: the blast-radius question returns
+params and metrics. The graph holds an undeclared `WorkOrder.downtime_minutes`, so evolving
+mode registers **Candidate v2**, which adds it, and judges the run's Conformance against that
+Candidate. It finds two mismatches: the required `Technician.badge` is filled on a third of
+technicians, and `SUPPLIED_BY` is declared but never observed. Executing the questions shows two failures: the blast-radius question returns
 the stale layout's answer, and the root-cause question returns nothing. The custom run
 Evaluator `report_coverage` reports one work order without a readable report (the email).
 

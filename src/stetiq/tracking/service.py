@@ -381,8 +381,15 @@ class LocalTrackingService:
             return self._register(knowledge_graph, ontology, "registered")
 
     def _register(
-        self, knowledge_graph: str, ontology: Ontology, origin: Origin
+        self,
+        knowledge_graph: str,
+        ontology: Ontology,
+        origin: Origin,
+        *,
+        base: OntologyVersion | None = None,
     ) -> OntologyVersion:
+        """Register `ontology` (deduped by content hash) and run the version built-ins on
+        a new version. `base` is the version a Candidate's run consumed."""
         # Hold the canonical form, so the returned version equals it fetched back.
         ontology = from_dict(to_dict(ontology))
         digest = content_hash(ontology)
@@ -699,19 +706,28 @@ class LocalTrackingService:
                 run_id=run_id,
             )
             self._store.add_observation(obs)
-            # Conformance, then Evolution Mode handling: a run introducing new Concepts
-            # fails (strict) or gives rise to a Candidate linked to it (evolving).
+            # Evolution Mode handling, then Conformance: a run introducing new Concepts
+            # fails (strict) or gives rise to a Candidate linked to it (evolving). An
+            # evolving run is judged against its Candidate, so what it added is the
+            # Candidate's Ontology Diff, not a mismatch; any other run against its
+            # Declared Ontology.
             declared = self.get_ontology_version(run.knowledge_graph, run.ontology_version)
-            conformance = assess_conformance(declared.ontology, schema)
-            self._store.set_run_conformance(run_id, conformance)
+            judged_against = declared
             status: RunStatus = "finished"
             candidate = candidate_ontology(declared.ontology, schema)
             if candidate is not None:
                 if self.get_evolution_mode(run.knowledge_graph) == "strict":
                     status = "failed"
                 else:
-                    version = self._register(run.knowledge_graph, candidate, "run")
-                    self._store.set_run_candidate(run_id, run.knowledge_graph, version.number)
+                    judged_against = self._register(
+                        run.knowledge_graph, candidate, "run", base=declared
+                    )
+                    self._store.set_run_candidate(
+                        run_id, run.knowledge_graph, judged_against.number
+                    )
+            self._store.set_run_conformance(
+                run_id, assess_conformance(judged_against.ontology, schema)
+            )
             self._store.end_run(run_id, status, ended, obs.id)
             run = self.get_run(run_id)
             self._run_run_built_ins(run)

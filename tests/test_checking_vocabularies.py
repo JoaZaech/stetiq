@@ -63,6 +63,8 @@ def test_values_inside_the_vocabulary_conform(client, plant, graph_source):
 def test_an_out_of_vocabulary_value_is_a_mismatch_with_its_count_and_lowers_the_score(
     client, plant, graph_source
 ):
+    # Strict: an evolving run is judged against its Candidate, which appends the values.
+    client.set_evolution_mode(plant, "strict")
     seed(graph_source, "open", "on_hold", "on_hold", "blocked")
 
     run = run_once(client, plant)
