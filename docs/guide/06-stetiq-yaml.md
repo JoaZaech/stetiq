@@ -147,7 +147,7 @@ The Conformance score of the Construction Run must be at least `min_score`.
 | --- | --- |
 | `min_score` | Required. A number from 0 to 1. |
 
-When you gate an Ontology Version, the run is the latest one that produced it as a Candidate or consumed it. The Gate fails if no such run has Conformance. When it fails, its reasons list the mismatches.
+When you gate an Ontology Version, the run is the latest one that produced it as a Candidate or consumed it. The Gate fails if no such run has Conformance. When it fails, its reasons list the mismatches. An evolving run that gave rise to a Candidate is scored against that Candidate, so what it added doesn't lower its score; gate on [`unjustified_additions`](#evaluators-and-their-metrics) to judge the additions themselves.
 
 ```yaml
 gates:
@@ -217,6 +217,7 @@ These Evaluator names are built in. stetiq computes their results itself, and a 
 | `definitions` | Ontology Version | `concepts_without_definition`, `vocabulary_values_without_definition`, `definition_ratio` |
 | `structural_answerability` | Ontology Version, when the Knowledge Graph has a Use Case | `questions`, `answerable_questions`, `unanswerable_questions`, `unmapped_questions`, `answerable_ratio`, `regressed_questions`, `questions_serving_no_task` |
 | `competency_question_coverage` | Ontology Version, when the Knowledge Graph has a Use Case | `concepts`, `traced_concepts`, `untraced_concepts`, `traced_concept_ratio` |
+| `unjustified_additions` | Ontology Version | `unjustified_additions`, `added_concepts`, `justified_ratio` |
 | `conformance` | Construction Run | `score`, `mismatches` |
 | `observed_schema` | Construction Run | `node_types`, `relationship_types`, `patterns`, `nodes`, `relationships`, `properties`, `mean_fill_rate` |
 | `competency_question_execution` | Construction Run, recorded by the SDK | `questions`, `passed_questions`, `failed_questions`, `skipped_questions`, `pass_ratio` |
@@ -226,6 +227,17 @@ These Evaluator names are built in. stetiq computes their results itself, and a 
 `questions_serving_no_task` counts the Competency Questions that no Consumer's Task needs: 0 when every question serves a Task, and every question in a Use Case without Consumers. A Gate with `metric: questions_serving_no_task` and `max: 0` fails while a question serves no Task.
 
 `competency_question_coverage` counts the Concepts that at least one Competency Question references, read from the same Concept mapping as `structural_answerability`, with one detail per Concept no question references. Deprecated Concepts, and the Attributes of a deprecated Class or Relation, are not counted. Like `structural_answerability`, it is judged again whenever you register a new Use Case Version. A Gate with `metric: traced_concept_ratio` and a `min` requires that share of the Ontology to be traceable to the Use Case.
+
+`unjustified_additions` judges what an evolving Construction Run added. On a Candidate an evolving run gave rise to, `added_concepts` counts the Concepts it adds to the version the run consumed (Classes and Relations with their attributes, and attributes added to existing ones; added Vocabulary Values are left out), and `unjustified_additions` those no Competency Question of the latest Use Case Version needs, with one detail per Concept, named `Label` or `Owner.attribute`, with its kind. An added Class or Relation is justified when a question's explicit Concept mapping or query needs it; an added attribute when a question needs it or its Class or Relation is an added, justified one. A question with neither a mapping nor a query justifies nothing, and without a Use Case nothing is justified. `justified_ratio` is the share of additions that are justified, and 1 when nothing was added. Every other Ontology Version reports 0 additions, so a Gate on it passes a run that added nothing. It is judged again whenever you register a new Use Case Version. To fail a run that extends the Ontology where nothing asked for it:
+
+```yaml
+gates:
+  - name: no-unjustified-additions
+    check: metric
+    evaluator: unjustified_additions
+    metric: unjustified_additions
+    max: 0
+```
 
 `definitions` counts the Classes, Relations and Attributes (`concepts_without_definition`) and the Vocabulary Values (`vocabulary_values_without_definition`) that have no `definition`, with one detail per item, named `Label`, `Owner.attribute` or `Vocabulary.value`. A Definition that is only whitespace counts as missing. Deprecated items, and the Attributes of a deprecated Class or Relation, are not counted. `definition_ratio` is the share of the counted items that have a Definition, and 1 when there is nothing to count. A Gate with `metric: concepts_without_definition` and `max: 0` requires every Concept to be defined.
 

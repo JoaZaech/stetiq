@@ -191,7 +191,7 @@ with client.start_run("support") as run:
 
 - **Declared Ontology.** By default the run consumes the Ontology Version the Contract Alias points to. Pass `ontology_version=3` or `alias="staging"` to choose another; passing both raises `ConflictingArgumentsError`. `run.declared_ontology` is that Ontology, and `run.ontology_version` its number.
 - **Params and metrics.** `log_param`/`log_params` store strings; `log_metric`/`log_metrics` store numbers. Logging a key again replaces its value.
-- **Ending the run.** When the block ends, the SDK observes the whole bound Graph Source scope and stores the Observed Schema. The tracking service then measures Conformance to the Declared Ontology and applies the Knowledge Graph's Evolution Mode. If the Observation itself fails, the run is marked failed.
+- **Ending the run.** When the block ends, the SDK observes the whole bound Graph Source scope and stores the Observed Schema. The tracking service then applies the Knowledge Graph's Evolution Mode and measures Conformance: against the Candidate when an evolving run gave rise to one, otherwise against the Declared Ontology (see [Evolution Mode and Candidates](./02-concepts.md#evolution-mode-and-candidates)). If the Observation itself fails, the run is marked failed.
 - **Failing the run.** An exception inside the block marks the run failed, observes nothing, and is raised again. Call `run.fail()` to fail it yourself, or `run.end()` to end it early.
 
 What happens when the run observed Concepts its Declared Ontology does not have depends on the Evolution Mode:
@@ -200,8 +200,8 @@ What happens when the run observed Concepts its Declared Ontology does not have 
 client.set_evolution_mode("support", "evolving")  # or "strict"
 ```
 
-- *evolving* (the default): the run finishes and a Candidate Ontology Version is registered from what it observed, linked to the run.
-- *strict*: the run is marked failed.
+- *evolving* (the default): the run finishes and a Candidate Ontology Version is registered from what it observed, linked to the run. The run's Conformance is judged against that Candidate, so what it added is not a mismatch; `client.diff_ontology_versions("support", run.ontology_version, run.candidate_version)` shows what it added, and `unjustified_additions` on the Candidate counts the additions no Competency Question needs.
+- *strict*: the run is marked failed, with Conformance judged against its Declared Ontology.
 
 Then read the result:
 
@@ -331,6 +331,52 @@ client.list_consumer_gate_results("plant", consumer="reliability-dashboard", ver
 
 A `ConsumerGateResult` has the `consumer`, the `use_case_version` judged by, the `run_id` and the `ontology_version` it stands for, the `baseline_run_id` (None without one) and `baseline_ontology_version` (None when the Contract Alias points to no version), `evaluated_at`, `passed`, and one outcome per Consumer Gate: its `gate` definition, `passed`, human `reasons`, and, per failing question, a `RowCountFinding` with the `task`, `competency_question`, `before`, `after`, relative `change` (negative for a drop), `limit`, or the `missing` input (`no_baseline_run`, `baseline_missing`, `baseline_error`, `candidate_missing`, `candidate_error`). `list_consumer_gate_results` returns recorded results oldest first. Consumer Gate results never reach the Promotion audit and never move an Alias.
 
+## The run context
+
+Before your pipeline extracts, ask stetiq for its context: what to extract against, what the graph is for, and how the Ontology currently scores. Pass it to an LLM agent's prompt, or let a static pipeline read it.
+
+```python
+context = client.run_context("plant")             # the Contract Alias's version
+context = client.run_context("plant", version=4)  # or another Ontology Version
+
+context.ontology_version         # the Ontology Version to extract against, as a suggestion
+context.use_case_version         # the latest Use Case Version (None without a Use Case)
+context.evaluation_results       # that Ontology Version's latest Evaluator results
+context.run                      # the latest finished run standing for it, or None
+context.run_evaluation_results   # its run-level results, competency_question_execution included
+data = context.to_dict()         # the JSON shape below
+```
+
+The run context is built from what the tracking service already holds, so it needs only *read* permission in server mode. It carries Ontology, Use Case, metrics and counts, never instance data: executed Competency Questions appear as a status and a row count, not their rows. An unknown Knowledge Graph or Ontology Version raises `NotFoundError`.
+
+`to_dict()` (and [`stetiq context`](./04-cli.md#the-run-context)) gives this shape:
+
+```json
+{
+  "knowledge_graph": "plant",
+  "ontology_version": {"number": 3, "ontology": {"node_types": ["..."], "relationship_types": ["..."]}},
+  "use_case_version": {"number": 2, "use_case": {"competency_questions": ["..."], "consumers": ["..."]}},
+  "competency_questions": [
+    {
+      "id": "parts-suppliers",
+      "question": "Which suppliers' components keep failing?",
+      "serves": [{"consumer": "maintenance-assistant", "task": "triage-breakdowns"}],
+      "execution": {"status": "failed", "rows": 0}
+    }
+  ],
+  "evaluation_results": [{"evaluator": "structural_answerability", "metrics": {"answerable_ratio": 0.875}, "details": ["..."]}],
+  "run": {"id": "5d0c1f2e...", "evaluation_results": [{"evaluator": "competency_question_execution", "metrics": {"pass_ratio": 0.8}, "details": ["..."]}]}
+}
+```
+
+- `ontology_version.ontology` is the Ontology in its `stetiq.yaml` form, as a mapping: write it out as YAML and it registers as is.
+- `use_case_version` is null without a Use Case; `use_case` is the Use Case in its `use-case.yaml` form.
+- `competency_questions` lists every question of that Use Case Version with the Consumer and Task pairs it serves (empty when it serves none), and `execution`: its `status` (`passed`, `failed` or `error`) and `rows` on `run`, or null when it wasn't executed there (no `query`, or no run).
+- `evaluation_results` and `run.evaluation_results` are Evaluator results as the server's API sends them: `evaluator`, `metrics`, `details` and the subject they belong to.
+- `run` is null when no finished Construction Run stands for that Ontology Version (a run stands for its Candidate, or else for the version it consumed).
+
+A pipeline that may extend the Ontology should do so only where a Competency Question needs it. Declare that question in the Use Case before the run; an evolving run's additions are then judged by `unjustified_additions` (see [Evaluators and their metrics](./06-stetiq-yaml.md#evaluators-and-their-metrics)).
+
 ## Evaluators
 
 An Evaluator measures an Ontology Version or a Construction Run and produces metrics. The built-in ones run in the tracking service whenever a new version is registered or a run ends. Read their results with:
@@ -390,7 +436,7 @@ client.evaluate("support", 3, evaluators=[MinimumNodeTypes(3), MinimumNodeTypes(
 client.evaluate_run(run.id, evaluators=[MyRunCheck()])
 ```
 
-If an Evaluator raises, the SDK raises `EvaluatorError`; the version or run it was evaluating is already recorded. The names of the built-in Evaluators (`hierarchy`, `isolated_node_types`, `orphan_concepts`, `redundancy`, `constraint_consistency`, `definitions`, `structural_answerability`, `competency_question_coverage`, `conformance`, `observed_schema`, `competency_question_execution`) are reserved.
+If an Evaluator raises, the SDK raises `EvaluatorError`; the version or run it was evaluating is already recorded. The names of the built-in Evaluators (`hierarchy`, `isolated_node_types`, `orphan_concepts`, `redundancy`, `constraint_consistency`, `definitions`, `structural_answerability`, `competency_question_coverage`, `unjustified_additions`, `conformance`, `observed_schema`, `competency_question_execution`) are reserved.
 
 ## Aliases, Promotion and Gates
 

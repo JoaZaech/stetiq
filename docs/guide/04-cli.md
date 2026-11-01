@@ -56,6 +56,7 @@ Local mode needs no token. How to issue one is described in [Server & API Tokens
 | `stetiq observations`, `stetiq drift` | List Observations and Drift events. |
 | `stetiq gate`, `stetiq gate-results` | Evaluate the Gates in `stetiq.yaml`, and list past results. |
 | `stetiq consumer` | Evaluate the Consumer Gates the Use Case declares, and list past results. |
+| `stetiq context` | Print the run context a pipeline extracts with, as JSON. |
 | `stetiq ui` | The web UI over a local tracking database. |
 | `stetiq server` | The stetiq server. |
 | `stetiq token` | Issue, list and revoke API Tokens (on the server's database). |
@@ -130,7 +131,7 @@ stetiq runs evaluate 5d0c1f2e9a7b4c3d8e6f1a2b3c4d5e6f --evaluator my_checks:Edge
 stetiq runs evaluations 5d0c1f2e9a7b4c3d8e6f1a2b3c4d5e6f
 ```
 
-`stetiq run` starts the Construction Entry Point declared in [`stetiq.yaml`](./06-stetiq-yaml.md) as a Construction Run, from the config file's folder (choose the file with `--config`). It consumes the Contract Alias's version unless you pass `--ontology-version` or `--alias`, and the Knowledge Graph defaults to `knowledge_graph` in the config file. When the command exits 0, stetiq observes the Graph Source, measures Conformance and applies the Evolution Mode. `stetiq run` exits 1 when the run failed: the command exited non-zero, or a *strict* Evolution Mode saw new Concepts.
+`stetiq run` starts the Construction Entry Point declared in [`stetiq.yaml`](./06-stetiq-yaml.md) as a Construction Run, from the config file's folder (choose the file with `--config`). It consumes the Contract Alias's version unless you pass `--ontology-version` or `--alias`, and the Knowledge Graph defaults to `knowledge_graph` in the config file. When the command exits 0, stetiq observes the Graph Source, applies the Evolution Mode and measures Conformance (against the Candidate, when an evolving run gave rise to one). `stetiq run` exits 1 when the run failed: the command exited non-zero, or a *strict* Evolution Mode saw new Concepts.
 
 `runs evaluate` runs run-level evaluation again (Conformance, Observed Schema statistics, executed Competency Questions and any `--evaluator`) on a run that reached its Observation.
 
@@ -180,6 +181,15 @@ safety-team: no Consumer Gate declared (skipped)
 ```
 
 It exits **0** when every Consumer Gate passed, **3** when one failed, including for a missing baseline or a question it could not measure, and **1** on an error: no Consumer declares a Consumer Gate, no finished run, an unknown Knowledge Graph, run or Consumer, or `--run` with `--version`. `consumer gate-results` lists the recorded verdicts, oldest first.
+
+### The run context
+
+```bash
+stetiq context
+stetiq context plant --version 4 > context.json
+```
+
+`stetiq context` prints the [run context](./03-python-sdk.md#the-run-context) as JSON, for a pipeline in any language: the Ontology Version to extract against (the Contract Alias's, or the one `--version` names), the latest Use Case Version with each Competency Question's Consumers and Tasks, that version's evaluation results, and the executed Competency Questions of the latest finished run standing for it. It holds no instance data. The Knowledge Graph defaults to `knowledge_graph` in `stetiq.yaml` (or `--config`). It needs only *read* permission, and exits 1 on an error such as an unknown Knowledge Graph or Ontology Version.
 
 ### Web UI, server and API Tokens
 
