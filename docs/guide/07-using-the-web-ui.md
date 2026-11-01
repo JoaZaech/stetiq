@@ -29,8 +29,9 @@ Some controls change a Knowledge Graph, and they need the *edit* permission on i
 | **Add Competency Question** | The Use Case section |
 | **Edit** and **Remove** a Competency Question | The header of its sheet: click the question in the Use Case section |
 | **Add Consumer** | The Consumers panel of the Use Case section |
-| Edit and remove a Consumer, add a Task to it | The header of each Consumer card |
-| Edit and remove a Task | Beside each Task on its Consumer card |
+| **Edit** and **Remove** a Consumer | The header of its sheet: click its tile in the Use Case section |
+| **Add Task** to a Consumer | The Tasks of the Consumer's sheet |
+| Edit and remove a Task | Beside the Task in its Consumer's sheet |
 
 Without *edit*, these controls stay visible but disabled, with a *Needs edit access* tooltip. Everything else in the UI is read-only. In local mode every Knowledge Graph is editable. The server checks every change too, so a disabled button is a convenience, not the protection.
 
@@ -47,7 +48,7 @@ Click a column header to sort, and type in **Search by name** to filter. Click a
 
 ## Inside a Knowledge Graph
 
-A Knowledge Graph opens on its Ontology Versions. Every section starts with the same header: the Knowledge Graph's name, its description (written in markdown), its Evolution Mode (*strict* or *evolving*) and its Contract Alias with the version it points to, e.g. `production → v3`. Below them, a pipeline strip shows where the Knowledge Graph sits: upstream pipeline → Gate → Knowledge Graph → Consumer Gate → Consumers, with the number of Consumers the latest Use Case Version declares (click it to open the [Use Case](#use-case-and-competency-questions)). Every step is built: the Consumer Gate is checked by `stetiq consumer gate` in your pipeline's CI, and its verdicts show on each Consumer card.
+A Knowledge Graph opens on its Ontology Versions. Every section starts with the same header: the Knowledge Graph's name, its description (written in markdown), its Evolution Mode (*strict* or *evolving*) and its Contract Alias with the version it points to, e.g. `production → v3`. Below them, a pipeline strip shows where the Knowledge Graph sits: upstream pipeline → Gate → Knowledge Graph → Consumer Gate → Consumers, with the number of Consumers the latest Use Case Version declares (click it to open the [Use Case](#use-case-and-competency-questions)). Every step is built: the Consumer Gate is checked by `stetiq consumer gate` in your pipeline's CI, and its verdicts show on each Consumer tile.
 
 **Edit description** (needs edit access) opens a markdown editor with a **Write** and a **Preview** tab. Saving shows the new description to everyone who can read the Knowledge Graph.
 
@@ -139,15 +140,20 @@ Click a question to open its **side sheet**, which shows the question and its st
 
 Below the Competency Questions:
 
-- **Consumers**: a card per Consumer the Use Case declares, with its kind, contact and description, and its Tasks. Each Task lists the Competency Questions it needs (id and question), or says it needs none. A Task that needs questions also shows its **readiness**, such as "3/4 questions answerable on v5". Readiness is always shown for the latest Ontology Version: the page has no version selector. It also says how many of the rest are *unanswerable* (the Ontology lacks Concepts they need) or *unmapped* (nothing maps them onto the Ontology). Readiness comes from the stored structural answerability result, and says "Not judged" until that Ontology Version has been judged against this Use Case Version. You can edit Consumers and Tasks here (see below) or declare them in the Use Case you register from the [Python SDK](./03-python-sdk.md#use-cases-and-competency-questions) or the [CLI](./04-cli.md#use-cases).
+- **Consumers**: a tile per Consumer the Use Case declares, with an icon for its kind (an application, an agent, a dashboard and a team each have their own; any other kind gets a generic one), its name and the first line of its description. Each tile has one **readiness** line: "*n* of *m* Tasks ready", green when all are and red otherwise. A Task is ready when the latest Ontology Version answers every Competency Question it needs. Readiness is always shown for the latest Ontology Version: the page has no version selector. It reads **Not checked yet** (grey) until that Ontology Version has been judged against this Use Case Version, or when the Knowledge Graph has no Ontology Version, and **No Tasks** (grey) for a Consumer that declares none. A Consumer that declares a Consumer Gate also has a **Consumer Gate** line with its latest verdict: *Consumer Gate passed*, *Consumer Gate failed* or *Consumer Gate not evaluated yet*; a Consumer without one has no such line. You can edit Consumers and Tasks here (see below) or declare them in the Use Case you register from the [Python SDK](./03-python-sdk.md#use-cases-and-competency-questions) or the [CLI](./04-cli.md#use-cases).
 
-  Each card's **Consumer Gate** lists the Consumer Gates the Consumer declares in this Use Case Version (name, check, Task and its limit, such as "at most −10% rows") and its latest verdict from `stetiq consumer gate`: **Passed** or **Failed**, the Ontology Version and run it judged, and how long ago. A failed verdict lists each failing Task / Competency Question with its row change, such as "5 → 2 rows (−60.0%, limit −10%)", or says what could not be compared (no baseline run, or no row count on a run). **Not evaluated yet** means the Consumer declares Consumer Gates but has no verdict; **None declared** means it declares none. Consumer Gates are declared in `use-case.yaml` (see [Consumer Gates](./03-python-sdk.md#consumer-gates)); the web UI shows them but does not edit them, and editing a Consumer here keeps them.
+  Click a tile to open the Consumer's **side sheet**. It shows the Consumer's kind, name, id, contact and description, with **Edit** and **Remove** in its header, then:
+
+  - **Tasks**: each Task's description and id, with an icon for whether it is ready. Point at a red icon to see why, such as "Not ready: 1 unanswerable, 1 can't check". Click a Task to expand it to the Competency Questions it needs, each with its status (or *Needs no Competency Question*). Click a question to show its sheet in place of the Consumer's, with **Back** to return; only one sheet is open at a time.
+  - **Consumer Gate**: the Consumer Gates the Consumer declares in this Use Case Version (name, check, Task and its limit, such as "at most −10% rows") and its latest verdict from `stetiq consumer gate`: **Passed** or **Failed**, the Ontology Version and run it judged, and how long ago. A failed verdict lists each failing Task / Competency Question with its row change, such as "5 → 2 rows (−60.0%, limit −10%)", or says what could not be compared (no baseline run, or no row count on a run). **Not evaluated yet** means the Consumer declares Consumer Gates but has no verdict; **No Consumer Gate declared** means it declares none. Consumer Gates are declared in `use-case.yaml` (see [Consumer Gates](./03-python-sdk.md#consumer-gates)); the web UI shows them but does not edit them, and editing a Consumer here keeps them.
+
+  Like a question's, the Consumer's sheet is part of the URL: you can link to it, a reload keeps it open, and the browser's Back steps back through the sheets you opened.
 
 - **Use Case Versions**: every Use Case Version with when it was created and how many Competency Questions it has.
 
 **Editing Competency Questions** (needs edit access). **Add Competency Question** opens a form with an **Id**, a **Question**, and optionally a **Cypher query**, an **Expected answer** (any JSON value the query's rows must match) and a **Concept mapping** (one Concept reference per line, e.g. `Customer`, `Ticket.opened_at` or `(Customer)-[OPENED]->(Ticket)`). In a question's sheet, **Edit** opens the same form (the id is locked: to change it, remove the question and add a new one) and **Remove** removes it, closing the sheet. Removing a question that Tasks need names those Tasks first: they stay, without that question. A new question's id must differ from every other Competency Question, Consumer and Task id in the Use Case.
 
-**Editing Consumers and Tasks** (needs edit access). **Add Consumer** opens a form with an **Id** and a **Name**, and optionally a **Kind** (an application, an agent, a dashboard, a team...), a **Contact** and a **Description**. On each Consumer card, the edit button opens the same form (the id is locked), the remove button removes the Consumer with all its Tasks after naming them (the Competency Questions stay), and the add button adds a Task: an **Id**, a **Description**, and the Competency Questions it needs, ticked from the Use Case's. Each Task has its own edit and remove buttons. A new Consumer's or Task's id must differ from every other Consumer, Task and Competency Question id in the Use Case.
+**Editing Consumers and Tasks** (needs edit access). **Add Consumer** opens a form with an **Id** and a **Name**, and optionally a **Kind** (an application, an agent, a dashboard, a team...), a **Contact** and a **Description**. In a Consumer's sheet, **Edit** opens the same form (the id is locked), **Remove** removes the Consumer with all its Tasks after naming them (the Competency Questions stay) and closes the sheet, and **Add Task** adds a Task: an **Id**, a **Description**, and the Competency Questions it needs, ticked from the Use Case's. Each Task in the sheet has its own edit and remove buttons. A new Consumer's or Task's id must differ from every other Consumer, Task and Competency Question id in the Use Case.
 
 Every save registers a new Use Case Version, so earlier results stay tied to the version they were judged against. After saving, the page says which Use Case Version you got. If the content is the same as the latest or an earlier version, no new version is created and the page says which one already has it.
 
@@ -171,11 +177,10 @@ The section is the Promotion audit, newest first: which Alias moved, from which 
 
 Some parts of stetiq's [vision](../vision.md) are shown in the web UI but not built yet. Each is muted or disabled and carries a **Planned** badge: point at the badge for what it will do, and click it to read about it in the vision.
 
-- **Connector: not connected**, on each Consumer card: today the pipeline's CI enforces its Consumer Gate.
-- **Evaluated on each Observation**, beside each Consumer card's Consumer Gate.
+- **Evaluated on each Observation**, beside the Consumer Gate in each Consumer's sheet: today the pipeline's CI enforces it.
 - **Pending Migration** and **Adoption**, on an Observation's Drift.
 - **Gate on Consumer impact**, under an Ontology Version's latest Gate result.
-- **Draft Tasks & questions with AI**, on the Use Case page.
+- **Draft Tasks & questions with AI**, beside **Add Consumer** on the Use Case page.
 
 ## Next steps
 
