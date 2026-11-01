@@ -50,7 +50,8 @@ export function ConsumerGateSection({ knowledgeGraph, consumer }: ConsumerGateSe
           <ul aria-label="Declared Consumer Gates" className="space-y-0.5">
             {gates.map((gate) => (
               <li key={gate.name}>
-                <span className="font-medium">{gate.name}</span>{' '}
+                {/* A name that defaults to the check would only repeat it. */}
+                {gate.name !== gate.check && <span className="font-medium">{gate.name} </span>}
                 <span className="text-muted-foreground">
                   <code className="font-mono">{gate.check}</code> on Task{' '}
                   <code className="font-mono">{gate.task}</code>: {consumerGateLimit(gate.max_drop)}
