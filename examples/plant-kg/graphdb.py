@@ -5,9 +5,10 @@ In production the pipeline writes to Neo4j and stetiq observes it through
 no services, so `LocalGraph` keeps the nodes and relationships in one JSON file
 and implements stetiq's `GraphSource` protocol:
 
-- `observe(scope)` hands the stored graph to stetiq's own `InMemoryGraphSource`,
-  so the Observed Schema (labels, counts, fill rates, cardinalities) is computed
-  the same way the real adapters compute it;
+- `observe(scope, bound_attributes)` hands the stored graph to stetiq's own
+  `InMemoryGraphSource`, so the Observed Schema (labels, counts, fill rates,
+  cardinalities, and the distinct values of Vocabulary-bound Attributes, capped) is
+  computed the same way the real adapters compute it;
 - `execute_read(scope, query)` answers the fixed set of Cypher queries the
   example uses (the Competency Questions in use-case.yaml and the queries of
   the custom Evaluators). They are matched by text in `QUERIES`; anything else
@@ -23,12 +24,18 @@ import datetime as dt
 import json
 import re
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Collection, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from stetiq.graph_source import GraphSourceScope, InMemoryGraphSource, ObservedSchema
+from stetiq.graph_source import (
+    DEFAULT_VALUE_CAP,
+    BoundAttribute,
+    GraphSourceScope,
+    InMemoryGraphSource,
+    ObservedSchema,
+)
 
 DEFAULT_DATABASE = "plant"
 
@@ -178,9 +185,16 @@ class LocalGraph:
 
     # --- stetiq's GraphSource protocol ----------------------------------------------
 
-    def observe(self, scope: GraphSourceScope) -> ObservedSchema:
+    def observe(
+        self,
+        scope: GraphSourceScope,
+        bound_attributes: Collection[BoundAttribute] = (),
+        *,
+        value_cap: int = DEFAULT_VALUE_CAP,
+    ) -> ObservedSchema:
         """Reload the file (another process may have written it) and let stetiq's
-        in-memory adapter compute the Observed Schema."""
+        in-memory adapter compute the Observed Schema, reading the values of
+        `bound_attributes` only (at most `value_cap` distinct ones each)."""
         self.load()
         memory = InMemoryGraphSource()
         ids: dict[int, int] = {}
@@ -188,7 +202,7 @@ class LocalGraph:
             ids[node.id] = memory.add_node(node.labels, node.properties, database=node.database)
         for rel in self._relationships:
             memory.add_relationship(ids[rel.start], rel.type, ids[rel.end], rel.properties)
-        return memory.observe(scope)
+        return memory.observe(scope, bound_attributes, value_cap=value_cap)
 
     def execute_read(
         self, scope: GraphSourceScope, query: str, parameters: Mapping[str, Any] | None = None
@@ -339,10 +353,13 @@ def _root_causes(g: LocalGraph, db: str) -> Rows:
 
 @query(DOWNTIME_BY_KIND)
 def _downtime_by_kind(g: LocalGraph, db: str) -> Rows:
-    totals: dict[str, int] = defaultdict(int)
+    totals: dict[str | None, int] = defaultdict(int)
     for w in g.nodes("WorkOrder", db):
         totals[w.properties.get("kind")] += int(w.properties.get("downtime_minutes") or 0)
-    return [{"kind": kind, "downtime_minutes": total} for kind, total in sorted(totals.items())]
+    return [
+        {"kind": kind, "downtime_minutes": total}
+        for kind, total in sorted(totals.items(), key=lambda kv: str(kv[0]))
+    ]
 
 
 @query(PARTS_SUPPLIERS)
