@@ -7,6 +7,7 @@ from stetiq.entry_point import EntryPoint, EntryPointError, InvalidEntryPointErr
 from stetiq.errors import (
     AuthenticationError,
     ConflictingArgumentsError,
+    ConsumerGateConfigError,
     EvaluatorError,
     GateConfigError,
     GraphSourceNotBoundError,
@@ -22,6 +23,7 @@ from stetiq.errors import (
     OntologyValidationError,
     PermissionDeniedError,
     RunNotActiveError,
+    RunNotFinishedError,
     StetiqError,
     UseCaseValidationError,
 )
@@ -40,6 +42,7 @@ from stetiq.ontology.diff import Change, ChangeKind, Classification, OntologyDif
 from stetiq.tracking import (
     Alias,
     ConstructionRun,
+    ConsumerGateResult,
     DriftEvent,
     EvaluationResult,
     GatePreview,
@@ -54,7 +57,16 @@ from stetiq.tracking import (
     RunComparison,
     UseCaseVersion,
 )
-from stetiq.use_case import CompetencyQuestion, Consumer, Task, UseCase
+from stetiq.use_case import (
+    CompetencyQuestion,
+    Consumer,
+    ConsumerGate,
+    ConsumerGateOutcome,
+    RowCountDropGate,
+    RowCountFinding,
+    Task,
+    UseCase,
+)
 
 __all__ = [
     "ActiveRun",
@@ -70,6 +82,10 @@ __all__ = [
     "ConstructionRun",
     "ConstructionRunEvaluator",
     "Consumer",
+    "ConsumerGate",
+    "ConsumerGateConfigError",
+    "ConsumerGateOutcome",
+    "ConsumerGateResult",
     "ConsumerImpact",
     "Detail",
     "DriftEvent",
@@ -116,8 +132,11 @@ __all__ = [
     "PermissionDeniedError",
     "Promotion",
     "QuestionImpact",
+    "RowCountDropGate",
+    "RowCountFinding",
     "RunComparison",
     "RunNotActiveError",
+    "RunNotFinishedError",
     "StetiqError",
     "Task",
     "TaskImpact",

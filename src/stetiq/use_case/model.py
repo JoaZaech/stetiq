@@ -6,6 +6,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from stetiq.use_case.consumer_gates import ConsumerGate
+
 
 @dataclass(frozen=True)
 class CompetencyQuestion:
@@ -54,6 +56,8 @@ class Consumer:
     - `description`: optional free text.
     - `tasks`: what it does with the Knowledge Graph. A Consumer depends on Concepts only
       through its Tasks' Competency Questions.
+    - `consumer_gates`: the rules it sets for taking a new Ontology Version, each over
+      one of its own Tasks (see `stetiq.use_case.consumer_gates`).
     """
 
     id: str
@@ -62,6 +66,7 @@ class Consumer:
     kind: str | None = None
     contact: str | None = None
     description: str | None = None
+    consumer_gates: tuple[ConsumerGate, ...] = ()
 
 
 @dataclass(frozen=True)

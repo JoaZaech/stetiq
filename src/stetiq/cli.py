@@ -907,6 +907,112 @@ def gate_results(knowledge_graph: str, tracking_uri: TrackingUri = None) -> None
             typer.echo(f"  {'PASS' if outcome.passed else 'FAIL'}  {outcome.gate.name}")
 
 
+# --- Consumer Gates ---------------------------------------------------------------------
+
+consumer_app = typer.Typer(no_args_is_help=True, help="Consumers and their Consumer Gates.")
+app.add_typer(consumer_app, name="consumer")
+
+# Like `stetiq gate`: 0 every Consumer Gate passed, 3 one failed, 1 error, 2 usage error.
+CONSUMER_GATE_FAILED_EXIT_CODE = 3
+
+
+def _echo_consumer_gate_outcomes(result, indent: str = "  ") -> None:
+    for outcome in result.outcomes:
+        typer.echo(f"{indent}{'PASS' if outcome.passed else 'FAIL'}  {outcome.gate.name}")
+        if not outcome.passed:
+            for reason in outcome.reasons:
+                typer.echo(f"{indent}      {reason}")
+
+
+@consumer_app.command("gate")
+def consumer_gate(
+    knowledge_graph: Annotated[
+        str | None, typer.Argument(help="Default: `knowledge_graph` from the repo config")
+    ] = None,
+    run: Annotated[
+        str | None,
+        typer.Option("--run", help="Construction Run id to judge (default: the latest finished)"),
+    ] = None,
+    version: Annotated[
+        int | None,
+        typer.Option(
+            "--version", help="Judge the latest finished run standing for this Ontology Version"
+        ),
+    ] = None,
+    consumer: Annotated[
+        str | None, typer.Option("--consumer", help="Evaluate only this Consumer's Consumer Gates")
+    ] = None,
+    config: ConfigPath = None,
+    tracking_uri: TrackingUri = None,
+) -> None:
+    """Evaluate every Consumer's Consumer Gates (declared in the latest Use Case Version)
+    for a finished Construction Run against the latest finished run on the Contract
+    Alias's version; record the verdicts on the server.
+
+    The repo config is read only for its `knowledge_graph`. Exit codes: 0 every Consumer
+    Gate passed, 3 one failed, 1 error (no Consumer Gates, no finished run...)."""
+    try:
+        kg = knowledge_graph or _repo_config(config).get("knowledge_graph")
+        if not kg:
+            raise StetiqError(
+                "no Knowledge Graph given (argument or `knowledge_graph` in the repo config)"
+            )
+        client = _client(tracking_uri)
+        results = client.evaluate_consumer_gates(kg, run=run, version=version, consumer=consumer)
+        use_case = client.get_use_case_version(kg, results[0].use_case_version).use_case
+    except StetiqError as e:
+        raise _fail(e) from None
+    by_consumer = {r.consumer: r for r in results}
+    for c in use_case.consumers:
+        if c.id in by_consumer:
+            typer.echo(c.id)
+            _echo_consumer_gate_outcomes(by_consumer[c.id])
+        elif consumer is None:
+            typer.echo(f"{c.id}: no Consumer Gate declared (skipped)")
+    first = results[0]
+    outcomes = [o for r in results for o in r.outcomes]
+    failed = [o for o in outcomes if not o.passed]
+    baseline = (
+        f"baseline run {first.baseline_run_id}"
+        if first.baseline_run_id is not None
+        else "no baseline run"
+    )
+    subject = (
+        f"{kg} run {first.run_id} (Ontology Version {first.ontology_version}; {baseline} on "
+        f"Ontology Version {first.baseline_ontology_version})"
+    )
+    if not failed:
+        typer.echo(f"All {len(outcomes)} Consumer Gates passed for {subject}")
+        return
+    typer.echo(f"{len(failed)} of {len(outcomes)} Consumer Gates failed for {subject}")
+    raise typer.Exit(code=CONSUMER_GATE_FAILED_EXIT_CODE)
+
+
+@consumer_app.command("gate-results")
+def consumer_gate_results(
+    knowledge_graph: str,
+    consumer: Annotated[
+        str | None, typer.Option("--consumer", help="Only this Consumer's results")
+    ] = None,
+    tracking_uri: TrackingUri = None,
+) -> None:
+    """List the recorded Consumer Gate results of the Knowledge Graph, oldest first."""
+    try:
+        results = _client(tracking_uri).list_consumer_gate_results(
+            knowledge_graph, consumer=consumer
+        )
+    except StetiqError as e:
+        raise _fail(e) from None
+    for r in results:
+        baseline = r.baseline_run_id or "none"
+        typer.echo(
+            f"{r.evaluated_at.isoformat()}  {'PASS' if r.passed else 'FAIL'}  {r.consumer}  "
+            f"run {r.run_id} (Ontology Version {r.ontology_version}), baseline {baseline} "
+            f"(Ontology Version {r.baseline_ontology_version})"
+        )
+        _echo_consumer_gate_outcomes(r)
+
+
 # --- Construction Runs and Observations -------------------------------------------------
 
 runs_app = typer.Typer(no_args_is_help=True, help="Construction Runs and their evaluation.")

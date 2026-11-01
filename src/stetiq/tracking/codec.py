@@ -32,6 +32,7 @@ from stetiq.ontology import Ontology, from_dict, to_dict
 from stetiq.tracking.entities import (
     Alias,
     ConstructionRun,
+    ConsumerGateResult,
     DriftEvent,
     EvaluationResult,
     GatePreview,
@@ -45,6 +46,9 @@ from stetiq.tracking.entities import (
     Promotion,
     UseCaseVersion,
 )
+from stetiq.use_case.consumer_gates import ConsumerGateOutcome
+from stetiq.use_case.consumer_gates import outcome_from_dict as consumer_gate_outcome_from_dict
+from stetiq.use_case.consumer_gates import outcome_to_dict as consumer_gate_outcome_to_dict
 
 
 def _dt(value: str | None) -> datetime | None:
@@ -491,6 +495,49 @@ def gate_preview_from_json(d: dict[str, Any]) -> GatePreview:
     )
 
 
+# --- Consumer Gates ----------------------------------------------------------------------
+
+
+def consumer_gate_outcomes_to_json(outcomes: Iterable[ConsumerGateOutcome]) -> list[dict[str, Any]]:
+    return [consumer_gate_outcome_to_dict(o) for o in outcomes]
+
+
+def consumer_gate_outcomes_from_json(
+    data: Iterable[dict[str, Any]],
+) -> tuple[ConsumerGateOutcome, ...]:
+    return tuple(consumer_gate_outcome_from_dict(o) for o in data)
+
+
+def consumer_gate_result_to_json(r: ConsumerGateResult) -> dict[str, Any]:
+    """`passed` is derived from the outcomes: sent for readers, ignored when decoding."""
+    return {
+        "knowledge_graph": r.knowledge_graph,
+        "consumer": r.consumer,
+        "use_case_version": r.use_case_version,
+        "run_id": r.run_id,
+        "ontology_version": r.ontology_version,
+        "baseline_run_id": r.baseline_run_id,
+        "baseline_ontology_version": r.baseline_ontology_version,
+        "passed": r.passed,
+        "outcomes": consumer_gate_outcomes_to_json(r.outcomes),
+        "evaluated_at": r.evaluated_at.isoformat(),
+    }
+
+
+def consumer_gate_result_from_json(d: dict[str, Any]) -> ConsumerGateResult:
+    return ConsumerGateResult(
+        knowledge_graph=d["knowledge_graph"],
+        consumer=d["consumer"],
+        use_case_version=d["use_case_version"],
+        run_id=d["run_id"],
+        ontology_version=d["ontology_version"],
+        baseline_run_id=d.get("baseline_run_id"),
+        baseline_ontology_version=d["baseline_ontology_version"],
+        outcomes=consumer_gate_outcomes_from_json(d["outcomes"]),
+        evaluated_at=datetime.fromisoformat(d["evaluated_at"]),
+    )
+
+
 # --- Dispatch by type --------------------------------------------------------------------
 
 _CODECS: dict[type, tuple[Callable[[Any], dict[str, Any]], Callable[[dict[str, Any]], Any]]] = {
@@ -506,6 +553,7 @@ _CODECS: dict[type, tuple[Callable[[Any], dict[str, Any]], Callable[[dict[str, A
     DriftEvent: (drift_event_to_json, drift_event_from_json),
     ObservationOutcome: (observation_outcome_to_json, observation_outcome_from_json),
     GateResult: (gate_result_to_json, gate_result_from_json),
+    ConsumerGateResult: (consumer_gate_result_to_json, consumer_gate_result_from_json),
     GatePreview: (gate_preview_to_json, gate_preview_from_json),
     GatePreviewSource: (gate_preview_source_to_json, gate_preview_source_from_json),
     Detail: (detail_to_json, detail_from_json),

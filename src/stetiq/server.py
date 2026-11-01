@@ -12,7 +12,7 @@ from typing import Any, cast
 
 from fastapi import APIRouter, Body, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from stetiq.auth import (
     ALL_KNOWLEDGE_GRAPHS,
@@ -55,6 +55,17 @@ class RecordedEvaluation(BaseModel):
     details: list[dict[str, Any]] = []
     parameters: dict[str, Any] = {}
     use_case_version: int | None = None
+
+
+class ConsumerGateRequest(BaseModel):
+    """Which run and Consumer to judge; nothing else. Consumer Gate definitions and
+    outcomes are the server's own, so a body that carries them is refused."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    run: str | None = None
+    version: int | None = None
+    consumer: str | None = None
 
 
 def create_app(
@@ -507,6 +518,25 @@ def create_app(
     def preview_gates(name: str) -> list[dict[str, Any]]:
         # Computed here from stored results and never recorded (ADR 0007).
         return [codec.gate_preview_to_json(p) for p in tracking.preview_gates(name)]
+
+    # --- Consumer Gates --------------------------------------------------------------
+
+    @api.post("/knowledge-graphs/{name}/consumer-gate-results", status_code=201)
+    def evaluate_consumer_gates(name: str, body: ConsumerGateRequest) -> list[dict[str, Any]]:
+        # The body picks the run and Consumer only: the server reads the Consumer Gate
+        # definitions from its own Use Case Version and the row counts from its own
+        # stored results (and checks that `run` belongs to `name`).
+        results = tracking.evaluate_consumer_gates(
+            name, run=body.run, version=body.version, consumer=body.consumer
+        )
+        return [codec.consumer_gate_result_to_json(r) for r in results]
+
+    @api.get("/knowledge-graphs/{name}/consumer-gate-results")
+    def list_consumer_gate_results(
+        name: str, consumer: str | None = None, version: int | None = None
+    ) -> list[dict[str, Any]]:
+        results = tracking.list_consumer_gate_results(name, consumer=consumer, version=version)
+        return [codec.consumer_gate_result_to_json(r) for r in results]
 
     app.include_router(api)
     app.include_router(ui_router(frontend_dir))

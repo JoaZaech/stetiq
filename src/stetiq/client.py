@@ -44,6 +44,7 @@ from stetiq.ontology.yaml_format import to_yaml
 from stetiq.tracking import (
     Alias,
     ConstructionRun,
+    ConsumerGateResult,
     EvaluationResult,
     GatePreview,
     GateResult,
@@ -475,6 +476,41 @@ class Client:
         recording nothing (ADR 0007). Runs with a recorded Gate result get one too; a
         reader lets the recorded result win. Empty if the Knowledge Graph was never gated."""
         return self._service.preview_gates(knowledge_graph)
+
+    # --- Consumer Gates -------------------------------------------------------------
+
+    def evaluate_consumer_gates(
+        self,
+        knowledge_graph: str,
+        *,
+        run: str | None = None,
+        version: int | None = None,
+        consumer: str | None = None,
+    ) -> list[ConsumerGateResult]:
+        """Evaluate the Consumer Gates the latest Use Case Version's Consumers declare,
+        and record one result per gated Consumer (only `consumer`'s, when given).
+
+        The Candidate is a finished Construction Run: `run`, else the latest finished
+        run standing for Ontology Version `version` (its Candidate, else the version it
+        consumed), else the latest finished run. The baseline is the latest other
+        finished run standing for the Contract Alias's version; without one, every
+        Consumer Gate fails. The server reads the definitions from its stored Use Case
+        Version and the row counts from its stored `competency_question_execution`
+        results, so nothing judged comes from this process. Results never reach the
+        Promotion audit. Raises `ConsumerGateConfigError` when no Consumer (or not
+        `consumer`) declares a Consumer Gate."""
+        return self._service.evaluate_consumer_gates(
+            knowledge_graph, run=run, version=version, consumer=consumer
+        )
+
+    def list_consumer_gate_results(
+        self, knowledge_graph: str, *, consumer: str | None = None, version: int | None = None
+    ) -> list[ConsumerGateResult]:
+        """Recorded Consumer Gate results, oldest first: all of them, or only `consumer`'s,
+        or only those about a run standing for Ontology Version `version`."""
+        return self._service.list_consumer_gate_results(
+            knowledge_graph, consumer=consumer, version=version
+        )
 
     # --- Aliases and Promotion ------------------------------------------------------
 

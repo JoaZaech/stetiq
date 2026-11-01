@@ -54,6 +54,7 @@ from stetiq.tracking import codec
 from stetiq.tracking.entities import (
     Alias,
     ConstructionRun,
+    ConsumerGateResult,
     DriftEvent,
     EvaluationResult,
     EvolutionMode,
@@ -319,6 +320,25 @@ gate_results = Table(
         ["knowledge_graph", "ontology_version"],
         ["ontology_versions.knowledge_graph", "ontology_versions.number"],
     ),
+)
+
+
+# --- Consumer Gates: insert-only; one row per gated Consumer per evaluation, holding the
+# Consumer Gate definitions it used (from Use Case Version `use_case_version`).
+consumer_gate_results = Table(
+    "consumer_gate_results",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("knowledge_graph", Text, ForeignKey("knowledge_graphs.name"), nullable=False),
+    Column("consumer", Text, nullable=False),
+    Column("use_case_version", Integer, nullable=False),
+    Column("run_id", Text, ForeignKey("construction_runs.id"), nullable=False),
+    Column("ontology_version", Integer, nullable=False),
+    Column("baseline_run_id", Text, ForeignKey("construction_runs.id"), nullable=True),
+    Column("baseline_ontology_version", Integer, nullable=False),
+    Column("passed", Integer, nullable=False),  # 0/1, denormalised for queries
+    Column("outcomes_json", Text, nullable=False),  # [{gate, passed, reasons, findings}]
+    Column("evaluated_at", Text, nullable=False),
 )
 
 
@@ -918,6 +938,48 @@ class SqlStore:
                 subject_id=r["subject_id"],
                 ontology_version=r["ontology_version"],
                 outcomes=codec.gate_outcomes_from_json(json.loads(r["outcomes_json"])),
+                evaluated_at=datetime.fromisoformat(r["evaluated_at"]),
+            )
+            for r in rows
+        ]
+
+    # --- Consumer Gates --------------------------------------------------------------
+
+    def add_consumer_gate_result(self, result: ConsumerGateResult) -> None:
+        with self._connection() as conn:
+            conn.execute(
+                insert(consumer_gate_results).values(
+                    knowledge_graph=result.knowledge_graph,
+                    consumer=result.consumer,
+                    use_case_version=result.use_case_version,
+                    run_id=result.run_id,
+                    ontology_version=result.ontology_version,
+                    baseline_run_id=result.baseline_run_id,
+                    baseline_ontology_version=result.baseline_ontology_version,
+                    passed=int(result.passed),
+                    outcomes_json=json.dumps(codec.consumer_gate_outcomes_to_json(result.outcomes)),
+                    evaluated_at=result.evaluated_at.isoformat(),
+                )
+            )
+
+    def list_consumer_gate_results(self, knowledge_graph: str) -> list[ConsumerGateResult]:
+        query = (
+            select(consumer_gate_results)
+            .where(consumer_gate_results.c.knowledge_graph == knowledge_graph)
+            .order_by(consumer_gate_results.c.id)
+        )
+        with self._connection() as conn:
+            rows = conn.execute(query).mappings().all()
+        return [
+            ConsumerGateResult(
+                knowledge_graph=r["knowledge_graph"],
+                consumer=r["consumer"],
+                use_case_version=r["use_case_version"],
+                run_id=r["run_id"],
+                ontology_version=r["ontology_version"],
+                baseline_run_id=r["baseline_run_id"],
+                baseline_ontology_version=r["baseline_ontology_version"],
+                outcomes=codec.consumer_gate_outcomes_from_json(json.loads(r["outcomes_json"])),
                 evaluated_at=datetime.fromisoformat(r["evaluated_at"]),
             )
             for r in rows
