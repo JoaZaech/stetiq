@@ -13,7 +13,9 @@ import { knowledgeGraphSection, kgUrl } from '@/app/knowledge-graph-sections'
 import { CopyButton } from '@/components/CopyButton'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Planned } from '@/components/Planned'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
@@ -154,6 +156,26 @@ function DriftDetails({ name, drift }: { name: string; drift: DriftEvent }) {
         </Fact>
         <Fact label="Thresholds">{formatThresholds(drift.thresholds)}</Fact>
       </dl>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+        <Planned
+          label="Pending Migration"
+          section="pending-migration-and-adoption"
+          tooltip="Drift that the Ontology Diff since the last version the Graph Source conformed to explains will be shown as a Pending Migration, raising no alert until a grace period ends."
+        >
+          Pending Migration: not detected
+        </Planned>
+        {drift.findings.some((f) => ADOPTABLE.has(f.kind)) && (
+          <Planned
+            label="Adoption"
+            section="pending-migration-and-adoption"
+            tooltip="Selected undeclared Concepts will be added to a new Candidate, and selected vanished ones deprecated."
+          >
+            <Button size="sm" variant="outline" disabled>
+              Adopt into a Candidate
+            </Button>
+          </Planned>
+        )}
+      </div>
       <Table aria-label="Drift findings">
         <TableHeader>
           <TableRow>
@@ -180,6 +202,9 @@ function DriftDetails({ name, drift }: { name: string; drift: DriftEvent }) {
     </section>
   )
 }
+
+/** Drift finding kinds an Adoption could take into a Candidate: undeclared and vanished Concepts. */
+const ADOPTABLE = new Set(['undeclared', 'vanished'])
 
 function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (

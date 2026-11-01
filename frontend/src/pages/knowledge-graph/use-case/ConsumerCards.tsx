@@ -1,7 +1,7 @@
 import { useId, type ReactNode } from 'react'
 import type { CompetencyQuestion, Consumer, Task, UseCase } from '@/api/use-cases'
 import { Badge } from '@/components/ui/badge'
-import { ConsumerEdgePlanned } from './planned'
+import { ConnectorPlanned } from './planned'
 
 interface ConsumerCardsProps {
   useCase: UseCase
@@ -11,13 +11,21 @@ interface ConsumerCardsProps {
   consumerActions?: (consumer: Consumer) => ReactNode
   /** Edit controls for a Task, shown beside it. */
   taskActions?: (task: Task, consumer: Consumer) => ReactNode
+  /** The Consumer's Consumer Gate section: its declared gates and latest verdict. */
+  consumerGate?: (consumer: Consumer) => ReactNode
 }
 
 /**
  * A Use Case Version's Consumers, one card each, listing its Tasks and the Competency
  * Questions each Task needs, with the edit controls the page passes in.
  */
-export function ConsumerCards({ useCase, taskStatus, consumerActions, taskActions }: ConsumerCardsProps) {
+export function ConsumerCards({
+  useCase,
+  taskStatus,
+  consumerActions,
+  taskActions,
+  consumerGate,
+}: ConsumerCardsProps) {
   const consumers = useCase.consumers ?? []
   if (consumers.length === 0) {
     return (
@@ -36,6 +44,7 @@ export function ConsumerCards({ useCase, taskStatus, consumerActions, taskAction
           questions={questions}
           taskStatus={taskStatus}
           actions={consumerActions?.(consumer)}
+          gate={consumerGate?.(consumer)}
           taskActions={taskActions && ((task) => taskActions(task, consumer))}
         />
       ))}
@@ -48,10 +57,11 @@ interface ConsumerCardProps {
   questions: Map<string, CompetencyQuestion>
   taskStatus?: (task: Task) => ReactNode
   actions?: ReactNode
+  gate?: ReactNode
   taskActions?: (task: Task) => ReactNode
 }
 
-function ConsumerCard({ consumer, questions, taskStatus, actions, taskActions }: ConsumerCardProps) {
+function ConsumerCard({ consumer, questions, taskStatus, actions, gate, taskActions }: ConsumerCardProps) {
   const titleId = useId()
   const tasksId = useId()
   const tasks = consumer.tasks ?? []
@@ -74,7 +84,8 @@ function ConsumerCard({ consumer, questions, taskStatus, actions, taskActions }:
         )}
         {consumer.description && <p className="whitespace-pre-wrap">{consumer.description}</p>}
       </header>
-      <ConsumerEdgePlanned />
+      <ConnectorPlanned />
+      {gate}
       <section className="space-y-2">
         <h5 id={tasksId} className="text-xs font-medium text-muted-foreground">
           Tasks

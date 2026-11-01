@@ -36,6 +36,22 @@ export interface Consumer {
   description?: string
   /** Sorted by id. */
   tasks?: Task[]
+  /** Sorted by name; omitted when the Consumer declares none. Declared in use-case.yaml. */
+  consumer_gates?: ConsumerGate[]
+}
+
+/**
+ * A Consumer Gate as use_case/consumer_gates.py `to_dict` sends it: for each Competency
+ * Question of `task`, the executed row count may not drop by more than `max_drop` (a
+ * fraction) from the baseline run's. `row_count_drop` is the one kind built.
+ */
+export interface ConsumerGate {
+  /** Unique within the Consumer; defaults to the check. */
+  name: string
+  check: string
+  /** One of the Consumer's own Tasks. */
+  task: string
+  max_drop: number
 }
 
 export interface UseCase {

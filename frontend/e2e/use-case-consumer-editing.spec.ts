@@ -201,6 +201,24 @@ test('removing a question no Task needs says nothing about Tasks', async ({ page
   await expect(confirm.getByRole('list', { name: 'Tasks that lose it' })).toHaveCount(0)
 })
 
+test.describe('with Consumer Gates declared in use-case.yaml', () => {
+  test.use({ seed: 'plant_consumer_gates' })
+
+  test('editing a Consumer keeps its Consumer Gates and its verdict', async ({ page }) => {
+    await page.goto('/ui/kg/plant/use-case')
+
+    await page.getByRole('button', { name: 'Edit Consumer reliability-dashboard' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Edit Consumer reliability-dashboard' })
+    await dialog.getByRole('textbox', { name: 'Name' }).fill('Breakdown dashboard')
+    await dialog.getByRole('button', { name: 'Save' }).click()
+
+    await expect(page.getByRole('status')).toHaveText('Saved as Use Case Version 2.')
+    const gate = card(page, 'Breakdown dashboard').getByRole('region', { name: 'Consumer Gate' })
+    await expect(gate.getByRole('list', { name: 'Declared Consumer Gates' })).toContainText('triage-rows-hold')
+    await expect(gate.getByRole('group', { name: 'Latest verdict' })).toContainText('Failed')
+  })
+})
+
 test.describe('signed in with a read-only API Token', () => {
   test.use({ mode: 'server', seed: 'support_use_case_consumers_reader' })
 

@@ -11,6 +11,7 @@ export type VisionSection =
   | 'consumer-gate'
   | 'connector'
   | 'consumer-impact-and-gates-over-it'
+  | 'pending-migration-and-adoption'
   | 'ai-and-mcp-authoring'
 
 /** App path (under `/ui`) of a section of the vision. */

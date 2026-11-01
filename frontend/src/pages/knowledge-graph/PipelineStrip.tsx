@@ -3,34 +3,21 @@ import { ChevronRight } from 'lucide-react'
 import { Link } from 'react-router'
 import { useUseCaseVersions } from '@/api/use-cases'
 import { kgUrl } from '@/app/knowledge-graph-sections'
-import { Planned } from '@/components/Planned'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 
 /**
  * Where a Knowledge Graph sits (docs/vision.md, "The two-gate pipeline"): upstream
- * pipeline → Gate → Knowledge Graph → Consumer Gate → Consumers. Live parts are drawn in
- * normal emphasis; the Consumer Gate is planned, so it is muted and badged. Wraps onto
- * more lines on a narrow screen.
+ * pipeline → Gate → Knowledge Graph → Consumer Gate → Consumers. Every step is built (the
+ * Consumer Gate is checked in CI by `stetiq consumer gate`); a step that is only planned
+ * would be drawn dashed, muted and badged. Wraps onto more lines on a narrow screen.
  */
 export function PipelineStrip({ name }: { name: string }) {
   const steps: { key: string; planned?: boolean; content: ReactNode }[] = [
     { key: 'upstream', content: 'Upstream pipeline' },
     { key: 'gate', content: 'Gate' },
     { key: 'kg', content: <span className="font-medium">Knowledge Graph</span> },
-    {
-      key: 'consumer-gate',
-      planned: true,
-      content: (
-        <Planned
-          label="Consumer Gate"
-          section="the-two-gate-pipeline"
-          tooltip="A rule, one per Consumer, that must hold for that Consumer to take an Ontology Version."
-        >
-          Consumer Gate
-        </Planned>
-      ),
-    },
+    { key: 'consumer-gate', content: 'Consumer Gate' },
     { key: 'consumers', content: <ConsumersStep name={name} /> },
   ]
   return (

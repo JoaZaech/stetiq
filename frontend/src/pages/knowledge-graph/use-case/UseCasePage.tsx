@@ -21,6 +21,7 @@ import { CompetencyQuestionDialog } from './CompetencyQuestionDialog'
 import { CompetencyQuestionsTable } from './CompetencyQuestionsTable'
 import { ConfirmRemoveDialog, TaskList } from './ConfirmRemoveDialog'
 import { ConsumerCards } from './ConsumerCards'
+import { ConsumerGateSection } from './ConsumerGateSection'
 import { ConsumerDialog } from './ConsumerDialog'
 import { withoutConsumer, withoutTask } from './consumer-form'
 import { DraftWithAiPlanned } from './planned'
@@ -306,6 +307,7 @@ function Consumers({ name, version, onSaved }: ConsumersProps) {
         taskStatus={(task) => <TaskReadiness knowledgeGraph={name} useCaseVersion={version.number} task={task} />}
         consumerActions={consumerActions}
         taskActions={taskActions}
+        consumerGate={(consumer) => <ConsumerGateSection knowledgeGraph={name} consumer={consumer} />}
       />
     </Panel>
   )
