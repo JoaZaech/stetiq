@@ -69,4 +69,5 @@ jobs:
       - run: uv run ruff check src tests frontend/e2e
       - run: uv run ruff format --check src tests frontend/e2e
       - run: uv run pyright
-      - run: uv run pytest
+      # The Docker image tests belong where the image is built, not in this job.
+      - run: uv run pytest -m "not image"
