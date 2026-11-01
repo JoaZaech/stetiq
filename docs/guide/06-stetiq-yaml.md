@@ -38,8 +38,6 @@ The name of a Knowledge Graph, as a string. `stetiq run`, `stetiq observe` and `
 knowledge_graph: support
 ```
 
-The Knowledge Graph's Steward and Authority are not part of `stetiq.yaml`: they are stored with the Knowledge Graph itself, and set with `stetiq kg steward` and `stetiq kg authority` (see [CLI](./04-cli.md)). A Steward watches the Knowledge Graph's Drift and keeps its Definitions and Competency Questions current; an Authority decides changes to its Ontology. Neither grants any permission.
-
 Without it, those commands need the name as their first argument, or they exit with an error.
 
 ## entry_point
@@ -192,18 +190,17 @@ gates:
     min: 1.0
 ```
 
-`gold_alignment` runs once per gold reference you pass it, and each result records its reference in its parameters. Name the reference to gate on it:
+Your own custom Evaluators can take parameters (see [Python SDK](./03-python-sdk.md)). Such an Evaluator runs once per configuration you pass it, and each result records its configuration in its parameters. Name the configuration to gate on it. In this example, `minimum_node_types` stands for your own parameterised Evaluator: stetiq ships nothing by that name.
 
 ```yaml
 gates:
-  - name: matches-gold
+  - name: at-least-three-node-types
     check: metric
-    evaluator: gold_alignment
-    metric: recall
-    min: 0.9
+    evaluator: minimum_node_types
+    metric: met
+    min: 1
     parameters:
-      reference_knowledge_graph: support-gold
-      reference_version: 3
+      minimum: 3
 ```
 
 #### Evaluators and their metrics
@@ -232,7 +229,7 @@ These Evaluator names are built in. stetiq computes their results itself, and a 
 
 `definitions` counts the Classes, Relations and Attributes (`concepts_without_definition`) and the Vocabulary Values (`vocabulary_values_without_definition`) that have no `definition`, with one detail per item, named `Label`, `Owner.attribute` or `Vocabulary.value`. A Definition that is only whitespace counts as missing. Deprecated items, and the Attributes of a deprecated Class or Relation, are not counted. `definition_ratio` is the share of the counted items that have a Definition, and 1 when there is nothing to count. A Gate with `metric: concepts_without_definition` and `max: 0` requires every Concept to be defined.
 
-`gold_alignment` ships with stetiq too, but you run it yourself with a reference of your choice. It reports `precision`, `recall`, `matched_concepts`, `unmatched_evaluated_concepts` and `unmatched_reference_concepts`. A custom Evaluator reports whatever metrics it returns.
+A custom Evaluator reports whatever metrics it returns.
 
 ### count_drop
 

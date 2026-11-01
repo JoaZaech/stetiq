@@ -215,14 +215,6 @@ class Client:
         """Replace the Knowledge Graph's markdown description; None or blank clears it."""
         return self._service.set_knowledge_graph_description(name, description)
 
-    def set_knowledge_graph_governance(
-        self, name: str, *, steward: str | None = None, authority: str | None = None
-    ) -> KnowledgeGraph:
-        """Name the Knowledge Graph's Steward and Authority. A name left out stays as it
-        is; an empty string clears it. The names are for display and routing only and
-        grant no permission; setting them needs `edit`."""
-        return self._service.set_knowledge_graph_governance(name, steward, authority)
-
     def list_knowledge_graphs(self) -> list[KnowledgeGraphSummary]:
         """All Knowledge Graphs by name, each with a summary of its state (in server
         mode: those the API token can read)."""
@@ -269,8 +261,8 @@ class Client:
         """Re-run every Evaluator (built-in and this client's custom ones) on a version.
 
         `evaluators` are extra, one-off Evaluators for this call only (not
-        registered), e.g. a parameterised `GoldOntologyAlignment(gold_version)`
-        whose reference is chosen per evaluation.
+        registered), e.g. a parameterised Evaluator whose configuration is chosen
+        per evaluation.
 
         Structural answerability is judged against `use_case_version` (default: the
         Knowledge Graph's latest Use Case version), which its result records.

@@ -152,7 +152,7 @@ class ConformanceGate(Gate):
 class MetricGate(Gate):
     """A metric of the latest result of `evaluator` must lie within [`min`, `max`]
     (either bound optional, at least one given). `parameters` picks one result when the
-    Evaluator ran with several configurations (e.g. gold references).
+    Evaluator ran with several configurations (e.g. one per minimum it checks).
 
     The result is the version's, else (for an Evaluator with no version result) the
     subject run's run-level result, e.g. `competency_question_execution`."""

@@ -115,11 +115,6 @@ def test_the_revised_ontology_and_pipeline_pass_every_gate_and_get_promoted(demo
     assert comparison.ontology_versions == (1, 3, 3)
     assert comparison.metrics["reports_read"] == (7.0, 8.0, None)
 
-    gold = result(client.get_evaluation_results(KG, 3), "gold_alignment")
-    assert gold.parameters == {"reference_knowledge_graph": "plant-gold", "reference_version": 1}
-    assert gold.metrics["precision"] == 1.0
-    assert gold.metrics["recall"] == pytest.approx(31 / 35)
-
     assert demo.gates_revised.passed
     assert client.get_contract_version(KG).number == 3
     production = [p for p in client.list_promotions(KG) if p.alias == "production"]

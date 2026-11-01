@@ -111,8 +111,6 @@ KNOWLEDGE_GRAPH = KnowledgeGraph(
     name="support",
     created_at=AT,
     description="Support tickets",
-    steward="Ada",
-    authority="Ops board",
 )
 OBSERVATION = Observation(
     id="obs-1",
@@ -304,3 +302,16 @@ def test_a_use_case_version_payload_from_before_consumers_still_parses():
 
     assert version.use_case.consumers == ()
     assert [q.id for q in version.use_case.competency_questions] == ["q1"]
+
+
+def test_a_knowledge_graph_payload_that_names_a_steward_and_authority_still_parses():
+    # Servers and Store rows from before the cut send these keys; they are ignored.
+    data = {
+        "name": "support",
+        "created_at": AT.isoformat(),
+        "description": "Support tickets",
+        "steward": "Ada",
+        "authority": "Ops board",
+    }
+
+    assert codec.knowledge_graph_from_json(data) == KNOWLEDGE_GRAPH

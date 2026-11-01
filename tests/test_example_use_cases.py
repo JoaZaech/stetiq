@@ -13,14 +13,7 @@ USE_CASE_FILES = sorted(EXAMPLES.glob("*/use-case.yaml"))
 
 
 def test_every_example_has_a_use_case():
-    assert [f.parent.name for f in USE_CASE_FILES] == [
-        "bookshelf-kg",
-        "citation-graph-kg",
-        "clinical-trials-kg",
-        "plant-kg",
-        "retail-orders-kg",
-        "transit-network-kg",
-    ]
+    assert [f.parent.name for f in USE_CASE_FILES] == ["plant-kg"]
 
 
 @pytest.mark.parametrize("path", USE_CASE_FILES, ids=lambda p: p.parent.name)
@@ -29,9 +22,8 @@ def test_an_examples_use_case_keeps_its_consumers_and_tasks_once_registered(clie
     assert declared.consumers and all(c.tasks for c in declared.consumers)
 
     # Each example starts from its first Ontology.
-    first = "initial.yaml" if path.parent.name == "plant-kg" else "v1.yaml"
     client_factory().create_knowledge_graph(
-        path.parent.name, ontology=path.parent / "ontology" / first
+        path.parent.name, ontology=path.parent / "ontology" / "initial.yaml"
     )
     client_factory().register_use_case(path.parent.name, path)
     stored = client_factory().get_use_case_version(path.parent.name).use_case

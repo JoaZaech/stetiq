@@ -13,7 +13,7 @@ export interface EvaluatorMetricRow {
 
 /**
  * An Evaluator's name with its parameters (in key order) when it has any, e.g.
- * `coverage (gold="v2", min=1)`: one name per configuration.
+ * `coverage (min=1, variant="b")`: one name per configuration.
  */
 export function evaluatorLabel(evaluator: string, parameters: Readonly<Record<string, unknown>>): string {
   const params = Object.entries(parameters).sort(([a], [b]) => a.localeCompare(b))
