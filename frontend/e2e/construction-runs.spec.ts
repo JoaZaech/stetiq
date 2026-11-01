@@ -3,7 +3,7 @@ import { expect, signIn, test } from './fixtures'
 test.describe('with Construction Runs', () => {
   test.use({ seed: 'construction_runs' })
 
-  test('the run table lists runs, newest first, with status, Conformance and links', async ({
+  test('the run table lists runs, newest first, with params, status, Conformance, Gate and links', async ({
     page,
     stetiq,
   }) => {
@@ -12,13 +12,20 @@ test.describe('with Construction Runs', () => {
     const rows = table.getByRole('row')
 
     await expect(rows.first()).toHaveText(
-      /Run.*Status.*Started.*Duration.*Declared Ontology.*Conformance.*Candidate/,
+      /Run.*Status.*Started.*Duration.*Declared Ontology.*Conformance.*Gate.*Candidate/,
     )
     await expect(rows).toHaveCount(3)
     const aborted = String(stetiq.seeded.aborted)
     const finished = String(stetiq.seeded.finished)
-    await expect(rows.nth(1)).toHaveText(new RegExp(`${aborted.slice(0, 8)}.*Failed.*v1.*—.*—`))
-    await expect(rows.nth(2)).toHaveText(new RegExp(`${finished.slice(0, 8)}.*Finished.*v1.*0\\.5455.*v2`))
+    // `support` was never gated: no Gate result and no Gate Preview.
+    await expect(rows.nth(1)).toHaveText(new RegExp(`^${aborted.slice(0, 8)}extractor: rules.*Failed.*v1.*—.*—.*—`))
+    await expect(rows.nth(2)).toHaveText(
+      new RegExp(`^${finished.slice(0, 8)}extractor: llmtemperature: 0\\.2.*Finished.*v1.*54\\.5%.*—.*v2`),
+    )
+    await expect(rows.nth(2).getByRole('list', { name: 'Params' }).getByRole('listitem')).toHaveText([
+      'extractor: llm',
+      'temperature: 0.2',
+    ])
 
     await rows.nth(2).getByRole('link', { name: 'v2' }).click()
     await expect(page).toHaveURL('/ui/kg/support/versions/2')
@@ -71,16 +78,23 @@ test.describe('with Construction Runs', () => {
     const id = String(stetiq.seeded.finished)
     await page.goto(`/ui/kg/support/runs/${id}`)
 
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText(id)
+    const heading = page.getByRole('heading', { level: 1 })
+    await expect(heading).toHaveText(`${id.slice(0, 8)}extractor: llmtemperature: 0.2`)
+    await expect(heading.getByRole('list', { name: 'Params' }).getByRole('listitem')).toHaveText([
+      'extractor: llm',
+      'temperature: 0.2',
+    ])
     await expect(page.getByRole('navigation', { name: 'breadcrumb' })).toHaveText(
       new RegExp(`Knowledge Graphs.*support.*Construction Runs.*${id.slice(0, 8)}`),
     )
     await expect(page.getByRole('main').getByText('Finished')).toBeVisible()
-    await page.getByRole('button', { name: 'Copy run id' }).click()
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(id)
     await expect(page.getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page')
 
+    // The full id is in Details, with a copy button.
     const details = page.getByRole('region', { name: 'Details' })
+    await expect(details).toContainText(`Run id${id}`)
+    await details.getByRole('button', { name: 'Copy run id' }).click()
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(id)
     await expect(details).toContainText(/Duration\s*\d/)
     await details.getByRole('link', { name: 'v1' }).click()
     await expect(page).toHaveURL('/ui/kg/support/versions/1')
@@ -110,37 +124,62 @@ test.describe('with Construction Runs', () => {
     await expect(page.getByRole('region', { name: 'Score' })).toContainText('0.5455')
     const absent = page.getByRole('table', { name: 'Declared but not observed' })
     await expect(absent.getByRole('row')).toHaveCount(3)
-    await expect(absent.getByRole('row').nth(1)).toHaveText(/Party\s*class/)
-    await expect(absent.getByRole('row').nth(2)).toHaveText(/Party\.name\s*attribute/)
+    await expect(absent.getByRole('row').nth(1)).toHaveText(/Party\s*Class/)
+    await expect(absent.getByRole('row').nth(2)).toHaveText(/Party\.name\s*Attribute/)
     const undeclared = page.getByRole('table', { name: 'Observed but not declared' })
     await expect(undeclared.getByRole('row')).toHaveCount(3)
-    await expect(undeclared.getByRole('row').nth(1)).toHaveText(/ESCALATED\s*relation/)
-    await expect(undeclared.getByRole('row').nth(2)).toHaveText(/Ticket\.priority\s*attribute/)
+    await expect(undeclared.getByRole('row').nth(1)).toHaveText(/ESCALATED\s*Relation/)
+    await expect(undeclared.getByRole('row').nth(2)).toHaveText(/Ticket\.priority\s*Attribute/)
     const patterns = page.getByRole('table', { name: 'Other mismatches' })
     await expect(patterns.getByRole('row').nth(1)).toHaveText(
       /\(Ticket\)-\[ESCALATED\]->\(Customer\)\s*pattern\s*Observed but not declared/,
     )
   })
 
-  test('the Evaluations tab shows Evaluator results and each executed Competency Question, never row data', async ({
+  test('the Evaluations tab shows Evaluator cards and each executed Competency Question, never row data', async ({
     page,
     stetiq,
   }) => {
-    await page.goto(`/ui/kg/support/runs/${String(stetiq.seeded.finished)}/evaluations`)
+    const id = String(stetiq.seeded.finished)
+    await page.goto(`/ui/kg/support/runs/${id}/evaluations`)
     await expect(page.getByRole('link', { name: 'Evaluations' })).toHaveAttribute('aria-current', 'page')
 
-    const results = page.getByRole('table', { name: 'Evaluator results' })
+    const evaluators = page.getByRole('region', { name: 'Evaluator results' })
+    await expect(evaluators.getByRole('article', { name: 'Questions executed' })).toContainText(
+      /Passed\s*1 \/ 2\s*Failed\s*1/,
+    )
+    await expect(evaluators.getByRole('article', { name: 'Conformance' })).toContainText(/Score\s*54\.5%/)
+    await expect(evaluators.getByRole('article', { name: 'Observed graph' })).toBeVisible()
+    await expect(evaluators.getByRole('article', { name: 'review (min_confidence=0.5)' })).toContainText('0.9')
+
+    // The raw table is behind the toggle.
+    const results = evaluators.getByRole('table', { name: 'Evaluator results' })
+    await expect(results).toBeHidden()
+    await evaluators.getByRole('button', { name: 'Show all metrics' }).click()
     await expect(results).toContainText(/competency_question_execution\s*pass_ratio\s*0\.5\s*1/)
     await expect(results).toContainText(/conformance\s*score\s*0\.5455/)
     await expect(results).toContainText(/observed_schema\s*node_types\s*2/)
 
-    const questions = page.getByRole('table', { name: 'Competency Questions' })
-    await expect(questions.getByRole('row').first()).toHaveText(/Competency Question.*Result.*Check.*Error type/)
-    await expect(questions.getByRole('row').nth(1)).toHaveText(/customer-names\s*Passed\s*expected answer\s*—/)
-    await expect(questions.getByRole('row').nth(2)).toHaveText(/open-tickets\s*Error\s*non-empty result\s*ValueError/)
+    const questions = page.getByRole('list', { name: 'Competency Questions' }).getByRole('listitem')
+    await expect(questions).toHaveText([
+      /^What are our customers called\?\s*Passed$/,
+      /^Which tickets are open\?\s*Error$/,
+    ])
 
     // The canned query returned a customer's name: instance data stays out of the UI.
     await expect(page.locator('body')).not.toContainText('Ada')
+
+    // A row opens the question's sheet, with this run's check and error type.
+    await questions.nth(1).getByRole('button').click()
+    await expect(page).toHaveURL(`/ui/kg/support/runs/${id}/evaluations?sheet=question%3Aopen-tickets`)
+    const sheet = page.getByRole('dialog', { name: 'Which tickets are open?' })
+    const inThisRun = sheet.getByRole('region', { name: 'In this run' })
+    await expect(inThisRun).toContainText(/Result\s*Error\s*Check\s*non-empty result\s*Error type\s*ValueError/)
+    await expect(sheet.getByRole('region', { name: 'Author details' })).toContainText('open-tickets')
+    await expect(sheet.getByRole('button', { name: 'Edit' })).toHaveCount(0)
+    await page.keyboard.press('Escape')
+    await expect(sheet).toBeHidden()
+    await expect(page).toHaveURL(`/ui/kg/support/runs/${id}/evaluations`)
   })
 
   test('the chart view charts Evaluator results, one chart per parameter configuration, under the filters', async ({
@@ -268,7 +307,7 @@ test.describe('with a token that can read one Knowledge Graph', () => {
 
     const finished = String(stetiq.seeded.finished)
     await page.goto(`/ui/kg/support/runs/${finished}`)
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText(finished)
+    await expect(page.getByRole('heading', { level: 1 })).toContainText(finished.slice(0, 8))
   })
 })
 

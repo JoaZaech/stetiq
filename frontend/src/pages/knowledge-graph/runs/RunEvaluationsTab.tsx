@@ -1,17 +1,15 @@
+import { useCallback } from 'react'
 import type { EvaluationResult } from '@/api/ontology-versions'
 import { useRunEvaluations } from '@/api/runs'
+import { useUseCaseVersions } from '@/api/use-cases'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { StatusLabel, type StatusTone } from '@/components/StatusLabel'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { EvaluatorResultTable, Panel } from '../versions/OverviewTab'
+import { useSheetParam } from '@/lib/sheet-param'
+import { EvaluatorResults } from '../versions/EvaluatorResults'
+import { Panel } from '../versions/OverviewTab'
+import { CompetencyQuestionSheet } from '../use-case/CompetencyQuestionSheet'
+import { SheetSection } from '../use-case/sheet-section'
 import { useConstructionRunTab } from './run-context'
 
 /** `evaluation.run.CQ_EXECUTION_EVALUATOR`: executes the Use Case's Competency Questions. */
@@ -49,7 +47,12 @@ const STATUS: Record<ExecutedQuestion['status'], { label: string; tone: StatusTo
 
 const CHECK = { non_empty: 'non-empty result', expected_answer: 'expected answer' } as const
 
-/** The run page's Evaluations tab: every run Evaluator's metrics, then each executed Competency Question. */
+const SHEET_KINDS = ['question'] as const
+
+/**
+ * The run page's Evaluations tab: one card per run Evaluator with every metric behind
+ * "Show all metrics", then each executed Competency Question.
+ */
 export function RunEvaluationsTab() {
   const run = useConstructionRunTab()
   const results = useRunEvaluations(run.knowledge_graph, run.id)
@@ -59,19 +62,33 @@ export function RunEvaluationsTab() {
   return (
     <div className="space-y-8">
       <Panel title="Evaluator results">
-        <EvaluatorResultTable results={results.data} empty="No Evaluator results for this run." />
+        <EvaluatorResults results={results.data} empty="No Evaluator results for this run." />
       </Panel>
       {execution && (
         <Panel title="Competency Questions">
-          <ExecutedQuestions result={execution} />
+          <ExecutedQuestions knowledgeGraph={run.knowledge_graph} result={execution} />
         </Panel>
       )}
     </div>
   )
 }
 
-function ExecutedQuestions({ result }: { result: EvaluationResult }) {
+/**
+ * The executed questions as the Use Case page lists them: question text and this run's
+ * result. A row opens the question's sheet (`?sheet=question:<id>`), with this run's
+ * result, check and error type added.
+ */
+function ExecutedQuestions({ knowledgeGraph, result }: { knowledgeGraph: string; result: EvaluationResult }) {
   const questions = executedQuestions(result)
+  const versions = useUseCaseVersions(knowledgeGraph)
+  const { sheet, openSheet, closeSheet } = useSheetParam(SHEET_KINDS)
+  const open = useCallback((id: string) => openSheet({ kind: 'question', id }), [openSheet])
+  if (versions.isError) return <ErrorAlert error={versions.error} />
+  if (versions.isPending) return <Skeleton className="h-20 w-full" />
+  // The questions as they were in the Use Case Version the run executed.
+  const version = versions.data.find((v) => v.number === result.use_case_version)
+  const question = (id: string) => version?.use_case.competency_questions.find((q) => q.id === id)
+  const selected = sheet && questions.find((q) => q.id === sheet.id)
   return (
     <div className="space-y-2">
       <p className="text-sm text-muted-foreground">
@@ -82,33 +99,55 @@ function ExecutedQuestions({ result }: { result: EvaluationResult }) {
       {questions.length === 0 ? (
         <p className="text-sm text-muted-foreground">No Competency Question has a query.</p>
       ) : (
-        <Table aria-label="Competency Questions">
-          <TableHeader>
-            <TableRow>
-              <TableHead>Competency Question</TableHead>
-              <TableHead>Result</TableHead>
-              <TableHead>Check</TableHead>
-              <TableHead>Error type</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {questions.map((q) => {
-              return (
-                <TableRow key={q.id}>
-                  <TableCell className="font-mono text-xs">{q.id}</TableCell>
-                  <TableCell>
-                    <StatusLabel {...(STATUS[q.status] ?? STATUS.error)} />
-                  </TableCell>
-                  <TableCell>{CHECK[q.check] ?? q.check}</TableCell>
-                  <TableCell className="font-mono text-xs">
-                    {q.error ?? <span className="text-muted-foreground">—</span>}
-                  </TableCell>
-                </TableRow>
-              )
-            })}
-          </TableBody>
-        </Table>
+        <ul aria-label="Competency Questions" className="divide-y overflow-hidden rounded-lg border">
+          {questions.map((q) => (
+            <li key={q.id}>
+              <button
+                type="button"
+                onClick={() => open(q.id)}
+                className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-left text-sm hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
+              >
+                <span className="min-w-0 flex-1">{question(q.id)?.question ?? q.id}</span>
+                <StatusLabel {...(STATUS[q.status] ?? STATUS.error)} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {version && (
+        <CompetencyQuestionSheet
+          knowledgeGraph={knowledgeGraph}
+          useCaseVersion={version}
+          question={selected ? question(selected.id) : undefined}
+          onClose={closeSheet}
+        >
+          {selected && <InThisRun question={selected} />}
+        </CompetencyQuestionSheet>
       )}
     </div>
+  )
+}
+
+/** The run's verdict on a question, in its sheet: the result, which check judged it and any error type. */
+function InThisRun({ question }: { question: ExecutedQuestion }) {
+  return (
+    <SheetSection title="In this run">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2">
+        <dt className="text-muted-foreground">Result</dt>
+        <dd>
+          <StatusLabel {...(STATUS[question.status] ?? STATUS.error)} />
+        </dd>
+        <dt className="text-muted-foreground">Check</dt>
+        <dd>{CHECK[question.check] ?? question.check}</dd>
+        <dt className="text-muted-foreground">Error type</dt>
+        <dd>
+          {question.error === null ? (
+            <span className="text-muted-foreground">—</span>
+          ) : (
+            <code className="font-mono text-xs">{question.error}</code>
+          )}
+        </dd>
+      </dl>
+    </SheetSection>
   )
 }

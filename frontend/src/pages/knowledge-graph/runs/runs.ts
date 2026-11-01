@@ -1,4 +1,7 @@
+import { type GatePreview, runGatePreview } from '@/api/gate-previews'
+import { type GateResult, latestGateResult } from '@/api/gate-results'
 import type { ConstructionRun } from '@/api/runs'
+import type { StatusTone } from '@/components/StatusLabel'
 
 /** A run id as the run table shows it; the full id is on the run page (and copyable). */
 export const shortRunId = (id: string) => id.slice(0, 8)
@@ -81,4 +84,40 @@ export type RunOutcome = 'running' | 'finished' | 'failed' | 'strict'
 export function runOutcome(run: ConstructionRun): RunOutcome {
   if (run.status !== 'failed') return run.status
   return run.observation_id === null ? 'failed' : 'strict'
+}
+
+/** How many params a run shows as chips beside its id; the rest count as "+n". */
+export const SHOWN_PARAMS = 3
+
+/** A run's params by key, split into the first `max`, shown as chips, and the hidden rest. */
+export function paramChips(
+  params: Readonly<Record<string, string>>,
+  max = SHOWN_PARAMS,
+): { shown: [string, string][]; hidden: [string, string][] } {
+  const sorted = Object.entries(params).sort(([a], [b]) => a.localeCompare(b))
+  return { shown: sorted.slice(0, max), hidden: sorted.slice(max) }
+}
+
+/**
+ * A Conformance score's colour, by how close it is to 100 %, as a status tone:
+ * `success` from 95 %, `warning` from 80 %, `failure` below.
+ */
+export function conformanceTone(score: number): StatusTone {
+  if (score >= 0.95) return 'success'
+  if (score >= 0.8) return 'warning'
+  return 'failure'
+}
+
+/**
+ * What a run's Gate column shows: its latest `recorded` Gate result; else its Gate
+ * `preview`, which is never recorded (ADR 0007); else `none`.
+ */
+export type RunGate = { kind: 'recorded' | 'preview'; passed: boolean } | { kind: 'none' }
+
+export function runGate(runId: string, results: readonly GateResult[], previews: readonly GatePreview[]): RunGate {
+  const recorded = latestGateResult(results, 'construction_run', runId)
+  if (recorded) return { kind: 'recorded', passed: recorded.passed }
+  const preview = runGatePreview(previews, runId)
+  if (preview) return { kind: 'preview', passed: preview.passed }
+  return { kind: 'none' }
 }

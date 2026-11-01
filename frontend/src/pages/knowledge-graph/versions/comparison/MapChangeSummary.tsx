@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, PanelRightOpen } from 'lucide-react'
 import { type Classification, CLASSIFICATION_LABEL, isCosmetic } from '@/api/ontology-diff'
 import { SeveritySwatch } from '@/components/SeveritySwatch'
 import { Button } from '@/components/ui/button'
+import { conceptKindLabel } from '@/lib/concept-kind'
 import { cn } from '@/lib/utils'
 import { CONCEPT_NOUN } from '../concepts'
 import type { PatternLink } from '../map/ontology-map'
@@ -203,7 +204,7 @@ function SummaryEntry({ concept, link }: { concept: ConceptChanges; link: MapLin
         <span data-concept-name className="block font-semibold break-normal wrap-normal">
           <BreakAtUnderscores name={concept.label} />
         </span>
-        <span className="block text-xs text-muted-foreground">{CONCEPT_NOUN[concept.kind]}</span>
+        <span className="block text-xs text-muted-foreground">{conceptKindLabel(concept.kind)}</span>
         {concept.statements.map((s) => (
           <Statement key={`${s.change.concept}:${s.change.detail}`} statement={s} />
         ))}

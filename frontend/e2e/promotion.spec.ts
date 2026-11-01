@@ -26,7 +26,7 @@ test.describe('as a reader (stetiq server)', () => {
     await page.getByRole('link', { name: 'Promotions' }).click()
     const rows = page.getByRole('table', { name: 'Promotions' }).getByRole('row')
     await expect(rows).toHaveCount(3)
-    await expect(rows.nth(1)).toHaveText(/staging.*—.*v2/)
+    await expect(rows.nth(1)).toHaveText(/staging.*—.*v2.*Not gated/)
   })
 })
 
@@ -55,7 +55,7 @@ test.describe('as an editor (stetiq ui)', () => {
     // Newest first: canary (now), staging → v2 (seed), production → v1 (creation).
     await expect(rows).toHaveCount(4)
     await expect(rows.nth(1)).toHaveText(/canary.*—.*v2.*e2e.*Passed/)
-    await expect(rows.nth(2)).toHaveText(/staging.*—.*v2/)
+    await expect(rows.nth(2)).toHaveText(/staging.*—.*v2.*Not gated/)
   })
 })
 
@@ -69,7 +69,7 @@ test.describe('the Promote dialog (stetiq ui)', () => {
     await page.getByRole('button', { name: 'Promote' }).click()
     const dialog = page.getByRole('dialog', { name: 'Promote v4' })
     const gate = dialog.getByRole('region', { name: 'Latest Gate result' })
-    await expect(gate).toContainText('None')
+    await expect(gate).toContainText('Not gated')
     await expect(gate).toContainText('never block')
 
     await dialog.getByRole('radio', { name: 'staging' }).check()
@@ -85,7 +85,7 @@ test.describe('the Promote dialog (stetiq ui)', () => {
     await page.goto('/ui/kg/support/versions/2')
     await page.getByRole('button', { name: 'Promote' }).click()
     const v2 = page.getByRole('dialog', { name: 'Promote v2' })
-    await expect(v2.getByRole('region', { name: 'Latest Gate result' })).toContainText('Passed')
+    await expect(v2.getByRole('region', { name: 'Latest Gate result' })).toContainText('The 1 Gate passed')
     await v2.getByRole('radio', { name: 'staging' }).check()
     await expect(v2.getByText('staging already points to v2.')).toBeVisible()
     await expect(v2.getByRole('button', { name: 'Promote to staging' })).toBeDisabled()
@@ -119,9 +119,7 @@ test.describe('the Promote dialog (stetiq ui)', () => {
 test.describe('the Promote dialog’s Consumer impact (stetiq ui)', () => {
   test.use({ seed: 'support_consumer_impact' })
 
-  test('lists the Consumers and Tasks the move affects and will affect, and still lets you promote', async ({
-    page,
-  }) => {
+  test('lists an item per Task the move affects and will affect, and still lets you promote', async ({ page }) => {
     await page.goto('/ui/kg/support/versions/4')
     await page.getByRole('button', { name: 'Promote' }).click()
     const dialog = page.getByRole('dialog', { name: 'Promote v4' })
@@ -129,14 +127,17 @@ test.describe('the Promote dialog’s Consumer impact (stetiq ui)', () => {
 
     // The impact of the Diff from v2 (where staging points now) to v4.
     const impact = dialog.getByRole('region', { name: 'Consumer impact' })
-    const affected = impact.getByRole('region', { name: 'Affected', exact: true })
-    const bot = affected.getByRole('listitem', { name: 'Triage bot' })
-    await expect(bot.getByRole('list', { name: 'Tasks of Triage bot hit' }).locator(':scope > li')).toHaveText([
-      /Route a new ticket by its age.*route-ticket/,
-      /Assign the ticket to an agent.*assign-agent.*\(will be affected\)/,
+    await expect(impact.getByRole('list', { name: 'Tasks and questions hit' }).locator(':scope > li')).toHaveText([
+      /^Affected: Route a new ticket by its age\s*Triage bot/,
+      /^Will be affected: Assign the ticket to an agent\s*Triage bot/,
+      /^Will be affected: Chart each agent's workload\s*Workload dashboard/,
+      /^Impact unknown: Which customers are the most loyal\?\s*No Consumer/,
     ])
-    const later = impact.getByRole('region', { name: 'Will be affected' })
-    await expect(later.getByRole('listitem', { name: 'Workload dashboard' })).toContainText('Chart each agent')
+    const route = impact.getByRole('listitem', { name: 'Route a new ticket by its age' })
+    await route.getByRole('button').click()
+    await expect(route.getByRole('list', { name: 'Competency Questions hit' })).toHaveText(
+      /When was each ticket opened\?\s*Ticket\.opened_at \(breaking\)/,
+    )
     await expect(impact.getByText('CRM sync')).toHaveCount(0)
 
     // Impact informs the Promotion; it never blocks it.
@@ -155,7 +156,7 @@ test.describe('the Promote dialog’s Consumer impact (stetiq ui)', () => {
 
     // v1 -> v2 only adds, so no Consumer, Task or question is hit.
     await expect(dialog.getByRole('region', { name: 'Consumer impact' })).toHaveText(
-      /Consumer impact\s*No Consumer, Task or Competency Question is hit\./,
+      /^Consumer impact\s*No Consumer is affected$/,
     )
     await dialog.getByRole('checkbox', { name: 'Switch Construction Runs and Drift to v2' }).check()
     await dialog.getByRole('button', { name: 'Promote to production' }).click()
