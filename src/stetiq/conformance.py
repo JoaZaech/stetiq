@@ -430,35 +430,54 @@ def apply_definitions(
 ) -> tuple[Ontology, tuple[str, ...]]:
     """`candidate` with each proposed Definition applied to the Concept it names, if that
     Concept is one the candidate adds to `base` (a Class or Relation by `Label`, an
-    Attribute by `Owner.name`); also the proposals it ignored, sorted. Proposals never
-    touch a Concept `base` declares."""
-    added = {a.identity for a in added_concepts(base, candidate)}
-    applied = {ref: text for ref, text in proposals.items() if ref in added}
-    ignored = tuple(sorted(ref for ref in proposals if ref not in applied))
-    if not applied:
+    Attribute by `Owner.name`); also the references of the proposals it ignored, sorted.
+
+    Proposals never touch a Concept `base` declares: when a Class and a Relation share a
+    label (or an Attribute name on such owners), a proposal applies only to the added one.
+    """
+    targets: dict[tuple[ConceptKind, str], str] = {}  # (kind, label) or ("property", ...)
+    applied_refs: set[str] = set()
+    for added in added_concepts(base, candidate):
+        text = proposals.get(added.identity)
+        if text is None:
+            continue
+        applied_refs.add(added.identity)
+        if added.kind == "property" and added.owner is not None:
+            owner_kind, _ = added.owner
+            targets[(owner_kind, added.identity)] = text
+        else:
+            targets[added.key] = text
+    ignored = tuple(sorted(ref for ref in proposals if ref not in applied_refs))
+    if not targets:
         return candidate, ignored
-
-    def document(concept):
-        own = applied.get(concept.label)
-        properties = tuple(
-            replace(p, definition=applied[f"{concept.label}.{p.name}"])
-            if f"{concept.label}.{p.name}" in applied
-            else p
-            for p in concept.properties
-        )
-        return replace(
-            concept,
-            definition=concept.definition if own is None else own,
-            properties=properties,
-        )
-
     return (
         replace(
             candidate,
-            node_types=tuple(document(n) for n in candidate.node_types),
-            relationship_types=tuple(document(r) for r in candidate.relationship_types),
+            node_types=tuple(_document(n, "node_type", targets) for n in candidate.node_types),
+            relationship_types=tuple(
+                _document(r, "relationship_type", targets) for r in candidate.relationship_types
+            ),
         ),
         ignored,
+    )
+
+
+def _document[C: (NodeType, RelationshipType)](
+    concept: C, kind: ConceptKind, targets: Mapping[tuple[ConceptKind, str], str]
+) -> C:
+    """`concept` (of `kind`) with the Definitions `targets` holds for it: under
+    (kind, label) for itself, under (kind, "Label.attribute") for its own Attributes."""
+    properties = tuple(
+        replace(p, definition=targets[(kind, f"{concept.label}.{p.name}")])
+        if (kind, f"{concept.label}.{p.name}") in targets
+        else p
+        for p in concept.properties
+    )
+    own = targets.get((kind, concept.label))
+    return replace(
+        concept,
+        definition=concept.definition if own is None else own,
+        properties=properties,
     )
 
 
