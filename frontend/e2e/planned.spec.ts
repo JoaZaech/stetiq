@@ -73,23 +73,22 @@ test.describe('with a Use Case that declares Consumers', () => {
     expect(await page.locator('html').evaluate(overflow)).toBeLessThanOrEqual(0)
   })
 
-  test('each Consumer card shows its Connector, and evaluating its Consumer Gate on each Observation, as planned', async ({
+  test('the Consumer sheet shows evaluating its Consumer Gate on each Observation as planned; tiles show no Connector', async ({
     page,
   }) => {
     await page.goto('/ui/kg/support/use-case')
 
-    const cards = page.getByRole('region', { name: 'Consumers' }).getByRole('article')
-    await expect(cards).toHaveCount(2)
-    for (const card of await cards.all()) {
-      await expect(planned(card, 'Connector').standIn).toHaveText('Connector: not connected')
-      await expectPlaceholder(card, 'Connector', 'connector')
-      const gate = card.getByRole('region', { name: 'Consumer Gate' })
-      await expect(gate).toContainText('None declared')
-      await expect(planned(gate, 'Evaluated on each Observation').standIn).toHaveText(
-        'Evaluated on each Observation',
-      )
-      await expectPlaceholder(gate, 'Evaluated on each Observation', 'consumer-gate')
+    const tiles = page.getByRole('region', { name: 'Consumers' }).getByRole('article')
+    await expect(tiles).toHaveCount(2)
+    for (const tile of await tiles.all()) {
+      await expect(tile).not.toContainText('Connector')
+      await expect(tile.getByRole('link', { name: /^Planned/ })).toHaveCount(0)
     }
+    await page.getByRole('button', { name: 'Triage bot' }).click()
+    const gate = page.getByRole('dialog', { name: 'Triage bot' }).getByRole('region', { name: 'Consumer Gate' })
+    await expect(gate).toContainText('No Consumer Gate declared')
+    await expect(planned(gate, 'Evaluated on each Observation').standIn).toHaveText('Evaluated on each Observation')
+    await expectPlaceholder(gate, 'Evaluated on each Observation', 'consumer-gate')
   })
 
   test('the Use Case page offers drafting Tasks and questions with AI, disabled', async ({ page }) => {
@@ -99,6 +98,7 @@ test.describe('with a Use Case that declares Consumers', () => {
     await expect(
       consumers.getByRole('button', { name: 'Draft Tasks & questions with AI' }),
     ).toBeDisabled()
+    await expect(consumers.locator('button:disabled')).toHaveCount(1)
     await expectPlaceholder(consumers, 'Draft Tasks & questions with AI', 'ai-and-mcp-authoring')
   })
 
@@ -117,15 +117,14 @@ test.describe('with a Use Case that declares Consumers', () => {
   }) => {
     await page.setViewportSize({ width: 1280, height: 600 })
     await page.goto('/ui/kg/support/use-case')
-    const card = page.getByRole('region', { name: 'Consumers' }).getByRole('article').first()
-    const { link } = planned(card, 'Connector')
+    const { link } = planned(page.getByRole('region', { name: 'Consumers' }), 'Draft Tasks & questions with AI')
 
     await link.hover()
-    await expect(page.getByRole('tooltip')).toContainText('Connector')
+    await expect(page.getByRole('tooltip')).toContainText('Tasks and Competency Questions')
 
     await link.click()
-    await expect(page).toHaveURL('/ui/help/vision#connector')
-    await expect(page.getByRole('heading', { name: 'Connector', exact: true })).toBeInViewport()
+    await expect(page).toHaveURL('/ui/help/vision#ai-and-mcp-authoring')
+    await expect(page.getByRole('heading', { name: 'AI and MCP authoring', exact: true })).toBeInViewport()
   })
 })
 
