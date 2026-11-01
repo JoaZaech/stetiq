@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Ontology } from '@/api/ontology-versions'
 import { searchOntology } from './ontology-map-search'
 
-// A slice of the retail-orders example: Bin mentions warehouses without being one.
+// A slice of a retailer's orders Ontology: Bin mentions warehouses without being one.
 const RETAIL: Ontology = {
   node_types: [
     {

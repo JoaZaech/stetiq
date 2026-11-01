@@ -227,7 +227,7 @@ def ontology_map_large(client: stetiq.Client) -> dict[str, Any]:
     return {}
 
 
-# Like examples/transit-network-kg: v2 (a Candidate's) takes the feed's camelCase columns,
+# A city's transit feed: v2 (a Candidate's) takes the feed's camelCase columns,
 # v3 renames them to snake_case (two breaking removals, two additions) and rewords HAS_TRIP's
 # description.
 MAP_TRANSIT_V2 = """
@@ -265,7 +265,7 @@ def ontology_map_transit(client: stetiq.Client) -> dict[str, Any]:
     return {}
 
 
-# For searching the Ontology Map, from the retail-orders example: Bin mentions warehouses in
+# For searching the Ontology Map, a retailer's orders: Bin mentions warehouses in
 # its description and an attribute without being one, and so does SHIPPED_FROM's description.
 MAP_SEARCH_ONTOLOGY = """
 node_types:
