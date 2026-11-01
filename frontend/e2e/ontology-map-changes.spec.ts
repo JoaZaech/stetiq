@@ -49,7 +49,7 @@ test("selecting a changed class shows the Diff's change detail", async ({ page }
   const details = page.getByRole('complementary', { name: 'Details' })
   const changes = details.getByRole('list', { name: 'Changes' })
   await expect(changes).toContainText('breaking')
-  await expect(changes).toContainText('required property Ticket.priority added')
+  await expect(changes).toContainText('required Attribute Ticket.priority added')
   // The details are the current version's: the new attribute is listed.
   await expect(details.getByRole('table', { name: 'Attributes' })).toContainText('priority')
 

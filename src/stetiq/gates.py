@@ -247,9 +247,9 @@ class CountDropGate(Gate):
             return self._outcome(True, "No earlier Observation to compare type counts with")
         drops = []
         for kind, before, after in (
-            ("node type", inputs.baseline.node_types, inputs.observed.node_types),
+            ("Class", inputs.baseline.node_types, inputs.observed.node_types),
             (
-                "relationship type",
+                "Relation",
                 inputs.baseline.relationship_types,
                 inputs.observed.relationship_types,
             ),
