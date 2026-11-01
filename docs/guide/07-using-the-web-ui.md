@@ -12,7 +12,7 @@ The sidebar looks the same on every page:
 
 - **Home**.
 - **The Knowledge Graph switcher**: shows the Knowledge Graph you are in, or *Select a Knowledge Graph*. Click it to see every Knowledge Graph you can read, with a check on the current one; type to search by name, and pick one with the mouse or the arrow keys and Enter. Switching keeps you in the same section: from *support*'s Construction Runs you land on *billing*'s Construction Runs. From a detail or compare page you land on that section's list, since the ids belong to the other Knowledge Graph. **All Knowledge Graphs** at the bottom opens the full list at `/ui/kg`. With the sidebar collapsed to icons, hover the switcher to see the Knowledge Graph's name.
-- **The sections**: Ontology Versions, Construction Runs, Use Case, Observations and Promotions. Inside a Knowledge Graph they lead to its sections. Elsewhere (Home, Settings, Help, the list) they lead into the Knowledge Graph you last opened in this browser. Until you have opened one, or if it no longer exists, they are greyed out with a *Select a Knowledge Graph first* tooltip.
+- **The sections**: Overview, Ontology Versions, Construction Runs, Use Case, Observations and Promotions. Inside a Knowledge Graph they lead to its sections. Elsewhere (Home, Settings, Help, the list) they lead into the Knowledge Graph you last opened in this browser. Until you have opened one, or if it no longer exists, they are greyed out with a *Select a Knowledge Graph first* tooltip.
 - **Help**: this guide.
 - **Settings**: the theme (light, dark or system) and your access. In local mode, Access says every Knowledge Graph is editable and names the user your changes are recorded as. On a server, it shows who you are signed in as, your grants (*read* or *edit* per Knowledge Graph, `*` meaning all of them) and a **Sign out** button.
 
@@ -24,7 +24,7 @@ Some controls change a Knowledge Graph, and they need the *edit* permission on i
 
 | Action | Where |
 | --- | --- |
-| **Edit description** | The header of every Knowledge Graph section |
+| **Edit description** | A Knowledge Graph's Overview, and the header of every other section |
 | **Promote** | An Ontology Version's page |
 | **Add Competency Question** | The Use Case section |
 | **Edit** and **Remove** a Competency Question | The header of its sheet: click the question in the Use Case section |
@@ -44,13 +44,29 @@ The Knowledge Graphs page (`/ui/kg`) lists every Knowledge Graph you can read, w
 - **Last run**: the status of its newest Construction Run (Running, Finished or Failed), or *No runs*.
 - **Last modified**: when it last changed.
 
-Click a column header to sort, and type in **Search by name** to filter. Click a name to open the Knowledge Graph. If there are none yet, the page shows how to create one from the Python SDK (see [Python SDK](./03-python-sdk.md)).
+Click a column header to sort, and type in **Search by name** to filter. Click a name to open the Knowledge Graph on its [Overview](#overview). If there are none yet, the page shows how to create one from the Python SDK (see [Python SDK](./03-python-sdk.md)).
 
 ## Inside a Knowledge Graph
 
-A Knowledge Graph opens on its Ontology Versions. Every section starts with the same header: the Knowledge Graph's name, its description (written in markdown), its Evolution Mode (*strict* or *evolving*) and its Contract Alias with the version it points to, e.g. `production → v3`. Below them, a pipeline strip shows where the Knowledge Graph sits: upstream pipeline → Gate → Knowledge Graph → Consumer Gate → Consumers, with the number of Consumers the latest Use Case Version declares (click it to open the [Use Case](#use-case-and-competency-questions)). Every step is built: the Consumer Gate is checked by `stetiq consumer gate` in your pipeline's CI, and its verdicts show on each Consumer tile.
+A Knowledge Graph opens on its [Overview](#overview). Every other section starts with the same one-line header: the Knowledge Graph's name, its Contract Alias chip with the version it points to (e.g. `production → v3`) and **Edit description**. The description, the Evolution Mode and the pipeline are on the Overview.
 
-**Edit description** (needs edit access) opens a markdown editor with a **Write** and a **Preview** tab. Saving shows the new description to everyone who can read the Knowledge Graph.
+**Edit description** (needs edit access) opens a markdown editor with a **Write** and a **Preview** tab. Saving shows the new description on the Overview to everyone who can read the Knowledge Graph.
+
+### Overview
+
+The Overview shows where the Knowledge Graph sits as a chain of five steps: upstream pipeline → Gate → Knowledge Graph → Consumer Gate → Consumers. Each step shows a status with its icon and one fact, and its name links to its page. A grey dashed status means stetiq has nothing to judge yet, never a pass.
+
+| Step | Shows | Status | Links to |
+| --- | --- | --- | --- |
+| **Upstream pipeline** | How long ago the latest Construction Run ended, or when a running one started | ✓ *Finished*, ✗ *Failed* or *Running*; *No runs* | [Construction Runs](#construction-runs) |
+| **Gate** | The newest Ontology Version and its latest recorded Gate result, e.g. `v3 · 6 of 9 Gates failed` | ✓ *Passed* or ✗ *Failed*; *Not gated* | That version's page |
+| **Knowledge Graph** | Where the Contract Alias points, e.g. `production → v3`, and when it was last observed | ✓ *No Drift* or ⚠ *Drift*, from the latest Observation; *Not observed* | [Observations](#observations) |
+| **Consumer Gate** | How many Consumers that declare a Consumer Gate passed it in their latest verdict, e.g. `1 of 2 passed` | ✗ *Failed* if any failed, ✓ *Passed* if all passed; *Not evaluated yet* while one has no verdict, *None declared* when no Consumer declares one | [Use Case](#use-case-and-competency-questions) |
+| **Consumers** | How many Consumers the latest Ontology Version is ready for, e.g. `2 of 3 ready`, as on their tiles. A Consumer without Tasks isn't counted | ✓ *Ready* if all are, ✗ *Not ready* otherwise; *Not checked yet*, *No Tasks* or *No Consumers* | [Use Case](#use-case-and-competency-questions) |
+
+The Consumers and the Consumer Gate are those of the latest Use Case Version. The Consumer Gate is checked by `stetiq consumer gate` in your pipeline's CI.
+
+Below the chain, **About** shows the Knowledge Graph's description (written in markdown), its Evolution Mode (*strict* or *evolving*) and **Edit description**.
 
 ### Ontology Versions
 

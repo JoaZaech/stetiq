@@ -88,7 +88,9 @@ test.describe('with Construction Runs', () => {
       new RegExp(`Knowledge Graphs.*support.*Construction Runs.*${id.slice(0, 8)}`),
     )
     await expect(page.getByRole('main').getByText('Finished')).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page')
+    await expect(
+      page.getByRole('navigation', { name: 'Construction Run' }).getByRole('link', { name: 'Overview' }),
+    ).toHaveAttribute('aria-current', 'page')
 
     // The full id is in Details, with a copy button.
     const details = page.getByRole('region', { name: 'Details' })

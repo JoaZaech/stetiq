@@ -1,77 +1,42 @@
-import type { ReactNode } from 'react'
 import { useAliases, useContractAlias } from '@/api/aliases'
-import { useEvolutionMode, useKnowledgeGraph } from '@/api/knowledge-graph'
-import { Markdown } from '@/components/Markdown'
+import { useKnowledgeGraph } from '@/api/knowledge-graph'
 import { NeedsEditAccess } from '@/components/NeedsEditAccess'
 import { PageHeader } from '@/components/PageHeader'
-import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EditDescriptionDialog } from './EditDescriptionDialog'
+import { contractAliasLabel } from './overview/pipeline-status'
+import { ContractAliasChip } from './versions/AliasChips'
 
 /**
- * Name, markdown description, Evolution Mode and Contract Alias of a Knowledge Graph: the
- * top of every Knowledge Graph section page. Edit actions (e.g. the description editor)
- * go in `PageHeader`'s `actions`.
+ * The one-line top of every Knowledge Graph section page but the Overview: the name, the
+ * Contract Alias chip and Edit description. The description, the Evolution Mode and the
+ * pipeline strip are on the Overview.
  */
 export function KnowledgeGraphHeader({ name }: { name: string }) {
-  const kg = useKnowledgeGraph(name)
-  const description = kg.data?.description ?? null
   return (
-    <section aria-label="Knowledge Graph" className="mb-6">
-      <PageHeader
-        title={name}
-        actions={
-          <NeedsEditAccess knowledgeGraph={name}>
-            {(disabled) => (
-              <EditDescriptionDialog name={name} description={description} disabled={disabled} />
-            )}
-          </NeedsEditAccess>
-        }
-      />
-      <div className="-mt-5 mb-3 max-w-3xl text-muted-foreground">
-        {description ? (
-          <Markdown>{description}</Markdown>
-        ) : (
-          <p className="text-sm italic">No description</p>
-        )}
-      </div>
-      <dl className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
-        <Fact label="Evolution Mode">
-          <EvolutionModeValue name={name} />
-        </Fact>
-        <Fact label="Contract Alias">
-          <ContractAliasValue name={name} />
-        </Fact>
-      </dl>
+    <section aria-label="Knowledge Graph">
+      <PageHeader title={name} aside={<ContractAliasValue name={name} />} actions={<EditDescription name={name} />} />
     </section>
   )
 }
 
-function Fact({ label, children }: { label: string; children: ReactNode }) {
+/** Edit description, disabled without edit access. */
+export function EditDescription({ name }: { name: string }) {
+  const kg = useKnowledgeGraph(name)
   return (
-    <div className="flex items-center gap-2">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd>{children}</dd>
-    </div>
+    <NeedsEditAccess knowledgeGraph={name}>
+      {(disabled) => (
+        <EditDescriptionDialog name={name} description={kg.data?.description ?? null} disabled={disabled} />
+      )}
+    </NeedsEditAccess>
   )
-}
-
-function EvolutionModeValue({ name }: { name: string }) {
-  const mode = useEvolutionMode(name)
-  if (mode.isPending) return <Skeleton className="h-5 w-16" />
-  if (mode.isError) return <span className="text-destructive">unavailable</span>
-  return <Badge variant="outline">{mode.data}</Badge>
 }
 
 function ContractAliasValue({ name }: { name: string }) {
   const contract = useContractAlias(name)
   const aliases = useAliases(name)
   if (contract.isPending || aliases.isPending) return <Skeleton className="h-5 w-28" />
-  if (contract.isError || aliases.isError) return <span className="text-destructive">unavailable</span>
+  if (contract.isError || aliases.isError) return <span className="text-sm text-destructive">Contract Alias unavailable</span>
   const alias = aliases.data.find((a) => a.name === contract.data)
-  return (
-    <Badge>
-      {alias ? `${alias.name} → v${alias.version}` : `${contract.data} (not set)`}
-    </Badge>
-  )
+  return <ContractAliasChip alias={contractAliasLabel(contract.data, alias?.version)} />
 }

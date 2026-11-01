@@ -1,4 +1,4 @@
-import { CircleArrowUp, Hammer, Layers, ListChecks, ScanEye, type LucideIcon } from 'lucide-react'
+import { CircleArrowUp, Hammer, Layers, LayoutDashboard, ListChecks, ScanEye, type LucideIcon } from 'lucide-react'
 
 /**
  * The sections of a Knowledge Graph, in sidebar order. The sidebar renders one entry
@@ -6,6 +6,7 @@ import { CircleArrowUp, Hammer, Layers, ListChecks, ScanEye, type LucideIcon } f
  * `knowledgeGraphSectionRoutes`. To build a section, replace its placeholder page there.
  */
 export const KNOWLEDGE_GRAPH_SECTIONS = [
+  { path: 'overview', label: 'Overview', icon: LayoutDashboard },
   { path: 'versions', label: 'Ontology Versions', icon: Layers },
   { path: 'runs', label: 'Construction Runs', icon: Hammer },
   { path: 'use-case', label: 'Use Case', icon: ListChecks },
@@ -21,7 +22,7 @@ export function knowledgeGraphSection(path: KnowledgeGraphSectionPath): Knowledg
 }
 
 /** The section a Knowledge Graph opens on. */
-export const DEFAULT_SECTION: KnowledgeGraphSectionPath = 'versions'
+export const DEFAULT_SECTION: KnowledgeGraphSectionPath = 'overview'
 
 /** App path (under `/ui`) of the Knowledge Graph list; every Knowledge Graph page sits below it. */
 export const kgListUrl = '/kg'

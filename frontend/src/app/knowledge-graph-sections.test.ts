@@ -19,6 +19,7 @@ describe('switchKnowledgeGraphUrl', () => {
   it('keeps the open section', () => {
     expect(switchKnowledgeGraphUrl('/kg/support/runs', 'billing')).toBe('/kg/billing/runs')
     expect(switchKnowledgeGraphUrl('/kg/support/use-case', 'billing')).toBe('/kg/billing/use-case')
+    expect(switchKnowledgeGraphUrl('/kg/support/overview', 'billing')).toBe('/kg/billing/overview')
   })
 
   it('drops a detail page below the section', () => {
@@ -33,10 +34,10 @@ describe('switchKnowledgeGraphUrl', () => {
   })
 
   it('opens the default section from a Knowledge Graph root or from outside a Knowledge Graph', () => {
-    expect(switchKnowledgeGraphUrl('/kg/support', 'billing')).toBe('/kg/billing/versions')
-    expect(switchKnowledgeGraphUrl('/kg/support/no-such-section', 'billing')).toBe('/kg/billing/versions')
-    expect(switchKnowledgeGraphUrl('/settings', 'billing')).toBe('/kg/billing/versions')
-    expect(switchKnowledgeGraphUrl('/', 'billing')).toBe('/kg/billing/versions')
+    expect(switchKnowledgeGraphUrl('/kg/support', 'billing')).toBe('/kg/billing/overview')
+    expect(switchKnowledgeGraphUrl('/kg/support/no-such-section', 'billing')).toBe('/kg/billing/overview')
+    expect(switchKnowledgeGraphUrl('/settings', 'billing')).toBe('/kg/billing/overview')
+    expect(switchKnowledgeGraphUrl('/', 'billing')).toBe('/kg/billing/overview')
   })
 
   it('encodes the target name, and reads an encoded current name', () => {

@@ -46,7 +46,7 @@ test.describe('with Knowledge Graphs', () => {
 
     await table.getByRole('link', { name: 'beta' }).click()
 
-    await expect(page).toHaveURL('/ui/kg/beta/versions')
+    await expect(page).toHaveURL('/ui/kg/beta/overview')
   })
 
   test('"View all" on Recent Knowledge Graphs opens the full list at /kg', async ({ page }) => {
