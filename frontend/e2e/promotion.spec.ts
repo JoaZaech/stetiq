@@ -26,7 +26,7 @@ test.describe('as a reader (stetiq server)', () => {
     await page.getByRole('link', { name: 'Promotions' }).click()
     const rows = page.getByRole('table', { name: 'Promotions' }).getByRole('row')
     await expect(rows).toHaveCount(3)
-    await expect(rows.nth(1)).toHaveText(/staging.*—.*v2/)
+    await expect(rows.nth(1)).toHaveText(/staging.*—.*v2.*Not gated/)
   })
 })
 
@@ -55,7 +55,7 @@ test.describe('as an editor (stetiq ui)', () => {
     // Newest first: canary (now), staging → v2 (seed), production → v1 (creation).
     await expect(rows).toHaveCount(4)
     await expect(rows.nth(1)).toHaveText(/canary.*—.*v2.*e2e.*Passed/)
-    await expect(rows.nth(2)).toHaveText(/staging.*—.*v2/)
+    await expect(rows.nth(2)).toHaveText(/staging.*—.*v2.*Not gated/)
   })
 })
 
@@ -69,7 +69,7 @@ test.describe('the Promote dialog (stetiq ui)', () => {
     await page.getByRole('button', { name: 'Promote' }).click()
     const dialog = page.getByRole('dialog', { name: 'Promote v4' })
     const gate = dialog.getByRole('region', { name: 'Latest Gate result' })
-    await expect(gate).toContainText('None')
+    await expect(gate).toContainText('Not gated')
     await expect(gate).toContainText('never block')
 
     await dialog.getByRole('radio', { name: 'staging' }).check()
@@ -85,7 +85,7 @@ test.describe('the Promote dialog (stetiq ui)', () => {
     await page.goto('/ui/kg/support/versions/2')
     await page.getByRole('button', { name: 'Promote' }).click()
     const v2 = page.getByRole('dialog', { name: 'Promote v2' })
-    await expect(v2.getByRole('region', { name: 'Latest Gate result' })).toContainText('Passed')
+    await expect(v2.getByRole('region', { name: 'Latest Gate result' })).toContainText('The 1 Gate passed')
     await v2.getByRole('radio', { name: 'staging' }).check()
     await expect(v2.getByText('staging already points to v2.')).toBeVisible()
     await expect(v2.getByRole('button', { name: 'Promote to staging' })).toBeDisabled()

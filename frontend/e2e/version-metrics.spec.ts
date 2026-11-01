@@ -67,6 +67,51 @@ test('the chart view shows one chart per Evaluator metric, and the search narrow
   await expect(grid.getByText('No metric charts match “nothing like this”.')).toBeVisible()
 })
 
+test('a version’s Overview leads with its Gate result, then one card per Evaluator, the raw table behind a toggle', async ({
+  page,
+}) => {
+  await page.goto('/ui/kg/support/versions/3')
+  const main = page.getByRole('main').last()
+  await expect(main.getByRole('heading', { level: 2 }).first()).toHaveText('Gate result')
+
+  // v3 is gated by three metric Gates: review-floor fails, the others are folded.
+  const gate = page.getByRole('region', { name: 'Gate result' })
+  await expect(gate).toContainText('1 of 3 Gates failed')
+  const failed = gate.getByRole('list', { name: 'Failed Gates' })
+  await expect(failed.locator(':scope > li')).toHaveText([/review-floor\s*review\.score = 0\.7 < min 0\.8/])
+  await expect(gate.getByRole('list', { name: 'Passed Gates' })).toBeHidden()
+  await gate.getByRole('button', { name: '2 passed' }).click()
+  await expect(gate.getByRole('list', { name: 'Passed Gates' }).getByRole('listitem')).toHaveText([
+    'shallow-hierarchy',
+    'no-inconsistencies',
+  ])
+
+  // Built-in Evaluators under readable titles, ratios as percentages; a user's own by its raw name.
+  const evaluators = page.getByRole('region', { name: 'Evaluator results' })
+  const answerable = evaluators.getByRole('article', { name: 'Answerable questions' })
+  await expect(answerable).toContainText(/structural_answerability\s*Answerable\s*\d+ \/ \d+\s*Unanswerable\s*\d+/)
+  await expect(evaluators.getByRole('article', { name: 'Concepts with a Definition' })).toContainText(/Defined\s*[\d.]+%/)
+  await expect(evaluators.getByRole('article', { name: 'Class hierarchy' })).toContainText(/Max depth\s*\d+\s*Root Classes\s*\d+/)
+  await expect(evaluators.getByRole('article', { name: 'review' })).toHaveText(/^review\s*score\s*0\.7$/)
+  await expect(evaluators.getByRole('article')).toHaveCount(9)
+
+  await answerable.getByRole('button', { name: 'About Answerable questions' }).hover()
+  await expect(page.getByRole('tooltip')).toContainText('Competency Questions whose Concepts this Ontology has')
+
+  // The raw table is unchanged, one toggle away.
+  const table = evaluators.getByRole('table', { name: 'Evaluator results' })
+  await expect(table).toBeHidden()
+  await evaluators.getByRole('button', { name: 'Show all metrics' }).click()
+  await expect(table.getByRole('row').first()).toHaveText(/Evaluator.*Metric.*Value.*Use Case Version/)
+  await expect(table.getByRole('row').filter({ hasText: 'review' })).toHaveText(/review\s*score\s*0\.7\s*—$/)
+
+  // Details sit last, folded.
+  const details = page.getByRole('region', { name: 'Details' })
+  await expect(details.getByText('Content hash')).toBeHidden()
+  await details.getByRole('button', { name: 'Details' }).click()
+  await expect(details).toContainText(/Origin\s*run/)
+})
+
 test('the view mode survives a reload', async ({ page }) => {
   await page.goto('/ui/kg/support/versions?view=chart')
   await expect(page.getByRole('radio', { name: 'Chart' })).toBeChecked()

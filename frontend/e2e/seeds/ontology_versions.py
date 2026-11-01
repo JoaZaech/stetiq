@@ -91,13 +91,35 @@ class ReviewScore(stetiq.OntologyVersionEvaluator):
         return stetiq.Evaluation(metrics={"score": self._scores[version.number]})
 
 
+# On v3 (review/score 0.7), `review-floor` fails and the other two pass.
+METRIC_GATES = """
+gates:
+  - name: review-floor
+    check: metric
+    evaluator: review
+    metric: score
+    min: 0.8
+  - name: shallow-hierarchy
+    check: metric
+    evaluator: hierarchy
+    metric: max_depth
+    max: 10
+  - name: no-inconsistencies
+    check: metric
+    evaluator: constraint_consistency
+    metric: inconsistencies
+    max: 0
+"""
+
+
 def support_metrics(client: stetiq.Client) -> dict[str, Any]:
     """`support_lineage`, plus a custom `review` Evaluator scoring v1 0.9 and v3 0.7;
-    v2 has no `review/score`."""
+    v2 has no `review/score`. v3 is gated by METRIC_GATES: 1 of 3 failed."""
     seeded = support_lineage(client)
     review = ReviewScore({1: 0.9, 3: 0.7})
     for number in (1, 3):
         client.evaluate("support", number, evaluators=[review])
+    client.evaluate_gates("support", METRIC_GATES, version=3)
     return seeded
 
 
