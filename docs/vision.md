@@ -2,7 +2,7 @@
 
 stetiq is the evaluation point in upstream pipeline → stetiq → Knowledge Graph → Consumers. Today it judges the input side well: what the upstream pipeline produced, and whether its Ontology Versions are fit to promote. This page describes where stetiq goes next on the output side, towards the Consumers. It says what the MVP builds, what it only shows as "Planned", and what a later team would build. Words in **bold** are defined in [GLOSSARY.md](../GLOSSARY.md).
 
-Nothing on this page beyond the "MVP builds" list is implemented. The integration contract for Consumers is written up separately in [the Consumer Connector spec](specs/consumer-connector.md), which is not implemented either.
+Nothing on this page beyond the "MVP builds" list is implemented. The integration contract for Consumers is written up separately in [the Consumer Connector spec](specs/consumer-connector.md); of it, only the Consumer Gate verdict is implemented.
 
 ## The two-gate pipeline
 
@@ -13,7 +13,7 @@ flowchart LR
   up["Upstream pipeline, e.g. an LLM system (live)"]
   gate{{"Gate (live)"}}
   kg[("Knowledge Graph and Ontology (live)")]
-  cgate{{"Consumer Gate, one per Consumer (planned)"}}
+  cgate{{"Consumer Gate, one per Consumer (live, in CI)"}}
   conn["Connector at the Consumer's edge (planned)"]
   cons["Consumers, declared in the Use Case (live)"]
 
@@ -24,7 +24,7 @@ flowchart LR
   conn --> cons
 
   classDef planned stroke-dasharray: 5 5
-  class cgate,conn planned
+  class conn planned
 ```
 
 Each box says whether it is live or planned, and planned boxes are drawn dashed.
@@ -32,12 +32,12 @@ Each box says whether it is live or planned, and planned boxes are drawn dashed.
 - **Upstream pipeline.** The user's own extraction workflow, often an LLM system that reads documents and writes the graph. stetiq records each execution as a **Construction Run** and never knows what happens inside it.
 - **Gate** (live). Rules in the user's repository, over Evaluator results, **Conformance** and the **Ontology Diff**, that a CI check enforces with `stetiq gate`. Its results go back to the upstream pipeline, so the people who own extraction see what to fix.
 - **Knowledge Graph and Ontology.** The registry of **Ontology Versions** and **Aliases**. A **Promotion** moves the **Contract Alias** to a new version.
-- **Consumer Gate** (planned). For one Consumer, rules over what the new Ontology Version offers that Consumer.
+- **Consumer Gate** (live, in CI). For one Consumer, rules over what a new Ontology Version or Construction Run offers that Consumer compared with the version it takes now, declared on the Consumer in the Use Case. The upstream pipeline's CI checks them with `stetiq consumer gate`, beside `stetiq gate`.
 - **Consumers** (live as declarations). Anyone or anything that uses the Knowledge Graph downstream, declared in the **Use Case** with the Tasks they perform and the **Competency Questions** those Tasks need answered.
 
 ## Consumer Gate
 
-A Consumer Gate is a rule, for one Consumer, that must hold for that Consumer to take an Ontology Version. It judges only four inputs:
+A Consumer Gate is a rule, for one Consumer, judged against the Ontology Version that Consumer takes now, that must hold for it to take a new one. Unlike a Gate, which judges absolute health, it judges what that Consumer would lose: **Consumer Drift**. It judges only four inputs:
 
 - **Observed Schema** statistics: counts per Class and Relation, cardinalities, Attribute fill rates.
 - **Conformance** of the Graph Source to its Declared Ontology.
@@ -52,9 +52,13 @@ Examples of Consumer Gates a Consumer might want:
 - "Every Competency Question my triage Task needs passed on the latest Construction Run."
 - "The WorkOrder Class still has at least 1,000 instances, and its status Attribute is filled at least 95% of the time."
 
-stetiq **evaluates** a Consumer Gate; the Consumer's **Connector** **enforces** it, at the edge ([ADR 0005](adr/0005-core-computes-over-artifacts-connectors-and-monitoring-live-at-the-edge.md)). The core computes the verdict over artifacts it already holds. It never reaches into the Consumer's systems, and nothing in stetiq stops a Consumer from taking a version. The Consumer asks instead: before its deployment takes Ontology Version 6, its Connector asks stetiq "is version 6 safe for me?", and fails its own deployment if the answer is no.
+Consumer Gates are declared on each Consumer in the Use Case, so the Consumer's team owns them, and the server evaluates them against the latest finished Construction Run on the Contract Alias's version ([ADR 0008](adr/0008-consumer-gates-are-declared-in-the-use-case.md)). The kind built today, `row_count_drop`, fails when a Competency Question of one Task returns more than a set share fewer rows than on that baseline, or when it cannot be compared. A verdict names the symptom (the Consumer, Task, Competency Question and row change), never a guessed cause.
 
-This mirrors how a Gate works today. A Gate does not block a Promotion, the CI check that runs it does. A Consumer Gate does not block a Consumer, the Connector does.
+stetiq **evaluates** a Consumer Gate; it is **enforced** wherever its verdict is checked ([ADR 0005](adr/0005-core-computes-over-artifacts-connectors-and-monitoring-live-at-the-edge.md)). Today that is the upstream pipeline's CI: `stetiq consumer gate` beside `stetiq gate`, so a pull request shows "Gate ✅ / Consumer Gate ❌" when a change is better by every evaluation but would break a Consumer. Later it will also be the Consumer's **Connector**: before its deployment takes Ontology Version 6, it asks stetiq "is version 6 safe for me?", and fails its own deployment if the answer is no. The core computes the verdict over artifacts it already holds and never reaches into the Consumer's systems.
+
+This mirrors how a Gate works. A Gate does not block a Promotion, the CI check that runs it does. A Consumer Gate does not block a Consumer, the CI check or the Connector does.
+
+Evaluating Consumer Gates on each scheduled Observation, so that monitoring catches Consumer Drift between pipeline changes, is planned.
 
 ## Connector
 
@@ -72,6 +76,13 @@ The events, payload, delivery options and verdict request are specified in [the 
 Consumer impact answers "which Consumers does this Ontology change hit?". It follows each change in an Ontology Diff through Concept → Competency Question → Task → Consumer. A breaking change makes a Task *affected*. A deprecating change makes it *will be affected*. A Competency Question that only the question mapper could map onto the Ontology gets impact *unknown*, and is never reported as unaffected.
 
 The MVP builds Consumer impact itself. A Gate over it is planned: a Gate in the user's `stetiq.yaml` such as "fail if a breaking change affects any Consumer", or "fail if the Consumer `maintenance-planner` is affected". It would let the upstream side see, in its own CI, the damage a Candidate would do downstream, before any Consumer has to ask.
+
+## Pending Migration and Adoption
+
+Two parts of Drift handling are planned, and the web UI shows them where Drift is shown:
+
+- **Pending Migration.** After a Promotion, the Graph Source takes time to catch up with the new Contract Alias version. Drift that the Ontology Diff, from the last version the Graph Source was observed to conform to up to the current one, explains will be shown as a Pending Migration, raising no alert until a grace period ends.
+- **Adoption.** When an Observation finds Concepts the Contract Alias's version does not declare, or no longer finds Concepts it does, the user will select which to take into a new Candidate: selected undeclared Concepts are added, selected vanished ones deprecated, never removed.
 
 ## AI and MCP authoring
 
@@ -91,12 +102,15 @@ The MVP **builds**:
 - **Consumers and Tasks** in the Use Case: who uses the Knowledge Graph, the Tasks they perform, and the Competency Questions each Task needs, versioned with the Use Case and editable in the web UI.
 - **Consumer impact** of an Ontology Diff, in the SDK, the CLI, the Ontology Diff view and the Promotion confirmation.
 - **Task readiness**: how many of a Task's Competency Questions the Ontology Version being viewed can answer, and which questions serve no Task.
+- **The Consumer Gate, checked in CI on a Candidate**: Consumer Gates declared on each Consumer in the Use Case (`row_count_drop`), evaluated and recorded by the server against the Contract Alias baseline, run by `stetiq consumer gate` in the upstream pipeline's CI, and shown on each Consumer card with its latest verdict and in the pipeline strip on the Knowledge Graph overview.
 
-The MVP **shows, as "Planned" placeholders** that link to this page:
+The MVP **shows, as "Planned"** (placeholders in the web UI that link to this page, or notes in the guide):
 
-- the Consumer Gate, in a pipeline strip on the Knowledge Graph overview (upstream pipeline → Gate → Knowledge Graph → Consumer Gate → Consumers);
-- the Connector and Consumer Gate on each Consumer card ("Connector: not connected", "Consumer Gate: none");
+- evaluating Consumer Gates on each scheduled Observation (monitoring), beside each Consumer card's Consumer Gate;
+- the Connector on each Consumer card ("Connector: not connected");
+- Pending Migration and Adoption, where an Observation's Drift is shown;
 - a Gate over Consumer impact, on the Gates view;
-- drafting Tasks and Competency Questions with AI, on the Use Case page.
+- drafting Tasks and Competency Questions with AI, on the Use Case page;
+- a hosted stetiq instance, installing from PyPI, and a quickstart for bringing your own pipeline, in the guide's Getting started.
 
-Everything else on this page, the Connector, the Consumer Gate verdict, Gates over Consumer impact and the MCP server, is left for a later team.
+Everything else on this page, the Connector and its events, the other Consumer Gate kinds, Gates over Consumer impact and the MCP server, is left for a later team.

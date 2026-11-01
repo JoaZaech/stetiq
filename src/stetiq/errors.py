@@ -51,6 +51,19 @@ class UseCaseValidationError(StetiqError):
     """A Use Case or Competency Question is malformed; the message names the offending path."""
 
 
+class ConsumerGateConfigError(UseCaseValidationError, ValueError):
+    """A Consumer Gate declared in the Use Case is malformed; the message names the field."""
+
+
+class NoConsumerGatesError(StetiqError):
+    """There is no Consumer Gate to evaluate: no Consumer of the latest Use Case Version
+    declares one, or the Consumer asked for declares none."""
+
+
+class RunNotFinishedError(StetiqError):
+    """The Construction Run has not finished, so it has nothing to be judged by."""
+
+
 class InvalidAliasNameError(StetiqError):
     """An Alias name is empty or contains characters other than letters, digits, `_`, `-`, `.`."""
 

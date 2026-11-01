@@ -5,6 +5,24 @@ export function formatDateTime(iso: string): string {
   return dateTime.format(new Date(iso))
 }
 
+const relative = new Intl.RelativeTimeFormat('en', { numeric: 'always' })
+const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
+  ['year', 365 * 24 * 3600],
+  ['month', 30 * 24 * 3600],
+  ['day', 24 * 3600],
+  ['hour', 3600],
+  ['minute', 60],
+]
+
+/** How long ago a server timestamp was, in its largest whole unit: "5 minutes ago", "just now". */
+export function formatRelativeTime(iso: string, now: Date = new Date()): string {
+  const seconds = (now.getTime() - new Date(iso).getTime()) / 1000
+  for (const [unit, size] of UNITS) {
+    if (Math.abs(seconds) >= size) return relative.format(-Math.trunc(seconds / size), unit)
+  }
+  return 'just now'
+}
+
 const metric = new Intl.NumberFormat(undefined, { maximumSignificantDigits: 4, useGrouping: false })
 
 /** An Evaluator metric or run metric value: integers as is, others to 4 significant digits. */

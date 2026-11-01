@@ -288,6 +288,49 @@ client.add_competency_question(
 
 `add_competency_question` adds one question to the latest Use Case Version, keeping its Consumers and Tasks, and registers the result as a new one. `client.get_use_case_version("support")` without a number returns the latest Use Case Version, and raises `NoUseCaseError` (a `NotFoundError`) when there is none. Every new Ontology Version is judged against the latest Use Case (`structural_answerability`: does the Ontology have the Concepts each question needs?). Its `questions_serving_no_task` metric counts the questions no Task needs, so a [metric Gate](./06-stetiq-yaml.md#evaluators-and-their-metrics) can require that every question serves a Task. The same mapping also shows which Concepts no question references (`competency_question_coverage`). At the end of a Construction Run, the SDK also executes the questions that have a `query` against your Graph Source (`competency_question_execution`). Their rows are judged and then dropped: only the result leaves your process.
 
+### Consumer Gates
+
+A Consumer declares the rules it needs to hold before it takes a new Ontology Version under `consumer_gates`. Its team owns them, they are versioned with the Use Case Version, and a newly declared Consumer is gated without anyone changing the pipeline's CI:
+
+```yaml
+competency_questions:
+  - id: breakdown-technicians
+    question: Which technicians fixed breakdowns?
+    query: "MATCH (t:Technician)-[:FIXED]->(w:WorkOrder {kind: 'breakdown'}) RETURN t.name"
+  - id: downtime-by-kind
+    question: How much downtime did each kind of work order cause?
+    query: MATCH (w:WorkOrder) RETURN w.kind, sum(w.downtime_hours)
+consumers:
+  - id: reliability-dashboard
+    name: Reliability dashboard
+    kind: dashboard
+    tasks:
+      - id: triage-breakdowns
+        description: Triage the week's breakdowns
+        competency_questions: [breakdown-technicians, downtime-by-kind]
+    consumer_gates:
+      - name: triage-rows-hold      # optional; defaults to the check
+        check: row_count_drop
+        task: triage-breakdowns     # one of this Consumer's Tasks
+        max_drop: 0.10              # a fraction from 0 to 1
+```
+
+`row_count_drop` is the one kind built. For each Competency Question of `task`, it compares the row count `competency_question_execution` recorded on the Construction Run being judged with the one on the baseline: the latest other finished run standing for the Contract Alias's version (a run stands for its Candidate, or else for the version it consumed). A question fails when its row count drops by more than `max_drop` (`0.10` allows a 10% drop), when either run has no row count for it (no `query`, or not executed), or when its query failed on either run. A baseline of 0 rows cannot drop. Without any baseline run, every Consumer Gate fails. The gate passes when every question passes.
+
+Registering rejects a Consumer Gate whose `task` is not one of its own Consumer's Tasks, a `max_drop` outside 0–1, a missing `task` or `max_drop`, an unknown key, or two gates with the same `name` in one Consumer, with `ConsumerGateConfigError` (a `UseCaseValidationError`) naming the field. `consumer_impact`, `conformance`, `observed_count`, `fill_rate` and `task_questions` are planned kinds: naming one says so. The same gate is `stetiq.RowCountDropGate(task=..., max_drop=..., name=...)` in a `Consumer`'s `consumer_gates`. Adding or changing a Consumer Gate yields a new Use Case Version; a Use Case without any keeps the content hash it had before Consumer Gates existed.
+
+```python
+results = client.evaluate_consumer_gates("plant")              # the latest finished run
+client.evaluate_consumer_gates("plant", run="5d0c1f2e...")     # or a named run
+client.evaluate_consumer_gates("plant", version=4)             # or the run standing for v4
+client.evaluate_consumer_gates("plant", consumer="reliability-dashboard")
+client.list_consumer_gate_results("plant", consumer="reliability-dashboard", version=4)
+```
+
+`evaluate_consumer_gates` judges a finished Construction Run with the Consumer Gates the latest Use Case Version declares, and records and returns one `ConsumerGateResult` per Consumer that declares any (`consumer=` limits it to one). Passing both `run` and `version` raises `ConflictingArgumentsError`; no finished run, or an unknown Consumer, raises `NotFoundError`; a Use Case in which no Consumer declares a Consumer Gate, or a `consumer=` that declares none, raises `NoConsumerGatesError`. A missing baseline is not an error: without a baseline run, or when the Contract Alias points to no Ontology Version, every Consumer Gate fails and is recorded. The tracking service reads the definitions from its stored Use Case Version and the row counts from its stored results, so nothing your process sends can weaken a rule or pass a verdict.
+
+A `ConsumerGateResult` has the `consumer`, the `use_case_version` judged by, the `run_id` and the `ontology_version` it stands for, the `baseline_run_id` (None without one) and `baseline_ontology_version` (None when the Contract Alias points to no version), `evaluated_at`, `passed`, and one outcome per Consumer Gate: its `gate` definition, `passed`, human `reasons`, and, per failing question, a `RowCountFinding` with the `task`, `competency_question`, `before`, `after`, relative `change` (negative for a drop), `limit`, or the `missing` input (`no_baseline_run`, `baseline_missing`, `baseline_error`, `candidate_missing`, `candidate_error`). `list_consumer_gate_results` returns recorded results oldest first. Consumer Gate results never reach the Promotion audit and never move an Alias.
+
 ## Evaluators
 
 An Evaluator measures an Ontology Version or a Construction Run and produces metrics. The built-in ones run in the tracking service whenever a new version is registered or a run ends. Read their results with:
@@ -364,4 +407,4 @@ client.preview_gates("support")                             # Gate Previews of e
 
 ## Errors
 
-Every error the SDK raises is a `stetiq.StetiqError`, with a subclass per cause, for example `NotFoundError`, `OntologyValidationError`, `PermissionDeniedError` (remote mode, the API Token lacks a permission) and `AuthenticationError` (remote mode, no or an invalid API Token).
+Every error the SDK raises is a `stetiq.StetiqError`, with a subclass per cause, for example `NotFoundError`, `OntologyValidationError`, `ConsumerGateConfigError`, `NoConsumerGatesError`, `RunNotFinishedError` (a Consumer Gate judges only a finished run), `PermissionDeniedError` (remote mode, the API Token lacks a permission) and `AuthenticationError` (remote mode, no or an invalid API Token).

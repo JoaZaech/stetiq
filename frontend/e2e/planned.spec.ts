@@ -26,7 +26,7 @@ async function expectPlaceholder(scope: Locator | Page, name: string, section: s
 test.describe('with a Use Case that declares Consumers', () => {
   test.use({ seed: 'support_use_case_consumers' })
 
-  test('the pipeline strip shows the live parts, the Consumers count and a planned Consumer Gate', async ({
+  test('the pipeline strip shows every part live, the Consumer Gate included, and the Consumers count', async ({
     page,
   }) => {
     await page.goto('/ui/kg/support/versions')
@@ -36,27 +36,29 @@ test.describe('with a Use Case that declares Consumers', () => {
       'Upstream pipeline',
       'Gate',
       'Knowledge Graph',
-      /^Consumer Gate\s*Planned$/,
+      'Consumer Gate',
       'Consumers 2',
     ])
-    await expectPlaceholder(strip, 'Consumer Gate', 'the-two-gate-pipeline')
+    await expect(strip.getByRole('link', { name: /^Planned/ })).toHaveCount(0)
+    await expect(strip.getByRole('group', { name: 'Consumer Gate' })).toHaveCount(0)
     await expect(strip.getByRole('link', { name: 'Consumers 2' })).toHaveAttribute(
       'href',
       '/ui/kg/support/use-case',
     )
   })
 
-  test('the planned Consumer Gate is muted next to the live parts, in light and dark themes', async ({
+  test('the Consumer Gate step is drawn like the other live parts, in light and dark themes', async ({
     page,
   }) => {
     for (const colorScheme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme })
       await page.goto('/ui/kg/support/versions')
       const strip = page.getByRole('list', { name: 'Pipeline' })
-      const color = (el: Element) => getComputedStyle(el).color
-      const live = await strip.getByText('Knowledge Graph', { exact: true }).evaluate(color)
-      const muted = await planned(strip, 'Consumer Gate').standIn.evaluate(color)
-      expect(muted, colorScheme).not.toBe(live)
+      const style = (el: Element) => `${getComputedStyle(el).color} ${getComputedStyle(el).borderStyle}`
+      const gate = await strip.getByText('Gate', { exact: true }).evaluate(style)
+      const consumerGate = await strip.getByText('Consumer Gate', { exact: true }).evaluate(style)
+      expect(consumerGate, colorScheme).toBe(gate)
+      expect(consumerGate, colorScheme).not.toContain('dashed')
     }
   })
 
@@ -71,7 +73,9 @@ test.describe('with a Use Case that declares Consumers', () => {
     expect(await page.locator('html').evaluate(overflow)).toBeLessThanOrEqual(0)
   })
 
-  test('each Consumer card shows its Connector and Consumer Gate as planned', async ({ page }) => {
+  test('each Consumer card shows its Connector, and evaluating its Consumer Gate on each Observation, as planned', async ({
+    page,
+  }) => {
     await page.goto('/ui/kg/support/use-case')
 
     const cards = page.getByRole('region', { name: 'Consumers' }).getByRole('article')
@@ -79,8 +83,12 @@ test.describe('with a Use Case that declares Consumers', () => {
     for (const card of await cards.all()) {
       await expect(planned(card, 'Connector').standIn).toHaveText('Connector: not connected')
       await expectPlaceholder(card, 'Connector', 'connector')
-      await expect(planned(card, 'Consumer Gate').standIn).toHaveText('Consumer Gate: none')
-      await expectPlaceholder(card, 'Consumer Gate', 'consumer-gate')
+      const gate = card.getByRole('region', { name: 'Consumer Gate' })
+      await expect(gate).toContainText('None declared')
+      await expect(planned(gate, 'Evaluated on each Observation').standIn).toHaveText(
+        'Evaluated on each Observation',
+      )
+      await expectPlaceholder(gate, 'Evaluated on each Observation', 'consumer-gate')
     }
   })
 
@@ -121,6 +129,20 @@ test.describe('with a Use Case that declares Consumers', () => {
   })
 })
 
+test.describe('with Drift that finds an undeclared Concept', () => {
+  test.use({ seed: 'observed_support' })
+
+  test('the Drift event shows Pending Migration and Adoption as planned', async ({ page }) => {
+    await page.goto('/ui/kg/support/observations')
+
+    const drift = page.getByRole('article').first().getByRole('region', { name: 'Drift' })
+    await expect(planned(drift, 'Pending Migration').standIn).toHaveText('Pending Migration')
+    await expectPlaceholder(drift, 'Pending Migration', 'pending-migration-and-adoption')
+    await expect(drift.getByRole('button', { name: 'Adopt into a Candidate' })).toBeDisabled()
+    await expectPlaceholder(drift, 'Adoption', 'pending-migration-and-adoption')
+  })
+})
+
 test('the vision page is in Help: its sections exist, its diagram draws, and repository links open on GitHub', async ({
   page,
 }) => {
@@ -135,6 +157,7 @@ test('the vision page is in Help: its sections exist, its diagram draws, and rep
     'consumer-gate',
     'connector',
     'consumer-impact-and-gates-over-it',
+    'pending-migration-and-adoption',
     'ai-and-mcp-authoring',
   ]) {
     await expect(page.locator(`[id="${id}"]`)).toHaveCount(1)

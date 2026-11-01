@@ -89,6 +89,17 @@ describe('withConsumer', () => {
     expect(next.consumers?.[0]).toEqual({ ...useCase.consumers![0], contact: 'Ada Lovelace' })
     expect(next.consumers).toHaveLength(2)
   })
+
+  it('edits a Consumer, keeping its Consumer Gates', () => {
+    const gate = { name: 'routing-holds', check: 'row_count_drop', task: 'route-ticket', max_drop: 0.1 }
+    const gated: UseCase = {
+      ...useCase,
+      consumers: [{ ...useCase.consumers![0], consumer_gates: [gate] }, useCase.consumers![1]],
+    }
+    const next = withConsumer(gated, { ...consumerDraftOf(gated.consumers![0]), name: 'Router' })
+    expect(next.consumers?.[0].consumer_gates).toEqual([gate])
+    expect(withTask(gated, 'triage-bot', taskDraft({})).consumers?.[0].consumer_gates).toEqual([gate])
+  })
 })
 
 describe('withoutConsumer', () => {

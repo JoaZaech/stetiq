@@ -74,6 +74,14 @@ A **Gate** is a rule, defined in your repository's `stetiq.yaml` (see [stetiq.ya
 
 `stetiq gate` evaluates the Gates for an Ontology Version or a Construction Run, records the result, and exits with a non-zero code when a Gate fails, so your CI check fails with it.
 
+## Consumer Gates
+
+A Gate judges a change's absolute health. A change can pass every Gate and still take something away from a Consumer: a Competency Question its dashboard runs returns 2 rows instead of 5. A **Consumer Gate** judges that: a rule, for one Consumer, over what a new Ontology Version or Construction Run gives that Consumer compared with the version it takes today. That divergence, between what a Consumer's Tasks rely on and what it would now get, is **Consumer Drift**. It is not Drift, which compares the Graph Source with the Contract Alias's version.
+
+Each Consumer declares its own Consumer Gates in the Use Case (`consumer_gates`, see [Consumer Gates](./03-python-sdk.md#consumer-gates)), so the Consumer's team owns what "safe" means for it, and the gates are versioned with the Use Case Version. The one kind built, `row_count_drop`, compares each Competency Question of one Task: its executed row count on the Construction Run being judged against the latest finished run on the Contract Alias's version (the baseline). It fails when a question's row count drops by more than the declared limit, and when it cannot compare (no baseline run, or no row count on either side), so a missing input is never a pass.
+
+`stetiq consumer gate` evaluates every Consumer's Consumer Gates, records the verdicts, and exits 3 when one fails, so your pipeline's CI can run it beside `stetiq gate`. A verdict names the symptom (the Consumer, Task, Competency Question and the row change), never a guessed cause. Consumer Gate verdicts never reach the Promotion audit. Checking them before a Consumer takes a version (a Connector) and on every scheduled Observation is planned.
+
 ## Aliases and Promotion
 
 An **Alias** is a named, movable pointer to one Ontology Version within a Knowledge Graph, e.g. `production` or `staging`.

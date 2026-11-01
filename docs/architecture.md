@@ -60,6 +60,7 @@ These run **in the tracking service**, which is server-side in remote mode:
 - Conformance, the Evolution Mode decision, Candidate registration (`origin="run"`) and the run built-ins `conformance` and `observed_schema` all run in `end_run`, in one transaction.
 - Drift (`record_observation`). It never registers a version or moves an Alias.
 - **Gates.** The client sends Gate *definitions* only (`POST …/gate-results`). The server gathers the inputs, computes the outcomes and records them, and the Promotion audit's `gate_result` column reads that record.
+- **Consumer Gates** (ADR 0008). The client sends no definitions at all (`POST …/consumer-gate-results` names only the run, version or Consumer, and refuses other fields). The server reads the definitions from its latest stored Use Case Version and the row counts from its stored `competency_question_execution` results, and records one `ConsumerGateResult` per gated Consumer. They never feed the Promotion audit.
 - The question mapper (`LocalTrackingService(question_mapper=…)`, `stetiq server --question-mapper` / `$STETIQ_QUESTION_MAPPER`). In remote mode the client's env var has no effect. Mapper exceptions turn the question into `unmapped` with `data.error`, so versioning is never blocked.
 
 Origin is decided by the server: `register_ontology` has no `origin` argument, and versions with origin `"run"` only come from `end_run`. `tests/test_server_trust.py` pins what the server refuses to take on the client's word. Extend it when you add a server-computed fact.
@@ -82,7 +83,7 @@ An Ontology Diff `Change` states what it concerns as fields: `owner`, `owner_kin
 
 | Section | Parsed by | Used by |
 |---|---|---|
-| `knowledge_graph:` | CLI | the default Knowledge Graph for `run`, `observe` and `gate` |
+| `knowledge_graph:` | CLI | the default Knowledge Graph for `run`, `observe`, `gate` and `consumer gate` |
 | `entry_point: {command}` | `EntryPoint.from_config` | `stetiq run` (a string is `shlex.split` and run with no shell; a list is used as-is) |
 | `gates:` | `gates.parse_gates` | `stetiq gate` |
 | `drift: {max_count_drop, max_count_increase}` | `drift.thresholds_from_config` | `stetiq observe` |
@@ -91,6 +92,7 @@ A new section gets its own parser module. Don't grow `config.py`.
 
 Exit codes are a contract with CI and schedulers:
 - `stetiq gate`: **0** means all Gates passed, **3** means a Gate failed (`GATE_FAILED_EXIT_CODE`), **1** means an error (missing or bad config, no Gates, unknown Knowledge Graph or version).
+- `stetiq consumer gate`: **0** means every Consumer Gate passed, **3** means one failed, including for a missing baseline or input (`CONSUMER_GATE_FAILED_EXIT_CODE`), **1** means an error (no Consumer declares a Consumer Gate, no finished run, unknown Knowledge Graph, run or Consumer, `--run` with `--version`). It reads `stetiq.yaml` only for `knowledge_graph`.
 - `stetiq observe`: **0** means no Drift, **3** means Drift (`DRIFT_EXIT_CODE`), **1** means an error. A missing *default* `./stetiq.yaml` counts as an empty config. A missing `--config` file is an error.
 - `stetiq run`: **1** whenever the run's status is not `finished`, which includes a strict Evolution Mode failure. The SDK never raises in that case, so callers must check `status`.
 - Every other command exits 1 on a `StetiqError`. Typer usage errors exit 2.

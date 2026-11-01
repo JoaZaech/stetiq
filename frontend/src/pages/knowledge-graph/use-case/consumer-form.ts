@@ -65,6 +65,8 @@ export function withConsumer(useCase: UseCase, draft: ConsumerDraft): UseCase {
     if (value) consumer[field] = value
   }
   if (existing?.tasks?.length) consumer.tasks = existing.tasks
+  // Declared in use-case.yaml; the web UI does not edit them, so it must never drop them.
+  if (existing?.consumer_gates?.length) consumer.consumer_gates = existing.consumer_gates
   const others = (useCase.consumers ?? []).filter((c) => c.id !== id)
   return withConsumers(useCase, [...others, consumer])
 }

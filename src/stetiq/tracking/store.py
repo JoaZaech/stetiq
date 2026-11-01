@@ -15,6 +15,7 @@ from stetiq.graph_source import GraphSourceScope
 from stetiq.tracking.entities import (
     Alias,
     ConstructionRun,
+    ConsumerGateResult,
     DriftEvent,
     EvaluationResult,
     EvolutionMode,
@@ -169,6 +170,14 @@ class Store(Protocol):
         ...
 
     def list_gate_results(self, knowledge_graph: str) -> list[GateResult]:
+        """Ordered oldest first."""
+        ...
+
+    def add_consumer_gate_result(self, result: ConsumerGateResult) -> None:
+        """Append one Consumer's Consumer Gate evaluation (insert-only)."""
+        ...
+
+    def list_consumer_gate_results(self, knowledge_graph: str) -> list[ConsumerGateResult]:
         """Ordered oldest first."""
         ...
 

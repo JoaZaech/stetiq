@@ -28,9 +28,11 @@ from stetiq.errors import (
     GraphSourceNotBoundError,
     InvalidEvolutionModeError,
     MissingDeclaredOntologyError,
+    NoConsumerGatesError,
     NotFoundError,
     NoUseCaseError,
     RunNotActiveError,
+    RunNotFinishedError,
 )
 from stetiq.evaluation.answerability import (
     ANSWERABILITY_EVALUATOR,
@@ -63,6 +65,7 @@ from stetiq.tracking.entities import (
     DEFAULT_EVOLUTION_MODE,
     Alias,
     ConstructionRun,
+    ConsumerGateResult,
     DriftEvent,
     EvaluationResult,
     EvolutionMode,
@@ -82,6 +85,7 @@ from stetiq.tracking.entities import (
 )
 from stetiq.tracking.store import Store
 from stetiq.use_case import UseCase
+from stetiq.use_case.consumer_gates import ConsumerGateInputs, QuestionRows, evaluate_consumer_gate
 
 # What the SDK observed at the end of a run: the scope it read and the Observed Schema.
 # The Observation itself happens SDK-side (the Graph Source adapter and its credentials
@@ -292,6 +296,27 @@ class TrackingService(Protocol):
         """A Gate Preview for every Construction Run, in run order: the Gate definitions
         of the latest Gate result about a run (else about any subject) evaluated against
         each run. Records nothing. Empty if the Knowledge Graph was never gated."""
+        ...
+
+    def evaluate_consumer_gates(
+        self,
+        knowledge_graph: str,
+        *,
+        run: str | None = None,
+        version: int | None = None,
+        consumer: str | None = None,
+    ) -> list[ConsumerGateResult]:
+        """Evaluate the Consumer Gates of the latest Use Case Version's Consumers (or of
+        `consumer` alone) for a finished run (`run`; else the latest finished run
+        standing for `version`; else the latest finished run) against the baseline, and
+        record one result per gated Consumer."""
+        ...
+
+    def list_consumer_gate_results(
+        self, knowledge_graph: str, *, consumer: str | None = None, version: int | None = None
+    ) -> list[ConsumerGateResult]:
+        """Recorded Consumer Gate results, oldest first, optionally only `consumer`'s or
+        only those about a run standing for Ontology Version `version`."""
         ...
 
 
@@ -986,6 +1011,156 @@ class LocalTrackingService:
                 )
             return previews
 
+    # --- Consumer Gates -------------------------------------------------------------
+
+    def evaluate_consumer_gates(
+        self,
+        knowledge_graph: str,
+        *,
+        run: str | None = None,
+        version: int | None = None,
+        consumer: str | None = None,
+    ) -> list[ConsumerGateResult]:
+        if run is not None and version is not None:
+            raise ConflictingArgumentsError(
+                "Consumer Gates judge a run or the run standing for a version, not both"
+            )
+        with self._store.transaction():
+            use_case = self.get_use_case_version(knowledge_graph)
+            consumers = use_case.use_case.consumers
+            if consumer is not None:
+                consumers = tuple(c for c in consumers if c.id == consumer)
+                if not consumers:
+                    raise NotFoundError(
+                        f"Use Case Version {use_case.number} of {knowledge_graph!r} has no "
+                        f"Consumer {consumer!r}"
+                    )
+                if not consumers[0].consumer_gates:
+                    raise NoConsumerGatesError(
+                        f"Consumer {consumer!r} declares no Consumer Gate in Use Case "
+                        f"Version {use_case.number}"
+                    )
+            gated = [c for c in consumers if c.consumer_gates]
+            if not gated:
+                raise NoConsumerGatesError(
+                    f"No Consumer in Use Case Version {use_case.number} of {knowledge_graph!r} "
+                    "declares a Consumer Gate"
+                )
+            subject = self._consumer_gate_subject(knowledge_graph, run=run, version=version)
+            contract = self._contract_version_number(knowledge_graph)
+            baseline = (
+                None
+                if contract is None
+                else next(
+                    (
+                        r
+                        for r in reversed(
+                            self._finished_runs_standing_for(knowledge_graph, contract)
+                        )
+                        if r.id != subject.id
+                    ),
+                    None,
+                )
+            )
+            inputs = ConsumerGateInputs(
+                task_questions={t.id: t.competency_questions for c in gated for t in c.tasks},
+                candidate=self._question_rows(knowledge_graph, subject),
+                baseline=None
+                if baseline is None
+                else self._question_rows(knowledge_graph, baseline),
+                baseline_version=contract,
+            )
+            evaluated_at = _now()
+            results = []
+            for c in gated:
+                result = ConsumerGateResult(
+                    knowledge_graph=knowledge_graph,
+                    consumer=c.id,
+                    use_case_version=use_case.number,
+                    run_id=subject.id,
+                    ontology_version=_stands_for(subject),
+                    baseline_run_id=None if baseline is None else baseline.id,
+                    baseline_ontology_version=contract,
+                    outcomes=tuple(evaluate_consumer_gate(g, inputs) for g in c.consumer_gates),
+                    evaluated_at=evaluated_at,
+                )
+                self._store.add_consumer_gate_result(result)
+                results.append(result)
+            return results
+
+    def _contract_version_number(self, knowledge_graph: str) -> int | None:
+        """The Contract Alias's version, None when it points to none: for a Consumer
+        Gate that is a missing baseline, recorded as a failure, not an error."""
+        alias = self._store.get_alias(knowledge_graph, self._contract_alias(knowledge_graph))
+        return None if alias is None else alias.version
+
+    def _consumer_gate_subject(
+        self, knowledge_graph: str, *, run: str | None, version: int | None
+    ) -> ConstructionRun:
+        """The finished run a Consumer Gate evaluation judges."""
+        if run is not None:
+            subject = self.get_run(run)
+            if subject.knowledge_graph != knowledge_graph:
+                raise NotFoundError(
+                    f"Knowledge Graph {knowledge_graph!r} has no Construction Run {run!r}"
+                )
+            if subject.status != "finished":
+                raise RunNotFinishedError(
+                    f"Construction Run {run!r} is {subject.status}, not finished"
+                )
+            return subject
+        if version is not None:
+            self.get_ontology_version(knowledge_graph, version)
+            runs = self._finished_runs_standing_for(knowledge_graph, version)
+            if not runs:
+                raise NotFoundError(
+                    f"No finished Construction Run of {knowledge_graph!r} stands for Ontology "
+                    f"Version {version}"
+                )
+            return runs[-1]
+        runs = [r for r in self.list_runs(knowledge_graph) if r.status == "finished"]
+        if not runs:
+            raise NotFoundError(
+                f"Knowledge Graph {knowledge_graph!r} has no finished Construction Run"
+            )
+        return runs[-1]
+
+    def _finished_runs_standing_for(
+        self, knowledge_graph: str, version: int
+    ) -> list[ConstructionRun]:
+        return [
+            r
+            for r in self._store.list_runs(knowledge_graph)
+            if r.status == "finished" and _stands_for(r) == version
+        ]
+
+    def _question_rows(self, knowledge_graph: str, run: ConstructionRun) -> dict[str, QuestionRows]:
+        """The row count `competency_question_execution` recorded per question on the run."""
+        results = self.get_evaluation_results(knowledge_graph, "construction_run", run.id)
+        execution = next(
+            (r for r in results if r.evaluator == CQ_EXECUTION_EVALUATOR and not r.parameters),
+            None,
+        )
+        if execution is None:
+            return {}
+        rows = {}
+        for d in execution.details:
+            data = d.data or {}
+            if isinstance(data.get("rows"), int):
+                rows[d.item] = QuestionRows(rows=data["rows"], error=data.get("status") == "error")
+        return rows
+
+    def list_consumer_gate_results(
+        self, knowledge_graph: str, *, consumer: str | None = None, version: int | None = None
+    ) -> list[ConsumerGateResult]:
+        self.get_knowledge_graph(knowledge_graph)
+        return [
+            r
+            for r in self._store.list_consumer_gate_results(knowledge_graph)
+            if (consumer is None or r.consumer == consumer)
+            and (version is None or r.ontology_version == version)
+        ]
+
     def _latest_gate_verdict(self, knowledge_graph: str, version: int) -> str | None:
         """ "passed"/"failed" for the version's latest Gate result; None if never gated."""
         for result in reversed(self._store.list_gate_results(knowledge_graph)):
@@ -999,6 +1174,11 @@ def _latest_per_evaluator(results: Sequence[EvaluationResult]) -> list[Evaluatio
     ordered by Evaluator name then parameters."""
     latest = {(r.evaluator, json.dumps(r.parameters, sort_keys=True)): r for r in results}
     return [latest[key] for key in sorted(latest)]
+
+
+def _stands_for(run: ConstructionRun) -> int:
+    """The Ontology Version a run stands for: its Candidate, else the version it consumed."""
+    return run.candidate_version or run.ontology_version
 
 
 def _now() -> datetime:

@@ -47,7 +47,7 @@ Click a column header to sort, and type in **Search by name** to filter. Click a
 
 ## Inside a Knowledge Graph
 
-A Knowledge Graph opens on its Ontology Versions. Every section starts with the same header: the Knowledge Graph's name, its description (written in markdown), its Evolution Mode (*strict* or *evolving*) and its Contract Alias with the version it points to, e.g. `production → v3`. Below them, a pipeline strip shows where the Knowledge Graph sits: upstream pipeline → Gate → Knowledge Graph → Consumer Gate → Consumers, with the number of Consumers the latest Use Case Version declares (click it to open the [Use Case](#use-case-and-competency-questions)). The Consumer Gate is muted: it is [planned](#planned-features).
+A Knowledge Graph opens on its Ontology Versions. Every section starts with the same header: the Knowledge Graph's name, its description (written in markdown), its Evolution Mode (*strict* or *evolving*) and its Contract Alias with the version it points to, e.g. `production → v3`. Below them, a pipeline strip shows where the Knowledge Graph sits: upstream pipeline → Gate → Knowledge Graph → Consumer Gate → Consumers, with the number of Consumers the latest Use Case Version declares (click it to open the [Use Case](#use-case-and-competency-questions)). Every step is built: the Consumer Gate is checked by `stetiq consumer gate` in your pipeline's CI, and its verdicts show on each Consumer card.
 
 **Edit description** (needs edit access) opens a markdown editor with a **Write** and a **Preview** tab. Saving shows the new description to everyone who can read the Knowledge Graph.
 
@@ -131,6 +131,8 @@ The section shows the latest Use Case Version: its description and its Competenc
 
 - **Consumers**: a card per Consumer the Use Case declares, with its kind, contact and description, and its Tasks. Each Task lists the Competency Questions it needs (id and question), or says it needs none. A Task that needs questions also shows its **readiness**, such as "3/4 questions answerable on v5". Readiness is always shown for the latest Ontology Version: the page has no version selector. It also says how many of the rest are *unanswerable* (the Ontology lacks Concepts they need) or *unmapped* (nothing maps them onto the Ontology). Readiness comes from the stored structural answerability result, and says "Not judged" until that Ontology Version has been judged against this Use Case Version. You can edit Consumers and Tasks here (see below) or declare them in the Use Case you register from the [Python SDK](./03-python-sdk.md#use-cases-and-competency-questions) or the [CLI](./04-cli.md#use-cases).
 
+  Each card's **Consumer Gate** lists the Consumer Gates the Consumer declares in this Use Case Version (name, check, Task and its limit, such as "at most −10% rows") and its latest verdict from `stetiq consumer gate`: **Passed** or **Failed**, the Ontology Version and run it judged, and how long ago. A failed verdict lists each failing Task / Competency Question with its row change, such as "5 → 2 rows (−60.0%, limit −10%)", or says what could not be compared (no baseline run, or no row count on a run). **Not evaluated yet** means the Consumer declares Consumer Gates but has no verdict; **None declared** means it declares none. Consumer Gates are declared in `use-case.yaml` (see [Consumer Gates](./03-python-sdk.md#consumer-gates)); the web UI shows them but does not edit them, and editing a Consumer here keeps them.
+
 - **Structural answerability**: how many of those Competency Questions the latest Ontology Version can answer, and for each one whether it is *Answerable*, *Unanswerable* (with the Concepts it is missing) or *Unmapped*.
 - **Use Case Versions**: every Use Case Version with when it was created and how many Competency Questions it has.
 
@@ -148,7 +150,7 @@ If no Use Case has been registered yet, add a Competency Question here or regist
 
 The section lists every Observation of the Graph Source, newest first, with its Graph Source scope and the Construction Run it ended, or *None (on demand)* for an Observation taken between runs. Each one is marked **Drift** or **No Drift**.
 
-An Observation with Drift lists what diverged from the Ontology Version of the Contract Alias: the Contract Alias and its version, the Drift thresholds, and each finding with its kind, Concept and detail. An *undeclared value* finding is a value of a Vocabulary-bound attribute that the Contract Alias's Vocabulary does not have: its Concept is the attribute (`Owner.attribute`), and its detail names the value and how many times it was observed.
+An Observation with Drift lists what diverged from the Ontology Version of the Contract Alias: the Contract Alias and its version, the Drift thresholds, and each finding with its kind, Concept and detail. It also shows **Pending Migration** as [planned](#planned-features), and, when it found undeclared or vanished Concepts, a disabled **Adopt into a Candidate** (Adoption, planned). An *undeclared value* finding is a value of a Vocabulary-bound attribute that the Contract Alias's Vocabulary does not have: its Concept is the attribute (`Owner.attribute`), and its detail names the value and how many times it was observed.
 
 This section is read-only: an Observation needs your graph database credentials, which never leave your own process. Take one with `stetiq observe` (see [CLI](./04-cli.md)) or by ending a Construction Run.
 
@@ -160,8 +162,9 @@ The section is the Promotion audit, newest first: which Alias moved, from which 
 
 Some parts of stetiq's [vision](../vision.md) are shown in the web UI but not built yet. Each is muted or disabled and carries a **Planned** badge: point at the badge for what it will do, and click it to read about it in the vision.
 
-- **Consumer Gate**, in the pipeline strip of every Knowledge Graph section.
-- **Connector: not connected** and **Consumer Gate: none**, on each Consumer card.
+- **Connector: not connected**, on each Consumer card: today the pipeline's CI enforces its Consumer Gate.
+- **Evaluated on each Observation**, beside each Consumer card's Consumer Gate.
+- **Pending Migration** and **Adoption**, on an Observation's Drift.
 - **Gate on Consumer impact**, under an Ontology Version's latest Gate result.
 - **Draft Tasks & questions with AI**, on the Use Case page.
 

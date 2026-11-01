@@ -28,6 +28,7 @@ from stetiq.tracking import codec, entities
 from stetiq.tracking.entities import (
     Alias,
     ConstructionRun,
+    ConsumerGateResult,
     DriftEvent,
     EvaluationResult,
     GatePreview,
@@ -42,7 +43,12 @@ from stetiq.tracking.entities import (
     RunComparison,
     UseCaseVersion,
 )
-from stetiq.use_case import parse_use_case_dict
+from stetiq.use_case import (
+    ConsumerGateOutcome,
+    RowCountDropGate,
+    RowCountFinding,
+    parse_use_case_dict,
+)
 
 # Composed by `Client` from other entities; never sent over the wire or stored.
 NOT_ENCODED = {RunComparison}
@@ -81,6 +87,14 @@ USE_CASE = parse_use_case_dict(
                 "description": "Routes tickets",
                 "tasks": [
                     {"id": "route", "description": "Route a ticket", "competency_questions": ["q1"]}
+                ],
+                "consumer_gates": [
+                    {
+                        "name": "rows-hold",
+                        "check": "row_count_drop",
+                        "task": "route",
+                        "max_drop": 0.2,
+                    }
                 ],
             }
         ],
@@ -218,6 +232,41 @@ SAMPLES: dict[type, Any] = {
         subject_id="run-1",
         ontology_version=2,
         outcomes=(GateOutcome(ConformanceGate("conformant", 0.8), False, ("0.5 < 0.8",)),),
+        evaluated_at=AT,
+    ),
+    ConsumerGateResult: ConsumerGateResult(
+        knowledge_graph="support",
+        consumer="triage-bot",
+        use_case_version=2,
+        run_id="run-2",
+        ontology_version=3,
+        baseline_run_id="run-1",
+        baseline_ontology_version=2,
+        outcomes=(
+            ConsumerGateOutcome(
+                RowCountDropGate(task="route", max_drop=0.1, name="rows-hold"),
+                False,
+                ("route / q1: 5 → 2 rows",),
+                (
+                    RowCountFinding(
+                        task="route",
+                        competency_question="q1",
+                        limit=0.1,
+                        before=5,
+                        after=2,
+                        change=-0.6,
+                        missing=None,
+                    ),
+                    RowCountFinding(
+                        task="route",
+                        competency_question="q2",
+                        limit=0.1,
+                        after=4,
+                        missing="baseline_error",
+                    ),
+                ),
+            ),
+        ),
         evaluated_at=AT,
     ),
     GatePreviewSource: GATE_PREVIEW_SOURCE,

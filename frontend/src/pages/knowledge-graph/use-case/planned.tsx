@@ -2,23 +2,16 @@ import { Sparkles } from 'lucide-react'
 import { Planned } from '@/components/Planned'
 import { Button } from '@/components/ui/button'
 
-/** A Consumer card's planned edge: its Connector and its Consumer Gate (docs/vision.md). */
-export function ConsumerEdgePlanned() {
+/** A Consumer card's planned edge: its Connector (docs/vision.md). CI enforces its Consumer Gate today. */
+export function ConnectorPlanned() {
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
       <Planned
         label="Connector"
         section="connector"
-        tooltip="The Connector at a Consumer's edge tells it of Ontology changes that affect its Tasks and enforces its Consumer Gate."
+        tooltip="The Connector at a Consumer's edge will tell it of Ontology changes that affect its Tasks and enforce its Consumer Gate before it takes a version; today the pipeline's CI enforces it."
       >
         Connector: not connected
-      </Planned>
-      <Planned
-        label="Consumer Gate"
-        section="consumer-gate"
-        tooltip="A rule, for this Consumer, that must hold for it to take an Ontology Version."
-      >
-        Consumer Gate: none
       </Planned>
     </div>
   )

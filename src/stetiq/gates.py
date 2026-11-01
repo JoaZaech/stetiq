@@ -20,7 +20,7 @@ import os
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Protocol
 
 import yaml
 
@@ -277,7 +277,29 @@ def evaluate_gates(gates: Sequence[Gate], inputs: GateInputs) -> tuple[GateOutco
     return tuple(gate.evaluate(inputs) for gate in gates)
 
 
-def outcome_to_dict(outcome: GateOutcome) -> dict[str, Any]:
+class _Definition(Protocol):
+    @property
+    def name(self) -> str: ...
+
+    def to_dict(self) -> dict[str, Any]: ...
+
+
+class Verdict(Protocol):
+    """An outcome of a rule: a Gate's (`GateOutcome`) or a Consumer Gate's
+    (`use_case.consumer_gates.ConsumerGateOutcome`)."""
+
+    @property
+    def gate(self) -> _Definition: ...
+
+    @property
+    def passed(self) -> bool: ...
+
+    @property
+    def reasons(self) -> tuple[str, ...]: ...
+
+
+def outcome_to_dict(outcome: Verdict) -> dict[str, Any]:
+    """The JSON form of a Gate outcome; a Consumer Gate outcome extends it."""
     return {
         "gate": outcome.gate.to_dict(),
         "passed": outcome.passed,
@@ -285,10 +307,14 @@ def outcome_to_dict(outcome: GateOutcome) -> dict[str, Any]:
     }
 
 
+def verdict_from_dict(d: Mapping[str, Any]) -> tuple[bool, tuple[str, ...]]:
+    """`passed` and `reasons` of an outcome's JSON form."""
+    return bool(d["passed"]), tuple(d["reasons"])
+
+
 def outcome_from_dict(d: Mapping[str, Any]) -> GateOutcome:
-    return GateOutcome(
-        gate=gate_from_dict(d["gate"]), passed=bool(d["passed"]), reasons=tuple(d["reasons"])
-    )
+    passed, reasons = verdict_from_dict(d)
+    return GateOutcome(gate=gate_from_dict(d["gate"]), passed=passed, reasons=reasons)
 
 
 # --- Parsing ---------------------------------------------------------------------------

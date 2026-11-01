@@ -19,6 +19,7 @@ from stetiq.tracking import codec, wire
 from stetiq.tracking.entities import (
     Alias,
     ConstructionRun,
+    ConsumerGateResult,
     DriftEvent,
     EvaluationResult,
     EvolutionMode,
@@ -339,3 +340,31 @@ class RemoteTrackingService:
     def preview_gates(self, knowledge_graph: str) -> list[GatePreview]:
         data = self._call("GET", self._kg_path(knowledge_graph) + "/gate-previews")
         return [codec.gate_preview_from_json(p) for p in data]
+
+    # --- Consumer Gates ---------------------------------------------------------------
+
+    def evaluate_consumer_gates(
+        self,
+        knowledge_graph: str,
+        *,
+        run: str | None = None,
+        version: int | None = None,
+        consumer: str | None = None,
+    ) -> list[ConsumerGateResult]:
+        # No definitions: the server reads them from its own Use Case Version.
+        body = {"run": run, "version": version, "consumer": consumer}
+        data = self._call("POST", self._kg_path(knowledge_graph) + "/consumer-gate-results", body)
+        return [codec.consumer_gate_result_from_json(r) for r in data]
+
+    def list_consumer_gate_results(
+        self, knowledge_graph: str, *, consumer: str | None = None, version: int | None = None
+    ) -> list[ConsumerGateResult]:
+        filters = [
+            f"{key}={quote(str(value), safe='')}"
+            for key, value in (("consumer", consumer), ("version", version))
+            if value is not None
+        ]
+        path = f"{self._kg_path(knowledge_graph)}/consumer-gate-results"
+        if filters:
+            path += "?" + "&".join(filters)
+        return [codec.consumer_gate_result_from_json(r) for r in self._call("GET", path)]

@@ -17,9 +17,15 @@
           - id: route-ticket                           # required, unique among all Tasks
             description: Route a ticket by its customer   # required
             competency_questions: [tickets-per-customer]  # ids of the questions it needs
+        consumer_gates:                                # optional, see consumer_gates.py
+          - name: routing-rows-hold                    # optional, defaults to the check
+            check: row_count_drop
+            task: route-ticket                         # one of this Consumer's Tasks
+            max_drop: 0.10                             # fraction 0-1
 
 The canonical form sorts questions, Consumers, Tasks and a Task's question ids, and
-omits absent fields (`consumers` too, when there are none), so equal Use Cases hash
+omits absent fields (`consumers` and a Consumer's `consumer_gates` too, when there are
+none), so equal Use Cases hash
 equally (identical content registers as the existing version).
 """
 
@@ -31,13 +37,18 @@ from typing import Any, cast
 import yaml
 
 from stetiq import digest
-from stetiq.errors import UseCaseValidationError
+from stetiq.errors import ConsumerGateConfigError, UseCaseValidationError
 from stetiq.use_case.concepts import parse_concept_reference
+from stetiq.use_case.consumer_gates import (
+    check_consumer_gates,
+    consumer_gate_from_dict,
+    parse_consumer_gate,
+)
 from stetiq.use_case.model import CompetencyQuestion, Consumer, Task, UseCase
 
 _TOP_LEVEL_KEYS = {"description", "competency_questions", "consumers"}
 _QUESTION_KEYS = {"id", "question", "query", "expected_answer", "concepts"}
-_CONSUMER_KEYS = {"id", "name", "kind", "contact", "description", "tasks"}
+_CONSUMER_KEYS = {"id", "name", "kind", "contact", "description", "tasks", "consumer_gates"}
 _TASK_KEYS = {"id", "description", "competency_questions"}
 
 
@@ -71,10 +82,15 @@ def parse_use_case_dict(data: Any) -> UseCase:
     )
 
 
-def _list(raw: dict[str, Any], key: str, path: str) -> list[Any] | tuple[Any, ...]:
+def _list(
+    raw: dict[str, Any],
+    key: str,
+    path: str,
+    error: type[UseCaseValidationError] = UseCaseValidationError,
+) -> list[Any] | tuple[Any, ...]:
     value = raw.get(key, ())
     if isinstance(value, str) or not isinstance(value, (list, tuple)):
-        raise UseCaseValidationError(f"{path}: must be a list")
+        raise error(f"{path}: must be a list")
     return value
 
 
@@ -90,6 +106,8 @@ def _mapping(path: str, raw: Any, keys: set[str], needs: str) -> dict[str, Any]:
 def _consumer(path: str, raw: Any) -> Consumer:
     raw = _mapping(path, raw, _CONSUMER_KEYS, "id and name")
     tasks = _list(raw, "tasks", f"{path}.tasks")
+    gates_path = f"{path}.consumer_gates"
+    gates = _list(raw, "consumer_gates", gates_path, ConsumerGateConfigError)
     # Unchecked YAML values: `check_use_case` validates them.
     return Consumer(
         id=cast(str, raw.get("id")),
@@ -98,6 +116,9 @@ def _consumer(path: str, raw: Any) -> Consumer:
         contact=raw.get("contact"),
         description=raw.get("description"),
         tasks=tuple(_task(f"{path}.tasks[{i}]", t) for i, t in enumerate(tasks)),
+        consumer_gates=tuple(
+            parse_consumer_gate(f"{gates_path}[{i}]", g) for i, g in enumerate(gates)
+        ),
     )
 
 
@@ -202,6 +223,7 @@ def _check_consumer(c: Consumer, question_ids: set[str], ids: _Ids) -> None:
                 raise UseCaseValidationError(
                     f"{t.id}.competency_questions: unknown competency question {q!r}"
                 )
+    check_consumer_gates(c.id, c.consumer_gates, {t.id for t in c.tasks})
 
 
 def check_use_case(use_case: UseCase) -> UseCase:
@@ -247,6 +269,9 @@ def _consumer_dict(c: Consumer) -> dict[str, Any]:
             d[field] = getattr(c, field)
     if c.tasks:
         d["tasks"] = [_task_dict(t) for t in sorted(c.tasks, key=lambda t: t.id)]
+    # Left out when empty, so a Use Case without Consumer Gates hashes as before them.
+    if c.consumer_gates:
+        d["consumer_gates"] = [g.to_dict() for g in sorted(c.consumer_gates, key=lambda g: g.name)]
     return d
 
 
@@ -285,6 +310,9 @@ def from_dict(d: dict[str, Any]) -> UseCase:
                         competency_questions=tuple(t.get("competency_questions", ())),
                     )
                     for t in c.get("tasks", ())
+                ),
+                consumer_gates=tuple(
+                    consumer_gate_from_dict(g) for g in c.get("consumer_gates", ())
                 ),
             )
             for c in d.get("consumers", ())

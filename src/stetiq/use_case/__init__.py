@@ -1,6 +1,11 @@
 """Use Cases: Consumers, Tasks and Competency Questions, versioned apart from the Ontology."""
 
 from stetiq.use_case.concepts import parse_concept_reference
+from stetiq.use_case.consumer_gates import (
+    ConsumerGateOutcome,
+    RowCountDropGate,
+    RowCountFinding,
+)
 from stetiq.use_case.format import (
     canonical_json,
     canonicalize,
@@ -19,6 +24,9 @@ from stetiq.use_case.model import CompetencyQuestion, Consumer, Task, UseCase
 __all__ = [
     "CompetencyQuestion",
     "Consumer",
+    "ConsumerGateOutcome",
+    "RowCountDropGate",
+    "RowCountFinding",
     "Task",
     "UseCase",
     "canonical_json",

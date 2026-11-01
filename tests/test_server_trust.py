@@ -322,3 +322,97 @@ def test_ids_outside_the_tokens_grants_answer_like_unknown_ids(
         run.observation_id, unknown_id
     )
     assert existing_text == unknown.text
+
+
+# --- Consumer Gate results are computed by the server ------------------------------------
+
+GATED_USE_CASE = {
+    "competency_questions": [
+        {"id": "customers", "question": "Which customers are there?", "query": "MATCH (c) RETURN c"}
+    ],
+    "consumers": [
+        {
+            "id": "triage-bot",
+            "name": "Triage bot",
+            "tasks": [
+                {
+                    "id": "route",
+                    "description": "Route a ticket",
+                    "competency_questions": ["customers"],
+                }
+            ],
+            "consumer_gates": [{"check": "row_count_drop", "task": "route", "max_drop": 0.1}],
+        }
+    ],
+}
+
+
+@pytest.mark.parametrize(
+    "smuggled",
+    [
+        {"consumer_gates": [{"check": "row_count_drop", "task": "route", "max_drop": 1.0}]},
+        {"outcomes": [{"passed": True, "reasons": [], "findings": []}]},
+        {"passed": True},
+    ],
+)
+def test_a_consumer_gate_request_cannot_carry_definitions_or_outcomes(
+    server, admin, support, smuggled
+):
+    _, http = server
+    admin.register_use_case(support, GATED_USE_CASE)
+    editor = _headers(server, "mallory", {"support": "edit"})
+
+    response = http.post(
+        f"{API}/knowledge-graphs/support/consumer-gate-results",
+        headers=editor,
+        json={"run": _run_id(admin, support), **smuggled},
+    )
+
+    assert response.status_code == 422
+    assert admin.list_consumer_gate_results(support) == []
+
+
+def test_a_consumer_gate_verdict_is_the_servers_own(server, admin, support):
+    _, http = server
+    admin.register_use_case(support, GATED_USE_CASE)
+    editor = _headers(server, "mallory", {"support": "edit"})
+
+    response = http.post(
+        f"{API}/knowledge-graphs/support/consumer-gate-results", headers=editor, json={}
+    )
+
+    # The run executed no question (it predates the Use Case) and has no baseline.
+    assert response.status_code == 201, response.text
+    [result] = admin.list_consumer_gate_results(support)
+    assert not result.passed and result.baseline_run_id is None
+
+
+def test_a_consumer_gate_run_from_another_knowledge_graph_is_refused(
+    server, admin, support, support_ontology
+):
+    _, http = server
+    admin.register_use_case(support, GATED_USE_CASE)
+    admin.create_knowledge_graph("billing", ontology=support_ontology)
+    admin.bind_graph_source("billing", stetiq.GraphSourceScope(database="neo4j"))
+    with admin.start_run("billing") as billing_run:
+        pass
+    editor = _headers(server, "mallory", {"support": "edit", "billing": "edit"})
+
+    response = http.post(
+        f"{API}/knowledge-graphs/support/consumer-gate-results",
+        headers=editor,
+        json={"run": billing_run.id},
+    )
+
+    assert response.status_code == 404
+    assert admin.list_consumer_gate_results(support) == []
+
+
+def test_consumer_gate_results_need_edit_to_record_and_read_to_list(server, admin, support):
+    _, http = server
+    admin.register_use_case(support, GATED_USE_CASE)
+    reader = _headers(server, "rita", {"support": "read"})
+    path = f"{API}/knowledge-graphs/support/consumer-gate-results"
+
+    assert http.post(path, headers=reader, json={}).status_code == 403
+    assert http.get(path, headers=reader).status_code == 200

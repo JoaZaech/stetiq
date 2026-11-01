@@ -147,8 +147,12 @@ A rule, defined in the user's repository, over Evaluator results, Conformance or
 _Avoid_: Policy, check, threshold, input gate
 
 **Consumer Gate**:
-A rule, for one Consumer, over Observed Schema statistics, Conformance, the Ontology Diff and executed Competency Question results that must hold for that Consumer to take an Ontology Version; stetiq evaluates it, the Consumer's Connector enforces it.
+A rule, for one Consumer, over Observed Schema statistics, Conformance, the Ontology Diff and executed Competency Question results, judged against the Ontology Version that Consumer currently takes, that must hold for it to take a new one; unlike a Gate, which judges absolute health, it judges what that Consumer would lose. stetiq evaluates it; it is enforced wherever its verdict is checked: by the upstream pipeline's CI before a change merges, or by the Consumer's Connector before it takes a version.
 _Avoid_: Output gate, release gate, downstream gate
+
+**Consumer Drift**:
+A divergence between what a Consumer's Tasks rely on in the Ontology Version it takes and what a newer Ontology Version or Construction Run gives it: the Consumer and the Ontology's definer drifting apart. The Consumer Gate detects it; Drift, which compares a Graph Source with the Contract Alias, does not.
+_Avoid_: Drift (unqualified, when the Consumer's side is meant), breakage
 
 **Connector**:
 What sits at a Consumer's edge and links it to stetiq: through it the Consumer learns of Ontology changes that affect its Tasks and enforces its Consumer Gate.

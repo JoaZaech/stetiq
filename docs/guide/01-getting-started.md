@@ -12,13 +12,22 @@ flowchart LR
 
 ## Install
 
-stetiq needs Python 3.12 or later. Install it from PyPI:
+stetiq needs Python 3.12 or later, [uv](https://docs.astral.sh/uv/) and, to build the web UI, Node.js. Install it from a clone of the repository:
 
 ```bash
-pip install stetiq
+git clone https://github.com/JoaZaech/stetiq.git
+cd stetiq
+(cd frontend && npm ci && npm run build)
+uv sync
 ```
 
-This installs the Python SDK, the `stetiq` command and the web UI.
+This installs the Python SDK, the `stetiq` command and the web UI into the clone's environment. Run the commands on this page with `uv run` in front (`uv run stetiq ui`), or activate `.venv` first.
+
+Not available yet (**Planned**, see the [vision](../vision.md#what-the-mvp-builds-and-what-it-only-shows)):
+
+- installing with `pip install stetiq` from PyPI;
+- a hosted stetiq instance you can sign in to without running a server;
+- a quickstart that takes your own extraction pipeline from zero to a gated Construction Run.
 
 ## Open the web UI
 
