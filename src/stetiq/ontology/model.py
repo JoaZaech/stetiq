@@ -15,10 +15,13 @@ ConceptKind = Literal["node_type", "relationship_type", "property"]
 
 @dataclass(frozen=True)
 class Property:
+    """An attribute Concept. Like every Concept it has a Definition and Alternative Labels."""
+
     name: str
     type: str
-    description: str | None = None
+    definition: str | None = None
     required: bool = False
+    alternative_labels: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -26,11 +29,12 @@ class NodeType:
     """A class Concept. `parent` is its superclass (single inheritance), if any."""
 
     label: str
-    description: str | None = None
+    definition: str | None = None
     properties: tuple[Property, ...] = ()
     deprecated: bool = False
     replaced_by: str | None = None
     parent: str | None = None
+    alternative_labels: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -38,10 +42,11 @@ class RelationshipType:
     """A relation Concept."""
 
     label: str
-    description: str | None = None
+    definition: str | None = None
     properties: tuple[Property, ...] = ()
     deprecated: bool = False
     replaced_by: str | None = None
+    alternative_labels: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, order=True)

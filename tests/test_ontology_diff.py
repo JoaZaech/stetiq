@@ -254,6 +254,43 @@ def test_changing_only_a_description_is_cosmetic(diff):
     assert d.cosmetic == d.changes
 
 
+def test_changing_only_definitions_is_cosmetic(diff):
+    d = diff(
+        BASE.replace("  - Agent", "  - {label: Agent, definition: A support employee}")
+        .replace(
+            "relationship_types: [OPENED, HANDLES]",
+            "relationship_types:\n"
+            "  - OPENED\n  - {label: HANDLES, definition: The agent works the ticket}",
+        )
+        .replace(
+            "{name: priority, type: FLOAT}",
+            "{name: priority, type: FLOAT, definition: Higher is more urgent}",
+        )
+    )
+
+    assert [(c.concept, c.classification, c.detail) for c in d.changes] == [
+        ("Agent", "cosmetic", "definition changed"),
+        ("Ticket.priority", "cosmetic", "definition changed"),
+        ("HANDLES", "cosmetic", "definition changed"),
+    ]
+    assert d.classification == "cosmetic"
+
+
+def test_changing_only_alternative_labels_is_cosmetic(diff):
+    d = diff(
+        BASE.replace("  - Agent", "  - {label: Agent, alternativeLabels: [Rep]}").replace(
+            "{name: name, type: STRING, required: true}",
+            "{name: name, type: STRING, required: true, alternativeLabels: [full_name]}",
+        )
+    )
+
+    assert [(c.concept, c.classification, c.detail) for c in d.changes] == [
+        ("Agent", "cosmetic", "alternative labels changed"),
+        ("Customer.name", "cosmetic", "alternative labels changed"),
+    ]
+    assert d.classification == "cosmetic"
+
+
 def test_a_cosmetic_change_ranks_below_an_additive_one(diff):
     d = diff(
         BASE.replace(

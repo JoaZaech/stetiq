@@ -104,7 +104,7 @@ client.get_ontology_yaml("support", 2)          # stetiq YAML text
 client.get_ontology_version_by_alias("support", "production")
 ```
 
-Compare two versions with an Ontology Diff. Each change is classified as cosmetic (only a description changed), additive, deprecating or breaking. `detail` says what changed in words; to act on a change in code, read its fields instead: `owner`, `owner_kind` and `attribute` for a change to an attribute, `required` for an added attribute, and `pattern` for an added or removed endpoint Pattern (each `None` when it doesn't apply). Without version numbers, it compares the Contract Alias's version with the latest Candidate. `diff_ontologies` compares two Ontologies that need not be registered, such as two files in your repository.
+Compare two versions with an Ontology Diff. Each change is classified as cosmetic (only a Definition or Alternative Labels changed), additive, deprecating or breaking. `detail` says what changed in words; to act on a change in code, read its fields instead: `owner`, `owner_kind` and `attribute` for a change to an attribute, `required` for an added attribute, and `pattern` for an added or removed endpoint Pattern (each `None` when it doesn't apply). Without version numbers, it compares the Contract Alias's version with the latest Candidate. `diff_ontologies` compares two Ontologies that need not be registered, such as two files in your repository.
 
 ```python
 diff = client.diff_ontology_versions("support", 1, 2)
@@ -244,10 +244,10 @@ class Documented(OntologyVersionEvaluator):
 
     def evaluate(self, version):
         node_types = version.ontology.node_types
-        missing = [n.label for n in node_types if not n.description]
+        missing = [n.label for n in node_types if not n.definition]
         return Evaluation(
             metrics={"undocumented": len(missing)},
-            details=[Detail(item=label, message="no description") for label in missing],
+            details=[Detail(item=label, message="no Definition") for label in missing],
         )
 
 

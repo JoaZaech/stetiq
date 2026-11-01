@@ -297,7 +297,7 @@ export interface ChangeStatement {
   level: Classification | null
   /** The attribute it changed, or null for a change to the class or relation itself. */
   attribute: string | null
-  /** What changed, e.g. "removed", "added, required", "class added", "description changed". */
+  /** What changed, e.g. "removed", "added, required", "class added", "definition changed". */
   text: string
 }
 

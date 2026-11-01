@@ -73,6 +73,47 @@ MALFORMED = {
         "node_types:\n  - label: Customer\n    replacedBy: Client",
         "Client",
     ),
+    "both definition and description": (
+        "node_types:\n  - label: Customer\n    definition: A buyer\n    description: A buyer",
+        "Customer.definition: give either definition or description",
+    ),
+    "both definition and description on a property": (
+        "node_types:\n  - label: Ticket\n    properties:\n"
+        "      - {name: title, type: STRING, definition: a, description: a}",
+        "Ticket.title.definition",
+    ),
+    "alternative label is another class's label": (
+        "node_types:\n  - {label: Customer, alternativeLabels: [Client]}\n  - Client",
+        "Customer.alternativeLabels: 'Client' is the label of another Concept in node_types",
+    ),
+    "alternative label is another relation's label": (
+        "node_types: [A]\nrelationship_types:\n  - {label: OPENED, alternativeLabels: [RAISED]}\n"
+        "  - RAISED",
+        "OPENED.alternativeLabels",
+    ),
+    "alternative label is another attribute's name": (
+        "node_types:\n  - label: Ticket\n    properties:\n"
+        "      - {name: title, type: STRING, alternativeLabels: [subject]}\n"
+        "      - {name: subject, type: STRING}",
+        "Ticket.title.alternativeLabels",
+    ),
+    "empty alternative label": (
+        "node_types:\n  - {label: Customer, alternativeLabels: ['']}",
+        "Customer.alternativeLabels",
+    ),
+    "duplicate alternative label": (
+        "node_types:\n  - {label: Customer, alternativeLabels: [Client, Client]}",
+        "Customer.alternativeLabels: Alternative Label 'Client' is given more than once",
+    ),
+    "duplicate alternative label on a property": (
+        "node_types:\n  - label: Ticket\n    properties:\n"
+        "      - {name: title, type: STRING, alternativeLabels: [subject, subject]}",
+        "Ticket.title.alternativeLabels",
+    ),
+    "alternative labels not a list": (
+        "node_types:\n  - {label: Customer, alternativeLabels: Client}",
+        "Customer.alternativeLabels",
+    ),
     "pattern with undeclared node type": (
         "node_types: [Customer]\nrelationship_types: [OPENED]\npatterns:\n  - [Customer, OPENED, Ticket]",
         "Ticket",

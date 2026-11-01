@@ -3,6 +3,11 @@
 The canonical form is order-independent (Concepts, properties and patterns are
 sorted) and omits default values, so two Ontologies with the same structure
 always produce byte-identical JSON and therefore the same hash.
+
+A Concept's Definition is stored under the key `description`, the name it had
+before Definitions existed, and Alternative Labels are omitted when there are
+none, so Ontology Versions registered before either existed keep their hashes.
+The stetiq YAML spells the Definition `definition` (`to_dict(definition_key=...)`).
 """
 
 from __future__ import annotations
@@ -20,22 +25,34 @@ from stetiq.ontology.model import (
     RelationshipType,
 )
 
+# The canonical key of a Concept's Definition; see the module docstring.
+DEFINITION_KEY = "description"
 
-def _property_to_dict(p: Property) -> dict[str, Any]:
-    d: dict[str, Any] = {"name": p.name, "type": p.type}
-    if p.description is not None:
-        d["description"] = p.description
+
+def _documentation(
+    c: Property | NodeType | RelationshipType, definition_key: str
+) -> dict[str, Any]:
+    d: dict[str, Any] = {}
+    if c.definition is not None:
+        d[definition_key] = c.definition
+    if c.alternative_labels:
+        d["alternativeLabels"] = list(c.alternative_labels)
+    return d
+
+
+def _property_to_dict(p: Property, definition_key: str) -> dict[str, Any]:
+    d: dict[str, Any] = {"name": p.name, "type": p.type, **_documentation(p, definition_key)}
     if p.required:
         d["required"] = True
     return d
 
 
-def _concept_to_dict(c: NodeType | RelationshipType) -> dict[str, Any]:
-    d: dict[str, Any] = {"label": c.label}
-    if c.description is not None:
-        d["description"] = c.description
+def _concept_to_dict(c: NodeType | RelationshipType, definition_key: str) -> dict[str, Any]:
+    d: dict[str, Any] = {"label": c.label, **_documentation(c, definition_key)}
     if c.properties:
-        d["properties"] = [_property_to_dict(p) for p in sorted(c.properties, key=lambda p: p.name)]
+        d["properties"] = [
+            _property_to_dict(p, definition_key) for p in sorted(c.properties, key=lambda p: p.name)
+        ]
     if c.deprecated:
         d["deprecated"] = True
     if c.replaced_by is not None:
@@ -50,14 +67,17 @@ def pattern_to_list(p: Pattern) -> list[str]:
     return [p.source, p.relationship, p.target]
 
 
-def to_dict(ontology: Ontology) -> dict[str, Any]:
-    """The canonical dict form; also the shape of the stetiq YAML."""
+def to_dict(ontology: Ontology, definition_key: str = DEFINITION_KEY) -> dict[str, Any]:
+    """The canonical dict form; also the shape of the stetiq YAML, which passes
+    `definition_key="definition"`."""
     d: dict[str, Any] = {
         "node_types": [
-            _concept_to_dict(n) for n in sorted(ontology.node_types, key=lambda n: n.label)
+            _concept_to_dict(n, definition_key)
+            for n in sorted(ontology.node_types, key=lambda n: n.label)
         ],
         "relationship_types": [
-            _concept_to_dict(r) for r in sorted(ontology.relationship_types, key=lambda r: r.label)
+            _concept_to_dict(r, definition_key)
+            for r in sorted(ontology.relationship_types, key=lambda r: r.label)
         ],
         "patterns": [pattern_to_list(p) for p in sorted(ontology.patterns)],
     }
@@ -69,19 +89,25 @@ def to_dict(ontology: Ontology) -> dict[str, Any]:
     return d
 
 
+def _definition(d: dict[str, Any]) -> str | None:
+    return d.get(DEFINITION_KEY, d.get("definition"))
+
+
 def _property_from_dict(d: dict[str, Any]) -> Property:
     return Property(
         name=d["name"],
         type=d["type"],
-        description=d.get("description"),
+        definition=_definition(d),
         required=d.get("required", False),
+        alternative_labels=tuple(d.get("alternativeLabels", ())),
     )
 
 
 def _concept_kwargs(d: dict[str, Any]) -> dict[str, Any]:
     return {
         "label": d["label"],
-        "description": d.get("description"),
+        "definition": _definition(d),
+        "alternative_labels": tuple(d.get("alternativeLabels", ())),
         "properties": tuple(_property_from_dict(p) for p in d.get("properties", [])),
         "deprecated": d.get("deprecated", False),
         "replaced_by": d.get("replacedBy"),

@@ -112,7 +112,7 @@ def test_a_version_is_fetched_back_as_yaml(client, kg):
             },
             {
                 "label": "Ticket",
-                "description": "A support request",
+                "definition": "A support request",
                 "properties": [{"name": "opened_at", "type": "DATE"}],
             },
         ],
@@ -212,3 +212,91 @@ def test_unknown_knowledge_graphs_and_versions_are_not_found(client, kg):
         client.register_ontology("nope", WITH_AGENT)
     with pytest.raises(stetiq.NotFoundError):
         client.get_ontology_version(kg.name, 2)
+
+
+WITH_DEFINITIONS = """
+node_types:
+  - label: WorkOrder
+    definition: A request to perform maintenance on one Machine
+    alternativeLabels: [WO, Job]
+    properties:
+      - name: status
+        type: STRING
+        definition: Where the work order is in its lifecycle
+        alternativeLabels: [state]
+  - Machine
+relationship_types:
+  - label: PERFORMED_ON
+    definition: The Machine a work order is carried out on
+    alternativeLabels: [TARGETS]
+patterns:
+  - [WorkOrder, PERFORMED_ON, Machine]
+"""
+
+
+def test_definitions_and_alternative_labels_round_trip_through_registration(client, kg):
+    v2 = client.register_ontology(kg.name, WITH_DEFINITIONS)
+
+    ontology = client.get_ontology_version(kg.name, v2.number).ontology
+    work_order = ontology.node_type("WorkOrder")
+    performed_on = ontology.relationship_type("PERFORMED_ON")
+    [status] = work_order.properties
+
+    assert work_order.definition == "A request to perform maintenance on one Machine"
+    assert work_order.alternative_labels == ("WO", "Job")
+    assert ontology.node_type("Machine").alternative_labels == ()
+    assert status.definition == "Where the work order is in its lifecycle"
+    assert status.alternative_labels == ("state",)
+    assert performed_on.definition == "The Machine a work order is carried out on"
+    assert performed_on.alternative_labels == ("TARGETS",)
+
+
+def test_fetched_yaml_spells_definitions_and_alternative_labels_as_written(client, kg):
+    v2 = client.register_ontology(kg.name, WITH_DEFINITIONS)
+
+    fetched = yaml.safe_load(client.get_ontology_yaml(kg.name, v2.number))
+    again = client.register_ontology(kg.name, client.get_ontology_yaml(kg.name, v2.number))
+
+    assert {
+        "label": "WorkOrder",
+        "definition": "A request to perform maintenance on one Machine",
+        "alternativeLabels": ["WO", "Job"],
+        "properties": [
+            {
+                "name": "status",
+                "type": "STRING",
+                "definition": "Where the work order is in its lifecycle",
+                "alternativeLabels": ["state"],
+            }
+        ],
+    } in fetched["node_types"]
+    assert (again.number, again.content_hash) == (v2.number, v2.content_hash)
+
+
+def test_description_is_accepted_as_the_older_spelling_of_definition(client, kg):
+    v2 = client.register_ontology(
+        kg.name,
+        WITH_DEFINITIONS.replace("definition:", "description:"),
+    )
+
+    ontology = v2.ontology
+    assert ontology.node_type("WorkOrder").definition == (
+        "A request to perform maintenance on one Machine"
+    )
+    assert ontology.node_type("WorkOrder").properties[0].definition == (
+        "Where the work order is in its lifecycle"
+    )
+    again = client.register_ontology(kg.name, WITH_DEFINITIONS)
+    assert (again.number, again.content_hash) == (v2.number, v2.content_hash)
+
+
+def test_an_unchanged_ontology_written_with_definition_deduplicates_to_its_older_version(
+    client, kg
+):
+    # v1 was registered with `description: A support request`; the golden hash test
+    # pins its hash, which therefore survives the new spelling.
+    again = client.register_ontology(
+        kg.name, SUPPORT_ONTOLOGY_REORDERED.replace("description:", "definition:")
+    )
+
+    assert again.number == 1

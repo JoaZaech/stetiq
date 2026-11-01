@@ -3,7 +3,7 @@ import { api, kgPath } from './client'
 
 /**
  * Consumer impact of a change, from least to most severe (ontology/diff.py). A cosmetic
- * change touches only documentation (a description).
+ * change touches only documentation (a Definition or Alternative Labels).
  */
 export const CLASSIFICATIONS = ['cosmetic', 'additive', 'deprecating', 'breaking'] as const
 
@@ -32,7 +32,7 @@ export const mostSevere = (classifications: Iterable<Classification>): Classific
 export const MOST_SEVERE_FIRST: readonly Classification[] = [...CLASSIFICATIONS].sort((a, b) => compareSeverity(b, a))
 
 /**
- * How the UI names each classification. Cosmetic changes (only a description changed)
+ * How the UI names each classification. Cosmetic changes (only a Definition or Alternative Labels changed)
  * are "documentation-only" here, as the comparison has always called them.
  */
 export const CLASSIFICATION_LABEL: Record<Classification, string> = {

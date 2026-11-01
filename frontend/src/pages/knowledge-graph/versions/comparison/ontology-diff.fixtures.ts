@@ -58,10 +58,10 @@ export const endpointChange = (
   pattern,
 })
 
-/** A description changed on a class or relation itself, which the Diff classes cosmetic. */
+/** A definition changed on a class or relation itself, which the Diff classes cosmetic. */
 export const conceptDescribed = (kind: OwnerKind, label: string) =>
-  conceptChange(kind, label, 'changed', 'cosmetic', 'description changed')
+  conceptChange(kind, label, 'changed', 'cosmetic', 'definition changed')
 
-/** A description changed on an attribute, which the Diff classes cosmetic. */
+/** A definition changed on an attribute, which the Diff classes cosmetic. */
 export const attributeDescribed = (ownerKind: OwnerKind, owner: string, attribute: string) =>
-  attributeChange(ownerKind, owner, attribute, 'changed', 'cosmetic', { detail: 'description changed' })
+  attributeChange(ownerKind, owner, attribute, 'changed', 'cosmetic', { detail: 'definition changed' })
