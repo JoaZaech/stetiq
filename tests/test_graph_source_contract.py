@@ -9,11 +9,14 @@ skipped when Docker is unavailable).
 import pytest
 
 from stetiq.graph_source import (
+    BoundAttribute,
     Degree,
     GraphSourceScope,
     InMemoryGraphSource,
     Neo4jGraphSource,
     ObservedProperty,
+    ObservedValues,
+    ValueCount,
 )
 
 
@@ -175,3 +178,80 @@ def test_an_empty_scope_has_an_empty_observed_schema(graph):
     schema = graph.source.observe(SCOPE)
 
     assert (schema.node_types, schema.relationship_types, schema.patterns) == ((), (), ())
+
+
+def test_observes_values_with_counts_for_a_requested_node_attribute(graph):
+    for status in ["open", "open", "closed", "open", "blocked", "closed"]:
+        graph.add_node(["KG", "Ticket"], {"status": status})
+    graph.add_node(["KG", "Ticket"], {"status": 3})  # not a string: no Vocabulary Value
+    graph.add_node(["Ticket"], {"status": "outside"})  # outside the scope label
+
+    schema = graph.source.observe(SCOPE, (BoundAttribute("node_type", "Ticket", "status"),))
+
+    assert schema.node_type("Ticket").properties[0].values == ObservedValues(
+        (ValueCount("open", 3), ValueCount("closed", 2), ValueCount("blocked", 1)),
+        truncated=False,
+    )
+
+
+def test_values_are_capped_and_truncated_only_when_more_distinct_values_exist(graph):
+    for status in ["open", "open", "open", "closed", "closed", "blocked"]:
+        graph.add_node(["KG", "Ticket"], {"status": status})
+    for priority in ["high", "low", "low"]:
+        graph.add_node(["KG", "Ticket"], {"priority": priority})
+
+    schema = graph.source.observe(
+        SCOPE,
+        (
+            BoundAttribute("node_type", "Ticket", "status"),
+            BoundAttribute("node_type", "Ticket", "priority"),
+        ),
+        value_cap=2,
+    )
+
+    priority, status = schema.node_type("Ticket").properties
+    assert status.values == ObservedValues(
+        (ValueCount("open", 3), ValueCount("closed", 2)), truncated=True
+    )
+    assert priority.values == ObservedValues(
+        (ValueCount("low", 2), ValueCount("high", 1)), truncated=False
+    )
+
+
+def test_observes_values_of_a_requested_relationship_attribute(graph):
+    ada = graph.add_node(["KG", "Customer"])
+    ticket = graph.add_node(["KG", "Ticket"])
+    outside = graph.add_node(["Ticket"])
+    graph.add_relationship(ada, "OPENED", ticket, {"channel": "email"})
+    graph.add_relationship(ada, "OPENED", ticket, {"channel": "phone"})
+    graph.add_relationship(ada, "OPENED", ticket, {"channel": "email"})
+    graph.add_relationship(ada, "OPENED", outside, {"channel": "fax"})  # endpoint out of scope
+
+    schema = graph.source.observe(
+        SCOPE, (BoundAttribute("relationship_type", "OPENED", "channel"),)
+    )
+
+    assert schema.relationship_type("OPENED").properties[0].values == ObservedValues(
+        (ValueCount("email", 2), ValueCount("phone", 1)), truncated=False
+    )
+
+
+def test_reads_no_values_for_attributes_that_were_not_requested(graph):
+    ada = graph.add_node(["KG", "Customer"], {"name": "Ada", "status": "vip"})
+    ticket = graph.add_node(["KG", "Ticket"], {"status": "open", "title": "Broken"})
+    graph.add_relationship(ada, "OPENED", ticket, {"status": "new"})
+
+    schema = graph.source.observe(SCOPE, (BoundAttribute("node_type", "Ticket", "status"),))
+
+    observed = {
+        (owner.label, p.name): p.values
+        for owner in (*schema.node_types, *schema.relationship_types)
+        for p in owner.properties
+    }
+    assert observed == {
+        ("Customer", "name"): None,
+        ("Customer", "status"): None,
+        ("Ticket", "status"): ObservedValues((ValueCount("open", 1),), truncated=False),
+        ("Ticket", "title"): None,
+        ("OPENED", "status"): None,
+    }

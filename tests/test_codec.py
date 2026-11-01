@@ -15,7 +15,14 @@ from stetiq.conformance import Conformance, Mismatch, MismatchKind
 from stetiq.drift import DriftFinding, DriftKind, DriftThresholds
 from stetiq.evaluation.framework import Detail, Evaluation
 from stetiq.gates import ConformanceGate, GateOutcome
-from stetiq.graph_source import GraphSourceScope, ObservedNodeType, ObservedSchema
+from stetiq.graph_source import (
+    GraphSourceScope,
+    ObservedNodeType,
+    ObservedProperty,
+    ObservedSchema,
+    ObservedValues,
+    ValueCount,
+)
 from stetiq.ontology import parse_dict
 from stetiq.tracking import codec, entities
 from stetiq.tracking.entities import (
@@ -64,7 +71,25 @@ USE_CASE = parse_use_case_dict(
     {"competency_questions": [{"id": "q1", "question": "Which customers opened tickets?"}]}
 )
 SCOPE = GraphSourceScope(database="kgs", label="KG_support", namespace="support")
-SCHEMA = ObservedSchema(node_types=(ObservedNodeType("Customer", 3, ()),), relationship_types=())
+SCHEMA = ObservedSchema(
+    node_types=(
+        ObservedNodeType(
+            "Customer",
+            3,
+            (
+                ObservedProperty("name", ("STRING",), 3, 1.0),
+                ObservedProperty(
+                    "tier",
+                    ("STRING",),
+                    3,
+                    1.0,
+                    ObservedValues((ValueCount("gold", 2), ValueCount("silver", 1)), True),
+                ),
+            ),
+        ),
+    ),
+    relationship_types=(),
+)
 DETAIL = Detail(item="Customer", message="isolated", metric="isolated", data={"missing": ["x"]})
 KNOWLEDGE_GRAPH = KnowledgeGraph(
     name="support",
@@ -197,6 +222,27 @@ def test_every_entity_round_trips_through_the_codec(cls):
     data = json.loads(json.dumps(codec.encode(sample)))
 
     assert codec.decode(cls, data) == sample
+
+
+def test_an_observed_schema_stored_before_vocabulary_values_still_parses():
+    stored = {
+        "node_types": [
+            {
+                "label": "Customer",
+                "count": 2,
+                "properties": [{"name": "tier", "types": ["STRING"], "count": 2, "fill_rate": 1.0}],
+            }
+        ],
+        "relationship_types": [],
+        "patterns": [],
+    }
+
+    schema = codec.observed_schema_from_json(stored)
+
+    assert schema.node_type("Customer").properties == (
+        ObservedProperty("tier", ("STRING",), 2, 1.0, values=None),
+    )
+    assert codec.observed_schema_to_json(schema) == stored
 
 
 def test_the_entity_list_is_found_automatically():

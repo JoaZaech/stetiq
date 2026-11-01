@@ -10,12 +10,14 @@ from __future__ import annotations
 
 import datetime as dt
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Mapping
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
 from stetiq.graph_source.model import (
+    DEFAULT_VALUE_CAP,
     NAMESPACE_PROPERTY,
+    BoundAttribute,
     Degree,
     GraphSourceScope,
     ObservedNodeType,
@@ -23,6 +25,7 @@ from stetiq.graph_source.model import (
     ObservedProperty,
     ObservedRelationshipType,
     ObservedSchema,
+    ObservedValues,
 )
 
 
@@ -83,7 +86,13 @@ class InMemoryGraphSource:
         except KeyError:
             raise ValueError(f"no canned result for query {query!r}") from None
 
-    def observe(self, scope: GraphSourceScope) -> ObservedSchema:
+    def observe(
+        self,
+        scope: GraphSourceScope,
+        bound_attributes: Collection[BoundAttribute] = (),
+        *,
+        value_cap: int = DEFAULT_VALUE_CAP,
+    ) -> ObservedSchema:
         nodes = {n.id: n for n in self._nodes.values() if _in_scope(n, scope)}
         rels = [r for r in self._relationships if r.start in nodes and r.end in nodes]
 
@@ -103,12 +112,20 @@ class InMemoryGraphSource:
         for rel in rels:
             rels_by_type[rel.type].append(rel)
 
+        def observed(kind: str, owner: str, records: list[dict[str, Any]]):
+            read = {
+                b.attribute for b in bound_attributes if (b.owner_kind, b.owner) == (kind, owner)
+            }
+            return _observed_properties(records, read, value_cap)
+
         node_types = tuple(
-            ObservedNodeType(label, len(ns), _observed_properties([props(n) for n in ns]))
+            ObservedNodeType(label, len(ns), observed("node_type", label, [props(n) for n in ns]))
             for label, ns in sorted(nodes_by_label.items())
         )
         relationship_types = tuple(
-            ObservedRelationshipType(t, len(rs), _observed_properties([r.properties for r in rs]))
+            ObservedRelationshipType(
+                t, len(rs), observed("relationship_type", t, [r.properties for r in rs])
+            )
             for t, rs in sorted(rels_by_type.items())
         )
 
@@ -142,18 +159,31 @@ def _in_scope(node: _Node, scope: GraphSourceScope) -> bool:
     return scope.namespace is None or node.properties.get(NAMESPACE_PROPERTY) == scope.namespace
 
 
-def _observed_properties(records: list[dict[str, Any]]) -> tuple[ObservedProperty, ...]:
+def _observed_properties(
+    records: list[dict[str, Any]], read_values_of: set[str], value_cap: int
+) -> tuple[ObservedProperty, ...]:
     total = len(records)
     types: dict[str, set[str]] = defaultdict(set)
     filled: Counter[str] = Counter()
+    values: dict[str, Counter[str]] = defaultdict(Counter)
     for record in records:
         for name, value in record.items():
             if value is None:
                 continue
             filled[name] += 1
             types[name].add(_type_name(value))
+            if name in read_values_of and isinstance(value, str):
+                values[name][value] += 1
     return tuple(
-        ObservedProperty(name, tuple(sorted(types[name])), filled[name], filled[name] / total)
+        ObservedProperty(
+            name,
+            tuple(sorted(types[name])),
+            filled[name],
+            filled[name] / total,
+            ObservedValues.capped(values[name].items(), value_cap)
+            if name in read_values_of
+            else None,
+        )
         for name in sorted(filled)
     )
 
