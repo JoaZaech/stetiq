@@ -220,7 +220,7 @@ client.add_competency_question(
 )
 ```
 
-`add_competency_question` adds one question to the latest Use Case Version and registers the result as a new one. `client.get_use_case_version("support")` without a number returns the latest Use Case Version, and raises `NoUseCaseError` (a `NotFoundError`) when there is none. Every new Ontology Version is judged against the latest Use Case (`structural_answerability`: does the Ontology have the Concepts each question needs?). At the end of a Construction Run, the SDK also executes the questions that have a `query` against your Graph Source (`competency_question_execution`). Their rows are judged and then dropped: only the result leaves your process.
+`add_competency_question` adds one question to the latest Use Case Version and registers the result as a new one. `client.get_use_case_version("support")` without a number returns the latest Use Case Version, and raises `NoUseCaseError` (a `NotFoundError`) when there is none. Every new Ontology Version is judged against the latest Use Case (`structural_answerability`: does the Ontology have the Concepts each question needs?). The same mapping also shows which Concepts no question references (`competency_question_coverage`). At the end of a Construction Run, the SDK also executes the questions that have a `query` against your Graph Source (`competency_question_execution`). Their rows are judged and then dropped: only the result leaves your process.
 
 ## Evaluators
 
@@ -267,7 +267,7 @@ client.evaluate("support", 3, evaluators=[stetiq.GoldOntologyAlignment(gold)])
 client.evaluate_run(run.id, evaluators=[MyRunCheck()])
 ```
 
-If an Evaluator raises, the SDK raises `EvaluatorError`; the version or run it was evaluating is already recorded. The names of the built-in Evaluators (`hierarchy`, `isolated_node_types`, `orphan_concepts`, `redundancy`, `constraint_consistency`, `structural_answerability`, `conformance`, `observed_schema`, `competency_question_execution`) are reserved.
+If an Evaluator raises, the SDK raises `EvaluatorError`; the version or run it was evaluating is already recorded. The names of the built-in Evaluators (`hierarchy`, `isolated_node_types`, `orphan_concepts`, `redundancy`, `constraint_consistency`, `structural_answerability`, `competency_question_coverage`, `conformance`, `observed_schema`, `competency_question_execution`) are reserved.
 
 ## Aliases, Promotion and Gates
 

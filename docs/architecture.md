@@ -56,8 +56,8 @@ These run **in the SDK process**:
 - `GoldOntologyAlignment` (client-side, parameterised).
 
 These run **in the tracking service**, which is server-side in remote mode:
-- The version built-ins (`BUILT_IN_EVALUATORS`) and `structural_answerability` run in `_register` for every *new* version, Candidates included. A dedupe hit does not re-run them.
-- `structural_answerability` also runs in `register_use_case` for every *new* Use Case Version, against the **latest** Ontology Version only, in the same transaction. The other built-ins are not re-run, and a dedupe hit judges nothing. This is why the web UI never calls `POST …/evaluate` after saving a Use Case: it only reads the stored result.
+- The version built-ins (`BUILT_IN_EVALUATORS`), `structural_answerability` and `competency_question_coverage` run in `_register` for every *new* version, Candidates included. A dedupe hit does not re-run them.
+- `structural_answerability` and `competency_question_coverage` also run in `register_use_case` for every *new* Use Case Version, against the **latest** Ontology Version only, in the same transaction. Both read one Concept mapping (`StructuralAnswerability.concept_mapping`), so the question mapper runs once per question. The other built-ins are not re-run, and a dedupe hit judges nothing. This is why the web UI never calls `POST …/evaluate` after saving a Use Case: it only reads the stored result.
 - Conformance, the Evolution Mode decision, Candidate registration (`origin="run"`) and the run built-ins `conformance` and `observed_schema` all run in `end_run`, in one transaction.
 - Drift (`record_observation`). It never registers a version or moves an Alias.
 - **Gates.** The client sends Gate *definitions* only (`POST …/gate-results`). The server gathers the inputs, computes the outcomes and records them, and the Promotion audit's `gate_result` column reads that record.
@@ -71,7 +71,7 @@ An Ontology Diff `Change` states what it concerns as fields: `owner`, `owner_kin
 
 ## Reserved Evaluator names
 
-`RESERVED_EVALUATOR_NAMES` (`tracking/service.py`) is the union of the version built-ins (`hierarchy`, `isolated_node_types`, `orphan_concepts`, `redundancy`, `constraint_consistency`), `structural_answerability`, and the run Evaluators `conformance`, `observed_schema` and `competency_question_execution`.
+`RESERVED_EVALUATOR_NAMES` (`tracking/service.py`) is the union of the version built-ins (`hierarchy`, `isolated_node_types`, `orphan_concepts`, `redundancy`, `constraint_consistency`), `structural_answerability`, `competency_question_coverage`, and the run Evaluators `conformance`, `observed_schema` and `competency_question_execution`.
 
 - `Client.register_evaluator` and the one-off `evaluators=` reject these names, before running anything, through the service's `check_not_built_in`, so the message is the same as the service's. `record_evaluation` refuses them too, with one exception: `competency_question_execution` is accepted on a `construction_run` subject, because it is a built-in that has to run on the SDK side.
 - Gates name these Evaluators and their metrics in users' `stetiq.yaml`, so **renaming one is a breaking change**. A new built-in must be added to this set.

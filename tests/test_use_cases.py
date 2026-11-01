@@ -144,7 +144,7 @@ def test_a_new_use_case_version_does_not_re_run_the_other_built_ins(client, kg):
     client.register_use_case(kg.name, USE_CASE)
 
     after = {r.evaluator: r for r in client.get_evaluation_results(kg.name, 1)}
-    assert set(after) == set(before) | {"structural_answerability"}
+    assert set(after) == set(before) | {"structural_answerability", "competency_question_coverage"}
     assert all(after[name] == result for name, result in before.items())
 
 
@@ -526,3 +526,8 @@ def test_questions_without_a_query_or_mapping_are_mapped_through_the_model_inter
     }
     assert (questions["names"]["status"], questions["names"]["source"]) == ("answerable", "model")
     assert questions["explicit"]["source"] == "concepts"
+    # Competency Question coverage read the same mapping: the mapper was asked once.
+    coverage = {r.evaluator: r for r in client.get_evaluation_results("kg", 1)}[
+        "competency_question_coverage"
+    ]
+    assert sorted(d.item for d in coverage.details) == ["OPENED", "Ticket.opened_at"]
