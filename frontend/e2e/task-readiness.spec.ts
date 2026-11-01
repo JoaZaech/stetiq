@@ -14,10 +14,12 @@ test('each Task on a Consumer card shows how many of its questions the latest On
   await expect(readiness).toContainText('1 unmapped')
 })
 
-test('the Competency Questions table marks the questions that serve no Task', async ({ page }) => {
+test('the Competency Questions list marks the questions no Task uses', async ({ page }) => {
   await page.goto('/ui/kg/support/use-case')
 
-  const table = page.getByRole('table', { name: 'Competency Questions' })
-  await expect(table.getByText('serves no Task')).toHaveCount(1)
-  await expect(table.getByRole('row').filter({ hasText: 'ticket-count' })).toContainText('serves no Task')
+  const list = page.getByRole('list', { name: 'Competency Questions' })
+  await expect(list.getByText('Not used by any Task')).toHaveCount(1)
+  await expect(list.getByRole('listitem').filter({ hasText: 'How many tickets are there?' })).toContainText(
+    'Not used by any Task',
+  )
 })

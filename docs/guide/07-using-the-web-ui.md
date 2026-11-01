@@ -27,7 +27,7 @@ Some controls change a Knowledge Graph, and they need the *edit* permission on i
 | **Edit description** | The header of every Knowledge Graph section |
 | **Promote** | An Ontology Version's page |
 | **Add Competency Question** | The Use Case section |
-| Edit and remove a Competency Question | The row of each Competency Question in the Use Case section |
+| **Edit** and **Remove** a Competency Question | The header of its sheet: click the question in the Use Case section |
 | **Add Consumer** | The Consumers panel of the Use Case section |
 | Edit and remove a Consumer, add a Task to it | The header of each Consumer card |
 | Edit and remove a Task | Beside each Task on its Consumer card |
@@ -127,16 +127,25 @@ If the Knowledge Graph has been gated, each KPI a Gate covers (Conformance, or t
 
 ### Use Case and Competency Questions
 
-The section shows the latest Use Case Version: its description and its Competency Questions, each with its id, question, Cypher query, expected answer and Concept mapping. A question that no Consumer's Task needs is marked *serves no Task* (in a Use Case without Consumers, every question is). Below it:
+The section shows the latest Use Case Version: its description and its **Competency Questions**, one row per question. A summary line above them says how many the latest Ontology Version answers, such as "Ontology Version v3 answers 2 of 4 Competency Questions." Each row shows the question and its status on that version:
+
+- **Answerable** (green check): the Ontology Version has every Concept the question needs.
+- **Unanswerable** (red cross): Concepts it needs are missing.
+- **Can't check** (grey dashed circle): the question has neither a Concept mapping nor a query, so stetiq can't tell. Point at it for that explanation.
+
+A question that no Consumer's Task needs is marked *Not used by any Task* (in a Use Case without Consumers, every question is). The status comes from the stored structural answerability result: until the latest Ontology Version has been judged against this Use Case Version, the summary line says so and the rows show no status, and a Knowledge Graph without an Ontology Version says that instead.
+
+Click a question to open its **side sheet**, which shows the question and its status, then the **Missing Concepts** of an unanswerable question, **Needed by** (each Consumer · Task that needs it, or *Not used by any Task*) and **Author details**: its id, Cypher query, expected answer and Concept mapping. **Edit** and **Remove** sit in the sheet's header. The open sheet is part of the URL, so you can link to a question, a reload keeps it open, and the browser's Back closes it.
+
+Below the Competency Questions:
 
 - **Consumers**: a card per Consumer the Use Case declares, with its kind, contact and description, and its Tasks. Each Task lists the Competency Questions it needs (id and question), or says it needs none. A Task that needs questions also shows its **readiness**, such as "3/4 questions answerable on v5". Readiness is always shown for the latest Ontology Version: the page has no version selector. It also says how many of the rest are *unanswerable* (the Ontology lacks Concepts they need) or *unmapped* (nothing maps them onto the Ontology). Readiness comes from the stored structural answerability result, and says "Not judged" until that Ontology Version has been judged against this Use Case Version. You can edit Consumers and Tasks here (see below) or declare them in the Use Case you register from the [Python SDK](./03-python-sdk.md#use-cases-and-competency-questions) or the [CLI](./04-cli.md#use-cases).
 
   Each card's **Consumer Gate** lists the Consumer Gates the Consumer declares in this Use Case Version (name, check, Task and its limit, such as "at most −10% rows") and its latest verdict from `stetiq consumer gate`: **Passed** or **Failed**, the Ontology Version and run it judged, and how long ago. A failed verdict lists each failing Task / Competency Question with its row change, such as "5 → 2 rows (−60.0%, limit −10%)", or says what could not be compared (no baseline run, or no row count on a run). **Not evaluated yet** means the Consumer declares Consumer Gates but has no verdict; **None declared** means it declares none. Consumer Gates are declared in `use-case.yaml` (see [Consumer Gates](./03-python-sdk.md#consumer-gates)); the web UI shows them but does not edit them, and editing a Consumer here keeps them.
 
-- **Structural answerability**: how many of those Competency Questions the latest Ontology Version can answer, and for each one whether it is *Answerable*, *Unanswerable* (with the Concepts it is missing) or *Unmapped*.
 - **Use Case Versions**: every Use Case Version with when it was created and how many Competency Questions it has.
 
-**Editing Competency Questions** (needs edit access). **Add Competency Question** opens a form with an **Id**, a **Question**, and optionally a **Cypher query**, an **Expected answer** (any JSON value the query's rows must match) and a **Concept mapping** (one Concept reference per line, e.g. `Customer`, `Ticket.opened_at` or `(Customer)-[OPENED]->(Ticket)`). Each row also has an edit button, which opens the same form (the id is locked: to change it, remove the question and add a new one), and a remove button. Removing a question that Tasks need names those Tasks first: they stay, without that question. A new question's id must differ from every other Competency Question, Consumer and Task id in the Use Case.
+**Editing Competency Questions** (needs edit access). **Add Competency Question** opens a form with an **Id**, a **Question**, and optionally a **Cypher query**, an **Expected answer** (any JSON value the query's rows must match) and a **Concept mapping** (one Concept reference per line, e.g. `Customer`, `Ticket.opened_at` or `(Customer)-[OPENED]->(Ticket)`). In a question's sheet, **Edit** opens the same form (the id is locked: to change it, remove the question and add a new one) and **Remove** removes it, closing the sheet. Removing a question that Tasks need names those Tasks first: they stay, without that question. A new question's id must differ from every other Competency Question, Consumer and Task id in the Use Case.
 
 **Editing Consumers and Tasks** (needs edit access). **Add Consumer** opens a form with an **Id** and a **Name**, and optionally a **Kind** (an application, an agent, a dashboard, a team...), a **Contact** and a **Description**. On each Consumer card, the edit button opens the same form (the id is locked), the remove button removes the Consumer with all its Tasks after naming them (the Competency Questions stay), and the add button adds a Task: an **Id**, a **Description**, and the Competency Questions it needs, ticked from the Use Case's. Each Task has its own edit and remove buttons. A new Consumer's or Task's id must differ from every other Consumer, Task and Competency Question id in the Use Case.
 

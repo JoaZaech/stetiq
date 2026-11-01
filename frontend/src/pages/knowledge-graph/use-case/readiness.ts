@@ -1,4 +1,4 @@
-import type { Task, UseCase } from '@/api/use-cases'
+import type { Consumer, Task, UseCase } from '@/api/use-cases'
 import type { Answerability } from './answerability'
 
 /** How many of the Competency Questions a Task needs an Ontology Version can answer. */
@@ -33,4 +33,13 @@ export function questionsServingNoTask(useCase: UseCase): Set<string> {
     (useCase.consumers ?? []).flatMap((c) => (c.tasks ?? []).flatMap((t) => t.competency_questions ?? [])),
   )
   return new Set(useCase.competency_questions.map((q) => q.id).filter((id) => !needed.has(id)))
+}
+
+/** The Tasks of `useCase` that need the question `id`, each with its Consumer, in Consumer order. */
+export function neededBy(useCase: UseCase, id: string): { consumer: Consumer; task: Task }[] {
+  return (useCase.consumers ?? []).flatMap((consumer) =>
+    (consumer.tasks ?? [])
+      .filter((task) => task.competency_questions?.includes(id))
+      .map((task) => ({ consumer, task })),
+  )
 }

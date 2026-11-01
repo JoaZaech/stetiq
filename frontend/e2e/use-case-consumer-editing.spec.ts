@@ -8,11 +8,11 @@ test.use({ seed: 'support_use_case_consumers' })
 
 const consumers = (page: Page) => page.getByRole('region', { name: 'Consumers' })
 const card = (page: Page, name: string) => consumers(page).getByRole('article', { name })
-const questionRows = (page: Page, version: number) =>
+const questionItems = (page: Page, version: number) =>
   page
     .getByRole('region', { name: `Use Case Version ${version}` })
-    .getByRole('table', { name: 'Competency Questions' })
-    .getByRole('row')
+    .getByRole('list', { name: 'Competency Questions' })
+    .getByRole('listitem')
 
 test('an editor adds a Consumer, which creates a new Use Case Version', async ({ page }) => {
   await page.goto('/ui/kg/support/use-case')
@@ -100,7 +100,7 @@ test('removing a Consumer names its Tasks, and keeps the Competency Questions', 
   await expect(page.getByRole('status')).toHaveText('Saved as Use Case Version 3.')
   await expect(consumers(page).getByRole('article')).toHaveCount(1)
   await expect(card(page, 'Workload dashboard')).toBeVisible()
-  await expect(questionRows(page, 3)).toHaveCount(3)
+  await expect(questionItems(page, 3)).toHaveCount(2)
 })
 
 test('an editor adds a Task to a Consumer, picking the questions it needs', async ({ page }) => {
@@ -174,7 +174,8 @@ test('an editor removes a Task after confirming', async ({ page }) => {
 test('removing a question a Task needs says which Tasks lose it', async ({ page }) => {
   await page.goto('/ui/kg/support/use-case')
 
-  await page.getByRole('button', { name: 'Remove customer-names' }).click()
+  await page.getByRole('button', { name: /^What are our customers called\?/ }).click()
+  await page.getByRole('dialog', { name: 'What are our customers called?' }).getByRole('button', { name: 'Remove' }).click()
   const confirm = page.getByRole('alertdialog', { name: 'Remove customer-names?' })
   await expect(confirm.getByRole('list', { name: 'Tasks that lose it' }).getByRole('listitem')).toHaveText([
     /greet-customer.*Greet the customer by name/,
@@ -183,7 +184,7 @@ test('removing a question a Task needs says which Tasks lose it', async ({ page 
   await confirm.getByRole('button', { name: 'Remove' }).click()
 
   await expect(page.getByRole('status')).toHaveText('Saved as Use Case Version 3.')
-  await expect(questionRows(page, 3)).toHaveCount(2)
+  await expect(questionItems(page, 3)).toHaveCount(1)
   const bot = card(page, 'Triage bot')
   const tasks = bot.getByRole('list', { name: 'Tasks' }).locator(':scope > li')
   await expect(tasks.filter({ hasText: 'Greet the customer by name' })).toContainText('Needs no Competency Question')
@@ -196,7 +197,8 @@ test('removing a question no Task needs says nothing about Tasks', async ({ page
   await page.getByRole('alertdialog', { name: 'Remove route-ticket?' }).getByRole('button', { name: 'Remove' }).click()
   await expect(page.getByRole('status')).toHaveText('Saved as Use Case Version 3.')
 
-  await page.getByRole('button', { name: 'Remove agent-names' }).click()
+  await page.getByRole('button', { name: /^What are our agents called\?/ }).click()
+  await page.getByRole('dialog', { name: 'What are our agents called?' }).getByRole('button', { name: 'Remove' }).click()
   const confirm = page.getByRole('alertdialog', { name: 'Remove agent-names?' })
   await expect(confirm.getByRole('list', { name: 'Tasks that lose it' })).toHaveCount(0)
 })
