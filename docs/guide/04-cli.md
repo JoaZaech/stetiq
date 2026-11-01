@@ -88,7 +88,7 @@ stetiq ontology evaluations support 2
 
 - `ontology register` registers a changed Ontology. Content identical to an existing version returns that version.
 - `ontology get` prints a version as stetiq YAML.
-- `ontology diff KG BASE TARGET` prints the Ontology Diff, one change per line, each cosmetic, additive, deprecating or breaking, then the overall classification. Without `BASE` it starts from the Contract Alias's version; without `TARGET` it ends at the latest Candidate.
+- `ontology diff KG BASE TARGET` prints the Ontology Diff, one change per line, each cosmetic, additive, deprecating or breaking, then the overall classification. Without `BASE` it starts from the Contract Alias's version; without `TARGET` it ends at the latest Candidate. A **Consumer impact** section follows: the Consumers the changes affect (breaking), then those they will affect (deprecating) and those of unknown impact, each with the Tasks and Competency Questions hit and the Concepts that hit them, then the questions no Task needs under *no Consumer*. It is judged against the latest Use Case Version and says so when there is no Use Case; see [Consumer impact](./03-python-sdk.md#consumer-impact).
 - `ontology evaluate` runs the built-in Evaluators again, plus any custom one given as `--evaluator module:Class` (repeatable; see [Custom Evaluators](./03-python-sdk.md#custom-evaluators)). `--use-case-version` picks the Use Case Version to judge answerability against. `ontology evaluations` shows the latest results.
 
 ### Use Cases
@@ -100,7 +100,7 @@ stetiq use-case list support
 stetiq use-case get support 2
 ```
 
-Each change registers a new Use Case Version. `add-question` takes `--query` for a Cypher query that answers the question, and `--concept` (repeatable) for the Concepts it needs.
+`use-case.yaml` holds the Competency Questions and, optionally, the Consumers and their Tasks, in the format shown in [Use Cases and Competency Questions](./03-python-sdk.md#use-cases-and-competency-questions). `get` prints a Use Case Version in that format. Each change registers a new Use Case Version. `add-question` keeps the Consumers and Tasks, and takes `--query` for a Cypher query that answers the question, and `--concept` (repeatable) for the Concepts it needs.
 
 ### Aliases and Promotion
 

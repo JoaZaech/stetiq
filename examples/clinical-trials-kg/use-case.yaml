@@ -1,4 +1,13 @@
-# What the safety monitor needs the trial registry Knowledge Graph to answer.
+# Who uses the trial registry Knowledge Graph, what they do with it, and the questions
+# that work needs answered.
+#
+# Four Consumers read the graph: the safety signal agent that screens every registry
+# export for adverse-event signals, the Data Safety Monitoring Board's quarterly review,
+# the clinical operations dashboard that plans site monitoring visits, and the portfolio
+# report the sponsor's leadership reads. serious-events-per-trial and events-per-arm
+# serve both the agent and the board, so a change that breaks them reaches both.
+# consent-withdrawals serves no Task yet: the board asked for it, but nothing reads it
+# until it is mapped.
 #
 # A question with a `query` is executed against the graph at the end of every
 # Construction Run (competency_question_execution). Every question is also judged
@@ -56,3 +65,40 @@ competency_questions:
     question: Which participants withdrew consent, and when?
     # No query and no Concept mapping yet: stetiq reports it as unmapped until a
     # question mapper (STETIQ_QUESTION_MAPPER) or a human maps it.
+consumers:
+  - id: safety-signal-agent
+    name: Safety signal agent
+    kind: agent
+    contact: Dana Reyes
+    description: Screens each monthly registry export and drafts a signal note for the safety monitor.
+    tasks:
+      - id: screen-safety-signals
+        description: Flag trials and arms whose serious adverse events rise above the usual rate
+        competency_questions: [serious-events-per-trial, events-per-arm]
+  - id: dsmb
+    name: Data Safety Monitoring Board
+    kind: team
+    contact: Dana Reyes
+    description: The independent board that can pause a trial on safety grounds.
+    tasks:
+      - id: quarterly-safety-review
+        description: Review serious events by trial and arm, and how well sites follow the protocol
+        competency_questions: [serious-events-per-trial, events-per-arm, protocol-deviations]
+  - id: site-monitoring-dashboard
+    name: Site monitoring dashboard
+    kind: dashboard
+    contact: Henrik Olsen
+    description: Clinical operations' view of enrolment and protocol adherence per site.
+    tasks:
+      - id: plan-site-visits
+        description: Pick the sites to visit next by enrolment and deviations, and whom to call there
+        competency_questions: [participants-per-site, site-investigators, protocol-deviations]
+  - id: portfolio-report
+    name: Trial portfolio report
+    kind: report
+    contact: Henrik Olsen
+    description: The sponsor's quarterly summary of what is under test and for which conditions.
+    tasks:
+      - id: summarise-portfolio
+        description: List the drugs under test and the conditions studied, with trial counts
+        competency_questions: [drugs-under-test, conditions-studied]

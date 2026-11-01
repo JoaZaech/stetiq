@@ -1,4 +1,11 @@
-# What the research office needs scholar-kg to answer: Use Case Version 1.
+# Who uses scholar-kg, what they do with it, and the questions that work needs answered:
+# Use Case Version 1.
+#
+# Three Consumers read the graph: the research portal's researcher profile pages, the
+# annual report the research office sends each funder, and the agent that drafts impact
+# case studies for the national research assessment. papers-per-author and
+# grant-funded-papers each serve two Tasks. venues-by-year serves no Task: the library
+# asked for it once, and nothing reads it now.
 #
 # Every question has a Cypher query, so it is judged structurally against each Ontology
 # Version (structural_answerability) and executed against the graph at the end of every
@@ -35,3 +42,31 @@ competency_questions:
     query: >-
       MATCH (p:Paper)-[:PUBLISHED_IN]->(v:Venue)
       RETURN p.year AS year, v.name AS venue, count(p) AS papers ORDER BY year, venue
+consumers:
+  - id: research-portal
+    name: Research portal
+    kind: dashboard
+    contact: Sofia Marquez
+    description: The university's public pages for each researcher.
+    tasks:
+      - id: researcher-profiles
+        description: Show each researcher's paper count and their most frequent co-authors
+        competency_questions: [papers-per-author, co-authorship-pairs]
+  - id: funder-report
+    name: Annual funder report
+    kind: report
+    contact: Sofia Marquez
+    description: What the research office tells each funder its grants produced.
+    tasks:
+      - id: report-grant-output
+        description: Count the papers each grant funded and who wrote them
+        competency_questions: [grant-funded-papers, papers-per-author]
+  - id: impact-assistant
+    name: Impact case assistant
+    kind: agent
+    contact: Arjun Mehta
+    description: Drafts impact case studies for the national research assessment.
+    tasks:
+      - id: draft-impact-case
+        description: Start a case study from the most cited paper and the grant behind it
+        competency_questions: [most-cited-paper, grant-funded-papers]

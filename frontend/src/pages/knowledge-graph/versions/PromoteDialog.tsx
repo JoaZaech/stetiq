@@ -1,6 +1,7 @@
 import { useId, useState } from 'react'
 import { ArrowUpRight, TriangleAlert } from 'lucide-react'
 import { type Alias, useAliases, useContractAlias, usePromote } from '@/api/aliases'
+import { ConsumerImpactPanel } from '@/components/ConsumerImpact'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { OntologyDiffPanel } from '@/components/OntologyDiff'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -35,8 +36,8 @@ interface PromoteDialogProps {
 
 /**
  * The version page's Promote action: pick an Alias (or name a new one), see the
- * Ontology Diff against the version it points to now and this version's latest Gate
- * result, then move it. The Contract Alias needs an extra confirmation.
+ * Ontology Diff against the version it points to now, the Consumer impact of that Diff
+ * and this version's latest Gate result, then move it. Neither impact nor Gates block it. The Contract Alias needs an extra confirmation.
  */
 export function PromoteDialog({ name, number, disabled }: PromoteDialogProps) {
   const [open, setOpen] = useState(false)
@@ -127,12 +128,20 @@ export function PromoteDialog({ name, number, disabled }: PromoteDialogProps) {
                 {alias} already points to v{number}.
               </p>
             ) : (
-              <OntologyDiffPanel
-                knowledgeGraph={name}
-                base={current.version}
-                target={number}
-                caption={`Changes from v${current.version} (${alias}) to v${number}`}
-              />
+              <>
+                <div className="grid gap-1.5">
+                  <ConsumerImpactPanel knowledgeGraph={name} base={current.version} target={number} />
+                  <p className="text-xs text-muted-foreground">
+                    Consumer impact never blocks a Promotion; it shows who downstream has to change.
+                  </p>
+                </div>
+                <OntologyDiffPanel
+                  knowledgeGraph={name}
+                  base={current.version}
+                  target={number}
+                  caption={`Changes from v${current.version} (${alias}) to v${number}`}
+                />
+              </>
             ))}
 
           {isContract && !unchanged && (

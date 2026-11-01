@@ -6,4 +6,5 @@ stetiq versions, diffs, evaluates and promotes a knowledge graph's Ontology; it 
 
 - stetiq never writes to a Graph Source (no constraint enforcement, no blue/green data loads).
 - A drop in instance volume with an unchanged ontology still surfaces, as Drift on the Observed Schema's statistics.
+- The one place Observation reads instance values is a Vocabulary-bound Attribute: it records the distinct values that Attribute takes, with counts, up to a cap. A Vocabulary is part of the Ontology, so the values it permits are structure, and without them a Vocabulary could not be checked.
 - stetiq borrows MLflow's concepts but neither depends on nor integrates with MLflow.

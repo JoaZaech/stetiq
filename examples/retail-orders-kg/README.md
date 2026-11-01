@@ -63,8 +63,10 @@ appear in no Observation. On Neo4j the same scope means `MATCH (n:Retail)`.
 
 **1. Declare.** `ontology/v1.yaml` becomes Ontology Version 1 of `retail-orders`: 9 node
 types (`Department` is a child of `Category`, so the hierarchy has depth 2) and 8
-relationship types, with `production` pointing at it. `use-case.yaml` holds the analytics
-team's 8 Competency Questions: revenue by department, lines per order, suppliers two hops
+relationship types, with `production` pointing at it. `use-case.yaml` names three
+Consumers: the analytics team's sales dashboard, procurement's monthly supplier-risk report
+and the merchandising team. Revenue by department serves both the dashboard and
+merchandising; `basket-affinity` serves no Task yet. Their Tasks need 8 Competency Questions: revenue by department, lines per order, suppliers two hops
 behind the orders, the category tree's depth with `expected_answer: 3`, and so on. Judged
 structurally against v1: 6 are answerable, `return-rate-per-product` needs `Return` and
 `RETURNED`, which v1 lacks, and `basket-affinity` is unmapped (ratio 0.750).
@@ -126,7 +128,7 @@ for a generated email address in the SQLite file.
 | `retail_synth.py` | The seeds (`data/`) and the deterministic generator of customers, orders, lines, shipments and returns |
 | `retail_graph.py` | `RetailGraph`, the pipeline's target and stetiq's Graph Source: the label-scoped `InMemoryGraphSource`, the dedupe strategies, the season's mutations and the canned Competency Question answers |
 | `stetiq.yaml` | Knowledge Graph name, Drift thresholds and the seven Gates |
-| `use-case.yaml` | The Competency Questions |
+| `use-case.yaml` | The Consumers, their Tasks and the Competency Questions |
 | `ontology/` | `v1` (declared), `v3` (the adopted Candidate with descriptions), `v4` (the Bins). v2 is the Candidate the run registered |
 
 Two findings are left standing on purpose. The `redundancy` Evaluator reports the pattern

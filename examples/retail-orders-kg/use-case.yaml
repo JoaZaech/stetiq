@@ -1,4 +1,11 @@
-# What the analytics team needs the retail-orders Knowledge Graph to answer.
+# Who uses the retail-orders Knowledge Graph, what they do with it, and the questions
+# that work needs answered.
+#
+# Three Consumers read the graph: the analytics team's sales dashboard, the monthly
+# supplier-risk report procurement sends to the board, and the merchandising team that
+# lays out the shop's category pages. top-categories-by-revenue serves both the
+# dashboard and merchandising. basket-affinity serves no Task yet: merchandising wants
+# it for cross-selling, but nothing reads it until it is mapped.
 #
 # A question with a `query` is executed against the Graph Source at the end of every
 # Construction Run (competency_question_execution); every question is also judged
@@ -52,3 +59,34 @@ competency_questions:
     question: Which products are bought together most often?
     # No query and no Concept mapping yet: stetiq reports it as unmapped until a question
     # mapper (STETIQ_QUESTION_MAPPER) or a human maps it.
+consumers:
+  - id: analytics-dashboard
+    name: Sales analytics dashboard
+    kind: dashboard
+    contact: Mara Lindqvist
+    description: The analytics team's weekly view of what sells and what comes back.
+    tasks:
+      - id: weekly-sales-review
+        description: Chart revenue per department, basket size and how many customers come back
+        competency_questions: [top-categories-by-revenue, lines-per-order, repeat-customers]
+      - id: returns-watch
+        description: Flag the products returned most often
+        competency_questions: [return-rate-per-product]
+  - id: supplier-risk-report
+    name: Supplier risk report
+    kind: report
+    contact: Jonas Achterberg
+    description: Procurement's monthly report to the board on who we depend on.
+    tasks:
+      - id: supplier-concentration
+        description: Show how many orders hang on each supplier and each warehouse
+        competency_questions: [suppliers-behind-orders, orders-per-warehouse]
+  - id: merchandising-team
+    name: Merchandising
+    kind: team
+    contact: Leila Haddad
+    description: Lays out the category pages and the shop's navigation.
+    tasks:
+      - id: plan-category-pages
+        description: Decide which departments lead the navigation and how deep the menus go
+        competency_questions: [category-tree-depth, top-categories-by-revenue]

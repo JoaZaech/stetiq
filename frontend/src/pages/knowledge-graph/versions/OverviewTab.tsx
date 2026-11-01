@@ -4,6 +4,7 @@ import { type EvaluationResult, useVersionEvaluations } from '@/api/ontology-ver
 import { useRuns } from '@/api/runs'
 import { kgUrl } from '@/app/knowledge-graph-sections'
 import { CopyButton } from '@/components/CopyButton'
+import { Planned } from '@/components/Planned'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -20,7 +21,10 @@ import { metricRows } from './evaluator-metrics'
 import { LatestGateResult } from './LatestGateResult'
 import { useOntologyVersionTab } from './version-context'
 
-/** The version page's Overview tab: metadata, Evaluator results and latest Gate result. */
+/**
+ * The version page's Overview tab: metadata, Evaluator results and latest Gate result,
+ * with the planned Gate on Consumer impact.
+ */
 export function OverviewTab() {
   const name = useKnowledgeGraphName()
   const version = useOntologyVersionTab()
@@ -52,6 +56,14 @@ export function OverviewTab() {
         </Panel>
         <Panel title="Latest Gate result">
           <LatestGateResult name={name} number={version.number} />
+          <Planned
+            label="Gate on Consumer impact"
+            section="consumer-impact-and-gates-over-it"
+            tooltip="A Gate that fails when a change in this version would affect a Consumer's Tasks."
+            className="text-sm"
+          >
+            Gate on Consumer impact
+          </Planned>
         </Panel>
       </div>
     </div>

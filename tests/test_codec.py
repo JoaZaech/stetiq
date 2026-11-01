@@ -63,7 +63,21 @@ ONTOLOGY = parse_dict(
     }
 )
 USE_CASE = parse_use_case_dict(
-    {"competency_questions": [{"id": "q1", "question": "Which customers opened tickets?"}]}
+    {
+        "competency_questions": [{"id": "q1", "question": "Which customers opened tickets?"}],
+        "consumers": [
+            {
+                "id": "triage-bot",
+                "name": "Triage bot",
+                "kind": "agent",
+                "contact": "Ada",
+                "description": "Routes tickets",
+                "tasks": [
+                    {"id": "route", "description": "Route a ticket", "competency_questions": ["q1"]}
+                ],
+            }
+        ],
+    }
 )
 SCOPE = GraphSourceScope(database="kgs", label="KG_support", namespace="support")
 SCHEMA = ObservedSchema(node_types=(ObservedNodeType("Customer", 3, ()),), relationship_types=())
@@ -210,3 +224,18 @@ def test_every_entity_round_trips_through_the_codec(cls):
 
 def test_the_entity_list_is_found_automatically():
     assert {KnowledgeGraph, OntologyVersion, GateResult, ObservationOutcome} <= set(ENTITY_TYPES)
+
+
+def test_a_use_case_version_payload_from_before_consumers_still_parses():
+    data = {
+        "knowledge_graph": "support",
+        "number": 1,
+        "content_hash": "def456",
+        "created_at": AT.isoformat(),
+        "use_case": {"competency_questions": [{"id": "q1", "question": "Which customers?"}]},
+    }
+
+    version = codec.use_case_version_from_json(data)
+
+    assert version.use_case.consumers == ()
+    assert [q.id for q in version.use_case.competency_questions] == ["q1"]

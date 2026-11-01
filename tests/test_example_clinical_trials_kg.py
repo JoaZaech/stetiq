@@ -47,6 +47,54 @@ def undeclared(run):
     return {m.subject for m in run.conformance.mismatches if str(m.kind) == "undeclared"}
 
 
+def consumers_of(use_case_version):
+    return {
+        c.id: (c.name, c.kind, {t.id: set(t.competency_questions) for t in c.tasks})
+        for c in use_case_version.use_case.consumers
+    }
+
+
+def test_the_use_case_names_the_consumers_and_the_tasks_they_need_answered(demo):
+    # serious-events-per-trial, events-per-arm and protocol-deviations each serve two
+    # Tasks; consent-withdrawals serves none yet.
+    latest = demo.dana.get_use_case_version(KG)
+    assert latest.number == 1
+    assert consumers_of(latest) == {
+        "safety-signal-agent": (
+            "Safety signal agent",
+            "agent",
+            {"screen-safety-signals": {"serious-events-per-trial", "events-per-arm"}},
+        ),
+        "dsmb": (
+            "Data Safety Monitoring Board",
+            "team",
+            {
+                "quarterly-safety-review": {
+                    "serious-events-per-trial",
+                    "events-per-arm",
+                    "protocol-deviations",
+                }
+            },
+        ),
+        "site-monitoring-dashboard": (
+            "Site monitoring dashboard",
+            "dashboard",
+            {
+                "plan-site-visits": {
+                    "participants-per-site",
+                    "site-investigators",
+                    "protocol-deviations",
+                }
+            },
+        ),
+        "portfolio-report": (
+            "Trial portfolio report",
+            "report",
+            {"summarise-portfolio": {"drugs-under-test", "conditions-studied"}},
+        ),
+    }
+
+
 def test_the_registry_is_strict_from_day_one_and_v1_lacks_the_arm_concepts(demo):
     client = demo.dana
     assert client.get_evolution_mode(KG) == "strict"

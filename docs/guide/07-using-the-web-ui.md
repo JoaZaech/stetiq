@@ -1,6 +1,6 @@
 # Using the web UI
 
-The web UI shows every Knowledge Graph you can read: its Ontology Versions, Construction Runs, Use Case, Observations and Promotions. It is also where you make the governance edits that don't belong in code: promoting an Ontology Version, editing a Knowledge Graph's description and changing its Competency Questions.
+The web UI shows every Knowledge Graph you can read: its Ontology Versions, Construction Runs, Use Case, Observations and Promotions. It is also where you make the governance edits that don't belong in code: promoting an Ontology Version, editing a Knowledge Graph's description and changing its Use Case's Competency Questions, Consumers and Tasks.
 
 Open it with `stetiq ui` (local mode, see [Getting started](./01-getting-started.md#open-the-web-ui)) or at `/ui` on a stetiq server, where you sign in with an API Token (see [Server and API Tokens](./05-server-and-api-tokens.md)). The words used here are explained on the [Concepts](./02-concepts.md) page.
 
@@ -28,6 +28,9 @@ Some controls change a Knowledge Graph, and they need the *edit* permission on i
 | **Promote** | An Ontology Version's page |
 | **Add Competency Question** | The Use Case section |
 | Edit and remove a Competency Question | The row of each Competency Question in the Use Case section |
+| **Add Consumer** | The Consumers panel of the Use Case section |
+| Edit and remove a Consumer, add a Task to it | The header of each Consumer card |
+| Edit and remove a Task | Beside each Task on its Consumer card |
 
 Without *edit*, these controls stay visible but disabled, with a *Needs edit access* tooltip. Everything else in the UI is read-only. In local mode every Knowledge Graph is editable. The server checks every change too, so a disabled button is a convenience, not the protection.
 
@@ -44,7 +47,7 @@ Click a column header to sort, and type in **Search by name** to filter. Click a
 
 ## Inside a Knowledge Graph
 
-A Knowledge Graph opens on its Ontology Versions. Every section starts with the same header: the Knowledge Graph's name, its description (written in markdown), its Evolution Mode (*strict* or *evolving*) and its Contract Alias with the version it points to, e.g. `production → v3`.
+A Knowledge Graph opens on its Ontology Versions. Every section starts with the same header: the Knowledge Graph's name, its description (written in markdown), its Evolution Mode (*strict* or *evolving*) and its Contract Alias with the version it points to, e.g. `production → v3`. Below them, a pipeline strip shows where the Knowledge Graph sits: upstream pipeline → Gate → Knowledge Graph → Consumer Gate → Consumers, with the number of Consumers the latest Use Case Version declares (click it to open the [Use Case](#use-case-and-competency-questions)). The Consumer Gate is muted: it is [planned](#planned-features).
 
 **Edit description** (needs edit access) opens a markdown editor with a **Write** and a **Preview** tab. Saving shows the new description to everyone who can read the Knowledge Graph.
 
@@ -55,7 +58,7 @@ The section lists every Ontology Version, newest first, with its origin, when it
 - **Columns** adds a column per Evaluator metric.
 - **Table** / **Chart** switches to one chart per Evaluator metric across versions, with a search box to find a metric.
 
-**Comparing two versions.** Tick two rows and click **Compare** to see the Ontology Diff from the older to the newer version. Any two versions can be compared, not only neighbours. The Compare page works like the [Changes tab](#the-changes-tab): it opens on a **Map** of both versions laid over each other, and the **Table / Map** toggle switches to the Diff as a grid.
+**Comparing two versions.** Tick two rows and click **Compare** to see the Ontology Diff from the older to the newer version. Any two versions can be compared, not only neighbours. The Compare page works like the [Changes tab](#the-changes-tab): it opens on a **Map** of both versions laid over each other, the **Table / Map** toggle switches to the Diff as a grid, and **Consumer impact** above the changes shows whom they hit.
 
 **An Ontology Version's page.** Click a version number to open it. It shows the version's Aliases and three tabs:
 
@@ -87,12 +90,14 @@ The tab opens on a **Map** of both versions laid over each other, each class in 
 
 **The Table.** The **Table / Map** toggle switches to the Diff as a grid: the overall classification and a count per level, then a row per change with its Concept, Concept kind, change (added, removed, changed or deprecated), severity and detail, most severe first. It sorts, filters and searches like the Ontology Table, and each row's **Show on Map** shows the class or relation it changed. Documentation-only changes are hidden until you click **Show documentation-only changes**.
 
+**Consumer impact.** Above the changes, **Consumer impact** lists the Consumers of the latest Use Case Version the changes hit, in sections: **Affected** (a breaking change to a Concept one of their Tasks' Competency Questions needs), **Will be affected** (a deprecating one) and **Impact unknown** (a question with neither a Concept mapping nor a query). Each Consumer shows the Tasks hit, most severe first, and under each its questions with the Concepts whose changes hit them, in their classification's colour. Questions no Task needs are listed under **No Consumer**. A Consumer the changes don't touch is left out. Without a Use Case the section says there is none, so no Consumers are declared. See [Consumer impact](./03-python-sdk.md#consumer-impact) for how changes are followed to Consumers.
+
 #### Promoting a version
 
 **Promote** on a version's page (needs edit access) moves an Alias to that version:
 
 1. Pick an existing Alias, or choose **New Alias** and type a name to create one.
-2. Check what changes: the dialog shows the Ontology Diff from the version the Alias points to now, and this version's latest Gate result. Gates never block a Promotion; the result is recorded with it.
+2. Check what changes: the dialog shows the Ontology Diff from the version the Alias points to now, its **Consumer impact** (the Consumers and their Tasks it affects or will affect, as on the Changes tab), and this version's latest Gate result. With no impact it says no Consumer, Task or Competency Question is hit; without a Use Case it says no Consumers are declared. Neither the impact nor the Gates block a Promotion: they show who downstream has to change, and the Gate result is recorded with it.
 3. If you picked the Contract Alias, confirm **Switch Construction Runs and Drift to v*N***: new Construction Runs will declare this version, and Drift will be measured against it.
 4. Click **Promote to *alias***.
 
@@ -122,12 +127,16 @@ If the Knowledge Graph has been gated, each KPI a Gate covers (Conformance, or t
 
 ### Use Case and Competency Questions
 
-The section shows the latest Use Case Version: its description and its Competency Questions, each with its id, question, Cypher query, expected answer and Concept mapping. Below it:
+The section shows the latest Use Case Version: its description and its Competency Questions, each with its id, question, Cypher query, expected answer and Concept mapping. A question that no Consumer's Task needs is marked *serves no Task* (in a Use Case without Consumers, every question is). Below it:
+
+- **Consumers**: a card per Consumer the Use Case declares, with its kind, contact and description, and its Tasks. Each Task lists the Competency Questions it needs (id and question), or says it needs none. A Task that needs questions also shows its **readiness**, such as "3/4 questions answerable on v5". Readiness is always shown for the latest Ontology Version: the page has no version selector. It also says how many of the rest are *unanswerable* (the Ontology lacks Concepts they need) or *unmapped* (nothing maps them onto the Ontology). Readiness comes from the stored structural answerability result, and says "Not judged" until that Ontology Version has been judged against this Use Case Version. You can edit Consumers and Tasks here (see below) or declare them in the Use Case you register from the [Python SDK](./03-python-sdk.md#use-cases-and-competency-questions) or the [CLI](./04-cli.md#use-cases).
 
 - **Structural answerability**: how many of those Competency Questions the latest Ontology Version can answer, and for each one whether it is *Answerable*, *Unanswerable* (with the Concepts it is missing) or *Unmapped*.
 - **Use Case Versions**: every Use Case Version with when it was created and how many Competency Questions it has.
 
-**Editing Competency Questions** (needs edit access). **Add Competency Question** opens a form with an **Id**, a **Question**, and optionally a **Cypher query**, an **Expected answer** (any JSON value the query's rows must match) and a **Concept mapping** (one Concept reference per line, e.g. `Customer`, `Ticket.opened_at` or `(Customer)-[OPENED]->(Ticket)`). Each row also has an edit button, which opens the same form (the id is locked: to change it, remove the question and add a new one), and a remove button.
+**Editing Competency Questions** (needs edit access). **Add Competency Question** opens a form with an **Id**, a **Question**, and optionally a **Cypher query**, an **Expected answer** (any JSON value the query's rows must match) and a **Concept mapping** (one Concept reference per line, e.g. `Customer`, `Ticket.opened_at` or `(Customer)-[OPENED]->(Ticket)`). Each row also has an edit button, which opens the same form (the id is locked: to change it, remove the question and add a new one), and a remove button. Removing a question that Tasks need names those Tasks first: they stay, without that question. A new question's id must differ from every other Competency Question, Consumer and Task id in the Use Case.
+
+**Editing Consumers and Tasks** (needs edit access). **Add Consumer** opens a form with an **Id** and a **Name**, and optionally a **Kind** (an application, an agent, a dashboard, a team...), a **Contact** and a **Description**. On each Consumer card, the edit button opens the same form (the id is locked), the remove button removes the Consumer with all its Tasks after naming them (the Competency Questions stay), and the add button adds a Task: an **Id**, a **Description**, and the Competency Questions it needs, ticked from the Use Case's. Each Task has its own edit and remove buttons. A new Consumer's or Task's id must differ from every other Consumer, Task and Competency Question id in the Use Case.
 
 Every save registers a new Use Case Version, so earlier results stay tied to the version they were judged against. After saving, the page says which Use Case Version you got. If the content is the same as the latest or an earlier version, no new version is created and the page says which one already has it.
 
@@ -146,6 +155,15 @@ This section is read-only: an Observation needs your graph database credentials,
 ### Promotions
 
 The section is the Promotion audit, newest first: which Alias moved, from which version to which, who moved it, when, and the version's latest Gate result at that moment (*Passed*, *Failed* or *None*). Promote an Ontology Version from [its page](#ontology-versions) to add a row.
+
+## Planned features
+
+Some parts of stetiq's [vision](../vision.md) are shown in the web UI but not built yet. Each is muted or disabled and carries a **Planned** badge: point at the badge for what it will do, and click it to read about it in the vision.
+
+- **Consumer Gate**, in the pipeline strip of every Knowledge Graph section.
+- **Connector: not connected** and **Consumer Gate: none**, on each Consumer card.
+- **Gate on Consumer impact**, under an Ontology Version's latest Gate result.
+- **Draft Tasks & questions with AI**, on the Use Case page.
 
 ## Next steps
 

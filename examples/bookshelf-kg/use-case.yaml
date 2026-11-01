@@ -1,4 +1,11 @@
-# What the head librarian needs the Knowledge Graph to answer.
+# Who uses the library's Knowledge Graph, what they do with it, and the questions that
+# work needs answered.
+#
+# Four Consumers read the graph: the online catalogue, the bot that emails overdue
+# reminders, the monthly lending report to the town council, and the acquisitions team
+# that buys new stock. popular-books and books-per-author each serve two Tasks.
+# authors-who-are-members serves no Task: the head librarian asked it for a local-authors
+# evening, and nothing reads it yet.
 #
 # A question with a `query` is executed against the Graph Source at the end of
 # every Construction Run (competency_question_execution). Every question is also
@@ -41,3 +48,40 @@ competency_questions:
   - id: authors-who-are-members
     question: Which authors in the catalogue also hold a library card?
     # Neither a query nor a Concept mapping yet: stetiq reports it as unmapped.
+consumers:
+  - id: catalogue-search
+    name: Online catalogue
+    kind: application
+    contact: Ines Ferreira
+    description: The library website's search page.
+    tasks:
+      - id: find-books
+        description: Find books by subject heading or by author
+        competency_questions: [books-by-subject, books-per-author]
+  - id: overdue-reminders
+    name: Overdue reminder bot
+    kind: agent
+    contact: Ines Ferreira
+    description: Emails a reminder each morning for every loan past its due date.
+    tasks:
+      - id: send-reminders
+        description: Remind the borrower of each overdue loan which book to bring back
+        competency_questions: [overdue-loans]
+  - id: lending-report
+    name: Monthly lending report
+    kind: report
+    contact: Ines Ferreira
+    description: What the library reports to the town council each month.
+    tasks:
+      - id: report-to-council
+        description: Report members per branch and the most borrowed books
+        competency_questions: [members-per-branch, popular-books]
+  - id: acquisitions-team
+    name: Acquisitions
+    kind: team
+    contact: Kwame Mensah
+    description: Decides which books to buy and which extra copies to order.
+    tasks:
+      - id: choose-new-stock
+        description: Order more copies of what is borrowed most and fill gaps in authors' work
+        competency_questions: [popular-books, books-per-author]
