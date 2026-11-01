@@ -62,7 +62,7 @@ The section lists every Ontology Version, newest first, with its origin, when it
 
 **An Ontology Version's page.** Click a version number to open it. It shows the version's Aliases and three tabs:
 
-- **Overview**: its number, origin, content hash (with a copy button), when it was created and, for a version produced by a Construction Run, a link to that run. Next to these, its Evaluator results (Evaluator, metric, value and the Use Case Version it was judged against) and its latest Gate result: *Passed*, *Failed* (naming the Gates that failed) or *None*.
+- **Overview**: first its latest **Gate result**, as a status with *n of m Gates failed* or *All m Gates passed* and when it was evaluated. Each failed Gate is listed with its reasons; the passed ones fold under ***k* passed**. A version no Gate was evaluated on shows *Not gated*. Then its **Evaluator results**, one card per Evaluator: a readable title (e.g. *Concepts with a Definition*) over the Evaluator's own name, one or two headline metrics, ratios as percentages and counts as *a / b* where there is a total, and an ⓘ that explains it. Your own Evaluators get a card under their name with their first metric. **Show all metrics** opens the full table (Evaluator, metric, value and the Use Case Version it was judged against): the names there are the ones Gates use. **Details**, folded at the bottom, holds its number, origin, content hash (with a copy button), when it was created and, for a version produced by a Construction Run, a link to that run.
 - **Ontology**: the version's Concepts, on a Map or in a Table. See [The Ontology tab](#the-ontology-tab).
 - **Changes**: the Ontology Diff from the previous version. v1 has nothing to compare with. See [The Changes tab](#the-changes-tab).
 
@@ -165,7 +165,7 @@ This section is read-only: an Observation needs your graph database credentials,
 
 ### Promotions
 
-The section is the Promotion audit, newest first: which Alias moved, from which version to which, who moved it, when, and the version's latest Gate result at that moment (*Passed*, *Failed* or *None*). Promote an Ontology Version from [its page](#ontology-versions) to add a row.
+The section is the Promotion audit, newest first: which Alias moved, from which version to which, who moved it, when, and the version's latest Gate result at that moment, as a status: ✓ *Passed*, ✗ *Failed* or a grey *Not gated*. Promote an Ontology Version from [its page](#ontology-versions) to add a row.
 
 ## Planned features
 

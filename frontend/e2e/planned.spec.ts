@@ -105,7 +105,7 @@ test.describe('with a Use Case that declares Consumers', () => {
   test('the Gate result shows a Gate on Consumer impact as planned', async ({ page }) => {
     await page.goto('/ui/kg/support/versions/2')
 
-    const gates = page.getByRole('region', { name: 'Latest Gate result' })
+    const gates = page.getByRole('region', { name: 'Gate result' })
     await expect(planned(gates, 'Gate on Consumer impact').standIn).toHaveText(
       'Gate on Consumer impact',
     )

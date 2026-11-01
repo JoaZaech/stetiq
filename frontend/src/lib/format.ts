@@ -30,6 +30,18 @@ export function formatMetric(value: number): string {
   return Number.isInteger(value) ? String(value) : metric.format(value)
 }
 
+const percent = new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 1 })
+
+/** A ratio between 0 and 1 as a percentage, to one decimal at most: 0.7097 → "71%", 0.995 → "99.5%". */
+export function formatPercent(ratio: number): string {
+  return percent.format(ratio)
+}
+
+/** A count out of its total: "5 / 6". */
+export function formatFraction(count: number, total: number): string {
+  return `${formatMetric(count)} / ${formatMetric(total)}`
+}
+
 /** `n` and `noun`, the noun plural unless `n` is 1: "1 attribute", "3 attributes", "2 classes". */
 export function formatCount(n: number, noun: string, plural = `${noun}s`): string {
   return `${n} ${n === 1 ? noun : plural}`

@@ -175,7 +175,7 @@ test('the Ontology Version table lists versions newest first with Alias chips an
   await expect(page).toHaveURL('/ui/kg/support/versions/2')
 })
 
-test('the version Overview shows its metadata, Evaluator results and latest Gate result', async ({
+test('the version Overview shows its latest Gate result, Evaluator results and metadata', async ({
   page,
   context,
 }) => {
@@ -189,7 +189,14 @@ test('the version Overview shows its metadata, Evaluator results and latest Gate
   )
   await expect(page.getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page')
 
+  const gate = page.getByRole('region', { name: 'Gate result' })
+  await expect(gate).toContainText('The 1 Gate passed')
+  await expect(gate.getByRole('list', { name: 'Failed Gates' })).toHaveCount(0)
+  await gate.getByRole('button', { name: '1 passed' }).click()
+  await expect(gate.getByRole('list', { name: 'Passed Gates' })).toHaveText('no-breaking-changes')
+
   const details = page.getByRole('region', { name: 'Details' })
+  await details.getByRole('button', { name: 'Details' }).click()
   await expect(details).toContainText(/Number\s*2/)
   await expect(details).toContainText(/Origin\s*registered/)
   await expect(details).toContainText(/Content hash\s*[0-9a-f]{12}/)
@@ -197,14 +204,15 @@ test('the version Overview shows its metadata, Evaluator results and latest Gate
   expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/^[0-9a-f]{64}$/)
   await expect(details).not.toContainText('Construction Run')
 
-  const results = page.getByRole('table', { name: 'Evaluator results' })
+  const evaluators = page.getByRole('region', { name: 'Evaluator results' })
+  await expect(evaluators.getByRole('article', { name: 'Class hierarchy' })).toContainText(/Max depth\s*2/)
+  await evaluators.getByRole('button', { name: 'Show all metrics' }).click()
+  const results = evaluators.getByRole('table', { name: 'Evaluator results' })
   await expect(results.getByRole('row').first()).toHaveText(/Evaluator.*Metric.*Value.*Use Case Version/)
   await expect(
     results.getByRole('row').filter({ hasText: 'structural_answerability' }).filter({ hasText: 'answerable_ratio' }),
   ).toHaveText(/answerable_ratio\s*1\s*1$/)
   await expect(results.getByRole('row').filter({ hasText: 'max_depth' })).toHaveText(/hierarchy.*max_depth\s*2/)
-
-  await expect(page.getByRole('region', { name: 'Latest Gate result' })).toContainText('Passed')
 })
 
 test('a run-originated version links its Construction Run; an ungated version has no Gate result', async ({
@@ -214,12 +222,13 @@ test('a run-originated version links its Construction Run; an ungated version ha
   await page.goto('/ui/kg/support/versions/3')
 
   const details = page.getByRole('region', { name: 'Details' })
+  await details.getByRole('button', { name: 'Details' }).click()
   await expect(details).toContainText(/Origin\s*run/)
   await expect(details.getByRole('link', { name: String(stetiq.seeded.run_id) })).toHaveAttribute(
     'href',
     `/ui/kg/support/runs/${String(stetiq.seeded.run_id)}`,
   )
-  await expect(page.getByRole('region', { name: 'Latest Gate result' })).toContainText('None')
+  await expect(page.getByRole('region', { name: 'Gate result' })).toContainText('Not gated')
 })
 
 test('the Ontology tab lists Concepts grouped, with hierarchy and constraints, and searchable', async ({
