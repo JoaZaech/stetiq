@@ -146,7 +146,11 @@ def test_a_new_use_case_version_does_not_re_run_the_other_built_ins(client, kg):
 
     after = {r.evaluator: r for r in client.get_evaluation_results(kg.name, 1)}
     assert set(after) == set(before) | {"structural_answerability", "competency_question_coverage"}
-    assert all(after[name] == result for name, result in before.items())
+    # unjustified_additions reads the Use Case too, so it is judged against the new one.
+    assert after["unjustified_additions"].use_case_version == 1
+    assert all(
+        after[name] == result for name, result in before.items() if name != "unjustified_additions"
+    )
 
 
 def test_a_new_ontology_version_reports_unanswerable_questions_with_the_missing_concepts(

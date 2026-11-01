@@ -21,6 +21,9 @@ answering it.
 `competency_question_coverage` reads the same Concept mapping the other way round: which
 Concepts of the version no Competency Question references. It shares the mapping (and
 so the mapper's answers) with `structural_answerability`, so the two always agree.
+
+`unjustified_additions` reads that mapping too, for an evolving run's Candidate: which
+Concepts the Candidate adds to the version its run consumed that no question needs.
 """
 
 from __future__ import annotations
@@ -30,6 +33,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from stetiq.evaluation.framework import Detail, Evaluation, OntologyVersionEvaluator
 from stetiq.ontology import Ontology
+from stetiq.ontology.diff import ChangeKind, diff_ontologies
 from stetiq.ontology.model import ConceptKind, live_concepts
 from stetiq.use_case.concepts import (
     ConceptRef,
@@ -49,6 +53,7 @@ if TYPE_CHECKING:
 
 ANSWERABILITY_EVALUATOR = "structural_answerability"
 COVERAGE_EVALUATOR = "competency_question_coverage"
+UNJUSTIFIED_ADDITIONS_EVALUATOR = "unjustified_additions"
 
 
 class CompetencyQuestionMapper(Protocol):
@@ -326,6 +331,92 @@ class CompetencyQuestionCoverage(OntologyVersionEvaluator):
                 for kind, identity in untraced
             ],
         )
+
+
+class UnjustifiedAdditions(OntologyVersionEvaluator):
+    """Which Concepts an evolving run's Candidate adds that no Competency Question needs.
+
+    `base` is the Ontology the run consumed; the added Concepts are the Ontology Diff's
+    additions from it to the judged version: Classes and Relations (each with its
+    Attributes) and Attributes added to a declared Class or Relation. Added Vocabulary
+    Values are left out. An added Class or Relation is justified when a question's
+    Concept requirements (as `answerability` maps them, so including mapped questions)
+    name it; an added Attribute when they name it or when its owner is an added,
+    justified Concept. An unmapped question justifies nothing, and without a Use Case
+    (`answerability` None) nothing is justified.
+
+    Metrics: `unjustified_additions`, `added_concepts`, `justified_ratio` (1.0 when
+    nothing was added). One Detail per unjustified Concept (`item` = `Label` or
+    `Owner.attribute`, `metric` = `unjustified_additions`, `data` = `{kind}`). Without
+    a `base` (a version that is not a run's Candidate) nothing counts as added.
+    """
+
+    name = UNJUSTIFIED_ADDITIONS_EVALUATOR
+
+    def __init__(
+        self, answerability: StructuralAnswerability | None, base: Ontology | None
+    ) -> None:
+        self.answerability = answerability
+        self.base = base
+
+    def evaluate(self, version) -> Evaluation:
+        ontology = version.ontology
+        added = [] if self.base is None else _added_concepts(self.base, ontology)
+        needed: set[tuple[ConceptKind, str]] = set()
+        if self.answerability is not None:
+            index = _OntologyIndex(ontology)
+            for _, required, _ in self.answerability.concept_mapping(ontology).values():
+                for req in required:
+                    needed |= index.referenced(req)
+        added_keys = {(kind, identity) for kind, identity, _ in added}
+        justified = {
+            (kind, identity)
+            for kind, identity, owner in added
+            if (kind, identity) in needed
+            or (owner is not None and owner in added_keys and owner in needed)
+        }
+        unjustified = [(k, i) for k, i, _ in added if (k, i) not in justified]
+        total = len(added)
+        return Evaluation(
+            metrics={
+                "unjustified_additions": len(unjustified),
+                "added_concepts": total,
+                "justified_ratio": (total - len(unjustified)) / total if total else 1.0,
+            },
+            details=[
+                Detail(
+                    item=identity,
+                    message="added, but no Competency Question needs it",
+                    metric="unjustified_additions",
+                    data={"kind": kind},
+                )
+                for kind, identity in unjustified
+            ],
+        )
+
+
+_AddedConcept = tuple[ConceptKind, str, "tuple[ConceptKind, str] | None"]
+
+
+def _added_concepts(base: Ontology, target: Ontology) -> list[_AddedConcept]:
+    """(kind, identity, owner) of every Concept the diff from `base` to `target` adds; an
+    added Class or Relation brings its own Attributes, owned by it."""
+    owners = {
+        **{("node_type", n.label): n for n in target.node_types},
+        **{("relationship_type", r.label): r for r in target.relationship_types},
+    }
+    added: list[_AddedConcept] = []
+    for change in diff_ontologies(base, target).changes:
+        if change.kind != ChangeKind.ADDED:
+            continue
+        if change.concept_kind in ("node_type", "relationship_type"):
+            key: tuple[ConceptKind, str] = (change.concept_kind, change.concept)
+            added.append((key[0], key[1], None))
+            for p in owners[key].properties:
+                added.append(("property", f"{change.concept}.{p.name}", key))
+        elif change.concept_kind == "property" and change.owner and change.owner_kind:
+            added.append(("property", change.concept, (change.owner_kind, change.owner)))
+    return added
 
 
 def _regression_message(contract_version: int, missing: list[str]) -> str:
