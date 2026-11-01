@@ -2,20 +2,15 @@ import { expect, signIn, test } from './fixtures'
 
 test.use({ seed: 'support_lineage' })
 
-const SECTIONS = ['Ontology Versions', 'Construction Runs', 'Use Case', 'Observations', 'Promotions']
+const SECTIONS = ['Overview', 'Ontology Versions', 'Construction Runs', 'Use Case', 'Observations', 'Promotions']
 
-test('a Knowledge Graph shows its sections in the sidebar and its header', async ({ page }) => {
+test('a Knowledge Graph opens on its Overview; every other section has the one-line header', async ({ page }) => {
   await page.goto('/ui/kg/support')
 
-  await expect(page).toHaveURL('/ui/kg/support/versions')
+  await expect(page).toHaveURL('/ui/kg/support/overview')
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('support')
-  const header = page.getByRole('region', { name: 'Knowledge Graph' })
-  await expect(header.getByText('Evolution Mode')).toBeVisible()
-  await expect(header.getByText('evolving')).toBeVisible()
-  await expect(header.getByText('Contract Alias')).toBeVisible()
-  await expect(header.getByText('production → v1')).toBeVisible()
   await expect(page.getByRole('navigation', { name: 'breadcrumb' })).toHaveText(
-    /Knowledge Graphs.*support.*Ontology Versions/,
+    /Knowledge Graphs.*support.*Overview/,
   )
 
   const sidebar = page.getByRole('navigation', { name: 'Main' })
@@ -23,15 +18,24 @@ test('a Knowledge Graph shows its sections in the sidebar and its header', async
   for (const name of SECTIONS) {
     await expect(sidebar.getByRole('link', { name })).toHaveAttribute('href', new RegExp(`^/ui/kg/support/`))
   }
-  await expect(sidebar.getByRole('link', { name: 'Ontology Versions' })).toHaveAttribute(
-    'aria-current',
-    'page',
-  )
+  await expect(sidebar.getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page')
 
-  await sidebar.getByRole('link', { name: 'Promotions' }).click()
+  for (const section of SECTIONS.slice(1)) {
+    await sidebar.getByRole('link', { name: section }).click()
+    await expect(page.getByRole('heading', { level: 2 })).toHaveText(section)
+    const header = page.getByRole('region', { name: 'Knowledge Graph' })
+    await expect(header.getByRole('heading', { level: 1 })).toHaveText('support')
+    await expect(header.getByText('production → v1')).toHaveAccessibleDescription('Contract Alias')
+    await expect(header.getByRole('button', { name: 'Edit description' })).toBeVisible()
+    // The description, the Evolution Mode and the pipeline strip are only on the Overview.
+    await expect(header).toHaveText(/^support\s*production → v1\s*Edit description$/, { useInnerText: true })
+    await expect(page.getByText('Evolution Mode')).toHaveCount(0)
+    await expect(page.getByRole('list', { name: 'Pipeline' })).toHaveCount(0)
+  }
   await expect(page).toHaveURL('/ui/kg/support/promotions')
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('support')
-  await expect(page.getByRole('heading', { level: 2 })).toHaveText('Promotions')
+  await expect(page.getByRole('navigation', { name: 'breadcrumb' })).toHaveText(
+    /Knowledge Graphs.*support.*Promotions/,
+  )
   await expect(sidebar.getByRole('link', { name: 'Back to Knowledge Graphs' })).toHaveCount(0)
 })
 
@@ -187,7 +191,9 @@ test('the version Overview shows its latest Gate result, Evaluator results and m
   await expect(page.getByRole('navigation', { name: 'breadcrumb' })).toHaveText(
     /Knowledge Graphs.*support.*Ontology Versions.*v2/,
   )
-  await expect(page.getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page')
+  await expect(
+    page.getByRole('navigation', { name: 'Ontology Version' }).getByRole('link', { name: 'Overview' }),
+  ).toHaveAttribute('aria-current', 'page')
 
   const gate = page.getByRole('region', { name: 'Gate result' })
   await expect(gate).toContainText('The 1 Gate passed')

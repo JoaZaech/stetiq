@@ -78,7 +78,9 @@ test.describe('with Construction Runs', () => {
     await expect(page.getByRole('main').getByText('Finished')).toBeVisible()
     await page.getByRole('button', { name: 'Copy run id' }).click()
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(id)
-    await expect(page.getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page')
+    await expect(
+      page.getByRole('navigation', { name: 'Construction Run' }).getByRole('link', { name: 'Overview' }),
+    ).toHaveAttribute('aria-current', 'page')
 
     const details = page.getByRole('region', { name: 'Details' })
     await expect(details).toContainText(/Duration\s*\d/)

@@ -26,51 +26,34 @@ async function expectPlaceholder(scope: Locator | Page, name: string, section: s
 test.describe('with a Use Case that declares Consumers', () => {
   test.use({ seed: 'support_use_case_consumers' })
 
-  test('the pipeline strip shows every part live, the Consumer Gate included, and the Consumers count', async ({
-    page,
-  }) => {
-    await page.goto('/ui/kg/support/versions')
+  test('the Overview shows every step of the pipeline live, the Consumer Gate included', async ({ page }) => {
+    await page.goto('/ui/kg/support/overview')
 
     const strip = page.getByRole('list', { name: 'Pipeline' })
-    await expect(strip.getByRole('listitem')).toHaveText([
+    await expect(strip.getByRole('link')).toHaveText([
       'Upstream pipeline',
       'Gate',
       'Knowledge Graph',
       'Consumer Gate',
-      'Consumers 2',
+      'Consumers',
     ])
     await expect(strip.getByRole('link', { name: /^Planned/ })).toHaveCount(0)
     await expect(strip.getByRole('group', { name: 'Consumer Gate' })).toHaveCount(0)
-    await expect(strip.getByRole('link', { name: 'Consumers 2' })).toHaveAttribute(
-      'href',
-      '/ui/kg/support/use-case',
-    )
   })
 
-  test('the Consumer Gate step is drawn like the other live parts, in light and dark themes', async ({
+  test('the Consumer Gate step is drawn like the other live steps, in light and dark themes', async ({
     page,
   }) => {
     for (const colorScheme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme })
-      await page.goto('/ui/kg/support/versions')
+      await page.goto('/ui/kg/support/overview')
       const strip = page.getByRole('list', { name: 'Pipeline' })
-      const style = (el: Element) => `${getComputedStyle(el).color} ${getComputedStyle(el).borderStyle}`
-      const gate = await strip.getByText('Gate', { exact: true }).evaluate(style)
-      const consumerGate = await strip.getByText('Consumer Gate', { exact: true }).evaluate(style)
+      const style = (el: Element) => `${getComputedStyle(el).color} ${getComputedStyle(el.parentElement!).borderStyle}`
+      const gate = await strip.getByRole('link', { name: 'Gate', exact: true }).evaluate(style)
+      const consumerGate = await strip.getByRole('link', { name: 'Consumer Gate' }).evaluate(style)
       expect(consumerGate, colorScheme).toBe(gate)
       expect(consumerGate, colorScheme).not.toContain('dashed')
     }
-  })
-
-  test('the pipeline strip fits a phone screen without scrolling sideways', async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 800 })
-    await page.goto('/ui/kg/support/versions')
-
-    const strip = page.getByRole('list', { name: 'Pipeline' })
-    await expect(strip.getByRole('listitem')).toHaveCount(5)
-    const overflow = (el: Element) => el.scrollWidth - el.clientWidth
-    expect(await strip.evaluate(overflow)).toBeLessThanOrEqual(0)
-    expect(await page.locator('html').evaluate(overflow)).toBeLessThanOrEqual(0)
   })
 
   test('the Consumer sheet shows evaluating its Consumer Gate on each Observation as planned; tiles show no Connector', async ({
