@@ -41,6 +41,7 @@ from stetiq.impact import UseCaseImpact, consumer_impact
 from stetiq.ontology import Ontology, parse_yaml
 from stetiq.ontology.diff import OntologyDiff, diff_ontologies
 from stetiq.ontology.yaml_format import to_yaml
+from stetiq.run_context import RunContext
 from stetiq.tracking import (
     Alias,
     ConstructionRun,
@@ -390,6 +391,40 @@ class Client:
     def diff_ontologies(self, base: OntologyInput, target: OntologyInput) -> OntologyDiff:
         """The Ontology Diff between two Ontologies that need not be registered (e.g. files in a repo)."""
         return diff_ontologies(_to_ontology(base), _to_ontology(target))
+
+    # --- The run context ------------------------------------------------------------
+
+    def run_context(self, knowledge_graph: str, version: int | None = None) -> RunContext:
+        """What a pipeline needs before it extracts: the Ontology Version to extract
+        against (`version`, default the Contract Alias's) as a suggestion, the latest Use
+        Case Version (its Consumers, Tasks and Competency Questions), that Ontology
+        Version's evaluation results, and the latest finished Construction Run standing
+        for it with its run-level results (executed Competency Questions included).
+        Only Ontology, Use Case, metrics and counts: no instance data. Needs *read*."""
+        ontology_version = (
+            self.get_contract_version(knowledge_graph)
+            if version is None
+            else self.get_ontology_version(knowledge_graph, version)
+        )
+        try:
+            use_case_version: UseCaseVersion | None = self.get_use_case_version(knowledge_graph)
+        except NoUseCaseError:
+            use_case_version = None
+        run = self._service.latest_finished_run(knowledge_graph, ontology_version.number)
+        return RunContext(
+            knowledge_graph=knowledge_graph,
+            ontology_version=ontology_version,
+            use_case_version=use_case_version,
+            evaluation_results=tuple(
+                self.get_evaluation_results(knowledge_graph, ontology_version.number)
+            ),
+            run=run,
+            run_evaluation_results=()
+            if run is None
+            else tuple(
+                self._service.get_evaluation_results(knowledge_graph, "construction_run", run.id)
+            ),
+        )
 
     # --- Use Cases ------------------------------------------------------------------
 

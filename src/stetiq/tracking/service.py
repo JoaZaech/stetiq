@@ -176,6 +176,11 @@ class TrackingService(Protocol):
 
     def list_runs(self, knowledge_graph: str) -> list[ConstructionRun]: ...
 
+    def latest_finished_run(self, knowledge_graph: str, version: int) -> ConstructionRun | None:
+        """The latest finished run standing for Ontology Version `version` (its Candidate,
+        else the version it consumed); None when no finished run does."""
+        ...
+
     def log_params(self, run_id: str, params: dict[str, str]) -> None: ...
 
     def log_metrics(self, run_id: str, metrics: dict[str, float]) -> None: ...
@@ -711,6 +716,12 @@ class LocalTrackingService:
     def list_runs(self, knowledge_graph: str) -> list[ConstructionRun]:
         self.get_knowledge_graph(knowledge_graph)
         return self._store.list_runs(knowledge_graph)
+
+    def latest_finished_run(self, knowledge_graph: str, version: int) -> ConstructionRun | None:
+        with self._store.transaction():
+            self.get_ontology_version(knowledge_graph, version)
+            runs = self._finished_runs_standing_for(knowledge_graph, version)
+            return runs[-1] if runs else None
 
     def _running(self, run_id: str) -> ConstructionRun:
         run = self.get_run(run_id)
