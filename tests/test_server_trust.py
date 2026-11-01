@@ -125,7 +125,14 @@ def test_a_gate_result_needs_gate_definitions(server, support):
 
 
 @pytest.mark.parametrize(
-    "evaluator", ["hierarchy", "structural_answerability", "conformance", "observed_schema"]
+    "evaluator",
+    [
+        "hierarchy",
+        "structural_answerability",
+        "competency_question_coverage",
+        "conformance",
+        "observed_schema",
+    ],
 )
 def test_results_under_built_in_evaluator_names_are_rejected(server, admin, support, evaluator):
     _, http = server
@@ -184,6 +191,36 @@ def test_regressed_questions_are_computed_by_the_server_from_a_bare_use_case(ser
     assert posted.status_code == 200, posted.text
     answerability = next(r for r in results if r["evaluator"] == "structural_answerability")
     assert answerability["metrics"]["regressed_questions"] == 1
+
+
+def test_competency_question_coverage_is_computed_by_the_server(server, support):
+    _, http = server
+    editor = _headers(server, "mallory", {"support": "edit"})
+    use_case = {
+        "competency_questions": [
+            {"id": "names", "question": "What are customers called?", "concepts": ["Customer.name"]}
+        ]
+    }
+    forged = http.post(
+        f"{API}/knowledge-graphs/support/ontology-versions/2/evaluations",
+        headers=editor,
+        json={"evaluator": "competency_question_coverage", "metrics": {"traced_concept_ratio": 1}},
+    )
+
+    http.post(
+        f"{API}/knowledge-graphs/support/use-case-versions",
+        headers=editor,
+        json={"use_case": use_case},
+    )
+    results = http.get(
+        f"{API}/knowledge-graphs/support/ontology-versions/2/evaluations", headers=editor
+    ).json()
+
+    assert forged.status_code == 422
+    coverage = next(r for r in results if r["evaluator"] == "competency_question_coverage")
+    # v2: Customer, Customer.name, Ticket, Ticket.opened_at; only the first two are traced.
+    assert coverage["metrics"]["traced_concept_ratio"] == 0.5
+    assert sorted(d["item"] for d in coverage["details"]) == ["Ticket", "Ticket.opened_at"]
 
 
 # --- Origin of hand registrations ------------------------------------------------------
