@@ -35,12 +35,12 @@ export function searchOntology(ontology: Ontology, query: string): SearchResults
   }
   const reasonsOf = (concept: OntologyConcept) => {
     const reasons: string[] = []
-    const described = mention(concept.description)
+    const described = mention(concept.definition)
     if (described !== undefined) reasons.push(`description mentions '${described}'`)
     for (const p of concept.properties ?? []) {
       if (mention(p.name) !== undefined) reasons.push(`attribute \`${p.name}\``)
       else {
-        const attributeDescribed = mention(p.description)
+        const attributeDescribed = mention(p.definition)
         if (attributeDescribed !== undefined)
           reasons.push(`attribute \`${p.name}\`: description mentions '${attributeDescribed}'`)
       }

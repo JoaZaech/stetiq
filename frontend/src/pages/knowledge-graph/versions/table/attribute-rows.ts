@@ -60,7 +60,7 @@ export function attributeRows(ontology: Ontology): AttributeGridRow[] {
       row(r.label, 'relation', undefined, {
         name: p.name,
         type: p.type,
-        description: p.description,
+        description: p.definition,
         required: p.required ?? false,
       }),
     ),

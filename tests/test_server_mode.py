@@ -4,6 +4,7 @@ The behaviour itself is covered by the whole SDK suite running in `remote` mode
 (see conftest); these tests cover starting the server and URI-based mode selection.
 """
 
+import json
 import socket
 import subprocess
 import sys
@@ -18,6 +19,7 @@ from typer.testing import CliRunner
 import stetiq
 from stetiq.auth import TokenRegistry
 from stetiq.cli import app as cli_app
+from stetiq.ontology import content_hash, parse_dict
 from stetiq.server import create_app
 
 
@@ -231,3 +233,44 @@ def test_the_server_accepts_bodies_from_sdks_that_resolve_defaults_themselves(tm
     assert [r.status_code for r in (older_run, newer_run)] == [201, 201]
     assert [r.json()["ontology_version"] for r in (older_run, newer_run)] == [1, 1]
     assert [r.status_code for r in (older_observation, newer_observation)] == [201, 201]
+
+
+def test_the_api_returns_ontology_definitions_under_definition(tmp_path):
+    database_url = f"sqlite:///{tmp_path / 'server.db'}"
+    _, token = TokenRegistry(database_url).issue("admin", {"*": "edit"})
+    ontology = {
+        "vocabularies": [
+            {
+                "label": "Status",
+                "definition": "Where a work order is",
+                "values": [{"label": "open", "definition": "Not started"}],
+            }
+        ],
+        "node_types": [
+            {
+                "label": "WorkOrder",
+                "definition": "A request for maintenance",
+                "properties": [
+                    {
+                        "name": "status",
+                        "type": "STRING",
+                        "definition": "Its lifecycle state",
+                        "vocabulary": "Status",
+                    }
+                ],
+            }
+        ],
+    }
+    with TestClient(create_app(database_url), headers={"Authorization": f"Bearer {token}"}) as http:
+        http.post("/api/v1/knowledge-graphs", json={"name": "plant", "declared_ontology": ontology})
+        version = http.get("/api/v1/knowledge-graphs/plant/ontology-versions/1").json()
+
+    (work_order,) = version["ontology"]["node_types"]
+    (status,) = version["ontology"]["vocabularies"]
+    assert work_order["definition"] == "A request for maintenance"
+    assert work_order["properties"][0]["definition"] == "Its lifecycle state"
+    assert status["definition"] == "Where a work order is"
+    assert status["values"][0]["definition"] == "Not started"
+    assert "description" not in json.dumps(version["ontology"])
+    # The content hash is still taken over the canonical form, so it does not change.
+    assert version["content_hash"] == content_hash(parse_dict(ontology))

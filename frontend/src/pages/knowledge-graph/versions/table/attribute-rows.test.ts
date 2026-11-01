@@ -9,7 +9,7 @@ const ONTOLOGY: Ontology = {
     {
       label: 'Customer',
       parent: 'Person',
-      properties: [{ name: 'email', type: 'STRING', description: 'Where we write to' }],
+      properties: [{ name: 'email', type: 'STRING', definition: 'Where we write to' }],
     },
     { label: 'Person', properties: [{ name: 'name', type: 'STRING', required: true }] },
     { label: 'Supervisor', parent: 'Agent' },

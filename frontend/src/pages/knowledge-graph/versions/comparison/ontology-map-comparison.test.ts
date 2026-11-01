@@ -256,12 +256,12 @@ describe('cosmetic changes', () => {
   const target: Ontology = {
     node_types: [
       { label: 'Route' },
-      { label: 'Stop', description: 'Where riders board' },
-      { label: 'Trip', properties: [{ name: 'headsign', type: 'STRING', description: 'The sign on the vehicle' }] },
+      { label: 'Stop', definition: 'Where riders board' },
+      { label: 'Trip', properties: [{ name: 'headsign', type: 'STRING', definition: 'The sign on the vehicle' }] },
     ],
     relationship_types: [
-      { label: 'HAS_TRIP', description: 'The scheduled trips of a route' },
-      { label: 'SERVES', description: 'The stops a trip calls at' },
+      { label: 'HAS_TRIP', definition: 'The scheduled trips of a route' },
+      { label: 'SERVES', definition: 'The stops a trip calls at' },
     ],
     patterns: [
       ['Route', 'HAS_TRIP', 'Trip'],
@@ -344,7 +344,7 @@ describe('cosmetic changes', () => {
     // Trip gains a description of its own too, which the Diff reports after its attribute's.
     const tripDescribed: Ontology = {
       ...target,
-      node_types: target.node_types.map((n) => (n.label === 'Trip' ? { ...n, description: 'One run along a route' } : n)),
+      node_types: target.node_types.map((n) => (n.label === 'Trip' ? { ...n, definition: 'One run along a route' } : n)),
     }
     const both = compareOntologies(base, tripDescribed, {
       classification: 'cosmetic',
@@ -369,8 +369,8 @@ describe('cosmetic changes', () => {
 
   it('reads a description from the Concept of the kind the change states, when a class and a relation share a label', () => {
     const shared = (description: string): Ontology => ({
-      node_types: [{ label: 'Stop', description: `class ${description}` }],
-      relationship_types: [{ label: 'Stop', description: `relation ${description}` }],
+      node_types: [{ label: 'Stop', definition: `class ${description}` }],
+      relationship_types: [{ label: 'Stop', definition: `relation ${description}` }],
       patterns: [['Stop', 'Stop', 'Stop']],
     })
     const comparison = compareOntologies(shared('before'), shared('after'), { classification: 'cosmetic', changes: [] })
@@ -538,7 +538,7 @@ const TRANSIT_V3: Ontology = {
     { label: 'Stop', properties: [{ name: 'wheelchair_boarding', type: 'INTEGER' }] },
     { label: 'Trip', properties: [{ name: 'bikes_allowed', type: 'INTEGER' }] },
   ],
-  relationship_types: [{ label: 'HAS_TRIP', description: 'The scheduled trips of a route' }, { label: 'SERVES' }],
+  relationship_types: [{ label: 'HAS_TRIP', definition: 'The scheduled trips of a route' }, { label: 'SERVES' }],
   patterns: [
     ['Route', 'HAS_TRIP', 'Trip'],
     ['Trip', 'SERVES', 'Stop'],
@@ -613,9 +613,9 @@ describe('summarizeChanges', () => {
       ...TRANSIT_V3,
       node_types: TRANSIT_V3.node_types.map((n) =>
         n.label === 'Stop'
-          ? { ...n, properties: [{ name: 'wheelchair_boarding', type: 'INTEGER', description: 'Step-free access' }] }
+          ? { ...n, properties: [{ name: 'wheelchair_boarding', type: 'INTEGER', definition: 'Step-free access' }] }
           : n.label === 'Route'
-            ? { ...n, description: 'A line riders know by name' }
+            ? { ...n, definition: 'A line riders know by name' }
             : n,
       ),
     }
@@ -642,7 +642,7 @@ describe('summarizeChanges', () => {
     const target: Ontology = {
       ...TRANSIT_V3,
       node_types: TRANSIT_V3.node_types.map((n) =>
-        n.label === 'Stop' ? { ...n, deprecated: true, description: 'Where riders board' } : n,
+        n.label === 'Stop' ? { ...n, deprecated: true, definition: 'Where riders board' } : n,
       ),
     }
     const { sections } = summarizeChanges(
