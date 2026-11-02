@@ -135,7 +135,7 @@ class Demo:
             run.log_params(
                 {
                     "extractor": "rules-v1",
-                    "sources": "machines.csv, material_flow.json, work_orders.csv, reports/",
+                    "sources": "data/",
                 }
             )
             stats = build(
@@ -260,7 +260,7 @@ class Demo:
             run.log_params(
                 {
                     "extractor": self.extractor.name,
-                    "sources": "machines.csv, material_flow.json, work_orders.csv, technicians.csv, reports/",
+                    "sources": "data/",
                 }
             )
             if isinstance(self.extractor, ClaudeExtractor):

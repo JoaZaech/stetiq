@@ -21,7 +21,8 @@ function WithTooltip({ tip, children }: { tip: ReactNode; children: ReactNode })
 
 /**
  * A run's first params as chips (`extractor: llm`), the rest as "+n" with them in a
- * tooltip. Spans, so it can sit in a heading.
+ * tooltip. A chip is never wider than `max-w-48`: a long value is cut with an ellipsis,
+ * and pointing at the chip shows it whole. Spans, so it can sit in a heading.
  */
 export function ParamChips({ params }: { params: Readonly<Record<string, string>> }) {
   const { shown, hidden } = paramChips(params)
@@ -30,9 +31,11 @@ export function ParamChips({ params }: { params: Readonly<Record<string, string>
     <span role="list" aria-label="Params" className="inline-flex flex-wrap items-center gap-1">
       {shown.map((param) => (
         <span role="listitem" key={param[0]}>
-          <Badge variant="outline" className="font-mono font-normal">
-            {formatParam(param)}
-          </Badge>
+          <WithTooltip tip={formatParam(param)}>
+            <Badge variant="outline" className="max-w-48 font-mono font-normal">
+              <span className="min-w-0 truncate">{formatParam(param)}</span>
+            </Badge>
+          </WithTooltip>
         </span>
       ))}
       {hidden.length > 0 && (

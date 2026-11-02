@@ -122,7 +122,7 @@ The Promotion is recorded with you as the actor and shows up under [Promotions](
 
 ### Construction Runs
 
-The section lists every Construction Run, newest first. Each run shows its short id with up to three of its params as chips (`extractor: llm`), sorted by name; the rest count as *+n*, and pointing at that shows them. Then come its status, start time, duration, Declared Ontology, Conformance, its Gate verdict and the Candidate it produced, if any.
+The section lists every Construction Run, newest first. Each run shows its short id with up to three of its params as chips (`extractor: llm`), sorted by name; a long value is cut short with an ellipsis, and pointing at the chip shows it whole. The rest count as *+n*, and pointing at that shows them. Then come its status, start time, duration, Declared Ontology, Conformance, its Gate verdict and the Candidate it produced, if any.
 
 - **Conformance** is a percentage, coloured by how close it is to 100 %: green from 95 %, amber from 80 %, red below.
 - **Gate** shows the run's latest recorded Gate result as **Passed** (green check) or **Failed** (red cross). A run CI never gated shows **Preview** (grey dashed circle) when it has a Gate Preview, whatever the preview judges: pointing at it says whether it passes or fails against current Gates, and that it is not recorded. Only a Gate result CI records counts. A Knowledge Graph that was never gated shows *—*.
