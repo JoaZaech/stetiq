@@ -15,6 +15,7 @@ from typing import Any, Literal
 
 from stetiq.graph_source import (
     ObservedNodeType,
+    ObservedPattern,
     ObservedProperty,
     ObservedRelationshipType,
     ObservedSchema,
@@ -52,9 +53,12 @@ class Mismatch:
     value: str | None = None
     count: int | None = None
     # The Violation Rate: the share of owner nodes or relationships failing this check, for
-    # `required_missing` and `value_outside_vocabulary`. None when unknown (a truncated
-    # value list) or for a kind without one.
+    # `required_missing` and `value_outside_vocabulary`, and of endpoint nodes for
+    # `cardinality_violation`. None when unknown (a truncated value list, a degree observed
+    # without counting the nodes outside the bound) or for a kind without one.
     rate: float | None = None
+    # For `cardinality_violation`: which degree breaks the bound, `out` or `in`.
+    direction: Literal["out", "in"] | None = None
 
 
 @dataclass(frozen=True)
@@ -115,6 +119,7 @@ class Conformance:
                     m.get("value"),
                     m.get("count"),
                     m.get("rate"),
+                    m.get("direction"),
                 )
                 for m in d["mismatches"]
             ),
@@ -133,6 +138,8 @@ def _mismatch_to_dict(m: Mismatch) -> dict[str, Any]:
         d["count"] = m.count
     if m.rate is not None:
         d["rate"] = m.rate
+    if m.direction is not None:
+        d["direction"] = m.direction
     return d
 
 
@@ -351,11 +358,15 @@ def _check_patterns(checks: _Checks, declared: Ontology, observed: ObservedSchem
 
 def _check_cardinality(checks: _Checks, declared: Pattern, observed: ObservedSchema) -> None:
     """Each declared bound is one item. A direction with a failing bound is reported once,
-    with the observed degree range against all of that direction's bounds. A pattern that
-    is not observed gives every node of its type degree 0; with no such nodes either, its
-    bounds hold."""
+    with the observed degree range against all of that direction's bounds and its
+    Violation Rate (see `_cardinality_rate`). A pattern that is not observed gives every
+    node of its type degree 0; with no such nodes either, its bounds hold."""
     seen = observed.pattern(declared.source, declared.relationship, declared.target)
-    for direction, node_type in (("out", declared.source), ("in", declared.target)):
+    directions: tuple[tuple[Literal["out", "in"], str], ...] = (
+        ("out", declared.source),
+        ("in", declared.target),
+    )
+    for direction, node_type in directions:
         low = getattr(declared, f"min_{direction}")
         high = getattr(declared, f"max_{direction}")
         if low is None and high is None:
@@ -388,8 +399,33 @@ def _check_cardinality(checks: _Checks, declared: Pattern, observed: ObservedSch
                     MismatchKind.CARDINALITY_VIOLATION,
                     f"{direction}-degree observed {observed_range[0]}..{observed_range[1]}, "
                     f"declared {bounds}",
+                    rate=_cardinality_rate(
+                        seen, direction, low, high, observed.node_type(node_type)
+                    ),
+                    direction=direction,
                 )
             )
+
+
+def _cardinality_rate(
+    seen: ObservedPattern | None,
+    direction: Literal["out", "in"],
+    low: int | None,
+    high: int | None,
+    endpoints: ObservedNodeType | None,
+) -> float | None:
+    """The share of the failing direction's endpoint nodes whose degree is outside the
+    declared bounds. An unobserved pattern leaves every endpoint node at degree 0, so all
+    of them fail its minimum. An observed one needs the adapter's count against these
+    same bounds; without it the rate is unknown."""
+    if endpoints is None or endpoints.count == 0:
+        return None
+    if seen is None:
+        return 1.0
+    outside = (seen.out_degree if direction == "out" else seen.in_degree).outside_bounds
+    if outside is None or (outside.min, outside.max) != (low, high):
+        return None
+    return outside.count / endpoints.count
 
 
 # --- Candidates ---------------------------------------------------------------------

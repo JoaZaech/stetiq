@@ -29,7 +29,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from stetiq.conformance import (
     Conformance,
@@ -63,7 +63,8 @@ class DriftFinding:
     `undeclared_value` carries the value, how many owners hold it (`count`) and their share
     of the owner (`share`, None when the value list was truncated). `violation_increase`
     carries the Conformance check (`violation`) and its Violation Rate in the Baseline
-    Observation and now (`baseline_rate`, `observed_rate`)."""
+    Observation and now (`baseline_rate`, `observed_rate`); for a `cardinality_violation`
+    on a pattern, `direction` says which degree (`out` or `in`)."""
 
     kind: DriftKind
     subject: str  # a label, `Owner.property`, or a pattern `(Source)-[REL]->(Target)`
@@ -77,6 +78,7 @@ class DriftFinding:
     violation: MismatchKind | None = None
     baseline_rate: float | None = None
     observed_rate: float | None = None
+    direction: Literal["out", "in"] | None = None
 
     @property
     def structural(self) -> bool:
@@ -98,6 +100,7 @@ class DriftFinding:
             "violation": None if self.violation is None else self.violation.value,
             "baseline_rate": self.baseline_rate,
             "observed_rate": self.observed_rate,
+            "direction": self.direction,
         }
         d.update({k: v for k, v in optional.items() if v is not None})
         return d
@@ -118,6 +121,7 @@ class DriftFinding:
             violation=None if violation is None else MismatchKind(violation),
             baseline_rate=d.get("baseline_rate"),
             observed_rate=d.get("observed_rate"),
+            direction=d.get("direction"),
         )
 
 
@@ -237,7 +241,7 @@ _STRUCTURAL = {
 
 # The Conformance checks whose Violation Rate Drift compares with the baseline.
 # `value_outside_vocabulary` has a rate too, but its Drift is `undeclared_value`.
-_RATED = (MismatchKind.REQUIRED_MISSING,)
+_RATED = (MismatchKind.REQUIRED_MISSING, MismatchKind.CARDINALITY_VIOLATION)
 
 
 def assess_drift(
@@ -295,14 +299,17 @@ def _violation_increases(
     """A finding per Violation Rate more than `limit` above its baseline value. A check
     the baseline passed had rate 0; one it could not run (its subject was not observed
     then), or whose rate is unknown on either side, is not comparable."""
-    before = {(m.kind, m.subject): m.rate for m in at_baseline.mismatches if m.kind in _RATED}
+    # A pattern's out- and in-degree are separate checks on the same subject.
+    before = {
+        (m.kind, m.subject, m.direction): m.rate for m in at_baseline.mismatches if m.kind in _RATED
+    }
     findings: list[DriftFinding] = []
     gaps: list[NotComparable] = []
     for m in conformance.mismatches:
         if m.kind not in _RATED:
             continue
-        if (m.kind, m.subject) in before:
-            then = before[(m.kind, m.subject)]
+        if (m.kind, m.subject, m.direction) in before:
+            then = before[(m.kind, m.subject, m.direction)]
         else:
             then = 0.0 if _observed_in(baseline, m.subject_kind, m.subject) else None
         if m.rate is None or then is None:
@@ -324,14 +331,19 @@ def _violation_increases(
                     kind=DriftKind.VIOLATION_INCREASE,
                     subject=m.subject,
                     subject_kind=m.subject_kind,
-                    detail=f"{m.kind} rate rose from {then:.1%} to {m.rate:.1%} "
-                    "since the Baseline Observation",
+                    detail=f"{m.kind}{_direction(m.direction)} rate rose from {then:.1%} "
+                    f"to {m.rate:.1%} since the Baseline Observation",
                     violation=m.kind,
                     baseline_rate=then,
                     observed_rate=m.rate,
+                    direction=m.direction,
                 )
             )
     return findings, gaps
+
+
+def _direction(direction: str | None) -> str:
+    return "" if direction is None else f" ({direction}-degree)"
 
 
 def _observed_in(schema: ObservedSchema, subject_kind: MismatchSubjectKind, subject: str) -> bool:

@@ -60,6 +60,33 @@ def bound_attributes(ontology: Ontology) -> tuple[BoundAttribute, ...]:
     )
 
 
+class PatternBound(NamedTuple):
+    """A Pattern's declared cardinality in one direction, as handed to the adapter:
+    `out` bounds how many `relationship` edges each `source` node has to `target` nodes,
+    `in` how many each `target` node has from `source` nodes. None leaves a side open."""
+
+    source: str
+    relationship: str
+    target: str
+    direction: Literal["out", "in"]
+    min: int | None
+    max: int | None
+
+
+def pattern_bounds(ontology: Ontology) -> tuple[PatternBound, ...]:
+    """Every declared cardinality bound of `ontology`'s Patterns, one per bounded
+    direction: what Observation counts the endpoint nodes outside of."""
+    bounds = [
+        bound
+        for p in ontology.patterns
+        for bound in (
+            PatternBound(p.source, p.relationship, p.target, "out", p.min_out, p.max_out),
+            PatternBound(p.source, p.relationship, p.target, "in", p.min_in, p.max_in),
+        )
+    ]
+    return tuple(b for b in bounds if b.min is not None or b.max is not None)
+
+
 @dataclass(frozen=True)
 class ValueCount:
     """One distinct string value of an Attribute and how many nodes or relationships of
@@ -124,19 +151,50 @@ class ObservedRelationshipType:
 
 
 @dataclass(frozen=True)
+class OutsideBounds:
+    """How many endpoint nodes have a degree outside the declared `[min, max]` (None
+    leaves a side open); a zero-degree node counts against a `min`. The bounds are kept
+    so that a count is only compared with the same bounds."""
+
+    min: int | None
+    max: int | None
+    count: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"min": self.min, "max": self.max, "count": self.count}
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> OutsideBounds:
+        return cls(d.get("min"), d.get("max"), d["count"])
+
+
+@dataclass(frozen=True)
 class Degree:
-    """Distribution of per-node relationship counts (zero-degree nodes included)."""
+    """Distribution of per-node relationship counts (zero-degree nodes included).
+
+    `outside_bounds` is set only when Observation was given a declared bound for this
+    Pattern and direction; schemas observed without one (or before it existed) lack it."""
 
     min: int
     max: int
     mean: float
+    outside_bounds: OutsideBounds | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {"min": self.min, "max": self.max, "mean": self.mean}
+        d: dict[str, Any] = {"min": self.min, "max": self.max, "mean": self.mean}
+        if self.outside_bounds is not None:
+            d["outside_bounds"] = self.outside_bounds.to_dict()
+        return d
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> Degree:
-        return cls(d["min"], d["max"], float(d["mean"]))
+        outside = d.get("outside_bounds")
+        return cls(
+            d["min"],
+            d["max"],
+            float(d["mean"]),
+            None if outside is None else OutsideBounds.from_dict(outside),
+        )
 
 
 @dataclass(frozen=True)

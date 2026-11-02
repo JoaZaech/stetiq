@@ -41,6 +41,7 @@ from stetiq.graph_source import (
     ObservedSchema,
     bound_attributes,
     graph_source_from_env,
+    pattern_bounds,
 )
 from stetiq.impact import UseCaseImpact, consumer_impact
 from stetiq.ontology import Ontology, parse_yaml
@@ -909,11 +910,14 @@ def _observe(
     graph_source: GraphSource, scope: GraphSourceScope, ontology: Ontology, value_cap: int
 ) -> ObservedSchema:
     """Observe `scope`, reading values for `ontology`'s Vocabulary-bound Attributes only
-    (ADR 0001). Without such Attributes the adapter is called as before Vocabularies."""
+    (ADR 0001) and counting the endpoint nodes outside its declared Pattern bounds.
+    Without such Attributes or bounds the adapter is called as before them."""
     bound = bound_attributes(ontology)
+    cardinality = pattern_bounds(ontology)
+    extra: dict[str, Any] = {"pattern_bounds": cardinality} if cardinality else {}
     if not bound:
-        return graph_source.observe(scope)
-    return graph_source.observe(scope, bound, value_cap=value_cap)
+        return graph_source.observe(scope, **extra)
+    return graph_source.observe(scope, bound, value_cap=value_cap, **extra)
 
 
 class ActiveRun:
