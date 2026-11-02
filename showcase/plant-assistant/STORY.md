@@ -70,7 +70,7 @@ CNC-04 is fine. Now rewind.
 
 ## Act 2 — With stetiq (prompt v2 again)
 
-`show.py` rewinds: stetiq's tracking database, both graphs and the assistant start over at v1,
+`show.py` rewinds: stetiq (a new, empty server), both graphs and the assistant start over at v1,
 guard on (`show.py --act 2` starts here). The same pull request runs, and this time its
 CI asks stetiq.
 
@@ -86,8 +86,10 @@ CI asks stetiq.
   still on v1.
 - Ask: **"Which suppliers' components keep failing?"** → still "not recorded". The
   assistant gives up the new feature rather than take a version that breaks a Task.
-- Right screen: `stetiq ui`, the Use Case › Consumers tab, shows both Consumers red, and
-  the Candidate's Consumer impact.
+- Right screen: `stetiq ui`, the Use Case › Consumers tab, shows both Consumers red.
+  (The Diff from v1 to v2 is additive, so the Candidate's Consumer impact lists no
+  affected Task: only the Consumer Gate, which runs the Competency Questions, sees the
+  rows go.)
 
 *Say:* stetiq computed the verdict; the assistant enforced it, in its own code. Neither
 the pipeline team nor the assistant team had to read an Ontology Diff.
@@ -126,8 +128,10 @@ follow-ups. The next Observation records Drift against `production` in `stetiq u
 
 ## If something goes wrong on stage
 
-- **No Wi-Fi or no `ANTHROPIC_API_KEY`:** the scripted questions answer from recorded
-  responses; free-form questions are disabled and the chat page says so.
+- **No Wi-Fi or no `ANTHROPIC_API_KEY`:** the scripted questions answer from
+  hand-written answers (`recordings/answers.json`, not recorded from Claude), each marked
+  *scripted answer (offline)*; free-form questions are disabled and the chat page says
+  so.
 - **A container is down:** `show.py` checks the stack before every act and says which.
 - **Lost your place:** `show.py --act 2` jumps to the start of an act: it rewinds and
   replays the acts before it without a word. `show.py --reset` only rewinds.
@@ -140,7 +144,7 @@ Settled in a grilling session on 2026-11-02.
 | --- | --- |
 | Q1, Q14 | Lives in `showcase/plant-assistant/` in the stetiq repo, built as a separate project: its own `pyproject.toml`, stetiq as a uv path source (a PyPI pin when lifted out), only stetiq's public SDK and REST API. |
 | Q2 | Plant-maintenance domain and plant-kg's story; data, prompts and `llm-cache/` copied, not imported. plant-kg stays as it is. |
-| Q3, Q13 | Extraction replays recorded Claude rounds (`--live` for real calls). The assistant answers live with the Anthropic API (`claude-sonnet-5-5`), with recorded answers for the scripted questions. |
+| Q3, Q13 | Extraction replays recorded Claude rounds (`--live` for real calls). The assistant answers live with the Anthropic API (`claude-sonnet-5-5`), with hand-written answers for the scripted questions when there is no API key. |
 | Q4, Q15 | Real Neo4j; the pipeline writes it and stetiq's built-in Neo4j Graph Source evaluates it with real Cypher. |
 | Q5 | GraphRAG as text-to-Cypher, with the trusted Ontology Version in the prompt. No vector index. |
 | Q6, Q12 | `show.py` presenter script; a FastAPI + single-HTML chat page with a version banner and the Cypher of each answer; `stetiq ui` beside it. |
@@ -150,5 +154,5 @@ Settled in a grilling session on 2026-11-02.
 | Q10, Q16 | Two Neo4j Community containers, `graph-candidate` and `graph-production`; `deploy.py` copies a promoted run into production (every run, in Act 1). |
 | Q11 | The show opens with a without-stetiq act, then rewinds. |
 | Q18 | `docker-compose.yml`: two Neo4j, a stetiq server built from the repo's Dockerfile with a build arg that skips the plant-kg seed (SQLite in a volume, API token from `.env`), and the assistant. `show.py` runs on the host. |
-| Q19 | A `neo4j`-marked test in `tests/` runs the show headless with recorded answers and pins every verdict and both answers. |
+| Q19 | A `neo4j`-marked test in `tests/` runs the show headless with the hand-written answers and pins every verdict and both answers. |
 | Q20 | A README for the showcase and a line in the root README; no `docs/guide/` change. |

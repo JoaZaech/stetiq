@@ -7,16 +7,13 @@ stetiq server. Both are named in the Gates of stetiq.yaml.
 from __future__ import annotations
 
 from stetiq import ConstructionRunEvaluator, Detail, Evaluation, OntologyVersionEvaluator
+from stetiq.evaluation.framework import ratio
 
 WORK_ORDER_COUNT = "MATCH (w:WorkOrder) RETURN count(w) AS work_orders"
 WORK_ORDERS_WITHOUT_FOLLOW_UPS = """
 MATCH (w:WorkOrder) WHERE NOT (w)-[:HAS_FOLLOW_UP]->(:FollowUp)
 RETURN count(w) AS work_orders
 """
-
-
-def _ratio(part: int, whole: int) -> float:
-    return part / whole if whole else 0.0
 
 
 class Documented(OntologyVersionEvaluator):
@@ -34,7 +31,7 @@ class Documented(OntologyVersionEvaluator):
         return Evaluation(
             metrics={
                 "undocumented": len(missing),
-                "documented_ratio": _ratio(len(concepts) - len(missing), len(concepts)),
+                "documented_ratio": ratio(len(concepts) - len(missing), len(concepts)),
             },
             details=[Detail(item=label, message="has no Definition") for label in missing],
         )
@@ -58,6 +55,6 @@ class ReportCoverage(ConstructionRunEvaluator):
             metrics={
                 "work_orders": work_orders,
                 "without_follow_ups": without,
-                "coverage": _ratio(work_orders - without, work_orders),
+                "coverage": ratio(work_orders - without, work_orders),
             }
         )

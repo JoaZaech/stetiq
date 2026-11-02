@@ -88,7 +88,7 @@ async function ask(question) {
   const a = await r.json();
   if (!r.ok) { body.className = "error"; body.textContent = a.detail; return; }
   body.textContent = a.answer;
-  const source = a.source === "recorded" ? " · recorded answer" : "";
+  const source = a.source === "scripted" ? " · scripted answer (offline)" : "";
   turn.append(el("div", "meta", `Ontology v${a.ontology_version}${source} · Cypher it ran:`));
   turn.append(el("pre", "", a.cypher));
 }

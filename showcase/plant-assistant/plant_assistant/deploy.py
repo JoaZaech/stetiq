@@ -7,11 +7,23 @@ stetiq let through.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import neo4j
 
 from plant_assistant.graph import Extraction, write
 
 PRODUCTION_DATABASE = "neo4j"  # Neo4j Community has the one database
+
+
+@dataclass(frozen=True)
+class Graphs:
+    """The two Neo4j servers the pipeline writes: `candidate`, which every Construction
+    Run rebuilds and stetiq observes, and `production`, which a deploy replays a
+    promoted run into."""
+
+    candidate: neo4j.Driver
+    production: neo4j.Driver
 
 
 def deploy(

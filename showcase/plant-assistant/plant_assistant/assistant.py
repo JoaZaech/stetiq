@@ -7,7 +7,8 @@ the rows. Every answer carries the Cypher it ran and the work orders in its rows
 
 Without Claude (no `ANTHROPIC_API_KEY`, or the API unreachable) the scripted questions
 answer from `recordings/answers.json`, keyed by question and Ontology Version, and
-free-form questions are refused.
+free-form questions are refused. Those answers were written by hand, not recorded from
+Claude (the file's `provenance` says so); their Cypher runs on the production graph.
 
     cd showcase/plant-assistant
     uv run uvicorn plant_assistant.assistant:app_from_env --factory --port 8000
@@ -44,7 +45,8 @@ HTTP API:
   any offer) with its reason, the banner the chat page shows, and whether free-form
   questions are answered;
 - `POST /api/ask` `{question}`: `{question, answer, cypher, work_orders,
-  ontology_version, source}`, `source` being `live` (Claude) or `recorded`;
+  ontology_version, source}`, `source` being `live` (Claude) or `scripted` (a hand-written answer
+  from `recordings/answers.json`, its Cypher run on the production graph);
 - `POST /api/poll`: check stetiq now instead of waiting for the next poll; returns the
   status;
 - `POST /api/reset` `{guard}`: forget the version in use and the guard's last decision,
@@ -82,7 +84,7 @@ PAGE = Path(__file__).resolve().parent / "static" / "index.html"
 ROW_LIMIT = 200  # rows past this are not sent to Claude
 NO_KEY = (
     "Free-form questions are off: the assistant has no ANTHROPIC_API_KEY, so it answers "
-    "only the scripted questions, from recorded answers."
+    "only the scripted questions, from hand-written answers."
 )
 
 _WORK_ORDER_ID = re.compile(r"\bWO-\d{4}\b")
@@ -133,7 +135,7 @@ class Claude(Protocol):
 
 @dataclass(frozen=True)
 class Recording:
-    """A recorded answer to a scripted question on one Ontology Version."""
+    """A hand-written answer to a scripted question on one Ontology Version."""
 
     question: str
     ontology_version: int
@@ -148,7 +150,7 @@ class Answer:
     cypher: str
     work_orders: list[str]
     ontology_version: int
-    source: str  # live | recorded
+    source: str  # live | scripted
 
 
 Decision = Literal["accepted", "waiting", "refused"]
@@ -307,13 +309,13 @@ class Assistant:
             except _API_ERRORS:
                 if recording is None:
                     raise Refused(
-                        503, "Claude is unreachable, and this question has no recorded answer."
+                        503, "Claude is unreachable, and this question has no scripted answer."
                     ) from None
         if recording is None:
             raise Refused(503, NO_KEY)
         rows = self._run(recording.cypher)
         return Answer(
-            question, recording.answer, recording.cypher, _work_orders(rows), number, "recorded"
+            question, recording.answer, recording.cypher, _work_orders(rows), number, "scripted"
         )
 
     def _ask_claude(self, llm: Claude, question: str, number: int, ontology_yaml: str) -> Answer:
@@ -367,16 +369,22 @@ class Assistant:
 
 
 def _symptom(verdict: stetiq.ConsumerGateResult) -> str:
-    """What a failed verdict names, from its findings: each failing question and its row
-    change, or the input that was missing. Never a cause: stetiq reads no instance data."""
-    symptoms = [
-        f"{f.competency_question} {percent(f.change)}"
-        if f.change is not None
-        else f"{f.competency_question} {f.missing}"
-        for o in verdict.failed
-        for f in o.findings
-    ]
-    return ", ".join(symptoms) or "Consumer Gate failed"
+    """What a failed verdict names: its failing findings, or that it failed."""
+    return ", ".join(failing_findings(verdict)) or "Consumer Gate failed"
+
+
+def failing_findings(verdict: stetiq.ConsumerGateResult, *, row_counts: bool = False) -> list[str]:
+    """The symptoms a verdict names, from its failed outcomes' findings: each failing
+    question and its row change (after its row counts, with `row_counts`), or the input
+    that was missing. Never a cause: stetiq reads no instance data."""
+
+    def symptom(f: stetiq.RowCountFinding) -> str:
+        if f.change is None:
+            return f"{f.competency_question} {f.missing}"
+        counts = f"{f.before} → {f.after}, " if row_counts else ""
+        return f"{f.competency_question} {counts}{percent(f.change)}"
+
+    return [symptom(f) for o in verdict.failed for f in o.findings]
 
 
 def percent(change: float) -> str:

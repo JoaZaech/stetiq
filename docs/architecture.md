@@ -177,7 +177,7 @@ How to run each check, and what a green run prints, is in [`docs/agents/running-
   docker run -d --rm --name stetiq-pg-test -e POSTGRES_PASSWORD=stetiq -e POSTGRES_DB=stetiq_test -p 55432:5432 postgres:17
   STETIQ_TEST_POSTGRES_URL=postgresql+psycopg://postgres:stetiq@localhost:55432/stetiq_test uv run pytest
   ```
-- **Neo4j.** Tests marked `neo4j` start a session-scoped testcontainer (`neo4j:2026.10-community`) whenever Docker answers, and skip cleanly when it does not. They are *not* deselected by default. Database scoping (a second database `other`) and the `reader`-role test need Enterprise: set `STETIQ_TEST_NEO4J_IMAGE=neo4j:2026.10-enterprise` (licence accepted in the fixture) to cover them; on Community the second-database seeding is a no-op and the role test skips. Run only these tests with `uv run pytest -m neo4j`.
+- **Neo4j.** Tests marked `neo4j` start a session-scoped testcontainer (`neo4j:2026.10-community`) whenever Docker answers, and skip cleanly when it does not. They are *not* deselected by default. Tests that need two graph databases (the plant-assistant showcase's candidate and production graphs, `tests/test_showcase_plant_assistant.py`) also ask for `neo4j_second_container`, a second session-scoped Community server started only for them, with a 300 s startup timeout (`SECOND_NEO4J_STARTUP_SECONDS`) because it starts while other tests run. Database scoping (a second database `other`) and the `reader`-role test need Enterprise: set `STETIQ_TEST_NEO4J_IMAGE=neo4j:2026.10-enterprise` (licence accepted in the fixture) to cover them; on Community the second-database seeding is a no-op and the role test skips. Run only these tests with `uv run pytest -m neo4j`.
 
 ### Frontend unit
 

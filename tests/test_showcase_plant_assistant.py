@@ -9,16 +9,19 @@ Claude fails the test.
 
 The maintenance assistant (the GraphRAG Consumer) runs as its FastAPI app behind a
 TestClient, with its own read-only stetiq token, and `run_show` reaches it only over its
-HTTP API. Its Claude is a scripted fake replaying the committed recorded answers, so no
-test calls a real LLM.
+HTTP API. Its Claude is a scripted fake replaying the committed answers, which were
+written by hand (`recordings/answers.json`), so no test calls a real LLM.
 
 The show plays Acts 0 and 1 without stetiq (the assistant's guard off, every run
-deployed), rewinds the tracking database, both graphs and the assistant, then plays
-Acts 0, 2 and 3 with stetiq; the tests pin both passes. The `--act N` tests come last,
-since they rewind again.
+deployed), rewinds stetiq, both graphs and the assistant, then plays Acts 0, 2 and 3
+with stetiq; the tests pin both passes. Where the stage's rewind recreates the stetiq
+service's volume through docker compose, the test's starts a fresh in-process server
+with new tokens (`Tracking.rewind`): the one place stage and test differ. The `--act N`
+tests come last, since they rewind again.
 
-Needs Docker (two Neo4j testcontainers); with Docker up it runs, never skips."""
+Needs Docker (two Neo4j testcontainers), and skips only when Docker is unavailable."""
 
+import contextlib
 import importlib
 import json
 from pathlib import Path
@@ -122,16 +125,40 @@ def production(neo4j_second_container):
         yield driver
 
 
-@pytest.fixture(scope="module")
-def server(tmp_path_factory):
-    """The in-process stetiq server and its tracking database."""
-    database_url = f"sqlite:///{tmp_path_factory.mktemp('stetiq') / 'server.db'}"
-    with TestClient(create_app(database_url=database_url)) as http:
-        yield http, database_url
+class Tracking:
+    """The stetiq server the show reaches, in-process. `rewind` starts a fresh one (a new
+    SQLite database, new tokens), as compose recreates the stetiq service's volume on
+    stage; gives each registered assistant a client with its new read token, as the
+    assistant's restart does; and returns the show's new edit client."""
+
+    def __init__(self, directory: Path, candidate) -> None:
+        self.directory = directory
+        self.candidate = candidate
+        self.assistants = []
+        self.servers = 0
+        self._stack = contextlib.ExitStack()
+        self.rewind()
+
+    def rewind(self) -> stetiq.Client:
+        self._stack.close()
+        self.servers += 1
+        self.database_url = f"sqlite:///{self.directory / f'server-{self.servers}.db'}"
+        app = create_app(database_url=self.database_url)
+        self.http = self._stack.enter_context(TestClient(app))
+        for assistant in self.assistants:
+            assistant.stetiq = self.remote("maintenance-assistant", "read")
+        self.client = self.remote("ci-bot", "edit", graph_source=Neo4jGraphSource(self.candidate))
+        return self.client
+
+    def remote(self, user: str, permission: str, **kwargs) -> stetiq.Client:
+        """A remote-mode client of the current server, with a token of its own."""
+        return _remote(self.http, self.database_url, user, permission, **kwargs)
+
+    def close(self) -> None:
+        self._stack.close()
 
 
-def _remote(server, user: str, permission: str, **kwargs) -> stetiq.Client:
-    http, database_url = server
+def _remote(http, database_url: str, user: str, permission: str, **kwargs) -> stetiq.Client:
     _, token = TokenRegistry(database_url).issue(user, {"*": permission})
     return stetiq.Client(
         str(http.base_url),
@@ -141,10 +168,18 @@ def _remote(server, user: str, permission: str, **kwargs) -> stetiq.Client:
 
 
 @pytest.fixture(scope="module")
-def client(server, candidate):
-    """A remote-mode client: stetiq is reached over REST with an API token, and the
-    Graph Source it observes is the candidate graph."""
-    return _remote(server, "ci-bot", "edit", graph_source=Neo4jGraphSource(candidate))
+def tracking(tmp_path_factory, candidate):
+    """The in-process stetiq server, which a rewind replaces with a fresh one."""
+    tracking = Tracking(tmp_path_factory.mktemp("stetiq"), candidate)
+    yield tracking
+    tracking.close()
+
+
+@pytest.fixture
+def client(show, tracking):
+    """After the show: a remote-mode client of the server the last rewind started, whose
+    Graph Source is the candidate graph."""
+    return tracking.client
 
 
 @pytest.fixture(scope="module")
@@ -152,18 +187,16 @@ def assistant_module(showcase):
     return importlib.import_module("plant_assistant.assistant")
 
 
-def _assistant_http(assistant_module, server, production, llm):
-    """The maintenance assistant's app, reading stetiq with its own read-only token and
-    answering from the production graph."""
-    assistant = assistant_module.Assistant(
-        _remote(server, "maintenance-assistant", "read"), production, llm=llm
-    )
-    return TestClient(assistant_module.create_app(assistant, poll_interval=None))
+def _assistant_app(assistant_module, stetiq_client, production, llm):
+    """The maintenance assistant's app, reading stetiq with `stetiq_client` (its own
+    read-only token) and answering from the production graph."""
+    assistant = assistant_module.Assistant(stetiq_client, production, llm=llm)
+    return assistant, TestClient(assistant_module.create_app(assistant, poll_interval=None))
 
 
 @pytest.fixture(scope="module")
 def claude():
-    """The assistant's Claude: replays the recorded answers, plus one question whose
+    """The assistant's Claude: replays the hand-written answers, plus one question whose
     Cypher would delete the work orders (asked after the show, on v3)."""
     return FakeAnthropic(
         [
@@ -179,26 +212,31 @@ def claude():
 
 
 @pytest.fixture(scope="module")
-def assistant(assistant_module, server, production, claude):
-    with _assistant_http(assistant_module, server, production, claude) as http:
+def assistant(assistant_module, tracking, production, claude):
+    """The show's assistant: each rewind gives it a client with its new token."""
+    state, app = _assistant_app(
+        assistant_module, tracking.remote("maintenance-assistant", "read"), production, claude
+    )
+    tracking.assistants.append(state)
+    with app as http:
         yield http
 
 
-def _run_show(showcase, server, client, candidate, production, assistant, **kwargs):
-    _, database_url = server
+@pytest.fixture(scope="module")
+def graphs(showcase, candidate, production):
+    return showcase.Graphs(candidate=candidate, production=production)
+
+
+def _run_show(showcase, tracking, graphs, assistant, **kwargs):
     return showcase.run_show(
-        client,
-        showcase.Graphs(candidate=candidate, production=production),
-        rewind_tracking=lambda: showcase.rewind_tracking(database_url),
-        assistant=assistant,
-        **{"quiet": True, **kwargs},
+        graphs, rewind=tracking.rewind, assistant=assistant, **{"quiet": True, **kwargs}
     )
 
 
 @pytest.fixture(scope="module")
-def show(showcase, server, client, candidate, production, assistant):
+def show(showcase, tracking, graphs, assistant):
     """The whole show: Acts 0 and 1 without stetiq, the rewind, then Acts 0, 2 and 3."""
-    return _run_show(showcase, server, client, candidate, production, assistant)
+    return _run_show(showcase, tracking, graphs, assistant)
 
 
 def _work_orders(driver) -> set[tuple[str, str, str]]:
@@ -314,11 +352,13 @@ def test_generated_cypher_runs_read_only(show, assistant, production):
     assert _work_orders(production) == V1_WORK_ORDERS
 
 
-def test_without_an_api_key_scripted_questions_answer_from_recordings(
-    show, assistant_module, server, production
+def test_without_an_api_key_scripted_questions_answer_from_hand_written_answers(
+    show, assistant_module, tracking, production
 ):
     # Started after the show, it takes the version `production` points to then: v3.
-    with _assistant_http(assistant_module, server, production, None) as offline:
+    reader = tracking.remote("maintenance-assistant", "read")
+    _, app = _assistant_app(assistant_module, reader, production, None)
+    with app as offline:
         status = offline.get("/api/status").json()
         line_2 = offline.post("/api/ask", json={"question": LINE_2})
         suppliers = offline.post("/api/ask", json={"question": SUPPLIERS})
@@ -327,9 +367,9 @@ def test_without_an_api_key_scripted_questions_answer_from_recordings(
     assert (status["in_use"], status["free_form"]) == (3, False)
     assert "ANTHROPIC_API_KEY" in status["message"]
     assert line_2.status_code == 200
-    assert (line_2.json()["source"], line_2.json()["ontology_version"]) == ("recorded", 3)
+    assert (line_2.json()["source"], line_2.json()["ontology_version"]) == ("scripted", 3)
     assert line_2.json()["work_orders"] == ["WO-2031", "WO-2038"]
-    # The recorded Cypher runs on the production graph: the work orders come from its rows.
+    # The scripted Cypher runs on the production graph: the work orders come from its rows.
     assert set(suppliers.json()["work_orders"]) == {
         "WO-2031",
         "WO-2032",
@@ -530,18 +570,25 @@ def unjudged(tmp_path):
     no Consumer Gate verdict exists for it."""
     database_url = f"sqlite:///{tmp_path / 'unjudged.db'}"
     with TestClient(create_app(database_url=database_url)) as http:
-        owner = _remote((http, database_url), "owner", "edit")
+        owner = _remote(http, database_url, "owner", "edit")
         owner.create_knowledge_graph(KG, ontology=SHOWCASE_DIR / "ontology" / "v1.yaml")
         owner.set_alias(KG, "production", 1)
         owner.register_ontology(KG, SHOWCASE_DIR / "ontology" / "fix.yaml")
         yield http, database_url, owner
 
 
+def _fresh_assistant(assistant_module, http, database_url, production):
+    """The assistant, without Claude, on the `unjudged` server."""
+    reader = _remote(http, database_url, "maintenance-assistant", "read")
+    _, app = _assistant_app(assistant_module, reader, production, None)
+    return app
+
+
 def test_a_version_with_no_recorded_verdict_is_refused_not_taken(
     unjudged, assistant_module, production
 ):
     http, database_url, owner = unjudged
-    with _assistant_http(assistant_module, (http, database_url), production, None) as fresh:
+    with _fresh_assistant(assistant_module, http, database_url, production) as fresh:
         offered = fresh.post("/api/poll").json()
         owner.set_alias(KG, "production", 2)  # deployed, but still without a verdict
         deployed = fresh.post("/api/poll").json()
@@ -558,7 +605,7 @@ def test_with_the_guard_off_the_newest_version_is_taken_without_a_verdict(
     unjudged, assistant_module, production
 ):
     http, database_url, _ = unjudged
-    with _assistant_http(assistant_module, (http, database_url), production, None) as fresh:
+    with _fresh_assistant(assistant_module, http, database_url, production) as fresh:
         guarded = fresh.post("/api/poll").json()
         off = fresh.post("/api/reset", json={"guard": "off"}).json()
         followed = fresh.post("/api/poll").json()
@@ -578,20 +625,20 @@ def test_with_the_guard_off_the_newest_version_is_taken_without_a_verdict(
 
 
 def test_a_container_that_is_down_is_named_before_the_act_starts(
-    show, showcase, server, client, candidate, assistant
+    show, showcase, tracking, client, candidate, assistant
 ):
-    http, _ = server
     runs_before = {r.id for r in client.list_runs(KG)}
     with neo4j.GraphDatabase.driver("bolt://localhost:1", auth=("neo4j", "x")) as stopped:
         graphs = showcase.Graphs(candidate=candidate, production=stopped)
         with pytest.raises(showcase.StackDown) as raised:
             showcase.run_show(
-                client,
                 graphs,
-                rewind_tracking=lambda: pytest.fail("the show rewound with a container down"),
+                rewind=lambda: pytest.fail("the show rewound with a container down"),
                 assistant=assistant,
                 quiet=True,
-                check=showcase.stack_check(stetiq=http, graphs=graphs, assistant=assistant),
+                check=showcase.stack_check(
+                    stetiq=tracking.http, graphs=graphs, assistant=assistant
+                ),
             )
 
     assert raised.value.down == ["graph-production"]
@@ -601,11 +648,10 @@ def test_a_container_that_is_down_is_named_before_the_act_starts(
 
 
 def test_the_stack_check_names_nothing_when_every_container_is_up(
-    showcase, server, candidate, production, assistant
+    showcase, tracking, graphs, assistant
 ):
-    http, _ = server
-    graphs = showcase.Graphs(candidate=candidate, production=production)
-    assert showcase.stack_check(stetiq=http, graphs=graphs, assistant=assistant)() == []
+    check = showcase.stack_check(stetiq=tracking.http, graphs=graphs, assistant=assistant)
+    assert check() == []
 
 
 def test_non_interactive_pauses_never_wait_for_enter(showcase):
@@ -629,9 +675,9 @@ def test_interactive_pauses_wait_for_enter_and_carry_on_when_input_ends(showcase
 
 
 @pytest.fixture(scope="module")
-def epilogue(show, showcase, server, production):
+def epilogue(show, showcase, tracking, production):
     """After the show: the hand edit to the production graph, then its Observation."""
-    observer = _remote(server, "ops", "edit", graph_source=Neo4jGraphSource(production))
+    observer = tracking.remote("ops", "edit", graph_source=Neo4jGraphSource(production))
     return showcase.run_epilogue(observer, production, quiet=True)
 
 
@@ -676,27 +722,28 @@ def test_the_epilogue_records_drift_against_production(epilogue, client):
 
 @pytest.mark.parametrize("start_act", [2, 3])
 def test_starting_at_an_act_reaches_the_state_the_acts_before_it_leave(
-    start_act, show, showcase, server, candidate, production, assistant
+    start_act, show, showcase, tracking, graphs, production, assistant
 ):
-    # `show.py --act N` is a new process, with a client of its own.
-    client = _remote(server, "ci-bot", "edit", graph_source=Neo4jGraphSource(candidate))
+    servers = tracking.servers
     beats = []
     resumed = _run_show(
         showcase,
-        server,
-        client,
-        candidate,
-        production,
+        tracking,
+        graphs,
         assistant,
         start_act=start_act,
         quiet=False,
         pause=beats.append,
     )
+    client = tracking.client
 
     for n in (0, 2, 3):
         assert resumed.acts[n].line == show.acts[n].line
         assert resumed.acts[n].banner == show.acts[n].banner
     assert resumed.without_stetiq == []
+    # One rewind, to a fresh server that holds only the runs the show replayed since.
+    assert tracking.servers == servers + 1
+    assert {r.id for r in client.list_runs(KG)} == {resumed.acts[n].run.id for n in (0, 2, 3)}
     # The presenter is paused only at the beats the audience sees: each act it plays, and
     # each scripted question in it; the acts replayed before it pass without a pause.
     played = {2: ["Act 2, with stetiq"], 3: []}[start_act] + ["Act 3, the fix"]
@@ -709,3 +756,30 @@ def test_starting_at_an_act_reaches_the_state_the_acts_before_it_leave(
     assert resumed.acts[2].production_run == resumed.acts[0].run.id
     assert client.get_contract_version(KG).number == 3
     assert _work_orders(production) == V1_WORK_ORDERS
+
+
+def test_a_version_whose_verdict_passed_waits_until_production_points_to_it(
+    show, showcase, tracking, graphs, assistant
+):
+    # Acts 0 and 2 from a rewind, then the fix's CI up to its verdicts, stopping short of
+    # the Promotion: v3 has passed the assistant's Consumer Gate, `production` is on v1.
+    replay = showcase.Show(
+        graphs, rewind=tracking.rewind, extraction="replay", quiet=True, assistant=assistant
+    )
+    replay.rewind(guard="on")
+    replay.play_act(0, replay.act_0, quiet=True)
+    replay.play_act(2, replay.act_2, quiet=True)
+    fix = replay.client.register_ontology(KG, SHOWCASE_DIR / "ontology" / "fix.yaml")
+    run = replay.construct("fix", ontology_version=fix.number)
+    verdicts = {c.consumer: c.passed for c in replay.client.evaluate_consumer_gates(KG, run=run.id)}
+
+    status = assistant.post("/api/poll").json()
+    answer = assistant.post("/api/ask", json={"question": LINE_2}).json()
+
+    assert verdicts["maintenance-assistant"] is True
+    assert replay.client.get_contract_version(KG).number == 1
+    assert (status["in_use"], status["offered"], status["decision"]) == (1, 3, "waiting")
+    assert status["banner"] == (
+        "on Ontology v1 · v3 offered: waiting (Consumer Gate passed, not in production yet)"
+    )
+    assert answer["ontology_version"] == 1

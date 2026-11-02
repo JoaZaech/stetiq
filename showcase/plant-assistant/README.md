@@ -45,23 +45,24 @@ reaches whichever answers first).
 A token cannot be preset in `.env`: the server accepts only tokens it issued, so the
 `tokens` service issues them after it starts. Sign in to `stetiq ui` with the one in
 `.show/tokens/show`. `show.py` reads that token and the ports and password from `.env`
-by itself; any of `STETIQ_TRACKING_URI`, `STETIQ_TOKEN`, `PLANT_CANDIDATE_URI`,
-`PLANT_PRODUCTION_URI`, `PLANT_ASSISTANT_URL`, `NEO4J_USER` and `NEO4J_PASSWORD` set in
-the environment wins.
+by itself; any of `STETIQ_TRACKING_URI`, `PLANT_CANDIDATE_URI`, `PLANT_PRODUCTION_URI`,
+`PLANT_ASSISTANT_URL`, `NEO4J_USER` and `NEO4J_PASSWORD` set in the environment wins.
 
-The rewind empties the server's tracking database, keeping its tokens. It runs inside
-the `stetiq` container (`docker compose exec`), next to the server holding the SQLite
-file open, so the host never opens that file across Docker Desktop's file sharing. Set
-`STETIQ_DATABASE_URL` to rewind a database the host reaches directly instead.
+The rewind goes through docker compose and stetiq's public CLI only: it removes the
+`stetiq` service and its `stetiq-data` volume, starts `stetiq` again on an empty one
+with the `tokens` service, which issues new tokens with `stetiq token create`, and
+recreates the assistant so it reads its new token. So after a rewind, sign in to
+`stetiq ui` again with the new token in `.show/tokens/show`.
 
 `docker compose down -v` removes everything, tokens included; the next `up` issues new
 ones.
 
-### Recorded answers, written by hand
+### Scripted answers, written by hand
 
 Without `ANTHROPIC_API_KEY` in `.env`, the assistant answers the two scripted questions
 from `recordings/answers.json` and turns free-form questions off (its chat page says
-so). Those answers were **written by hand, not recorded from Claude**: no API key was
+so), and marks each answer *scripted answer (offline)*. Those answers were **written
+by hand, not recorded from Claude**: no API key was
 available when the showcase was built. Each was written from the rows its Cypher returns
 on the show's production graph, in the style the assistant's prompt asks for, and the
 file says so in its `provenance`. The Cypher is real: the assistant runs it on

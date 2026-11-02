@@ -112,6 +112,8 @@ NEO4J_IMAGE_ENV = "STETIQ_TEST_NEO4J_IMAGE"
 # Community by default. Set STETIQ_TEST_NEO4J_IMAGE to an Enterprise image to also cover
 # database scoping (a second database) and the built-in `reader` role.
 NEO4J_DEFAULT_IMAGE = "neo4j:2026.10-community"
+# How long the second Neo4j server may take to start (testcontainers' default is 120 s).
+SECOND_NEO4J_STARTUP_SECONDS = 300
 
 
 def _neo4j_image() -> str:
@@ -159,9 +161,22 @@ def neo4j_container(neo4j_enterprise):
 def neo4j_second_container(neo4j_enterprise):
     """A second throwaway Neo4j server, for tests that need two graph databases (the
     plant-assistant showcase's candidate and production graphs); started only by the
-    tests that ask for it."""
-    with _neo4j_server(neo4j_enterprise) as container:
+    tests that ask for it. It starts while other tests run in parallel, so it gets a
+    longer startup timeout than testcontainers' default."""
+    from testcontainers.core.config import testcontainers_config
+
+    container = _neo4j_server(neo4j_enterprise)
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(
+            testcontainers_config,
+            "max_tries",
+            int(SECOND_NEO4J_STARTUP_SECONDS / testcontainers_config.sleep_time),
+        )
+        container.start()
+    try:
         yield container
+    finally:
+        container.stop()
 
 
 @pytest.fixture

@@ -7,8 +7,10 @@
 #
 # The stetiq server accepts only tokens it issued, so none can be preset: once it is up,
 # the one-shot `tokens` service issues an edit token for show.py and a read token for the
-# assistant into .show/tokens/. A rewind (show.py) keeps them; `docker compose down -v`
-# drops them with the tracking database, and the next `up` issues new ones.
+# assistant into .show/tokens/. A rewind (show.py) removes the stetiq service and its
+# volume, starts it again with `tokens`, which issues new ones, and recreates the
+# assistant so it reads its new token. `docker compose down -v` drops them too, and the
+# next `up` issues new ones.
 
 x-neo4j: &neo4j
   image: neo4j:2026.10-community
@@ -41,8 +43,8 @@ services:
     build: *stetiq-build
     image: plant-assistant/stetiq-server
     ports: ["${STETIQ_PORT:-5000}:5000"]
-    # SQLite in a named volume: the server, `stetiq token create` and the show's rewind
-    # (run inside this container) all open the file from the same Linux kernel.
+    # SQLite in a named volume: the server and `stetiq token create` open the file from
+    # the same Linux kernel. The show's rewind replaces the volume with an empty one.
     volumes: [stetiq-data:/data]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
