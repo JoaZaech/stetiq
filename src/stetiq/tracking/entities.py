@@ -115,7 +115,11 @@ class Observation:
 
     An on-demand Observation also records its Baseline Observation (its own id when it is
     the first since the contract's Ontology Version became the contract) and the Drift
-    checks that were `not_comparable`; a run-end Observation is checked for neither."""
+    checks that were `not_comparable`; a run-end Observation is checked for neither.
+
+    An on-demand Observation carries its Conformance to the Contract Alias's Ontology
+    Version at the time (`ontology_version`). Both are None for a run-end Observation
+    (its run holds its Conformance) and for one stored before Observations were scored."""
 
     id: str
     knowledge_graph: str
@@ -125,6 +129,23 @@ class Observation:
     run_id: str | None = None
     baseline_observation_id: str | None = None
     not_comparable: tuple[NotComparable, ...] = ()
+    conformance: Conformance | None = None
+    ontology_version: int | None = None
+
+
+@dataclass(frozen=True)
+class AlignmentPoint:
+    """One Conformance score on a Knowledge Graph's alignment trend, at `at`: a Construction
+    Run's (`run_id` set; `observation_id` is its run-end Observation), judged against the
+    version the run was judged against, or an on-demand Observation's (`run_id` None),
+    judged against the Contract Alias's version at the time. It has no threshold and
+    raises no Drift."""
+
+    at: datetime
+    score: float
+    ontology_version: int
+    observation_id: str
+    run_id: str | None = None
 
 
 @dataclass(frozen=True)

@@ -13,13 +13,24 @@ export interface MetricPoint {
 
 /**
  * One plotted value. `status`, when the value is judged (e.g. by a Gate), colours the
- * point pass or fail; `label` says the same in text (e.g. "fail (preview)").
+ * point pass or fail; `label` says the same in text (e.g. "fail (preview)"). `marker`
+ * tells apart points of one line that come from different sources (e.g. a run's and an
+ * on-demand Observation's), as a filled or hollow mark named by `label`. `detail` is
+ * extra text for the point's tooltip (e.g. "v2").
  */
 export interface ChartPoint {
   x: number
   value: number
   id?: string
   status?: { passed: boolean; label: string }
+  marker?: ChartMarker
+  detail?: string
+}
+
+/** A point's source mark: filled or hollow, with its legend and tooltip text. */
+export interface ChartMarker {
+  hollow: boolean
+  label: string
 }
 
 /** A dashed horizontal line at `value`, e.g. a Gate's bound: `label` "min 0.6", `name` the Gate. */

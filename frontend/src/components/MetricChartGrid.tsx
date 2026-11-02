@@ -8,13 +8,17 @@
  *
  * A series' `references` are drawn as dashed lines and listed in text ("Bounds"); a
  * point's `status` colours it pass (circle) or fail (diamond) and names it in its label.
- * Points without a status keep the neutral series colour.
+ * Points without a status keep the neutral series colour. A point's `marker` draws it
+ * filled or hollow, listed in text the same way, to tell sources apart on one line.
+ *
+ * `MetricChart` is one such chart on its own, without the grid's search, for a page
+ * that has a single series to show.
  */
 import { type KeyboardEvent, useId, useMemo } from 'react'
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { SearchInput } from '@/components/SearchInput'
 import { formatMetric } from '@/lib/format'
-import { type ChartPoint, filterMetricSeries, type MetricSeries } from '@/lib/metric-charts'
+import { type ChartMarker, type ChartPoint, filterMetricSeries, type MetricSeries } from '@/lib/metric-charts'
 
 export interface MetricChartXAxis {
   /** What x is, e.g. "Ontology Version"; shown in the tooltip. */
@@ -76,28 +80,32 @@ export default function MetricChartGrid<S extends MetricSeries>({
   )
 }
 
-function MetricChart({
+export function MetricChart({
   series,
   xAxis,
-  domain,
+  domain = xDomain([series]),
   onPointClick,
 }: {
   series: MetricSeries
   xAxis: MetricChartXAxis
-  domain: [number, number]
+  /** The x range; the series' own when omitted. */
+  domain?: [number, number]
   onPointClick?: (point: ChartPoint) => void
 }) {
   const axisTick = { fontSize: 11, fill: 'var(--muted-foreground)' }
   const references = series.references ?? []
   const judged = series.points.some((p) => p.status !== undefined)
+  const markers = distinctMarkers(series.points)
   const pointLabel = (p: ChartPoint) =>
-    `${xAxis.format(p.x)}: ${formatMetric(p.value)}${p.status ? `, ${p.status.label}` : ''}`
+    `${xAxis.format(p.x)}: ${formatMetric(p.value)}${pointNotes(p)
+      .map((n) => `, ${n}`)
+      .join('')}`
   return (
     <figure className="min-w-0 rounded-lg border p-3">
       <figcaption className="truncate text-xs font-medium" title={series.metric}>
         {series.metric}
       </figcaption>
-      {(references.length > 0 || judged || series.note) && (
+      {(references.length > 0 || judged || markers.length > 0 || series.note) && (
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
           {judged && (
             <span className="inline-flex items-center gap-2" aria-hidden>
@@ -113,6 +121,18 @@ function MetricChart({
                 </svg>
                 fail
               </span>
+            </span>
+          )}
+          {markers.length > 0 && (
+            <span className="inline-flex items-center gap-2" aria-hidden>
+              {markers.map((m) => (
+                <span key={m.label} className="inline-flex items-center gap-1">
+                  <svg viewBox="0 0 10 10" className="size-2.5">
+                    <circle cx="5" cy="5" r="3.5" {...markerStyle(m)} />
+                  </svg>
+                  {m.label}
+                </span>
+              ))}
             </span>
           )}
           {references.length > 0 && (
@@ -157,8 +177,9 @@ function MetricChart({
               cursor={{ stroke: 'var(--muted-foreground)', strokeDasharray: '3 3' }}
               labelFormatter={(x) => `${xAxis.label} ${xAxis.format(Number(x))}`}
               formatter={(value, _name, item) => {
-                const status = (item.payload as ChartPoint | undefined)?.status
-                return [`${formatMetric(Number(value))}${status ? ` · ${status.label}` : ''}`, series.metric]
+                const point = item.payload as ChartPoint | undefined
+                const notes = point ? pointNotes(point) : []
+                return [[formatMetric(Number(value)), ...notes].join(' · '), series.metric]
               }}
               contentStyle={{
                 background: 'var(--popover)',
@@ -209,6 +230,23 @@ const STATUS_FILL = {
   fail: 'fill-destructive',
 } as const
 
+/** A point's text beyond its value: its verdict, its source, its detail. */
+function pointNotes(p: ChartPoint): string[] {
+  return [p.status?.label, p.marker?.label, p.detail].filter((n): n is string => n !== undefined)
+}
+
+/** The markers on a line, once each, in order of first appearance. */
+function distinctMarkers(points: readonly ChartPoint[]): ChartMarker[] {
+  const byLabel = new Map<string, ChartMarker>()
+  for (const p of points) if (p.marker && !byLabel.has(p.marker.label)) byLabel.set(p.marker.label, p.marker)
+  return [...byLabel.values()]
+}
+
+/** A neutral mark in the series colour: filled, or a ring on the card surface when hollow. */
+function markerStyle(marker: ChartMarker | undefined) {
+  return marker?.hollow ? { fill: 'var(--card)', stroke: 'var(--primary)', strokeWidth: 2 } : { fill: 'var(--primary)' }
+}
+
 /** What Recharts passes a custom dot. */
 interface DotProps {
   cx?: number
@@ -249,13 +287,16 @@ function PointMark({
       role={activate ? 'button' : 'img'}
       aria-label={label(point)}
       data-status={status === undefined ? undefined : status.passed ? 'pass' : 'fail'}
+      data-marker={point.marker?.label}
       tabIndex={activate ? 0 : undefined}
       onClick={activate}
       onKeyDown={onKeyDown}
       className={activate ? 'cursor-pointer outline-none focus-visible:[&>.mark]:stroke-ring' : undefined}
     >
       <circle cx={cx} cy={cy} r={10} fill="transparent" />
-      {status === undefined ? (
+      {status === undefined && point.marker?.hollow ? (
+        <circle className="mark" cx={cx} cy={cy} r={4} {...markerStyle(point.marker)} />
+      ) : status === undefined ? (
         <circle className="mark" cx={cx} cy={cy} r={4} fill="var(--primary)" {...ring} />
       ) : status.passed ? (
         <circle className={`mark ${STATUS_FILL.pass}`} cx={cx} cy={cy} r={4.5} {...ring} />
