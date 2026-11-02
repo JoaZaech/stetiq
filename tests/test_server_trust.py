@@ -621,3 +621,28 @@ def test_the_server_picks_the_baseline_observation_and_what_was_not_comparable(
     observation = response.json()["observation"]
     assert observation["baseline_observation_id"] == run_end
     assert observation["not_comparable"] == []
+
+
+# --- An on-demand Observation's Conformance score is computed by the server -------------
+
+
+def test_a_client_cannot_supply_an_observations_score(server, admin, support):
+    _, http = server
+    editor = _headers(server, "mallory", {"support": "edit"})
+    body = _end_body(admin, "support", ["Agent"])
+    body["conformance"] = {"score": 1.0, "mismatches": []}
+    body["ontology_version"] = 2
+
+    response = http.post(f"{API}/knowledge-graphs/support/observations", json=body, headers=editor)
+
+    assert response.status_code == 201, response.text
+    observation = response.json()["observation"]
+    assert observation["ontology_version"] == 1  # production, not what the body said
+    assert observation["conformance"]["score"] < 1.0
+    trend = http.get(f"{API}/knowledge-graphs/support/alignment-trend", headers=editor).json()
+    run = admin.list_runs("support")[-1]
+    assert [(p["run_id"], p["observation_id"], p["ontology_version"]) for p in trend] == [
+        (run.id, run.observation_id, 1),
+        (None, observation["id"], 1),
+    ]
+    assert trend[1]["score"] == observation["conformance"]["score"]

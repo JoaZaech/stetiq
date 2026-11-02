@@ -1,29 +1,46 @@
-import type { DriftEvent, DriftThresholds, NotComparable, Observation } from '@/api/observations'
+import type { AlignmentPoint, DriftEvent, DriftThresholds, NotComparable, Observation } from '@/api/observations'
 import { matchesSearch } from '@/lib/search'
 import { DRIFT_FINDING, MISMATCH_FINDING, subjectKindLabel } from '../evaluation/findings'
+import { alignmentByObservation } from './alignment-trend'
 
 export type ObservationStatus = 'Drift' | 'No Drift'
 export const OBSERVATION_STATUSES: readonly ObservationStatus[] = ['Drift', 'No Drift']
 
-/** One row of the Observations table: the Observation and the Drift event it raised, if any. */
+/**
+ * One row of the Observations table: the Observation, the Drift event it raised, if any,
+ * and its point on the alignment trend (none for one made before Observations were scored).
+ */
 export interface ObservationRow {
   observation: Observation
   drift: DriftEvent | undefined
   /** The Baseline Observation its Violation Rates were compared with; undefined for a run-end one. */
   baseline: Observation | undefined
+  alignment: AlignmentPoint | undefined
   status: ObservationStatus
   /** How many Drift findings; 0 without Drift. */
   findings: number
 }
 
 /** The rows, newest first (the server sends Observations oldest first). */
-export function observationRows(observations: readonly Observation[], driftEvents: readonly DriftEvent[]): ObservationRow[] {
+export function observationRows(
+  observations: readonly Observation[],
+  driftEvents: readonly DriftEvent[],
+  trend: readonly AlignmentPoint[] = [],
+): ObservationRow[] {
   const byObservation = new Map(driftEvents.map((e) => [e.observation_id, e]))
   const byId = new Map(observations.map((o) => [o.id, o]))
+  const scored = alignmentByObservation(trend)
   return [...observations].reverse().map((observation) => {
     const drift = byObservation.get(observation.id)
     const baseline = observation.baseline_observation_id ? byId.get(observation.baseline_observation_id) : undefined
-    return { observation, drift, baseline, status: drift ? 'Drift' : 'No Drift', findings: drift?.findings.length ?? 0 }
+    return {
+      observation,
+      drift,
+      baseline,
+      alignment: scored.get(observation.id),
+      status: drift ? 'Drift' : 'No Drift',
+      findings: drift?.findings.length ?? 0,
+    }
   })
 }
 

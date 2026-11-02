@@ -27,6 +27,7 @@ from stetiq.ontology import parse_dict
 from stetiq.tracking import codec, entities
 from stetiq.tracking.entities import (
     Alias,
+    AlignmentPoint,
     ConstructionRun,
     ConsumerGateResult,
     DriftEvent,
@@ -145,6 +146,10 @@ OBSERVATION = Observation(
         ),
         NotComparable(DriftKind.UNDECLARED_VALUE, "Ticket.status", "property", "truncated"),
     ),
+    conformance=Conformance(
+        score=0.75, mismatches=(Mismatch("Invoice", "node_type", MismatchKind.UNDECLARED),)
+    ),
+    ontology_version=2,
 )
 DRIFT_EVENT = DriftEvent(
     id="drift-1",
@@ -230,6 +235,9 @@ RUN = ConstructionRun(
 )
 
 SAMPLES: dict[type, Any] = {
+    AlignmentPoint: AlignmentPoint(
+        at=LATER, score=0.75, ontology_version=2, observation_id="obs-1", run_id="run-1"
+    ),
     KnowledgeGraph: KNOWLEDGE_GRAPH,
     KnowledgeGraphSummary: KnowledgeGraphSummary(
         knowledge_graph=KNOWLEDGE_GRAPH,
@@ -420,3 +428,12 @@ def test_a_run_from_an_older_server_or_store_has_no_ignored_definitions():
     del data["ignored_definitions"]
 
     assert codec.run_from_json(data).ignored_definitions == ()
+
+
+def test_an_observation_from_an_older_server_has_no_score():
+    data = codec.observation_to_json(SAMPLES[Observation])
+    del data["conformance"], data["ontology_version"]
+
+    observation = codec.observation_from_json(data)
+
+    assert (observation.conformance, observation.ontology_version) == (None, None)

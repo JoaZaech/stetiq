@@ -18,6 +18,7 @@ from stetiq.ontology import Ontology
 from stetiq.tracking import codec, wire
 from stetiq.tracking.entities import (
     Alias,
+    AlignmentPoint,
     ConstructionRun,
     ConsumerGateResult,
     DriftEvent,
@@ -219,6 +220,10 @@ class RemoteTrackingService:
     def list_drift_events(self, knowledge_graph: str) -> list[DriftEvent]:
         data = self._call("GET", self._kg_path(knowledge_graph) + "/drift-events")
         return [codec.drift_event_from_json(e) for e in data]
+
+    def alignment_trend(self, knowledge_graph: str) -> list[AlignmentPoint]:
+        data = self._call("GET", self._kg_path(knowledge_graph) + "/alignment-trend")
+        return [codec.alignment_point_from_json(p) for p in data]
 
     # --- Aliases and Promotion ----------------------------------------------------------
 
