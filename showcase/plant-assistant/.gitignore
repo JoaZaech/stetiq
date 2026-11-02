@@ -1,0 +1,3 @@
+# Generated state of the show: the --live extraction cache, and the project's venv.
+.show/
+.venv/

@@ -1,0 +1,9 @@
+WO-2034 / Paint-01 / 18 Feb 2026 / Lena Okafor
+
+Quality flagged orange peel and bare spots on about 15% of frames from Paint-01 at 16:02. Booth stopped, Packer-05 kept running on buffer stock because Paint-01 feeds Packer-05 through the cure oven and there was an hour of parts in the oven. The work involved the paint nozzle and the air filter.
+
+Root cause was a clogged air filter that let overspray build up on the nozzle. Cleaned the nozzle, changed the filter, test panels fine. Booth back at 17:00.
+
+Follow-ups:
+- [ ] Shorten the air filter change interval on Paint-01 (owner: Diego Álvarez)
+- [ ] Add nozzle inspection to the shift checklist (owner: Lena Okafor)

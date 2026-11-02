@@ -1,0 +1,20 @@
+From: Tomasz Nowak <tomasz.nowak@plant.example>
+To: maintenance-lead@plant.example
+Subject: WO-2038 Lathe-02 chuck pressure fault, closed
+Date: Thu, 2 Apr 2026 16:40:00 +0100
+
+Hi all,
+
+quick note on WO-2038 since the CMMS form was down this afternoon.
+
+Lathe-02 dropped chuck pressure mid-cycle at 14:05 and the part came loose. No damage, but the cycle stopped. Work involved: chuck, pneumatic valve. Valve was sticking half open.
+
+Root cause: a sticking pneumatic valve on the chuck supply.
+Replacement part: pneumatic valve, ordered from Festo.
+
+Machine back at 14:20.
+
+Follow-ups:
+- [x] Replace the pneumatic valve on Lathe-02 (owner: Tomasz Nowak)
+
+Tomasz
