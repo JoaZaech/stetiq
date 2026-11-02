@@ -3,6 +3,7 @@
 from stetiq.tracking.entities import (
     DEFAULT_CONTRACT_ALIAS,
     Alias,
+    AlignmentPoint,
     ConstructionRun,
     ConsumerGateResult,
     DriftEvent,
@@ -28,6 +29,7 @@ from stetiq.tracking.store import Store
 __all__ = [
     "DEFAULT_CONTRACT_ALIAS",
     "Alias",
+    "AlignmentPoint",
     "ConstructionRun",
     "ConsumerGateResult",
     "DriftEvent",

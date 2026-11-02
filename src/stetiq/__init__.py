@@ -42,6 +42,7 @@ from stetiq.ontology.diff import Change, ChangeKind, Classification, OntologyDif
 from stetiq.run_context import LastAttempt, RecordedVerdicts, RunContext
 from stetiq.tracking import (
     Alias,
+    AlignmentPoint,
     ConstructionRun,
     ConsumerGateResult,
     DriftEvent,
@@ -72,6 +73,7 @@ from stetiq.use_case import (
 __all__ = [
     "ActiveRun",
     "Alias",
+    "AlignmentPoint",
     "AuthenticationError",
     "Change",
     "ChangeKind",

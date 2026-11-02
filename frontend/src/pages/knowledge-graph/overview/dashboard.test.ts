@@ -31,6 +31,8 @@ const observation = (id: string): Observation => ({
   scope: { database: 'neo4j', label: null, namespace: null },
   baseline_observation_id: id,
   not_comparable: [],
+  conformance: null,
+  ontology_version: null,
 })
 
 describe('runs', () => {
