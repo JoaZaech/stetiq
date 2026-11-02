@@ -40,6 +40,11 @@ consumers:
       - id: weekly
         description: Review the week
         competency_questions: [orders-per-machine]
+    consumer_gates:
+      - name: weekly-rows-hold
+        check: row_count_drop
+        task: weekly
+        max_drop: 0.10
 competency_questions:
   - id: orders-per-machine
     question: Which work orders were performed on a machine?
@@ -260,9 +265,159 @@ def test_a_read_token_is_enough_for_the_context(tmp_path):
         owner.create_knowledge_graph("plant", ontology=ONTOLOGY)
         owner.bind_graph_source("plant", GraphSourceScope(database="neo4j"))
         owner.register_use_case("plant", USE_CASE)
-        finish_a_run(owner, graph_source)
+        run = finish_a_run(owner, graph_source)
+        owner.evaluate_gates("plant", NO_BREAKING, run=run.id)
+        owner.evaluate_consumer_gates("plant", run=run.id)
 
         context = client_with(reader).run_context("plant")
 
     assert context.ontology_version.number == 1
     assert context.run is not None
+    assert context.verdicts.gate_result is not None
+    assert context.verdicts.consumer_gate_results["review"] is not None
+
+
+# --- Recorded verdicts --------------------------------------------------------------
+
+
+NOT_EVALUATED = {"status": "not_evaluated"}
+
+
+def test_without_a_recorded_gate_result_the_gate_result_is_not_evaluated(client, plant):
+    data = client.run_context("plant").to_dict()
+
+    assert data["gate_result"] == NOT_EVALUATED
+
+
+NO_BREAKING = """
+gates:
+  - name: no-breaking-changes
+    check: ontology_diff
+    max_classification: deprecating
+"""
+
+STRICT_NO_BREAKING = """
+gates:
+  - name: only-cosmetic
+    check: ontology_diff
+    max_classification: cosmetic
+"""
+
+
+def test_the_context_carries_the_latest_gate_result_about_its_run(client, plant, graph_source):
+    run = finish_a_run(client, graph_source)
+    client.evaluate_gates("plant", STRICT_NO_BREAKING, run=run.id)
+    client.evaluate_gates("plant", NO_BREAKING, run=run.id)
+    client.evaluate_gates("plant", STRICT_NO_BREAKING, version=1)  # about the version: later
+
+    gate_result = client.run_context("plant").to_dict()["gate_result"]
+
+    assert gate_result["status"] == "passed"
+    assert (gate_result["subject_kind"], gate_result["subject_id"]) == ("construction_run", run.id)
+    [outcome] = gate_result["outcomes"]
+    assert outcome["passed"] is True
+    assert outcome["gate"] == {
+        "name": "no-breaking-changes",
+        "check": "ontology_diff",
+        "max_classification": "deprecating",
+    }
+
+
+def test_without_one_about_its_run_the_gate_result_is_the_latest_about_its_version(client, plant):
+    without_names = ONTOLOGY.replace("      - {name: name, type: STRING}\n", "")
+    client.register_ontology("plant", without_names)  # v2: breaking
+    client.evaluate_gates("plant", NO_BREAKING, version=1)
+    client.evaluate_gates("plant", NO_BREAKING, version=2)  # about another version
+
+    gate_result = client.run_context("plant").to_dict()["gate_result"]
+    other = client.run_context("plant", version=2).to_dict()["gate_result"]
+
+    assert gate_result["status"] == "passed"
+    assert (gate_result["subject_kind"], gate_result["subject_id"]) == ("ontology_version", "1")
+    assert other["status"] == "failed"
+    assert other["subject_id"] == "2"
+
+
+def test_a_gated_consumer_without_a_recorded_verdict_is_not_evaluated(client, plant, graph_source):
+    finish_a_run(client, graph_source)
+
+    data = client.run_context("plant").to_dict()
+
+    # `review` declares a Consumer Gate; `assistant` declares none and is absent.
+    assert data["consumer_gate_results"] == [{"consumer": "review", **NOT_EVALUATED}]
+
+
+def test_the_context_carries_each_gated_consumers_latest_verdict_about_its_run(
+    client, plant, graph_source
+):
+    finish_a_run(client, graph_source)  # baseline: two rows
+    graph_source.add_query_result(ORDERS_QUERY, [{"m.name": "Press 7", "count(w)": 1}])
+    with client.start_run("plant") as candidate:
+        pass
+    client.evaluate_consumer_gates("plant", run=candidate.id)
+
+    [verdict] = client.run_context("plant").to_dict()["consumer_gate_results"]
+
+    assert verdict["consumer"] == "review"
+    assert verdict["status"] == "failed"
+    assert verdict["run_id"] == candidate.id
+    [outcome] = verdict["outcomes"]
+    assert outcome["gate"]["name"] == "weekly-rows-hold"
+    [finding] = outcome["findings"]
+    assert finding == {
+        "task": "weekly",
+        "competency_question": "orders-per-machine",
+        "limit": 0.1,
+        "before": 2,
+        "after": 1,
+        "change": -0.5,
+    }
+
+
+def test_a_verdict_about_another_run_is_not_the_contexts(client, plant, graph_source):
+    earlier = finish_a_run(client, graph_source)
+    client.evaluate_consumer_gates("plant", run=earlier.id)
+    finish_a_run(client, graph_source)  # the context's run: never evaluated
+
+    data = client.run_context("plant").to_dict()
+
+    assert data["consumer_gate_results"] == [{"consumer": "review", **NOT_EVALUATED}]
+
+
+def test_reading_the_context_records_no_verdict(client, plant, graph_source):
+    run = finish_a_run(client, graph_source)
+    client.evaluate_gates("plant", NO_BREAKING, run=run.id)
+
+    client.run_context("plant")
+    client.run_context("plant", version=1)
+
+    assert len(client.list_gate_results("plant")) == 1
+    assert client.list_consumer_gate_results("plant") == []
+
+
+QUOTED_STAYS_LOW = """
+gates:
+  - name: quotes-nothing
+    check: metric
+    evaluator: quotes_the_graph
+    metric: quoted
+    max: 0
+"""
+
+
+def test_a_recorded_gate_outcome_keeps_its_verdict_but_never_quotes_details(
+    client, plant, graph_source
+):
+    run = finish_a_run(client, graph_source)
+    client.evaluate_run(run.id, evaluators=[QuotesTheGraph()])
+    recorded = client.evaluate_gates("plant", QUOTED_STAYS_LOW, run=run.id)
+    # The recorded reasons do quote the custom Evaluator's details.
+    assert any("Press 7" in r for r in recorded.outcomes[0].reasons)
+
+    gate_result = client.run_context("plant").to_dict()["gate_result"]
+
+    [outcome] = gate_result["outcomes"]
+    assert gate_result["status"] == "failed"
+    assert outcome["passed"] is False
+    assert outcome["reasons"] == ["quotes_the_graph.quoted = 1 > max 0"]
+    assert "Press 7" not in json.dumps(gate_result)

@@ -361,6 +361,8 @@ context.evaluation_results       # that Ontology Version's latest Evaluator resu
 context.run                      # the latest finished run standing for it, or None
 context.run_evaluation_results   # its run-level results, metrics only
 context.question_executions      # per Competency Question id: .status and .rows on that run
+context.verdicts.gate_result     # the latest recorded Gate result about that run (or version), or None
+context.verdicts.consumer_gate_results  # per gated Consumer id: its latest recorded verdict, or None
 data = context.to_dict()         # the JSON shape below
 ```
 
@@ -382,7 +384,27 @@ The run context is built from what the tracking service already holds, so it nee
     }
   ],
   "evaluation_results": [{"evaluator": "structural_answerability", "parameters": {}, "metrics": {"answerable_ratio": 0.875}, "details": [], "use_case_version": 2, "...": "..."}],
-  "run": {"id": "5d0c1f2e...", "evaluation_results": [{"evaluator": "competency_question_execution", "parameters": {}, "metrics": {"pass_ratio": 0.8}, "details": [], "use_case_version": 2, "...": "..."}]}
+  "run": {"id": "5d0c1f2e...", "evaluation_results": [{"evaluator": "competency_question_execution", "parameters": {}, "metrics": {"pass_ratio": 0.8}, "details": [], "use_case_version": 2, "...": "..."}]},
+  "gate_result": {"status": "not_evaluated"},
+  "consumer_gate_results": [
+    {
+      "status": "failed",
+      "consumer": "reliability-dashboard",
+      "run_id": "5d0c1f2e...",
+      "baseline_run_id": "9a7b3c4d...",
+      "outcomes": [
+        {
+          "gate": {"name": "triage-rows-hold", "check": "row_count_drop", "task": "triage-breakdowns", "max_drop": 0.1},
+          "passed": false,
+          "reasons": ["triage-breakdowns / breakdown-technicians: 5 → 2 rows (−60.0%, limit −10%)"],
+          "findings": [{"task": "triage-breakdowns", "competency_question": "breakdown-technicians", "limit": 0.1, "before": 5, "after": 2, "change": -0.6}],
+          "new_questions": []
+        }
+      ],
+      "...": "..."
+    },
+    {"consumer": "maintenance-assistant", "status": "not_evaluated"}
+  ]
 }
 ```
 
@@ -391,6 +413,9 @@ The run context is built from what the tracking service already holds, so it nee
 - `competency_questions` lists every question of that Use Case Version with the Consumer and Task pairs it serves (empty when it serves none), and `execution`: its `status` (`passed`, `failed` or `error`) and `rows` on `run`, or null when it wasn't executed there (no `query`, or no run).
 - `evaluation_results` and `run.evaluation_results` are the latest Evaluator results in the form the REST API returns them (`evaluator`, `parameters`, `metrics`, the `use_case_version` judged against or null, the subject and `created_at`), **metrics only**: `details` is always an empty list.
 - `run` is null when no finished Construction Run stands for that Ontology Version (a run stands for its Candidate, or else for the version it consumed).
+- `gate_result` is the latest [Gate](#aliases-promotion-and-gates) result recorded about `run`, or, without one, about the Ontology Version, in the form the REST API returns it plus a `status` of `passed` or `failed`. Each outcome carries the Gate definition as it was recorded and `passed`. Its `reasons` are those stetiq writes: a `metric` or `conformance` Gate keeps only its first reason (the observed value against its limit), because the rest list Evaluator details or Conformance mismatches, which can quote graph values.
+- `consumer_gate_results` has one entry per Consumer that declares a [Consumer Gate](#consumer-gates), in Use Case order: its latest Consumer Gate result recorded about `run`, with a `status` of `passed` or `failed` and the findings (the failing Task, Competency Question and row change against the baseline, or the missing input). Consumers without Consumer Gates are absent.
+- When nothing has been recorded, `gate_result` or a Consumer's entry is `{"status": "not_evaluated"}`. It never means passed. The run context only reads what CI recorded with `evaluate_gates` and `evaluate_consumer_gates`; it never evaluates or previews a Gate, and reading it records nothing.
 
 An upstream pipeline that may extend the Ontology should do so only where a Competency Question needs it. Declare that question in the Use Case before the run; an evolving run's additions are then judged by `unjustified_additions` (see [Evaluators and their metrics](./06-stetiq-yaml.md#evaluators-and-their-metrics)).
 
