@@ -20,7 +20,7 @@ from stetiq.graph_source import (
     ObservedSchema,
 )
 from stetiq.ontology import NodeType, Ontology, Pattern, Property, RelationshipType
-from stetiq.ontology.diff import WIDENING_TYPE_CHANGES, added_concepts
+from stetiq.ontology.diff import WIDENING_TYPE_CHANGES, AddedConcept, added_concepts
 from stetiq.ontology.model import ConceptKind, Vocabulary, VocabularyValue, is_deprecated
 
 # What a mismatch is about. Concepts are node types, relationship types and properties
@@ -435,45 +435,44 @@ def apply_definitions(
     Proposals never touch a Concept `base` declares: when a Class and a Relation share a
     label (or an Attribute name on such owners), a proposal applies only to the added one.
     """
-    targets: dict[tuple[ConceptKind, str], str] = {}  # (kind, label) or ("property", ...)
-    applied_refs: set[str] = set()
-    for added in added_concepts(base, candidate):
-        text = proposals.get(added.identity)
-        if text is None:
-            continue
-        applied_refs.add(added.identity)
-        if added.kind == "property" and added.owner is not None:
-            owner_kind, _ = added.owner
-            targets[(owner_kind, added.identity)] = text
-        else:
-            targets[added.key] = text
+    targets = {
+        added: proposals[added.identity]
+        for added in added_concepts(base, candidate)
+        if added.identity in proposals
+    }
+    applied_refs = {added.identity for added in targets}
     ignored = tuple(sorted(ref for ref in proposals if ref not in applied_refs))
     if not targets:
         return candidate, ignored
     return (
         replace(
             candidate,
-            node_types=tuple(_document(n, "node_type", targets) for n in candidate.node_types),
+            node_types=tuple(
+                _with_definitions(n, "node_type", targets) for n in candidate.node_types
+            ),
             relationship_types=tuple(
-                _document(r, "relationship_type", targets) for r in candidate.relationship_types
+                _with_definitions(r, "relationship_type", targets)
+                for r in candidate.relationship_types
             ),
         ),
         ignored,
     )
 
 
-def _document[C: (NodeType, RelationshipType)](
-    concept: C, kind: ConceptKind, targets: Mapping[tuple[ConceptKind, str], str]
+def _with_definitions[C: (NodeType, RelationshipType)](
+    concept: C, kind: ConceptKind, targets: Mapping[AddedConcept, str]
 ) -> C:
-    """`concept` (of `kind`) with the Definitions `targets` holds for it: under
-    (kind, label) for itself, under (kind, "Label.attribute") for its own Attributes."""
-    properties = tuple(
-        replace(p, definition=targets[(kind, f"{concept.label}.{p.name}")])
-        if (kind, f"{concept.label}.{p.name}") in targets
-        else p
-        for p in concept.properties
-    )
-    own = targets.get((kind, concept.label))
+    """`concept` (of `kind`) with the Definitions `targets` holds for it and its own
+    Attributes, each keyed by the added Concept it is (so never a declared Concept that
+    merely shares a label)."""
+    own_key = AddedConcept(kind, concept.label)
+
+    def documented(p: Property) -> Property:
+        text = targets.get(AddedConcept("property", f"{concept.label}.{p.name}", own_key.key))
+        return p if text is None else replace(p, definition=text)
+
+    properties = tuple(documented(p) for p in concept.properties)
+    own = targets.get(own_key)
     return replace(
         concept,
         definition=concept.definition if own is None else own,
