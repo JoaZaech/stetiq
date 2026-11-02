@@ -7,10 +7,17 @@ candidate graph every Construction Run builds and the production graph a deploy
 replays a promoted run into. Extraction replays the committed llm-cache/; any call to
 Claude fails the test.
 
+The maintenance assistant (the GraphRAG Consumer) runs as its FastAPI app behind a
+TestClient, with its own read-only stetiq token, and `run_show` reaches it only over its
+HTTP API. Its Claude is a scripted fake replaying the committed recorded answers, so no
+test calls a real LLM.
+
 Needs Docker (two Neo4j testcontainers); with Docker up it runs, never skips."""
 
 import importlib
+import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -47,6 +54,40 @@ TECHNICIANS = {
 }
 
 
+LINE_2 = "Why did Line 2's machines break down?"
+SUPPLIERS = "Which suppliers' components keep failing?"
+
+
+class FakeAnthropic:
+    """Stands in for `anthropic.Anthropic()` in the assistant: answers `messages.create`
+    from a script of {question, ontology_version, cypher, answer}. The request for Cypher
+    (a structured-output request) gets the script's Cypher; the request for the answer
+    gets its answer."""
+
+    def __init__(self, script):
+        self.script = script
+        self.requests = []
+        self.messages = self
+        self.beta = SimpleNamespace(messages=self)
+
+    def create(self, **request):
+        self.requests.append(request)
+        prompt = request["messages"][-1]["content"]
+        for entry in self.script:
+            on_version = f"Ontology Version {entry['ontology_version']}" in request["system"]
+            if entry["question"] in prompt and on_version:
+                wants_cypher = "format" in request.get("output_config", {})
+                text = json.dumps({"cypher": entry["cypher"]}) if wants_cypher else entry["answer"]
+                return SimpleNamespace(
+                    stop_reason="end_turn", content=[SimpleNamespace(type="text", text=text)]
+                )
+        raise AssertionError(f"unexpected prompt: {prompt}")
+
+
+def _recordings() -> list[dict]:
+    return json.loads((SHOWCASE_DIR / "recordings" / "answers.json").read_text())["answers"]
+
+
 def _no_claude(*args, **kwargs):
     raise AssertionError("the show called Claude; extraction must replay llm-cache/")
 
@@ -76,23 +117,74 @@ def production(neo4j_second_container):
 
 
 @pytest.fixture(scope="module")
-def client(tmp_path_factory, candidate):
-    """A remote-mode client: stetiq is reached over REST with an API token, and the
-    Graph Source it observes is the candidate graph."""
+def server(tmp_path_factory):
+    """The in-process stetiq server and its tracking database."""
     database_url = f"sqlite:///{tmp_path_factory.mktemp('stetiq') / 'server.db'}"
-    _, token = TokenRegistry(database_url).issue("ci-bot", {"*": "edit"})
     with TestClient(create_app(database_url=database_url)) as http:
-        yield stetiq.Client(
-            str(http.base_url),
-            service=RemoteTrackingService(str(http.base_url), http=http, token=token),
-            graph_source=Neo4jGraphSource(candidate),
-        )
+        yield http, database_url
+
+
+def _remote(server, user: str, permission: str, **kwargs) -> stetiq.Client:
+    http, database_url = server
+    _, token = TokenRegistry(database_url).issue(user, {"*": permission})
+    return stetiq.Client(
+        str(http.base_url),
+        service=RemoteTrackingService(str(http.base_url), http=http, token=token),
+        **kwargs,
+    )
 
 
 @pytest.fixture(scope="module")
-def show(showcase, client, candidate, production):
+def client(server, candidate):
+    """A remote-mode client: stetiq is reached over REST with an API token, and the
+    Graph Source it observes is the candidate graph."""
+    return _remote(server, "ci-bot", "edit", graph_source=Neo4jGraphSource(candidate))
+
+
+@pytest.fixture(scope="module")
+def assistant_module(showcase):
+    return importlib.import_module("plant_assistant.assistant")
+
+
+def _assistant_http(assistant_module, server, production, llm):
+    """The maintenance assistant's app, reading stetiq with its own read-only token and
+    answering from the production graph."""
+    assistant = assistant_module.Assistant(
+        _remote(server, "maintenance-assistant", "read"), production, llm=llm
+    )
+    return TestClient(assistant_module.create_app(assistant, poll_interval=None))
+
+
+@pytest.fixture(scope="module")
+def claude():
+    """The assistant's Claude: replays the recorded answers, plus one question whose
+    Cypher would delete the work orders."""
+    return FakeAnthropic(
+        [
+            *_recordings(),
+            {
+                "question": "Clean up the old work orders",
+                "ontology_version": 1,
+                "cypher": "MATCH (w:WorkOrder) DETACH DELETE w",
+                "answer": "Done.",
+            },
+        ]
+    )
+
+
+@pytest.fixture(scope="module")
+def assistant(assistant_module, server, production, claude):
+    with _assistant_http(assistant_module, server, production, claude) as http:
+        yield http
+
+
+@pytest.fixture(scope="module")
+def show(showcase, client, candidate, production, assistant):
     return showcase.run_show(
-        client, showcase.Graphs(candidate=candidate, production=production), quiet=True
+        client,
+        showcase.Graphs(candidate=candidate, production=production),
+        assistant=assistant,
+        quiet=True,
     )
 
 
@@ -158,3 +250,71 @@ def test_a_cache_miss_is_an_error_naming_live_and_record(showcase, tmp_path):
 
     assert "--live" in str(raised.value)
     assert "--record" in str(raised.value)
+
+
+# --- The maintenance assistant on v1 ---------------------------------------------------
+
+
+def test_act_0_the_assistant_is_on_v1(show):
+    assert show.acts[0].banner == "on Ontology v1"
+
+
+def test_act_0_line_2_broke_down_on_cnc_04_and_lathe_02(show):
+    answer = show.acts[0].answers[LINE_2]
+    assert (answer.ontology_version, answer.source) == (1, "live")
+    assert "kind = 'breakdown'" in answer.cypher
+    assert answer.work_orders == ["WO-2031", "WO-2038"]
+    for named in ("WO-2031", "CNC-04", "WO-2038", "Lathe-02"):
+        assert named in answer.answer
+
+
+def test_act_0_the_graph_does_not_record_suppliers(show):
+    answer = show.acts[0].answers[SUPPLIERS]
+    assert answer.ontology_version == 1
+    assert "does not record suppliers" in answer.answer
+    assert answer.work_orders == []
+
+
+def test_claudes_prompt_carries_the_ontology_version_fetched_from_stetiq(show, client, claude):
+    from_stetiq = client.get_ontology_yaml(KG, 1)
+    # The local file's opening comment: only the file has it, stetiq's YAML does not.
+    [opening, *_] = (SHOWCASE_DIR / "ontology" / "v1.yaml").read_text().splitlines()
+    assert claude.requests
+    for request in claude.requests:
+        assert request["model"] == "claude-sonnet-5-5"
+        assert from_stetiq in request["system"]
+        assert opening not in request["system"]
+
+
+def test_generated_cypher_runs_read_only(show, assistant, production):
+    response = assistant.post("/api/ask", json={"question": "Clean up the old work orders"})
+
+    assert response.status_code == 422
+    assert "read-only" in response.json()["detail"]
+    assert _work_orders(production) == V1_WORK_ORDERS
+
+
+def test_without_an_api_key_scripted_questions_answer_from_recordings(
+    show, assistant_module, server, production
+):
+    with _assistant_http(assistant_module, server, production, None) as offline:
+        status = offline.get("/api/status").json()
+        line_2 = offline.post("/api/ask", json={"question": LINE_2})
+        suppliers = offline.post("/api/ask", json={"question": SUPPLIERS})
+        free_form = offline.post("/api/ask", json={"question": "Which machine is the oldest?"})
+
+    assert (status["in_use"], status["free_form"]) == (1, False)
+    assert "ANTHROPIC_API_KEY" in status["message"]
+    assert line_2.status_code == 200
+    assert line_2.json()["source"] == "recorded"
+    assert line_2.json()["work_orders"] == ["WO-2031", "WO-2038"]
+    assert "does not record suppliers" in suppliers.json()["answer"]
+    assert free_form.status_code == 503
+    assert "ANTHROPIC_API_KEY" in free_form.json()["detail"]
+
+
+def test_the_chat_page_shows_the_banner_and_the_cypher(assistant):
+    page = assistant.get("/")
+    assert page.status_code == 200
+    assert 'id="banner"' in page.text
+    assert "a.cypher" in page.text

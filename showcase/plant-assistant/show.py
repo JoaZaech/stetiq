@@ -7,11 +7,12 @@
 stetiq is a remote server (`STETIQ_TRACKING_URI`, an API token in `STETIQ_TOKEN`); the
 pipeline writes two Neo4j servers, the candidate graph every Construction Run builds
 (`PLANT_CANDIDATE_URI`) and the production graph a promoted run is deployed to
-(`PLANT_PRODUCTION_URI`), with `NEO4J_USER` / `NEO4J_PASSWORD`. STORY.md tells the
-story and its running order.
+(`PLANT_PRODUCTION_URI`), with `NEO4J_USER` / `NEO4J_PASSWORD`. The maintenance
+assistant runs at `PLANT_ASSISTANT_URL`; the show asks it the scripted questions over
+its HTTP API. STORY.md tells the story and its running order.
 
 Act 0, Monday morning: prompt v1 builds v1, the Gates pass, `production` is promoted
-to v1 and the run is deployed.
+to v1 and the run is deployed. The assistant, on v1, answers both scripted questions.
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from pathlib import Path
 SHOWCASE_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SHOWCASE_DIR))
 
+import httpx  # noqa: E402
 import neo4j  # noqa: E402
 from plant_assistant.deploy import deploy  # noqa: E402
 from plant_assistant.evaluators import Documented, ReportCoverage  # noqa: E402
@@ -55,6 +57,10 @@ Competency Questions are in `use-case.yaml`."""
 
 ROUND_LABEL: dict[Round, str] = {"v1": "v1", "v2": "prompt v2", "fix": "fix"}
 
+LINE_2 = "Why did Line 2's machines break down?"
+SUPPLIERS = "Which suppliers' components keep failing?"
+SCRIPTED_QUESTIONS = (LINE_2, SUPPLIERS)
+
 
 @dataclass(frozen=True)
 class Graphs:
@@ -64,6 +70,18 @@ class Graphs:
 
     candidate: neo4j.Driver
     production: neo4j.Driver
+
+
+@dataclass(frozen=True)
+class Answer:
+    """The assistant's answer to a question, as its HTTP API returned it."""
+
+    question: str
+    answer: str
+    cypher: str
+    work_orders: list[str]
+    ontology_version: int
+    source: str  # live (Claude) | recorded
 
 
 @dataclass(frozen=True)
@@ -77,6 +95,10 @@ class ActState:
     gates: stetiq.GateResult
     promoted: bool
     deployed: bool
+    # The assistant's banner and its answers to the scripted questions after the act
+    # (None and empty when the show runs without the assistant).
+    banner: str | None = None
+    answers: dict[str, Answer] = field(default_factory=dict)
 
 
 @dataclass
@@ -94,10 +116,17 @@ class ShowState:
 
 class Show:
     def __init__(
-        self, client: stetiq.Client, graphs: Graphs, *, extraction: LlmMode, quiet: bool
+        self,
+        client: stetiq.Client,
+        graphs: Graphs,
+        *,
+        extraction: LlmMode,
+        quiet: bool,
+        assistant: httpx.Client | None = None,
     ) -> None:
         self.client = client
         self.graphs = graphs
+        self.assistant = assistant
         self.extraction: LlmMode = extraction
         self.quiet = quiet
         self.state = ShowState()
@@ -142,13 +171,46 @@ class Show:
         parts = [ROUND_LABEL["v1"], f"Gate {_mark(gates.passed)}"]
         if promoted:
             parts += [f"promoted: production -> v{gates.ontology_version}", "deployed"]
-        act = ActState(0, "v1", "   ".join(parts), run, gates, promoted, promoted)
-        self.state.acts[0] = act
-        self.say("Act 0, Monday morning", act.line)
+        line = "   ".join(parts)
+        self.say("Act 0, Monday morning", line)
         for o in gates.outcomes:
             if not o.passed:
                 self.say(f"    Gate {o.gate.name} failed: {'; '.join(o.reasons[:3])}")
+        banner, answers = self.consult_assistant()
+        act = ActState(0, "v1", line, run, gates, promoted, promoted, banner, answers)
+        self.state.acts[0] = act
         return act
+
+    def consult_assistant(self) -> tuple[str | None, dict[str, Answer]]:
+        """Ask the assistant, over its HTTP API only, to check stetiq now, then read its
+        banner and ask it the scripted questions."""
+        if self.assistant is None:
+            return None, {}
+        banner = _banner(_json(self.assistant.post("/api/poll")))
+        self.say(f"  assistant: {banner}")
+        answers: dict[str, Answer] = {}
+        for question in SCRIPTED_QUESTIONS:
+            reply = _json(self.assistant.post("/api/ask", json={"question": question}))
+            answers[question] = Answer(**reply)
+            self.say(f"  Q: {question}", f"  A: {reply['answer']}")
+        return banner, answers
+
+
+class AssistantError(Exception):
+    """The maintenance assistant refused or failed a request the show made."""
+
+
+def _json(response: httpx.Response) -> dict:
+    if response.is_error:
+        raise AssistantError(f"the assistant answered {response.status_code}: {response.text}")
+    return response.json()
+
+
+def _banner(status: dict) -> str:
+    """The assistant's banner, as its chat page shows it."""
+    if status["in_use"] is None:
+        return "no Ontology Version yet"
+    return f"on Ontology v{status['in_use']}"
 
 
 def _mark(passed: bool) -> str:
@@ -161,14 +223,20 @@ def run_show(
     *,
     extraction: LlmMode = "replay",
     quiet: bool = False,
+    assistant: httpx.Client | None = None,
 ) -> ShowState:
     """Run the show headless from an empty stetiq and empty graphs.
 
     `client` reaches the stetiq server and observes the candidate graph: its Graph Source
     must be `graphs.candidate` (e.g. `Neo4jGraphSource(graphs.candidate)`). `extraction`
     is how Claude's extraction runs: `replay` (the committed llm-cache/ only; a miss is
-    an error), `live` (Claude on a miss) or `record` (Claude for every report)."""
-    show = Show(client, graphs, extraction=extraction, quiet=quiet)
+    an error), `live` (Claude on a miss) or `record` (Claude for every report).
+
+    `assistant` is an HTTP client on the maintenance assistant's base URL (an
+    `httpx.Client(base_url=...)`, or a FastAPI TestClient over its app); after an act
+    the show reads its banner and asks it the scripted questions, over its HTTP API
+    only."""
+    show = Show(client, graphs, extraction=extraction, quiet=quiet, assistant=assistant)
     show.declare()
     show.act_0()
     return show.state
@@ -199,11 +267,14 @@ def main(argv: list[str] | None = None) -> int:
     with (
         _driver("PLANT_CANDIDATE_URI", "bolt://localhost:7687") as candidate,
         _driver("PLANT_PRODUCTION_URI", "bolt://localhost:7688") as production,
+        httpx.Client(
+            base_url=os.environ.get("PLANT_ASSISTANT_URL", "http://localhost:8000"), timeout=120
+        ) as assistant,
     ):
         client = stetiq.Client(graph_source=Neo4jGraphSource(candidate))
         try:
-            run_show(client, Graphs(candidate, production), extraction=mode)
-        except (stetiq.StetiqError, ExtractionError) as e:
+            run_show(client, Graphs(candidate, production), extraction=mode, assistant=assistant)
+        except (stetiq.StetiqError, ExtractionError, AssistantError, httpx.HTTPError) as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
     return 0

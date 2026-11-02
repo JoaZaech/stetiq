@@ -1,0 +1,342 @@
+"""The maintenance assistant: a GraphRAG Consumer of the plant Knowledge Graph.
+
+It answers the shift lead's questions as text-to-Cypher. The Ontology Version it uses,
+fetched from stetiq as YAML, goes into Claude's prompt; Claude writes one read-only
+Cypher query; the production graph runs it in a read transaction; Claude answers from
+the rows. Every answer carries the Cypher it ran and the work orders in its rows.
+
+Without Claude (no `ANTHROPIC_API_KEY`, or the API unreachable) the scripted questions
+answer from `recordings/answers.json`, keyed by question and Ontology Version, and
+free-form questions are refused.
+
+    cd showcase/plant-assistant
+    uv run uvicorn plant_assistant.assistant:app_from_env --factory --port 8000
+
+reads `STETIQ_TRACKING_URI` / `STETIQ_TOKEN` (stetiq), `PLANT_PRODUCTION_URI` with
+`NEO4J_USER` / `NEO4J_PASSWORD` (the production graph) and `ANTHROPIC_API_KEY`.
+
+HTTP API:
+- `GET /api/status`: `{in_use, free_form, message}`, the Ontology Version in use (null
+  before stetiq has a Contract version), whether free-form questions are answered;
+- `POST /api/ask` `{question}`: `{question, answer, cypher, work_orders,
+  ontology_version, source}`, `source` being `live` (Claude) or `recorded`;
+- `POST /api/poll`: check stetiq now instead of waiting for the next poll; returns the
+  status.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import threading
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Any, LiteralString, Protocol, cast
+
+import neo4j
+import neo4j.exceptions
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
+
+import stetiq
+
+KG = "plant-maintenance"
+MODEL = "claude-sonnet-5-5"
+PRODUCTION_DATABASE = "neo4j"  # Neo4j Community has the one database
+POLL_SECONDS = 5.0
+RECORDINGS = Path(__file__).resolve().parent.parent / "recordings" / "answers.json"
+PAGE = Path(__file__).resolve().parent / "static" / "index.html"
+ROW_LIMIT = 200  # rows past this are not sent to Claude
+NO_KEY = (
+    "Free-form questions are off: the assistant has no ANTHROPIC_API_KEY, so it answers "
+    "only the scripted questions, from recorded answers."
+)
+
+_WORK_ORDER_ID = re.compile(r"\bWO-\d{4}\b")
+
+_CYPHER_SYSTEM = """You answer questions about a factory's maintenance history from its \
+Neo4j knowledge graph. The graph follows the Ontology below (Ontology Version {number}, \
+YAML): its node types, properties, relationship types and patterns are all the graph \
+holds. Write exactly one read-only Cypher query (MATCH ... RETURN; never CREATE, MERGE, \
+SET, DELETE, REMOVE or CALL) that fetches the rows needed to answer the question. Use only \
+labels, properties and values the Ontology declares; where it lists a property's allowed \
+values, filter on those. Return readable columns (ids, names, descriptions). If the \
+Ontology cannot answer the question, return a query for the closest rows it does hold.
+
+{ontology}"""
+
+_ANSWER_SYSTEM = """You are the maintenance assistant for a factory's shift lead. You \
+answer from rows a Cypher query returned from the plant's knowledge graph, which follows \
+the Ontology below (Ontology Version {number}, YAML). Answer in two to four plain \
+sentences, naming machines and work order ids. Use only the rows; if the Ontology has no \
+concept for what was asked, say the graph does not record it. Do not mention Cypher.
+
+{ontology}"""
+
+_CYPHER_FORMAT = {
+    "type": "json_schema",
+    "schema": {
+        "type": "object",
+        "properties": {"cypher": {"type": "string"}},
+        "required": ["cypher"],
+        "additionalProperties": False,
+    },
+}
+
+try:  # the Anthropic SDK is only needed when Claude answers live
+    import anthropic
+
+    _API_ERRORS: tuple[type[Exception], ...] = (anthropic.APIError,)
+except ImportError:  # pragma: no cover - the showcase installs it
+    _API_ERRORS = ()
+
+
+class Claude(Protocol):
+    """What the assistant needs of `anthropic.Anthropic()` (tests pass a scripted fake)."""
+
+    @property
+    def beta(self) -> Any: ...
+
+
+@dataclass(frozen=True)
+class Recording:
+    """A recorded answer to a scripted question on one Ontology Version."""
+
+    question: str
+    ontology_version: int
+    cypher: str
+    answer: str
+
+
+@dataclass(frozen=True)
+class Answer:
+    question: str
+    answer: str
+    cypher: str
+    work_orders: list[str]
+    ontology_version: int
+    source: str  # live | recorded
+
+
+class Refused(Exception):
+    """A question the assistant will not answer; `status` is the HTTP status it sends."""
+
+    def __init__(self, status: int, message: str) -> None:
+        super().__init__(message)
+        self.status = status
+
+
+def load_recordings(path: Path = RECORDINGS) -> dict[tuple[str, int], Recording]:
+    entries = json.loads(path.read_text())["answers"]
+    return {
+        (_normal(e["question"]), e["ontology_version"]): Recording(
+            e["question"], e["ontology_version"], e["cypher"], e["answer"]
+        )
+        for e in entries
+    }
+
+
+def _normal(question: str) -> str:
+    return " ".join(
+        question.lower().replace("\N{RIGHT SINGLE QUOTATION MARK}", "'").split()
+    ).rstrip("?")
+
+
+class Assistant:
+    """The assistant's state: the Ontology Version in use and how it answers.
+
+    `stetiq` is the assistant's own client (a read token is enough); `production` is the
+    production graph. `llm` is the Anthropic client, or None to answer from recordings
+    only."""
+
+    def __init__(
+        self,
+        stetiq_client: stetiq.Client,
+        production: neo4j.Driver,
+        *,
+        llm: Claude | None,
+        recordings: dict[tuple[str, int], Recording] | None = None,
+        knowledge_graph: str = KG,
+        model: str = MODEL,
+    ) -> None:
+        self.stetiq = stetiq_client
+        self.production = production
+        self.llm = llm
+        self.recordings = load_recordings() if recordings is None else recordings
+        self.knowledge_graph = knowledge_graph
+        self.model = model
+        self.in_use: int | None = None
+        self.ontology_yaml: str | None = None
+        self._lock = threading.Lock()
+
+    # --- The Ontology Version in use ------------------------------------------------
+
+    def poll(self) -> None:
+        """Take the Ontology Version the `production` Contract Alias points to, fetching
+        its YAML from stetiq. Before stetiq has one, nothing is in use."""
+        try:
+            number = self.stetiq.get_contract_version(self.knowledge_graph).number
+        except stetiq.StetiqError:
+            return
+        if number != self.in_use:
+            ontology_yaml = self.stetiq.get_ontology_yaml(self.knowledge_graph, number)
+            with self._lock:
+                self.in_use, self.ontology_yaml = number, ontology_yaml
+
+    def status(self) -> dict[str, Any]:
+        return {
+            "in_use": self.in_use,
+            "free_form": self.llm is not None,
+            "message": None if self.llm is not None else NO_KEY,
+        }
+
+    # --- Answering ------------------------------------------------------------------
+
+    def ask(self, question: str) -> Answer:
+        with self._lock:
+            number, ontology_yaml = self.in_use, self.ontology_yaml
+        if number is None or ontology_yaml is None:
+            raise Refused(503, "The assistant has no Ontology Version yet: nothing is deployed.")
+        recording = self.recordings.get((_normal(question), number))
+        if self.llm is not None:
+            try:
+                return self._ask_claude(self.llm, question, number, ontology_yaml)
+            except _API_ERRORS:
+                if recording is None:
+                    raise Refused(
+                        503, "Claude is unreachable, and this question has no recorded answer."
+                    ) from None
+        if recording is None:
+            raise Refused(503, NO_KEY)
+        rows = self._run(recording.cypher)
+        return Answer(
+            question, recording.answer, recording.cypher, _work_orders(rows), number, "recorded"
+        )
+
+    def _ask_claude(self, llm: Claude, question: str, number: int, ontology_yaml: str) -> Answer:
+        reply = self._create(
+            llm,
+            system=_CYPHER_SYSTEM.format(number=number, ontology=ontology_yaml),
+            content=f"Question: {question}",
+            output_config={"effort": "low", "format": _CYPHER_FORMAT},
+        )
+        cypher = json.loads(reply)["cypher"]
+        rows = self._run(cypher)
+        shown = json.dumps(rows[:ROW_LIMIT], default=str, ensure_ascii=False)
+        answer = self._create(
+            llm,
+            system=_ANSWER_SYSTEM.format(number=number, ontology=ontology_yaml),
+            content=f"Question: {question}\n\nCypher:\n{cypher}\n\nRows ({len(rows)}):\n{shown}",
+            output_config={"effort": "low"},
+        )
+        return Answer(question, answer, cypher, _work_orders(rows), number, "live")
+
+    def _create(self, llm: Claude, *, system: str, content: str, output_config: dict) -> str:
+        response = llm.beta.messages.create(
+            model=self.model,
+            max_tokens=4096,
+            system=system,
+            messages=[{"role": "user", "content": content}],
+            output_config=output_config,
+            betas=["server-side-fallback-2026-07-01"],
+            fallbacks="default",
+        )
+        if response.stop_reason == "refusal":
+            raise Refused(422, "Claude declined to answer this question.")
+        return "".join(b.text for b in response.content if b.type == "text")
+
+    def _run(self, cypher: str) -> list[dict[str, Any]]:
+        """Run `cypher` on the production graph in a read transaction: the server
+        rejects any write in it."""
+
+        def work(tx: neo4j.ManagedTransaction) -> list[dict[str, Any]]:
+            return [r.data() for r in tx.run(cast(LiteralString, cypher))]
+
+        try:
+            with self.production.session(database=PRODUCTION_DATABASE) as session:
+                return session.execute_read(work)
+        except neo4j.exceptions.ClientError as e:
+            if "write" in (e.message or "").lower():
+                raise Refused(
+                    422, "The generated Cypher tried to write; the assistant runs read-only."
+                ) from None
+            raise Refused(422, f"The generated Cypher failed: {e.code}") from None
+
+
+def _work_orders(rows: list[dict[str, Any]]) -> list[str]:
+    """The work order ids in the rows, in order of first appearance."""
+    found: dict[str, None] = {}
+    for row in rows:
+        for value in row.values():
+            for wo in _WORK_ORDER_ID.findall(json.dumps(value, default=str)):
+                found.setdefault(wo, None)
+    return list(found)
+
+
+# --- The HTTP API -------------------------------------------------------------------
+
+
+class Question(BaseModel):
+    question: str
+
+
+def create_app(assistant: Assistant, *, poll_interval: float | None = POLL_SECONDS) -> FastAPI:
+    """The assistant's app. It polls stetiq on startup and then every `poll_interval`
+    seconds (None: only on startup and on `POST /api/poll`)."""
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        assistant.poll()
+        stop = threading.Event()
+        if poll_interval is not None:
+
+            def loop() -> None:
+                while not stop.wait(poll_interval):
+                    assistant.poll()
+
+            threading.Thread(target=loop, name="stetiq-poll", daemon=True).start()
+        yield
+        stop.set()
+
+    app = FastAPI(title="Maintenance assistant", lifespan=lifespan)
+
+    @app.get("/", response_class=HTMLResponse)
+    def page() -> str:
+        return PAGE.read_text()
+
+    @app.get("/api/status")
+    def status() -> dict[str, Any]:
+        return assistant.status()
+
+    @app.post("/api/poll")
+    def poll() -> dict[str, Any]:
+        assistant.poll()
+        return assistant.status()
+
+    @app.post("/api/ask")
+    def ask(body: Question) -> dict[str, Any]:
+        try:
+            answer = assistant.ask(body.question)
+        except Refused as e:
+            raise HTTPException(e.status, str(e)) from None
+        return asdict(answer)
+
+    return app
+
+
+def app_from_env() -> FastAPI:
+    """The app as compose runs it, configured from the environment."""
+    auth = (os.environ.get("NEO4J_USER", "neo4j"), os.environ.get("NEO4J_PASSWORD", ""))
+    production = neo4j.GraphDatabase.driver(
+        os.environ.get("PLANT_PRODUCTION_URI", "bolt://localhost:7688"), auth=auth
+    )
+    llm = None
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        import anthropic
+
+        llm = anthropic.Anthropic()
+    return create_app(Assistant(stetiq.Client(), production, llm=llm))
