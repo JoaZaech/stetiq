@@ -8,6 +8,7 @@ example's file-backed graph store, reading Claude's answers from the committed
 llm-cache/ only: the `claude` CLI is never started."""
 
 import importlib
+import json
 from pathlib import Path
 
 import pytest
@@ -193,3 +194,117 @@ def test_the_use_case_names_the_two_consumers_and_their_tasks(demo):
             {"explain-root-causes": ["parts-suppliers", "root-causes"]},
         ),
     }
+
+
+# --- the flywheel step: a coding agent reads the red round 2 through `stetiq mcp` ---
+
+
+@pytest.fixture(scope="module")
+def round_2_context(tmp_path_factory):
+    """The Run Context a coding agent gets from `stetiq mcp` once round 2 is red: the
+    replay stops before the committed fix, and the `run_context` tool is called
+    in-process with no version, so it reads the Contract Alias's (v1)."""
+    mcp = pytest.importorskip("mcp")
+    import anyio
+
+    from stetiq.mcp_server import create_server
+
+    demo = _run_demo(tmp_path_factory.mktemp("plant-kg-round-2"), until="v2")
+    assert "fix" not in demo.rounds
+
+    async def call():
+        async with mcp.Client(create_server(demo.priya)) as session:
+            return await session.call_tool("run_context", {"knowledge_graph": KG})
+
+    result = anyio.run(call)
+    assert not result.is_error
+    return json.loads(result.content[0].text)
+
+
+def _verdict(results, consumer):
+    [verdict] = [r for r in results if r["consumer"] == consumer]
+    return verdict
+
+
+def test_the_agent_reads_v1_with_kind_as_a_plain_string(round_2_context):
+    assert round_2_context["ontology_version"]["number"] == 1
+    # `kind` is an unbound string in v1: what the committed fix tightens to a Vocabulary.
+    [work_order] = [
+        n
+        for n in round_2_context["ontology_version"]["ontology"]["node_types"]
+        if n["label"] == "WorkOrder"
+    ]
+    assert {"name": "kind", "type": "STRING"} in work_order["properties"]
+
+
+def test_the_last_attempt_is_prompt_v2s_run_and_its_additive_candidate(round_2_context):
+    attempt = round_2_context["last_attempt"]
+    assert (attempt["status"], attempt["ontology_version"], attempt["candidate_version"]) == (
+        "finished",
+        1,
+        2,
+    )
+    assert attempt["added"]["classification"] == "additive"
+    assert [(c["concept"], c["kind"]) for c in attempt["added"]["changes"]] == [
+        ("Supplier", "added"),
+        ("SUPPLIED_BY", "added"),
+    ]
+
+
+def test_the_last_attempt_fails_the_reliability_dashboards_consumer_gate(round_2_context):
+    dashboard = _verdict(
+        round_2_context["last_attempt"]["consumer_gate_results"], "reliability-dashboard"
+    )
+    assert dashboard["status"] == "failed"
+    [outcome] = dashboard["outcomes"]
+    assert (outcome["gate"]["name"], outcome["passed"]) == ("triage-rows-hold", False)
+    [finding] = outcome["findings"]
+    assert (finding["task"], finding["competency_question"]) == (
+        "triage-breakdowns",
+        "breakdown-technicians",
+    )
+    assert (finding["before"], finding["after"], finding["limit"]) == (6, 4, 0.1)
+    assert outcome["reasons"] == [
+        "triage-breakdowns / breakdown-technicians: 6 → 4 rows (−33.3%, limit −10%)"  # noqa: RUF001 - the minus sign stetiq writes
+    ]
+
+
+def test_the_last_attempt_passes_the_maintenance_assistants_consumer_gate(round_2_context):
+    assistant = _verdict(
+        round_2_context["last_attempt"]["consumer_gate_results"], "maintenance-assistant"
+    )
+    assert assistant["status"] == "passed"
+    [outcome] = assistant["outcomes"]
+    assert outcome["findings"] == []
+    assert outcome["new_questions"] == ["parts-suppliers"]
+
+
+def test_the_last_attempt_passes_the_front_gate(round_2_context):
+    gate = round_2_context["last_attempt"]["gate_result"]
+    assert gate["status"] == "passed"
+    assert all(o["passed"] for o in gate["outcomes"])
+
+
+def test_the_last_attempts_rows_point_at_a_new_kind(round_2_context):
+    # The Ontology Diff only adds Supplier: the relabelling is in the data, which stetiq
+    # never reads. What points at `kind` is the rows: the breakdowns lost from
+    # breakdown-technicians reappear as a third `kind` group in downtime-by-kind.
+    after = {q["id"]: q["rows"] for q in round_2_context["last_attempt"]["competency_questions"]}
+    before = {
+        q["id"]: q["execution"]["rows"]
+        for q in round_2_context["competency_questions"]
+        if q["execution"]
+    }
+    assert (before["breakdown-technicians"], after["breakdown-technicians"]) == (6, 4)
+    assert (before["downtime-by-kind"], after["downtime-by-kind"]) == (2, 3)
+    assert after["parts-suppliers"] == 5
+
+
+def test_v1s_run_passed_its_gate_and_was_never_consumer_gated(round_2_context):
+    # The baseline run, which `run` still stands for, was gated but never Consumer-gated:
+    # "not evaluated", never a pass.
+    assert round_2_context["gate_result"]["status"] == "passed"
+    assert round_2_context["consumer_gate_results"] == [
+        {"consumer": "maintenance-assistant", "status": "not_evaluated"},
+        {"consumer": "reliability-dashboard", "status": "not_evaluated"},
+    ]

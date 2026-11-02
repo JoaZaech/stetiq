@@ -13,6 +13,7 @@ from, and the **maintenance assistant**, an agent that explains why a machine st
 cd examples/plant-kg
 uv run python demo.py --reset      # the three rounds (--reset starts over)
 uv run python demo.py --reset --epilogue   # ... then hand edits to the graph, and Drift
+uv run python demo.py --reset --until v2   # stop with round 2 red: the flywheel step
 uv run stetiq ui                   # the same verdicts at http://127.0.0.1:5000/ui
 ```
 
@@ -64,6 +65,11 @@ keeps its 8 rows, and `parts-suppliers` was not in the Use Case Version the base
 was judged by, so it has no baseline and is reported as new, not compared. Candidate v2
 stays unpromoted, like an open red pull request.
 
+**The flywheel step (shown, never required).** Between rounds 2 and 3, a coding agent
+works out the fix from what stetiq recorded. See [The flywheel step](#the-flywheel-step)
+below. The committed round 3 is what the replay runs, so nobody needs an agent or an API
+key to see the story.
+
 **3. The fix.** `ontology/fix.yaml` is v1 plus what Candidate v2 added, with
 `WorkOrder.kind` bound to the `WorkOrderKind` Vocabulary {`breakdown`, `preventive`}.
 Prompt v2 runs again on it (v3). Claude sees the Vocabulary in the Ontology, and wherever
@@ -82,6 +88,59 @@ Consumer Gate verdicts.
 nodes and deletes the done follow-ups. The next Observation records Drift against
 `production`: two undeclared Concepts and three count drops past the 25% in
 `stetiq.yaml`.
+
+## The flywheel step
+
+Stop the replay with round 2's Consumer Gate red, then let a coding agent read the
+[Run Context](../../docs/guide/03-python-sdk.md#the-run-context) through `stetiq mcp`,
+the read-only MCP server ([Agents and MCP](../../docs/guide/08-agents-and-mcp.md)):
+
+```bash
+cd examples/plant-kg
+uv run python demo.py --reset --until v2           # rounds 1 and 2; production stays on v1
+claude mcp add stetiq -- uv run stetiq mcp         # from this folder: reads .stetiq/stetiq.db
+claude "Why is the reliability dashboard's Consumer Gate red on plant-maintenance, and what would you change?"
+```
+
+The agent calls the `run_context` tool (`uv run stetiq context plant-maintenance` prints
+the same JSON). With no version it reads `production`'s v1, where `WorkOrder.kind` is a
+plain string, and its `last_attempt` is prompt v2's run:
+
+- the reliability dashboard's Consumer Gate failed: Task `triage-breakdowns`, question
+  `breakdown-technicians`, 6 → 4 rows (−33.3%, limit −10%);
+- the maintenance assistant's passed, with `parts-suppliers` new and not compared;
+- the front Gate passed;
+- `added`, the Ontology Diff to Candidate v2, is additive: only `Supplier` and
+  `SUPPLIED_BY`. Nothing in it touches `kind`: the relabelling is in the data, which
+  stetiq never reads. What points at `kind` is the row counts: `downtime-by-kind`, which
+  groups work orders by `kind`, went from 2 rows to 3 while `breakdown-technicians`,
+  which matches `kind = 'breakdown'`, lost two.
+
+Compare the agent's proposal with the committed round 3, `ontology/fix.yaml`: bind
+`WorkOrder.kind` to a Vocabulary {`breakdown`, `preventive`} and keep what Candidate v2
+added. A good answer names that, and leaves `Supplier` alone because `parts-suppliers`
+needs it. Then `uv run python demo.py --reset` replays all three rounds, the fix included.
+
+`tests/test_example_plant_kg.py` stops the replay after round 2 the same way and calls
+the `run_context` tool in-process, so the facts above are pinned without an agent, an
+LLM or a network. Those tests skip if the `mcp` extra is not installed; the replay
+itself never needs it.
+
+### Recording notes
+
+For the screen recording and the presenter's script:
+
+1. `uv run python demo.py --reset --until v2`. Pause on the prompt v2 line: better by
+   the evals, red for the reliability dashboard.
+2. In a terminal next to it, `claude mcp add stetiq -- uv run stetiq mcp` (once; `claude
+   mcp list` shows it), then ask the question above. Show the agent calling `run_context`
+   and quoting `breakdown-technicians` 6 → 4 and the additive diff.
+3. Read its proposal out, then open `ontology/fix.yaml` next to it. Say plainly where it
+   differs: the agent is shown, not trusted; the committed round 3 is what CI replays.
+4. `uv run python demo.py --reset` for the fix round, then `uv run stetiq ui`.
+
+An agent's answer differs from take to take: record a take that proposes the Vocabulary,
+and never edit `llm-cache/` or the fix to match an answer.
 
 ## Claude and the cache
 
