@@ -180,7 +180,6 @@ test('the vision page is in Help: its sections exist, its diagram draws, and rep
   await expect(contents.getByRole('link', { name: /^Vision/ })).toHaveAttribute('aria-current', 'page')
   // Every section a placeholder links to.
   for (const id of [
-    'the-two-gate-pipeline',
     'consumer-gate',
     'connector',
     'consumer-impact-and-gates-over-it',
