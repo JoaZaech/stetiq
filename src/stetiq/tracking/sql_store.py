@@ -256,6 +256,8 @@ drift_events = Table(
     Column("thresholds_json", Text, nullable=False),
     Column("findings_json", Text, nullable=False),
 )
+# Looked up by Observation when marking the next Observation's findings new or persisting.
+_drift_events_by_observation = Index("ix_drift_events_observation", drift_events.c.observation_id)
 
 
 # Insert-only: a re-run adds rows; readers take the latest row per evaluator.
@@ -400,6 +402,8 @@ class SqlStore:
         self._local = threading.local()  # the open transaction's connection, per thread
         metadata.create_all(self._engine)
         _add_missing_columns(self._engine)
+        # `create_all` adds an index only with its table, so stores created before get it here.
+        _drift_events_by_observation.create(self._engine, checkfirst=True)
 
     def drop_all(self) -> None:
         """Delete every table (test helper); they are recreated on next construction."""
@@ -793,9 +797,16 @@ class SqlStore:
             )
 
     def list_drift_events(self, knowledge_graph: str) -> list[DriftEvent]:
+        return self._drift_events(drift_events.c.knowledge_graph == knowledge_graph)
+
+    def get_drift_event_for_observation(self, observation_id: str) -> DriftEvent | None:
+        found = self._drift_events(drift_events.c.observation_id == observation_id)
+        return found[0] if found else None
+
+    def _drift_events(self, where) -> list[DriftEvent]:
         query = (
             select(drift_events)
-            .where(drift_events.c.knowledge_graph == knowledge_graph)
+            .where(where)
             .order_by(drift_events.c.detected_at, drift_events.c.id)
         )
         with self._connection() as conn:

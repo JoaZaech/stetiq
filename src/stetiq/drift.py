@@ -179,9 +179,11 @@ class NotComparable:
 
 @dataclass(frozen=True)
 class DriftAssessment:
-    """What `assess_drift` found: the findings (empty means no Drift) and the checks that
-    were not comparable."""
+    """What `assess_drift` found: the findings (empty means no Drift), the checks that
+    were not comparable, and the Conformance of the Observed Schema to the contract that
+    the structural findings and Violation Rates come from."""
 
+    conformance: Conformance
     findings: tuple[DriftFinding, ...] = ()
     not_comparable: tuple[NotComparable, ...] = ()
 
@@ -347,7 +349,7 @@ def assess_drift(
                 findings.extend(ratio_findings)
                 not_comparable.extend(ratio_gaps)
     # One entry per check: a truncated list yields one mismatch per listed outside value.
-    return DriftAssessment(tuple(findings), tuple(dict.fromkeys(not_comparable)))
+    return DriftAssessment(conformance, tuple(findings), tuple(dict.fromkeys(not_comparable)))
 
 
 # A ratio check bound to its contract: (observed, baseline, limit, min_count) -> findings, gaps.
