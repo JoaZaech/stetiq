@@ -41,4 +41,37 @@ def observed_support(_client: stetiq.Client) -> dict[str, Any]:
     return {"run_id": run.id, "observation_id": outcome.observation.id}
 
 
-SCENARIOS: tuple[Scenario, ...] = (observed_support,)
+WORK_ORDERS = """
+vocabularies:
+  - {label: Status, values: [open, closed]}
+node_types:
+  - label: WorkOrder
+    properties:
+      - {name: status, type: STRING, vocabulary: Status}
+      - {name: code, type: STRING, required: true}
+"""
+
+
+def observed_violation_rates(_client: stetiq.Client) -> dict[str, Any]:
+    """`plant` observed twice on demand, with one listed value per Attribute
+    (`value_cap=1`). The first Observation, the Baseline Observation, has every WorkOrder
+    `code` set. In the second, half the WorkOrders lack their required `code` (a Violation
+    Rate risen from 0% to 50%) and the most frequent `status` is `on_hold`, outside the
+    Vocabulary, in a truncated value list, so its share is not comparable."""
+    graph = stetiq.InMemoryGraphSource()
+    client = stetiq.Client(_client.tracking_uri, graph_source=graph, value_cap=1)
+    client.create_knowledge_graph("plant", ontology=WORK_ORDERS)
+    for status in ("open", "open", "closed", "closed"):
+        graph.add_node(["WorkOrder"], {"status": status, "code": "W"})
+    for status, code in (("on_hold", "W"), ("on_hold", None), ("open", "W"), ("closed", None)):
+        props = {"status": status} | ({"code": code} if code else {})
+        graph.add_node(["WorkOrder"], props, database="later")
+    client.bind_graph_source("plant", GraphSourceScope(database="neo4j"))
+    baseline = client.observe("plant")
+    client.bind_graph_source("plant", GraphSourceScope(database="later"))
+    outcome = client.observe("plant")
+    assert outcome.drift is not None and outcome.observation.not_comparable
+    return {"baseline_id": baseline.observation.id, "observation_id": outcome.observation.id}
+
+
+SCENARIOS: tuple[Scenario, ...] = (observed_support, observed_violation_rates)

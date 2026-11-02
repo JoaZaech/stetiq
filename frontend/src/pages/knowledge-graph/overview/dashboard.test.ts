@@ -29,6 +29,8 @@ const observation = (id: string): Observation => ({
   run_id: null,
   observed_at: `2026-11-0${id}T10:00:00Z`,
   scope: { database: 'neo4j', label: null, namespace: null },
+  baseline_observation_id: id,
+  not_comparable: [],
 })
 
 describe('runs', () => {

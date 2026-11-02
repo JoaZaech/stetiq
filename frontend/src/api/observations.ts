@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { api, kgPath } from './client'
+import type { Mismatch, MismatchSubjectKind } from './runs'
 
 /** wire.graph_source_scope_to_json: a database, optionally narrowed by label or namespace. */
 export interface GraphSourceScope {
@@ -27,24 +28,63 @@ export interface Observation {
   run_id: string | null
   observed_at: string
   scope: GraphSourceScope
+  /**
+   * On-demand only: the Observation its Violation Rates were compared with (its own id
+   * when it is the first since the contract's Ontology Version became the contract).
+   */
+  baseline_observation_id: string | null
+  /** The Drift checks that lacked their input, so raised no finding. */
+  not_comparable: NotComparable[]
 }
 
-/** drift.DriftThresholds: fractions of the previous count (0.1 = 10%); null = check off. */
+/**
+ * drift.DriftThresholds; null = check off. The count ones are fractions of the previous
+ * count (0.1 = 10%), `max_violation_increase` is absolute points above the baseline's
+ * Violation Rate (0.01 = 1 point). Events from before that check lack it.
+ */
 export interface DriftThresholds {
   max_count_drop: number | null
   max_count_increase: number | null
+  max_violation_increase?: number | null
 }
+
+/** drift.DriftKind */
+export type DriftKind =
+  | 'undeclared'
+  | 'vanished'
+  | 'undeclared_value'
+  | 'count_drop'
+  | 'count_increase'
+  | 'violation_increase'
 
 /** drift.DriftFinding */
 export interface DriftFinding {
-  kind: 'undeclared' | 'vanished' | 'undeclared_value' | 'count_drop' | 'count_increase'
+  kind: DriftKind
   subject: string
-  subject_kind: 'node_type' | 'relationship_type' | 'property'
+  subject_kind: MismatchSubjectKind
   detail: string
   previous_count: number | null
   observed_count: number | null
   /** `undeclared_value` only: the value outside the contract's Vocabulary. */
   value?: string
+  /** `undeclared_value` only: how many owners hold the value, and their share (absent when unknown). */
+  count?: number
+  share?: number
+  /** `violation_increase` only: the Conformance check, and its Violation Rate in the baseline and now. */
+  violation?: Mismatch['kind']
+  baseline_rate?: number
+  observed_rate?: number
+}
+
+/** drift.NotComparable: a check that lacked its input, so it raised no finding. */
+export interface NotComparable {
+  /** The finding kind the check would have raised. */
+  check: DriftKind
+  subject: string
+  subject_kind: MismatchSubjectKind
+  reason: string
+  /** For a Violation Rate: the Conformance check behind it. */
+  violation?: Mismatch['kind']
 }
 
 /** wire.drift_event_to_json */

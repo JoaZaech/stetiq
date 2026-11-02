@@ -1,9 +1,10 @@
-import { useMemo } from 'react'
+import { useId, useMemo } from 'react'
 import { Link } from 'react-router'
 import { type DriftEvent, type Observation, useDriftEvents, useObservations } from '@/api/observations'
 import { knowledgeGraphSection, kgUrl } from '@/app/knowledge-graph-sections'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { FilterMenu } from '@/components/FilterMenu'
+import { InfoTip } from '@/components/InfoTip'
 import { KpiTiles } from '@/components/KpiTiles'
 import { ListCount, ListToolbar } from '@/components/ListToolbar'
 import { StatusLabel } from '@/components/StatusLabel'
@@ -12,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useSearchParam } from '@/hooks/use-search-param'
 import { formatDateTime } from '@/lib/format'
+import { helpUrl } from '@/pages/help/guide-index'
 import { useSheetParam } from '@/lib/sheet-param'
 import { evaluationKpis } from '../evaluation/evaluation-kpis'
 import { findingsFromDrift } from '../evaluation/findings'
@@ -23,12 +25,14 @@ import { focusSheetItself } from '../use-case/sheet-focus'
 import {
   filterObservationRows,
   formatThresholds,
+  notComparableRows,
   OBSERVATION_STATUSES,
   type ObservationRow,
   observationRows,
 } from './observation-rows'
 
 const SECTION = knowledgeGraphSection('observations')
+const DRIFT_GUIDE = `${helpUrl('concepts')}#observation-and-drift`
 const SHEET_KINDS = ['observation'] as const
 
 /**
@@ -190,13 +194,65 @@ function ObservationSheetContent({ name, row }: { name: string; row: Observation
           <StatusLabel tone={drift ? 'warning' : 'success'} label={row.status} />
           <Source name={name} observation={observation} />
           {drift && <DriftMeta name={name} drift={drift} />}
+          <BaselineMeta row={row} />
         </p>
       </SheetHeader>
       <div className="space-y-6 px-4 pb-6">
         <KpiTiles tiles={evaluationKpis({ drift: row.findings })} />
         <FindingsTable rows={drift ? findingsFromDrift(drift.findings) : []} empty="No Drift." />
+        <NotComparableList observation={observation} />
       </div>
     </>
+  )
+}
+
+/** When its Violation Rates were compared with: the Baseline Observation's time, or "itself". */
+function BaselineMeta({ row }: { row: ObservationRow }) {
+  const { observation, baseline } = row
+  if (observation.baseline_observation_id === null) return null
+  if (observation.baseline_observation_id === observation.id) return <span>baseline: itself</span>
+  return (
+    <span>
+      baseline:{' '}
+      {baseline ? <time dateTime={baseline.observed_at}>{formatDateTime(baseline.observed_at)}</time> : 'unknown'}
+    </span>
+  )
+}
+
+/** The Drift checks that lacked their input; nothing when every check could run. */
+function NotComparableList({ observation }: { observation: Observation }) {
+  const id = useId()
+  const rows = notComparableRows(observation.not_comparable)
+  if (rows.length === 0) return null
+  return (
+    <section aria-labelledby={id} className="space-y-3">
+      <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+        <span id={id}>Not comparable</span>
+        <InfoTip label="Not comparable" to={DRIFT_GUIDE}>
+          Checks that lacked their input, such as a Violation Rate the Baseline Observation cannot give or a truncated value list. They raise no Drift.
+        </InfoTip>
+      </h2>
+      <Table aria-label="Not comparable">
+        <TableHeader>
+          <TableRow>
+            <TableHead>Subject</TableHead>
+            <TableHead>Kind</TableHead>
+            <TableHead>Check</TableHead>
+            <TableHead>Reason</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((r) => (
+            <TableRow key={`${r.subject} ${r.check}`}>
+              <TableCell className="font-mono text-xs">{r.subject}</TableCell>
+              <TableCell>{r.kind}</TableCell>
+              <TableCell>{r.check}</TableCell>
+              <TableCell className="text-muted-foreground">{r.reason}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </section>
   )
 }
 

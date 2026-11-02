@@ -47,7 +47,9 @@ test.describe('with Drift', () => {
     await expect(page).toHaveURL(/sheet=observation%3A/)
     await expect(sheet.getByLabel('Contract Alias')).toHaveText('production')
     await expect(sheet.getByRole('link', { name: 'v1' })).toHaveAttribute('href', '/ui/kg/support/versions/1')
-    await expect(sheet.getByLabel('Thresholds')).toHaveText('max drop off · max rise 50%')
+    await expect(sheet.getByLabel('Thresholds')).toHaveText('max drop off · max rise 50% · max violation rise 1 pt')
+    await expect(sheet).toContainText('baseline:')
+    await expect(sheet.getByRole('table', { name: 'Not comparable' })).toHaveCount(0)
 
     const tiles = sheet.getByRole('list', { name: 'Key figures' }).getByRole('listitem')
     await expect(tiles).toHaveText([/^Conformance—$/, /^CQ coverage—$/, /^Gates—$/, /^Drift4findings$/])
@@ -67,6 +69,36 @@ test.describe('with Drift', () => {
     await page.keyboard.press('Escape')
     await expect(sheet).toBeHidden()
     await expect(page).not.toHaveURL(/sheet=/)
+  })
+})
+
+test.describe('with Violation Rates', () => {
+  test.use({ seed: 'observed_violation_rates' })
+
+  test('the sheet shows a risen Violation Rate against the baseline, and lists what was not comparable', async ({
+    page,
+  }) => {
+    await page.goto('/ui/kg/plant/observations')
+    await page.getByRole('table', { name: 'Observations' }).getByRole('row').nth(1).click()
+
+    const sheet = page.getByRole('dialog')
+    await expect(sheet.getByRole('table', { name: 'Findings' }).getByRole('row')).toHaveText([
+      'ConceptKindFindingChange',
+      /^WorkOrder\.statusAttributeValue outside the Vocabulary“on_hold” × 2$/,
+      /^WorkOrder\.codeAttributeViolation Rate roseRequired but not always set: 0% → 50% \(\+50 pts\)$/,
+    ])
+    await expect(sheet.getByRole('table', { name: 'Not comparable' }).getByRole('row')).toHaveText([
+      'SubjectKindCheckReason',
+      /^WorkOrder\.statusAttributeValue outside the Vocabularyvalue list truncated/,
+    ])
+    await expect(sheet.locator('time')).toHaveCount(2) // the Observation's time and its baseline's
+  })
+
+  test('the baseline itself compares with nothing yet', async ({ page }) => {
+    await page.goto('/ui/kg/plant/observations')
+    await page.getByRole('table', { name: 'Observations' }).getByRole('row').nth(2).click()
+
+    await expect(page.getByRole('dialog')).toContainText('baseline: itself')
   })
 })
 
