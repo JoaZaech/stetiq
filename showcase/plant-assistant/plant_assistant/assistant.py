@@ -31,8 +31,14 @@ offer:
 
 The last decision stays on the banner until another version is on offer.
 
+The guard can be turned off, for the act that shows the show without stetiq. Off, it
+follows whatever is deployed: the pipeline's CD then deploys every run, so the assistant
+takes the newest Ontology Version stetiq holds (the latest Candidate when it is newer
+than the version `production` points to), asking for no verdict.
+
 HTTP API:
-- `GET /api/status`: `{in_use, offered, decision, reason, banner, free_form, message}`:
+- `GET /api/status`: `{in_use, offered, decision, reason, guard, banner, free_form,
+  message}`:
   the Ontology Version in use (null before stetiq has a Contract version), the version on
   offer and the guard's decision on it (`accepted`, `waiting` or `refused`; nulls before
   any offer) with its reason, the banner the chat page shows, and whether free-form
@@ -40,7 +46,10 @@ HTTP API:
 - `POST /api/ask` `{question}`: `{question, answer, cypher, work_orders,
   ontology_version, source}`, `source` being `live` (Claude) or `recorded`;
 - `POST /api/poll`: check stetiq now instead of waiting for the next poll; returns the
-  status.
+  status;
+- `POST /api/reset` `{guard}`: forget the version in use and the guard's last decision,
+  as a restart would, with the guard `on` or `off`; returns the status. The show calls it
+  when it rewinds stetiq, whose versions and verdicts the assistant's state refers to.
 """
 
 from __future__ import annotations
@@ -143,6 +152,7 @@ class Answer:
 
 
 Decision = Literal["accepted", "waiting", "refused"]
+Guard = Literal["on", "off"]
 
 
 class Refused(Exception):
@@ -186,6 +196,7 @@ class Assistant:
         knowledge_graph: str = KG,
         consumer: str = CONSUMER,
         model: str = MODEL,
+        guard: Guard = "on",
     ) -> None:
         self.stetiq = stetiq_client
         self.production = production
@@ -194,6 +205,7 @@ class Assistant:
         self.knowledge_graph = knowledge_graph
         self.consumer = consumer
         self.model = model
+        self.guard: Guard = guard
         self.in_use: int | None = None
         self.ontology_yaml: str | None = None
         # The Connector guard's last decision: the version on offer, and why.
@@ -211,6 +223,9 @@ class Assistant:
         kg = self.knowledge_graph
         try:
             production = self.stetiq.get_contract_version(kg).number
+            if self.guard == "off":
+                self._follow(max(production, self.stetiq.latest_candidate(kg).number))
+                return
             if self.in_use is None:
                 self._take(production)
                 return
@@ -244,6 +259,20 @@ class Assistant:
             return "waiting", "Consumer Gate passed, not in production yet"
         return "accepted", None
 
+    def _follow(self, version: int) -> None:
+        """The guard off: take `version` without a verdict; there is no decision."""
+        if version != self.in_use:
+            self._take(version)
+        with self._lock:
+            self.offered = self.decision = self.reason = None
+
+    def reset(self, guard: Guard) -> None:
+        """Forget the version in use and the guard's last decision, and set the guard."""
+        with self._lock:
+            self.guard = guard
+            self.in_use = self.ontology_yaml = None
+            self.offered = self.decision = self.reason = None
+
     def _take(self, version: int) -> None:
         ontology_yaml = self.stetiq.get_ontology_yaml(self.knowledge_graph, version)
         with self._lock:
@@ -258,6 +287,7 @@ class Assistant:
             "offered": offered,
             "decision": decision,
             "reason": reason,
+            "guard": self.guard,
             "banner": _banner(in_use, offered, decision, reason),
             "free_form": self.llm is not None,
             "message": None if self.llm is not None else NO_KEY,
@@ -386,6 +416,10 @@ class Question(BaseModel):
     question: str
 
 
+class Reset(BaseModel):
+    guard: Guard = "on"
+
+
 def create_app(assistant: Assistant, *, poll_interval: float | None = POLL_SECONDS) -> FastAPI:
     """The assistant's app. It polls stetiq on startup and then every `poll_interval`
     seconds (None: only on startup and on `POST /api/poll`)."""
@@ -417,6 +451,11 @@ def create_app(assistant: Assistant, *, poll_interval: float | None = POLL_SECON
     @app.post("/api/poll")
     def poll() -> dict[str, Any]:
         assistant.poll()
+        return assistant.status()
+
+    @app.post("/api/reset")
+    def reset(body: Reset) -> dict[str, Any]:
+        assistant.reset(body.guard)
         return assistant.status()
 
     @app.post("/api/ask")

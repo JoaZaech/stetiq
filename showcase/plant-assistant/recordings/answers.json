@@ -16,6 +16,20 @@
     },
     {
       "question": "Why did Line 2's machines break down?",
+      "ontology_version": 2,
+      "cypher": "MATCH (w:WorkOrder)-[:PERFORMED_ON]->(m:Machine)-[:PART_OF]->(:Line {name: 'Line 2'})\nWHERE w.kind = 'breakdown'\nOPTIONAL MATCH (w)-[:CAUSED_BY]->(f:Fault)\nRETURN w.id AS work_order, m.name AS machine, w.title AS title, f.description AS fault\nORDER BY work_order",
+      "answer": "Line 2 had no breakdowns. The graph records no breakdown work orders on any Line 2 machine, so there is nothing to explain.",
+      "provenance": "HAND-WRITTEN, NOT RECORDED: written from the rows this Cypher returns on Act 1's production graph (prompt v2 deployed without stetiq)."
+    },
+    {
+      "question": "Which suppliers' components keep failing?",
+      "ontology_version": 2,
+      "cypher": "MATCH (w:WorkOrder)-[:INVOLVED]->(c:Component)-[:SUPPLIED_BY]->(s:Supplier)\nRETURN s.name AS supplier, c.name AS component, collect(w.id) AS work_orders\nORDER BY size(work_orders) DESC, supplier",
+      "answer": "No supplier's components fail repeatedly yet: five suppliers each had one replaced component. SKF's spindle bearing (WO-2031), Parker's hydraulic hose (WO-2032), Haas's gripper (WO-2036), Watlow's heater band (WO-2037) and Festo's pneumatic valve (WO-2038).",
+      "provenance": "HAND-WRITTEN, NOT RECORDED: written from the rows this Cypher returns on Act 1's production graph (prompt v2 deployed without stetiq)."
+    },
+    {
+      "question": "Why did Line 2's machines break down?",
       "ontology_version": 3,
       "cypher": "MATCH (w:WorkOrder)-[:PERFORMED_ON]->(m:Machine)-[:PART_OF]->(:Line {name: 'Line 2'})\nWHERE w.kind = 'breakdown'\nOPTIONAL MATCH (w)-[:CAUSED_BY]->(f:Fault)\nRETURN w.id AS work_order, m.name AS machine, w.title AS title, f.description AS fault\nORDER BY work_order",
       "answer": "Line 2 had two breakdowns. CNC-04 (WO-2031) stopped with spindle vibration, caused by a worn spindle bearing that had passed its service interval. Lathe-02 (WO-2038) had a chuck pressure fault, caused by a sticking pneumatic valve on the chuck supply."

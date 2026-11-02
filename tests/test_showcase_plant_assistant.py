@@ -12,6 +12,11 @@ TestClient, with its own read-only stetiq token, and `run_show` reaches it only 
 HTTP API. Its Claude is a scripted fake replaying the committed recorded answers, so no
 test calls a real LLM.
 
+The show plays Acts 0 and 1 without stetiq (the assistant's guard off, every run
+deployed), rewinds the tracking database, both graphs and the assistant, then plays
+Acts 0, 2 and 3 with stetiq; the tests pin both passes. The `--act N` tests come last,
+since they rewind again.
+
 Needs Docker (two Neo4j testcontainers); with Docker up it runs, never skips."""
 
 import importlib
@@ -178,14 +183,22 @@ def assistant(assistant_module, server, production, claude):
         yield http
 
 
-@pytest.fixture(scope="module")
-def show(showcase, client, candidate, production, assistant):
+def _run_show(showcase, server, client, candidate, production, assistant, **kwargs):
+    _, database_url = server
     return showcase.run_show(
         client,
         showcase.Graphs(candidate=candidate, production=production),
+        rewind_tracking=lambda: showcase.rewind_tracking(database_url),
         assistant=assistant,
         quiet=True,
+        **kwargs,
     )
+
+
+@pytest.fixture(scope="module")
+def show(showcase, server, client, candidate, production, assistant):
+    """The whole show: Acts 0 and 1 without stetiq, the rewind, then Acts 0, 2 and 3."""
+    return _run_show(showcase, server, client, candidate, production, assistant)
 
 
 def _work_orders(driver) -> set[tuple[str, str, str]]:
@@ -287,7 +300,7 @@ def test_claudes_prompt_carries_the_ontology_version_fetched_from_stetiq(show, c
     [opening, *_] = (SHOWCASE_DIR / "ontology" / "v1.yaml").read_text().splitlines()
     assert claude.requests
     for request in claude.requests:
-        [version] = {v for v in (1, 3) if f"Ontology Version {v}" in request["system"]}
+        [version] = {v for v in (1, 2, 3) if f"Ontology Version {v}" in request["system"]}
         assert request["model"] == "claude-sonnet-5-5"
         assert client.get_ontology_yaml(KG, version) in request["system"]
         assert opening not in request["system"]
@@ -334,6 +347,53 @@ def test_the_chat_page_shows_the_banner_and_the_cypher(assistant):
     assert page.status_code == 200
     assert 'id="banner"' in page.text
     assert "a.cypher" in page.text
+
+
+# --- Act 1: prompt v2 without stetiq ---------------------------------------------------
+
+
+def test_act_1_deploys_prompt_v2_without_gates(show):
+    assert show.acts[1].line == "prompt v2   tests ✅   deployed"
+
+
+def test_act_1_the_guard_is_off_and_the_assistant_follows_v2(show):
+    status = show.acts[1].status
+    assert show.acts[1].banner == "on Ontology v2"
+    assert (status["in_use"], status["guard"], status["decision"]) == (2, "off", None)
+
+
+def test_act_1_on_v2_the_suppliers_question_answers(show):
+    answer = show.acts[1].answers[SUPPLIERS]
+    assert answer.ontology_version == 2
+    assert "SKF" in answer.answer
+    assert set(answer.work_orders) == {"WO-2031", "WO-2032", "WO-2036", "WO-2037", "WO-2038"}
+
+
+def test_act_1_on_v2_line_2_had_no_breakdowns_from_mondays_cypher(show):
+    answer = show.acts[1].answers[LINE_2]
+    monday = show.without_stetiq[0].answers[LINE_2]
+    assert answer.ontology_version == 2
+    assert answer.answer.startswith("Line 2 had no breakdowns.")
+    assert answer.cypher == monday.cypher
+    assert "kind = 'breakdown'" in answer.cypher
+    assert answer.work_orders == []
+
+
+def test_the_first_pass_act_0_is_monday_on_v1(show):
+    act = show.without_stetiq[0]
+    assert act.line == "v1   Gate ✅   promoted: production -> v1   deployed"
+    assert act.banner == "on Ontology v1"
+    assert act.status["guard"] == "off"
+    assert act.answers[LINE_2].work_orders == ["WO-2031", "WO-2038"]
+
+
+def test_after_the_rewind_act_2_starts_from_v1_in_production_with_the_guard_on(show, client):
+    status = show.acts[0].status
+    assert (status["in_use"], status["guard"], status["offered"]) == (1, "on", None)
+    # The rewind left no trace of Act 1 in stetiq: one Construction Run per act since.
+    runs = {r.id for r in client.list_runs(KG)}
+    assert runs == {show.acts[n].run.id for n in (0, 2, 3)}
+    assert show.acts[1].run.id not in runs
 
 
 # --- Act 2: prompt v2 with stetiq, Act 3: the fix ---------------------------------------
@@ -492,3 +552,48 @@ def test_a_version_with_no_recorded_verdict_is_refused_not_taken(
         assert status["banner"] == (
             "on Ontology v1 · v2 offered: refused (no Consumer Gate verdict)"
         )
+
+
+def test_with_the_guard_off_the_newest_version_is_taken_without_a_verdict(
+    unjudged, assistant_module, production
+):
+    http, database_url, _ = unjudged
+    with _assistant_http(assistant_module, (http, database_url), production, None) as fresh:
+        guarded = fresh.post("/api/poll").json()
+        off = fresh.post("/api/reset", json={"guard": "off"}).json()
+        followed = fresh.post("/api/poll").json()
+        back_on = fresh.post("/api/reset", json={"guard": "on"}).json()
+        restarted = fresh.post("/api/poll").json()
+
+    assert (guarded["in_use"], guarded["decision"]) == (1, "refused")
+    assert (off["in_use"], off["guard"], off["banner"]) == (None, "off", "no Ontology Version yet")
+    assert (followed["in_use"], followed["offered"], followed["decision"]) == (2, None, None)
+    assert followed["banner"] == "on Ontology v2"
+    assert back_on["in_use"] is None
+    # Back on, it starts over as on startup: it takes the version `production` points to.
+    assert (restarted["in_use"], restarted["guard"]) == (1, "on")
+
+
+# --- --act N: the show from the beginning of an act -----------------------------------
+# Last in the module: these rewind stetiq and both graphs, which the tests above read.
+
+
+@pytest.mark.parametrize("start_act", [2, 3])
+def test_starting_at_an_act_reaches_the_state_the_acts_before_it_leave(
+    start_act, show, showcase, server, candidate, production, assistant
+):
+    # `show.py --act N` is a new process, with a client of its own.
+    client = _remote(server, "ci-bot", "edit", graph_source=Neo4jGraphSource(candidate))
+    resumed = _run_show(
+        showcase, server, client, candidate, production, assistant, start_act=start_act
+    )
+
+    for n in (0, 2, 3):
+        assert resumed.acts[n].line == show.acts[n].line
+        assert resumed.acts[n].banner == show.acts[n].banner
+    assert resumed.without_stetiq == []
+    # The Act 2 the show starts from (or replays) left production on v1 and its graph.
+    assert resumed.acts[2].status["in_use"] == 1
+    assert resumed.acts[2].production_run == resumed.acts[0].run.id
+    assert client.get_contract_version(KG).number == 3
+    assert _work_orders(production) == V1_WORK_ORDERS
