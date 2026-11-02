@@ -70,7 +70,8 @@ CNC-04 is fine. Now rewind.
 
 ## Act 2 — With stetiq (prompt v2 again)
 
-`show.py --reset` starts over at v1, guard on. The same pull request runs, and this time its
+`show.py` rewinds: stetiq's tracking database, both graphs and the assistant start over at v1,
+guard on (`show.py --act 2` starts here). The same pull request runs, and this time its
 CI asks stetiq.
 
 - Terminal (same numbers as the plant-kg recording):
@@ -121,7 +122,8 @@ follow-ups. The next Observation records Drift against `production` in `stetiq u
 - **No Wi-Fi or no `ANTHROPIC_API_KEY`:** the scripted questions answer from recorded
   responses; free-form questions are disabled and the chat page says so.
 - **A container is down:** `show.py` checks the stack before every act and says which.
-- **Lost your place:** `show.py --act 2` jumps to the start of an act.
+- **Lost your place:** `show.py --act 2` jumps to the start of an act: it rewinds and
+  replays the acts before it without a word. `show.py --reset` only rewinds.
 
 ## Decisions behind the design
 

@@ -339,6 +339,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "httpx" },
     { name = "neo4j" },
+    { name = "sqlalchemy" },
     { name = "stetiq" },
     { name = "uvicorn" },
 ]
@@ -349,6 +350,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.162.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "neo4j", specifier = ">=6.4" },
+    { name = "sqlalchemy", specifier = ">=2.1.6" },
     { name = "stetiq", editable = "../../" },
     { name = "uvicorn", specifier = ">=0.54.0" },
 ]
