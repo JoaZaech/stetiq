@@ -146,7 +146,7 @@ stetiq observations list support
 stetiq drift list support
 ```
 
-`stetiq observe` takes an Observation now, outside any Construction Run, and compares it with the Contract Alias's version and with the previous Observation. Drift thresholds come from the `drift:` section of `stetiq.yaml` (or `--config`). It exits 3 when it found Drift and 1 when the check could not run, so a cron job, Airflow task or CI step can tell the two apart.
+`stetiq observe` takes an Observation now, outside any Construction Run, and compares it with the Contract Alias's version, its counts with the previous Observation and its Violation Rates with the Baseline Observation. Drift thresholds come from the `drift:` section of `stetiq.yaml` (or `--config`). When some checks lacked their input, it prints one `Not comparable: N checks` line; the web UI lists them with the Observation. It exits 3 when it found Drift and 1 when the check could not run, so a cron job, Airflow task or CI step can tell the two apart.
 
 ### Gates
 
