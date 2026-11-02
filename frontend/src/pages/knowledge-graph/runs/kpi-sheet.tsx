@@ -20,8 +20,7 @@ export interface KpiSelection {
 
 const TAB_LABELS: Record<KpiDrillDown['tab'], string> = {
   overview: 'Overview',
-  evaluations: 'Evaluations',
-  conformance: 'Conformance',
+  evaluation: 'Evaluation',
 }
 
 /**

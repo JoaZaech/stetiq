@@ -10,8 +10,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { createDataTableColumnHelper, useDataTable } from '@/lib/data-table'
 import { formatDateTime, formatMetric } from '@/lib/format'
 import { metricColumnId, paramColumnId } from '@/lib/metric-view-params'
-import { ConformancePercent, ParamChips, RunGateLabel } from './run-labels'
-import { formatDuration, type RunGate, runDurationMs, runGate, shortRunId } from './runs'
+import { ConformancePercent, RunGateLabel, SourcesLabel } from './run-labels'
+import { formatDuration, type RunGate, runDurationMs, runGate, shortRunId, splitParamKeys } from './runs'
 
 /** One row of the run table. */
 export interface RunRow {
@@ -57,17 +57,17 @@ const baseColumns = column.columns([
     header: 'Run',
     enableSorting: false,
     cell: ({ row }) => {
-      const { id, knowledge_graph, params } = row.original.run
+      const { id, knowledge_graph } = row.original.run
       return (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <Link to={kgUrl(knowledge_graph, 'runs', id)} title={id} className={`font-mono ${linkClass}`}>
-            {shortRunId(id)}
-          </Link>
-          <ParamChips params={params} />
-        </div>
+        <Link to={kgUrl(knowledge_graph, 'runs', id)} title={id} className={`font-mono ${linkClass}`}>
+          {shortRunId(id)}
+        </Link>
       )
     },
   }),
+])
+
+const statusColumns = column.columns([
   column.accessor((r) => r.run.status, {
     id: 'status',
     header: 'Status',
@@ -114,10 +114,23 @@ const baseColumns = column.columns([
   }),
 ])
 
+/** A default param column (`DEFAULT_PARAM_COLUMNS`): `sources` as a count, the others as is. */
+const defaultParamColumn = (key: string) =>
+  column.accessor((r) => r.run.params[key], {
+    id: paramColumnId(key),
+    header: key === 'sources' ? 'Sources' : key,
+    sortUndefined: 'last',
+    cell: ({ getValue }) => {
+      const value = getValue()
+      if (value === undefined) return none
+      return key === 'sources' ? <SourcesLabel value={value} /> : <span className="font-mono text-xs">{value}</span>
+    },
+  })
+
 /**
- * The run table over `runs` (already filtered), with a selection column and one
- * optional column per param and metric key; `visible` names the optional columns shown
- * (`paramColumnId`/`metricColumnId`). The Gate column shows `runGate` over `gateResults`
+ * The run table over `runs` (already filtered), with a selection column, a column per
+ * `DEFAULT_PARAM_COLUMNS` param some run logged, and one optional column per other param
+ * and metric key; `visible` names the optional columns shown (`paramColumnId`/`metricColumnId`). The Gate column shows `runGate` over `gateResults`
  * and `gatePreviews`, a placeholder while either is undefined. Read the selection with
  * `table.getSelectedRowModel()` (row ids are run ids), e.g. to compare runs.
  */
@@ -139,11 +152,14 @@ export function useRunTable({
   gateResults: readonly GateResult[] | undefined
   gatePreviews: readonly GatePreview[] | undefined
 }) {
+  const { shown: defaultParams, optional } = useMemo(() => splitParamKeys(params), [params])
   const columns = useMemo(
     () =>
       column.columns([
         ...baseColumns,
-        ...params.map((key) =>
+        ...defaultParams.map(defaultParamColumn),
+        ...statusColumns,
+        ...optional.map((key) =>
           column.accessor((r) => r.run.params[key], {
             id: paramColumnId(key),
             header: key,
@@ -163,7 +179,7 @@ export function useRunTable({
           }),
         ),
       ]),
-    [params, metrics],
+    [defaultParams, optional, metrics],
   )
   const data = useMemo(
     () =>
@@ -179,10 +195,10 @@ export function useRunTable({
   const columnVisibility = useMemo(
     () =>
       Object.fromEntries([
-        ...params.map((k) => [paramColumnId(k), visible.has(paramColumnId(k))]),
+        ...optional.map((k) => [paramColumnId(k), visible.has(paramColumnId(k))]),
         ...metrics.map((k) => [metricColumnId(k), visible.has(metricColumnId(k))]),
       ]),
-    [params, metrics, visible],
+    [optional, metrics, visible],
   )
   return useDataTable({
     data,

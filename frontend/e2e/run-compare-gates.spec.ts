@@ -113,8 +113,8 @@ test.describe('the KPI drill-down', () => {
     await expect(reasons.getByRole('listitem')).toHaveText(['review.score = 0.6 < min 0.8', 'open-tickets: no answer'])
     const details = sheet.getByRole('list', { name: 'Detail items' })
     await expect(details.getByRole('listitem')).toHaveText([/open-tickets\s*no answer/])
-    await sheet.getByRole('link', { name: 'Open the run’s Evaluations tab' }).click()
-    await expect(page).toHaveURL(new RegExp(`/runs/${String(regressed)}/evaluations$`))
+    await sheet.getByRole('link', { name: 'Open the run’s Evaluation tab' }).click()
+    await expect(page).toHaveURL(new RegExp(`/runs/${String(regressed)}/evaluation$`))
   })
 
   test('a gated KPI the run has no value for says "no result" once, as its value', async ({ page, stetiq }) => {
@@ -129,7 +129,7 @@ test.describe('the KPI drill-down', () => {
     await expect(verdict).not.toContainText('no result')
   })
 
-  test('Conformance opens with its recorded verdict and links to the Conformance tab; an ungated KPI opens with no verdict', async ({
+  test('Conformance opens with its recorded verdict and links to the Evaluation tab; an ungated KPI opens with no verdict', async ({
     page,
     stetiq,
   }) => {
@@ -139,9 +139,9 @@ test.describe('the KPI drill-down', () => {
     const sheet = page.getByRole('dialog', { name: 'Conformance' })
     await expect(sheet.getByRole('region', { name: 'Verdict' })).toContainText(/fail\s*recorded.*recorded Gate result/)
     await expect(sheet.getByRole('list', { name: 'conformance-floor reasons' })).toContainText('Conformance 0.5455 < 0.6')
-    await expect(sheet.getByRole('link', { name: 'Open the run’s Conformance tab' })).toHaveAttribute(
+    await expect(sheet.getByRole('link', { name: 'Open the run’s Evaluation tab' })).toHaveAttribute(
       'href',
-      new RegExp(`/runs/${String(baseline)}/conformance$`),
+      new RegExp(`/runs/${String(baseline)}/evaluation$`),
     )
     await page.keyboard.press('Escape')
 

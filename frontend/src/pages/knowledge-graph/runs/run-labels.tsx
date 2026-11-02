@@ -1,12 +1,9 @@
 import type { ReactNode } from 'react'
 import { STATUS_TONES } from '@/components/status-tones'
 import { StatusLabel } from '@/components/StatusLabel'
-import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { formatPercent } from '@/lib/format'
-import { conformanceTone, paramChips, type RunGate } from './runs'
-
-const formatParam = ([key, value]: [string, string]) => `${key}: ${value}`
+import { formatCount, formatPercent } from '@/lib/format'
+import { conformanceTone, type RunGate, sourceList } from './runs'
 
 function WithTooltip({ tip, children }: { tip: ReactNode; children: ReactNode }) {
   return (
@@ -19,32 +16,23 @@ function WithTooltip({ tip, children }: { tip: ReactNode; children: ReactNode })
   )
 }
 
-/**
- * A run's first params as chips (`extractor: llm`), the rest as "+n" with them in a
- * tooltip. Spans, so it can sit in a heading.
- */
-export function ParamChips({ params }: { params: Readonly<Record<string, string>> }) {
-  const { shown, hidden } = paramChips(params)
-  if (shown.length === 0) return null
+/** A `sources` param as "5 sources", each source in a tooltip. */
+export function SourcesLabel({ value }: { value: string }) {
+  const sources = sourceList(value)
   return (
-    <span role="list" aria-label="Params" className="inline-flex flex-wrap items-center gap-1">
-      {shown.map((param) => (
-        <span role="listitem" key={param[0]}>
-          <Badge variant="outline" className="font-mono font-normal">
-            {formatParam(param)}
-          </Badge>
-        </span>
-      ))}
-      {hidden.length > 0 && (
-        <span role="listitem">
-          <WithTooltip tip={hidden.map(formatParam).join(', ')}>
-            <Badge variant="secondary" className="font-normal">
-              +{hidden.length}
-            </Badge>
-          </WithTooltip>
-        </span>
-      )}
-    </span>
+    <WithTooltip
+      tip={
+        <ul aria-label="Sources" className="font-mono text-xs">
+          {sources.map((s) => (
+            <li key={s}>{s}</li>
+          ))}
+        </ul>
+      }
+    >
+      <span tabIndex={0} className="tabular-nums underline decoration-dotted underline-offset-4">
+        {formatCount(sources.length, 'source')}
+      </span>
+    </WithTooltip>
   )
 }
 

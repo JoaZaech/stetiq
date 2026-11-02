@@ -167,7 +167,7 @@ export interface KpiDrillDown {
   /** For an Evaluator KPI, its Evaluator result's detail items about this metric. */
   details: EvaluationResult['details']
   /** The run page tab the KPI comes from. */
-  tab: 'overview' | 'evaluations' | 'conformance'
+  tab: 'overview' | 'evaluation'
 }
 
 /**
@@ -198,7 +198,7 @@ export function kpiDrillDown(
     value,
     verdict: kpiVerdict(kpi, value, gating),
     details,
-    tab: kpi.kind === 'conformance' ? 'conformance' : kpi.kind === 'evaluator' ? 'evaluations' : 'overview',
+    tab: kpi.kind === 'run-metric' ? 'overview' : 'evaluation',
   }
 }
 

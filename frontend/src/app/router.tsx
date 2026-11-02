@@ -26,8 +26,7 @@ function lazyPage<M>(load: () => Promise<M>, pick: (module: M) => ComponentType)
 const ConstructionRunPage = lazyPage(() => import('@/pages/knowledge-graph/runs/ConstructionRunPage'), (m) => m.ConstructionRunPage)
 const ConstructionRunsPage = lazyPage(() => import('@/pages/knowledge-graph/runs/ConstructionRunsPage'), (m) => m.ConstructionRunsPage)
 const RunComparePage = lazyPage(() => import('@/pages/knowledge-graph/runs/RunComparePage'), (m) => m.RunComparePage)
-const RunConformanceTab = lazyPage(() => import('@/pages/knowledge-graph/runs/RunConformanceTab'), (m) => m.RunConformanceTab)
-const RunEvaluationsTab = lazyPage(() => import('@/pages/knowledge-graph/runs/RunEvaluationsTab'), (m) => m.RunEvaluationsTab)
+const RunEvaluationTab = lazyPage(() => import('@/pages/knowledge-graph/runs/RunEvaluationTab'), (m) => m.RunEvaluationTab)
 const RunOverviewTab = lazyPage(() => import('@/pages/knowledge-graph/runs/RunOverviewTab'), (m) => m.RunOverviewTab)
 const HomePage = lazyPage(() => import('@/pages/home/HomePage'), (m) => m.HomePage)
 const KnowledgeGraphsPage = lazyPage(() => import('@/pages/knowledge-graphs/KnowledgeGraphsPage'), (m) => m.KnowledgeGraphsPage)
@@ -87,8 +86,10 @@ const knowledgeGraphSectionRoutes: Record<
         // The run page's tabs (see TABS in ConstructionRunPage).
         children: [
           { index: true, element: <RunOverviewTab /> },
-          { path: 'conformance', element: <RunConformanceTab /> },
-          { path: 'evaluations', element: <RunEvaluationsTab /> },
+          { path: 'evaluation', element: <RunEvaluationTab /> },
+          // The Conformance and Evaluations tabs merged into Evaluation; old links still work.
+          { path: 'conformance', element: <Navigate to="../evaluation" relative="path" replace /> },
+          { path: 'evaluations', element: <Navigate to="../evaluation" relative="path" replace /> },
         ],
       },
     ],

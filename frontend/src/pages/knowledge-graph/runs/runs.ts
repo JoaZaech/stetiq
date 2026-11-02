@@ -1,7 +1,10 @@
 import { type GatePreview, runGatePreview } from '@/api/gate-previews'
 import { type GateResult, latestGateResult } from '@/api/gate-results'
+import type { DriftEvent } from '@/api/observations'
+import type { EvaluationResult } from '@/api/ontology-versions'
 import type { ConstructionRun } from '@/api/runs'
 import type { StatusTone } from '@/components/StatusLabel'
+import type { EvaluationInputs } from '../evaluation/evaluation-kpis'
 
 /** A run id as the run table shows it; the full id is on the run page (and copyable). */
 export const shortRunId = (id: string) => id.slice(0, 8)
@@ -86,16 +89,107 @@ export function runOutcome(run: ConstructionRun): RunOutcome {
   return run.observation_id === null ? 'failed' : 'strict'
 }
 
-/** How many params a run shows as chips beside its id; the rest count as "+n". */
-export const SHOWN_PARAMS = 3
+/**
+ * Params the run table shows as columns from the start, in this order, when any run
+ * logged them; the rest are added with Columns. `sources` reads as a count.
+ */
+export const DEFAULT_PARAM_COLUMNS = ['extractor', 'model', 'sources'] as const
 
-/** A run's params by key, split into the first `max`, shown as chips, and the hidden rest. */
-export function paramChips(
-  params: Readonly<Record<string, string>>,
-  max = SHOWN_PARAMS,
-): { shown: [string, string][]; hidden: [string, string][] } {
-  const sorted = Object.entries(params).sort(([a], [b]) => a.localeCompare(b))
-  return { shown: sorted.slice(0, max), hidden: sorted.slice(max) }
+/** The `DEFAULT_PARAM_COLUMNS` some run logged, and every other param key, for Columns. */
+export function splitParamKeys(keys: readonly string[]): { shown: string[]; optional: string[] } {
+  const defaults: readonly string[] = DEFAULT_PARAM_COLUMNS
+  return {
+    shown: DEFAULT_PARAM_COLUMNS.filter((k) => keys.includes(k)),
+    optional: keys.filter((k) => !defaults.includes(k)),
+  }
+}
+
+/** A `sources` param's entries: `machines.csv, reports/` → `['machines.csv', 'reports/']`. */
+export function sourceList(value: string): string[] {
+  return value
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+/** What the run list's search matches: the run id, its param values and its versions. */
+export function runSearchFields(run: ConstructionRun): (string | null)[] {
+  return [
+    run.id,
+    ...Object.values(run.params),
+    `v${run.ontology_version}`,
+    run.candidate_version === null ? null : `v${run.candidate_version}`,
+  ]
+}
+
+/**
+ * A failed run's banner, one line: what failed and, for a strict run with a Conformance,
+ * the finding its Evaluation tab opens filtered to. `null` for a run that did not fail.
+ */
+export function runFailure(run: ConstructionRun): { text: string; finding: string | null } | null {
+  const outcome = runOutcome(run)
+  if (outcome === 'failed') return { text: 'Failed before the Graph Source was observed.', finding: null }
+  if (outcome !== 'strict') return null
+  const undeclared = run.conformance?.mismatches.filter((m) => m.kind === 'undeclared' && m.subject_kind !== 'pattern')
+  if (!undeclared?.length) return { text: 'Failed: Concepts observed but not declared (strict mode).', finding: null }
+  const n = undeclared.length
+  return {
+    text: `Failed: ${n} ${n === 1 ? 'Concept' : 'Concepts'} observed but not declared (strict mode).`,
+    finding: 'Observed but not declared',
+  }
+}
+
+/** `evaluation.run.CQ_EXECUTION_EVALUATOR`: executes the Use Case's Competency Questions. */
+export const CQ_EXECUTION_EVALUATOR = 'competency_question_execution'
+
+/**
+ * One executed Competency Question, from a Detail of the execution Evaluator. Only
+ * these fields are read: the verdict, which check judged it and an exception type.
+ * Rows are never stored (ADR 0001), and the UI shows nothing else from the Detail.
+ */
+export interface ExecutedQuestion {
+  id: string
+  status: 'passed' | 'failed' | 'error'
+  check: 'non_empty' | 'expected_answer'
+  error: string | null
+}
+
+export function executedQuestions(result: EvaluationResult): ExecutedQuestion[] {
+  return result.details.map((detail) => {
+    const data = detail.data ?? {}
+    return {
+      id: detail.item,
+      status: data.status as ExecutedQuestion['status'],
+      check: data.check as ExecutedQuestion['check'],
+      error: typeof data.error === 'string' ? data.error : null,
+    }
+  })
+}
+
+/**
+ * A run's four evaluation KPIs: its Conformance score; the Competency Questions it
+ * executed that passed, of all it executed; its latest recorded Gate result's Gates
+ * passed, of all; and the Drift findings of the Observation it ended with (0 when that
+ * Observation found no Drift, none when the run ended without one or while loading).
+ */
+export function runEvaluationInputs(
+  run: ConstructionRun,
+  evaluations: readonly EvaluationResult[] | undefined,
+  gateResults: readonly GateResult[] | undefined,
+  driftEvents: readonly DriftEvent[] | undefined,
+): EvaluationInputs {
+  const execution = evaluations?.find((r) => r.evaluator === CQ_EXECUTION_EVALUATOR)
+  const questions = execution ? executedQuestions(execution) : []
+  const gate = gateResults && latestGateResult(gateResults, 'construction_run', run.id)
+  const drift = driftEvents?.find((e) => e.observation_id === run.observation_id)
+  return {
+    conformance: run.conformance?.score ?? null,
+    coverage: questions.length
+      ? { count: questions.filter((q) => q.status === 'passed').length, total: questions.length }
+      : null,
+    gates: gate ? { count: gate.outcomes.filter((o) => o.passed).length, total: gate.outcomes.length } : null,
+    drift: run.observation_id === null || driftEvents === undefined ? null : (drift?.findings.length ?? 0),
+  }
 }
 
 /**

@@ -479,11 +479,11 @@ describe('kpiDrillDown', () => {
       value: 0.6,
       verdict: { verdict: 'fail', origin: 'preview', outcomes: [outcome(reviewGate, false, reasons)] },
       details: [{ item: 'CQ-open-tickets', message: 'no answer', metric: 'score' }],
-      tab: 'evaluations',
+      tab: 'evaluation',
     })
   })
 
-  it("shows Conformance with its recorded verdict, linking to the run's Conformance tab", () => {
+  it("shows Conformance with its recorded verdict, linking to the run's Evaluation tab", () => {
     const gating = { recorded: recorded([outcome(conformanceGate, false, ['Conformance 0.5455 < 0.6'])]) }
     expect(kpiDrillDown({ kind: 'conformance' }, reviewed, [review], gating)).toEqual({
       name: 'Conformance',
@@ -494,7 +494,7 @@ describe('kpiDrillDown', () => {
         outcomes: [outcome(conformanceGate, false, ['Conformance 0.5455 < 0.6'])],
       },
       details: [],
-      tab: 'conformance',
+      tab: 'evaluation',
     })
   })
 
