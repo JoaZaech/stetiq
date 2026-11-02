@@ -273,7 +273,7 @@ test.describe('with Consumer Gates declared in use-case.yaml', () => {
     await expect(gate.getByRole('list', { name: 'Declared Consumer Gates' })).toContainText('triage-rows-hold')
     await expect(gate.getByRole('group', { name: 'Latest verdict' })).toContainText('Failed')
     await page.keyboard.press('Escape')
-    await expect(page.getByRole('status')).toHaveText('Saved as Use Case Version 2.')
+    await expect(page.getByRole('status')).toHaveText('Saved as Use Case Version 3.')
     await expect(tile(page, 'Breakdown dashboard')).toContainText('Consumer Gate failed')
   })
 })

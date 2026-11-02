@@ -36,7 +36,9 @@ PLANNED_CHECKS = ("consumer_impact", "conformance", "observed_count", "fill_rate
 class RowCountDropGate:
     """For each Competency Question of `task`, the executed row count may not drop by
     more than `max_drop` (a fraction, 0.1 = 10%) from the baseline run's. A question
-    without a row count on either side fails; a baseline of 0 rows cannot drop."""
+    without a row count on either side fails; a baseline of 0 rows cannot drop. A
+    question that was not in the Use Case Version the baseline run was judged by is new:
+    it has no baseline, so it is reported and not compared."""
 
     task: str
     max_drop: float
@@ -147,18 +149,24 @@ class ConsumerGateOutcome:
     passed: bool
     reasons: tuple[str, ...] = ()
     findings: tuple[RowCountFinding, ...] = ()
+    # Questions of the Task the baseline run's Use Case Version did not have: not compared.
+    new_questions: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class ConsumerGateInputs:
     """The row counts of the Candidate run and the baseline run (None: no baseline run),
     by Competency Question id. `baseline_version` is the Contract Alias's version, None
-    when it points to none."""
+    when it points to none. `baseline_use_case_version` is the Use Case Version the
+    baseline run's questions were executed under, and `baseline_questions` its question
+    ids (empty when the baseline run executed none: it had no Use Case)."""
 
     task_questions: Mapping[str, Sequence[str]]  # Task id -> its Competency Question ids
     candidate: Mapping[str, QuestionRows]
     baseline: Mapping[str, QuestionRows] | None
     baseline_version: int | None
+    baseline_use_case_version: int | None = None
+    baseline_questions: frozenset[str] = frozenset()
 
 
 def evaluate_consumer_gate(
@@ -196,7 +204,17 @@ def evaluate_consumer_gate(
         )
     findings_list: list[RowCountFinding] = []
     reasons: list[str] = []
+    new = tuple(q for q in questions if q not in inputs.baseline_questions)
     for q in questions:
+        if q in new:
+            judged_by = (
+                "the baseline run executed no Competency Question"
+                if inputs.baseline_use_case_version is None
+                else f"not in the baseline run's Use Case Version "
+                f"{inputs.baseline_use_case_version}"
+            )
+            reasons.append(f"{gate.task} / {q}: new, no baseline ({judged_by})")
+            continue
         before, after = inputs.baseline.get(q), inputs.candidate.get(q)
         missing = _missing(before, after)
         if missing is not None:
@@ -231,7 +249,7 @@ def evaluate_consumer_gate(
                 f"{gate.task} / {q}: {before.rows} → {after.rows} rows "
                 f"({_MINUS}{-change * 100:.1f}%, limit {_MINUS}{limit * 100:g}%)"
             )
-    return ConsumerGateOutcome(gate, not findings_list, tuple(reasons), tuple(findings_list))
+    return ConsumerGateOutcome(gate, not findings_list, tuple(reasons), tuple(findings_list), new)
 
 
 _MINUS = "\u2212"  # MINUS SIGN, as a drop reads in the CLI and the web UI
@@ -263,8 +281,12 @@ def _missing(before: QuestionRows | None, after: QuestionRows | None) -> Missing
 
 
 def outcome_to_dict(o: ConsumerGateOutcome) -> dict[str, Any]:
-    """A Gate outcome's form (`gates.outcome_to_dict`) plus `findings`."""
-    return {**gates.outcome_to_dict(o), "findings": [_finding_to_dict(f) for f in o.findings]}
+    """A Gate outcome's form (`gates.outcome_to_dict`) plus `findings` and `new_questions`."""
+    return {
+        **gates.outcome_to_dict(o),
+        "findings": [_finding_to_dict(f) for f in o.findings],
+        "new_questions": list(o.new_questions),
+    }
 
 
 def outcome_from_dict(d: Mapping[str, Any]) -> ConsumerGateOutcome:
@@ -274,6 +296,7 @@ def outcome_from_dict(d: Mapping[str, Any]) -> ConsumerGateOutcome:
         passed=passed,
         reasons=reasons,
         findings=tuple(_finding_from_dict(f) for f in d.get("findings", ())),
+        new_questions=tuple(d.get("new_questions", ())),
     )
 
 

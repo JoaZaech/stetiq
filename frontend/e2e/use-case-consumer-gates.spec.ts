@@ -53,6 +53,9 @@ test('a passing verdict, a gate never evaluated and a Consumer without gates rea
   const passed = (await gateSection(page, 'Maintenance assistant')).getByRole('group', { name: 'Latest verdict' })
   await expect(passed).toContainText('Passed')
   await expect(passed.getByRole('list', { name: 'Failing Competency Questions' })).toHaveCount(0)
+  await expect(passed.getByRole('list', { name: 'New Competency Questions' }).getByRole('listitem')).toHaveText([
+    'machine-models: new since the baseline run, not compared',
+  ])
   await page.keyboard.press('Escape')
 
   const safety = await gateSection(page, 'Safety team')

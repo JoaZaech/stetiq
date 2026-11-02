@@ -1175,6 +1175,9 @@ class LocalTrackingService:
                     None,
                 )
             )
+            baseline_use_case = (
+                None if baseline is None else self._executed_use_case(knowledge_graph, baseline)
+            )
             inputs = ConsumerGateInputs(
                 task_questions={t.id: t.competency_questions for c in gated for t in c.tasks},
                 candidate=self._question_rows(knowledge_graph, subject),
@@ -1182,6 +1185,12 @@ class LocalTrackingService:
                 if baseline is None
                 else self._question_rows(knowledge_graph, baseline),
                 baseline_version=contract,
+                baseline_use_case_version=None
+                if baseline_use_case is None
+                else baseline_use_case.number,
+                baseline_questions=frozenset()
+                if baseline_use_case is None
+                else frozenset(q.id for q in baseline_use_case.use_case.competency_questions),
             )
             evaluated_at = _now()
             results = []
@@ -1245,6 +1254,20 @@ class LocalTrackingService:
             for r in self._store.list_runs(knowledge_graph)
             if r.status == "finished" and _stands_for(r) == version
         ]
+
+    def _executed_use_case(
+        self, knowledge_graph: str, run: ConstructionRun
+    ) -> UseCaseVersion | None:
+        """The Use Case Version the run's Competency Questions were executed under; None
+        when it executed none."""
+        results = self.get_evaluation_results(knowledge_graph, "construction_run", run.id)
+        execution = next(
+            (r for r in results if r.evaluator == CQ_EXECUTION_EVALUATOR and not r.parameters),
+            None,
+        )
+        if execution is None or execution.use_case_version is None:
+            return None
+        return self.get_use_case_version(knowledge_graph, execution.use_case_version)
 
     def _question_rows(self, knowledge_graph: str, run: ConstructionRun) -> dict[str, QuestionRows]:
         """The row count `competency_question_execution` recorded per question on the run."""

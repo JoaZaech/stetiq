@@ -180,7 +180,7 @@ safety-team: no Consumer Gate declared (skipped)
 1 of 2 Consumer Gates failed for plant run 81a4c0e2f3b5d6e7f8a9b0c1d2e3f4a5 (Ontology Version 4; baseline run 5d0c1f2e9a7b4c3d8e6f1a2b3c4d5e6f on Ontology Version 3)
 ```
 
-It exits **0** when every Consumer Gate passed, **3** when one failed, including for a missing baseline or a question it could not measure, and **1** on an error: no Consumer declares a Consumer Gate, no finished run, an unknown Knowledge Graph, run or Consumer, or `--run` with `--version`. `consumer gate-results` lists the recorded verdicts, oldest first.
+A question declared since the baseline run (not in the Use Case Version it was judged by) is listed under its `PASS` as `new, no baseline` and is not compared. It exits **0** when every Consumer Gate passed, including when the only questions it could not compare are new ones, **3** when one failed, including for a missing baseline or a question it could not measure, and **1** on an error: no Consumer declares a Consumer Gate, no finished run, an unknown Knowledge Graph, run or Consumer, or `--run` with `--version`. `consumer gate-results` lists the recorded verdicts, oldest first.
 
 ### The run context
 

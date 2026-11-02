@@ -411,6 +411,68 @@ def test_a_question_without_a_query_has_no_row_count_and_fails(client, plant, gr
     ]
 
 
+def with_question_in_the_assistants_task(question):
+    """USE_CASE with `question` (a new, executed question) added to the assistant's Task."""
+    data = yaml.safe_load(USE_CASE)
+    data["competency_questions"].append(
+        {"id": question, "question": "Which suppliers fail?", "query": DOWNTIME}
+    )
+    [assistant] = [c for c in data["consumers"] if c["id"] == "maintenance-assistant"]
+    assistant["tasks"][0]["competency_questions"].append(question)
+    return data
+
+
+def test_a_question_new_since_the_baselines_use_case_version_is_not_compared(
+    client, plant, graph_source
+):
+    baseline = run_with(client, graph_source)  # judged by Use Case Version 1
+    client.register_use_case(KG, with_question_in_the_assistants_task("suppliers"))
+    run_with(client, graph_source)
+
+    result, outcome = outcome_of(
+        client.evaluate_consumer_gates(plant, consumer="maintenance-assistant"),
+        "maintenance-assistant",
+    )
+
+    assert result.passed and outcome.passed
+    assert result.baseline_run_id == baseline.id
+    assert outcome.findings == ()
+    assert outcome.new_questions == ("suppliers",)
+    assert outcome.reasons == (
+        "list-machines / suppliers: new, no baseline (not in the baseline run's Use Case "
+        "Version 1)",
+    )
+    assert client.list_consumer_gate_results(plant)[-1].outcomes[0].new_questions == ("suppliers",)
+
+
+def test_a_new_question_does_not_hide_a_drop_beside_it(client, plant, graph_source):
+    run_with(client, graph_source, machines=4)
+    client.register_use_case(KG, with_question_in_the_assistants_task("suppliers"))
+    run_with(client, graph_source, machines=1)
+
+    _, outcome = outcome_of(
+        client.evaluate_consumer_gates(plant, consumer="maintenance-assistant"),
+        "maintenance-assistant",
+    )
+
+    assert not outcome.passed
+    assert [f.competency_question for f in outcome.findings] == ["machines"]
+    assert outcome.new_questions == ("suppliers",)
+
+
+def test_a_new_question_without_a_baseline_run_still_fails(client, plant, graph_source):
+    client.register_use_case(KG, with_question_in_the_assistants_task("suppliers"))
+    run_with(client, graph_source)
+
+    result, outcome = outcome_of(
+        client.evaluate_consumer_gates(plant, consumer="maintenance-assistant"),
+        "maintenance-assistant",
+    )
+
+    assert not result.passed
+    assert {f.missing for f in outcome.findings} == {"no_baseline_run"}
+
+
 def test_a_baseline_of_zero_rows_cannot_drop(client, plant, graph_source):
     run_with(client, graph_source, technicians=0)
     run_with(client, graph_source, technicians=0)
@@ -605,6 +667,20 @@ def test_the_cli_fails_a_missing_baseline_with_exit_3(cli_plant):
 
     assert result.exit_code == 3, result.output
     assert "No baseline" in result.output
+
+
+def test_the_cli_exits_0_when_only_new_questions_are_not_compared(cli_plant):
+    sdk, graph = cli_plant
+    run_with(sdk, graph)
+    sdk.register_use_case(KG, with_question_in_the_assistants_task("suppliers"))
+    run_with(sdk, graph)
+
+    result = consumer_gate("--consumer", "maintenance-assistant")
+
+    assert result.exit_code == 0, result.output
+    lines = result.output.splitlines()
+    assert "  PASS  row_count_drop" in lines
+    assert any("list-machines / suppliers: new, no baseline" in line for line in lines)
 
 
 @pytest.mark.parametrize(

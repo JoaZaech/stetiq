@@ -808,12 +808,17 @@ GATE_FAILED_EXIT_CODE = 3
 
 
 def _echo_outcomes(
-    outcomes: Iterable[Verdict], *, indent: str = "", with_reasons: bool = True
+    outcomes: Iterable[Verdict],
+    *,
+    indent: str = "",
+    with_reasons: bool = True,
+    pass_reasons: bool = False,
 ) -> None:
-    """`PASS`/`FAIL  <name>` per Gate or Consumer Gate outcome, then a failure's reasons."""
+    """`PASS`/`FAIL  <name>` per Gate or Consumer Gate outcome, then a failure's reasons
+    (and, with `pass_reasons`, a pass's)."""
     for outcome in outcomes:
         typer.echo(f"{indent}{'PASS' if outcome.passed else 'FAIL'}  {outcome.gate.name}")
-        if with_reasons and not outcome.passed:
+        if with_reasons and (pass_reasons or not outcome.passed):
             for reason in outcome.reasons:
                 typer.echo(f"{indent}      - {reason}")
 
@@ -926,7 +931,8 @@ def consumer_gate(
     for c in use_case.consumers:
         if c.id in by_consumer:
             typer.echo(c.id)
-            _echo_outcomes(by_consumer[c.id].outcomes, indent="  ")
+            # A pass's reasons name the new questions it did not compare.
+            _echo_outcomes(by_consumer[c.id].outcomes, indent="  ", pass_reasons=True)
         elif consumer is None:
             typer.echo(f"{c.id}: no Consumer Gate declared (skipped)")
     first = results[0]
@@ -970,7 +976,7 @@ def consumer_gate_results(
             f"run {r.run_id} (Ontology Version {r.ontology_version}), baseline {baseline} "
             f"(Ontology Version {r.baseline_ontology_version})"
         )
-        _echo_outcomes(r.outcomes, indent="  ")
+        _echo_outcomes(r.outcomes, indent="  ", pass_reasons=True)
 
 
 # --- The run context ---------------------------------------------------------------------
