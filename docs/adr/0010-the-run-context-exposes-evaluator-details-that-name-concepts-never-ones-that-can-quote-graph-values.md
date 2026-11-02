@@ -16,3 +16,4 @@ The Run Context is handed to LLM agents (the upstream pipeline's own extraction 
 
 - The line is drawn by what an Evaluator reads, not by name: a new built-in that judges an Ontology Version from the Ontology and Use Case alone is exposed, and one that reads the Graph Source is not.
 - Conformance mismatches stay out even though they would help an agent. The agent learns about them from the Conformance metric and from the Gate verdict, and a person reads the details in the web UI.
+- A strict-failed attempt's Ontology Diff (the Run Context's `last_attempt`) leaves out the Vocabulary Values its never-registered Candidate would have added, for the same reason: they are values observed in the graph that never became Ontology. Only their count is shown. An evolving run's added values are kept, because its registered Candidate made them Ontology.

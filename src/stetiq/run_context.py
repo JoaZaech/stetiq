@@ -18,7 +18,8 @@ from typing import Any
 from stetiq import use_case as use_case_format
 from stetiq.evaluation.run import QuestionExecution
 from stetiq.gates import ConformanceGate, MetricGate
-from stetiq.tracking import codec
+from stetiq.ontology.diff import OntologyDiff
+from stetiq.tracking import codec, wire
 from stetiq.tracking.entities import (
     ConstructionRun,
     ConsumerGateResult,
@@ -91,6 +92,47 @@ def _gate_result_to_dict(result: GateResult) -> dict[str, Any]:
 
 
 @dataclass(frozen=True)
+class LastAttempt:
+    """The latest ended Construction Run that consumed the Run Context's version
+    (`TrackingService.latest_ended_run`), whether or not its Candidate was promoted.
+
+    - `run`: the run, `finished` or `failed` by strict Evolution Mode.
+    - `added`: the Ontology Diff from the version it consumed to its Candidate, or to the
+      Candidate it would have produced (strict); empty when it added nothing. A
+      strict-failed run's would-be Vocabulary Values are left out, since they are values
+      observed in the graph that never became Ontology (ADR 0010);
+      `withheld_vocabulary_values` counts them.
+    - `evaluation_results`: its run-level results (metrics only), `question_executions`
+      each executed Competency Question's status and row count, and `verdicts` the
+      recorded Gate and Consumer Gate verdicts about it."""
+
+    run: ConstructionRun
+    added: OntologyDiff
+    withheld_vocabulary_values: int = 0
+    evaluation_results: tuple[EvaluationResult, ...] = ()
+    question_executions: Mapping[str, QuestionExecution] = field(default_factory=dict)
+    verdicts: RecordedVerdicts = field(default_factory=RecordedVerdicts)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.run.id,
+            "status": self.run.status,
+            "ontology_version": self.run.ontology_version,
+            "candidate_version": self.run.candidate_version,
+            "added": wire.ontology_diff_to_json(self.added),
+            "withheld_vocabulary_values": self.withheld_vocabulary_values,
+            "evaluation_results": [
+                codec.evaluation_result_to_json(r) for r in self.evaluation_results
+            ],
+            "competency_questions": [
+                {"id": question, "status": e.status, "rows": e.rows}
+                for question, e in self.question_executions.items()
+            ],
+            **self.verdicts.to_dict(),
+        }
+
+
+@dataclass(frozen=True)
 class RunContext:
     """- `ontology_version`: the version to extract against, as a suggestion.
     - `use_case_version`: the latest Use Case Version (None without a Use Case).
@@ -101,7 +143,9 @@ class RunContext:
       `question_executions` each executed Competency Question's status and row count on
       it.
     - `verdicts`: the recorded Gate and Consumer Gate verdicts about `run` (the Gate
-      result falls back to the Ontology Version's)."""
+      result falls back to the Ontology Version's).
+    - `last_attempt`: the latest ended run that consumed the version, with what it added
+      and how it was judged (None when no run has ended against it)."""
 
     knowledge_graph: str
     ontology_version: OntologyVersion
@@ -111,6 +155,7 @@ class RunContext:
     run_evaluation_results: tuple[EvaluationResult, ...] = ()
     question_executions: Mapping[str, QuestionExecution] = field(default_factory=dict)
     verdicts: RecordedVerdicts = field(default_factory=RecordedVerdicts)
+    last_attempt: LastAttempt | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """A stable, JSON-ready shape (see the guide's "The run context")."""
@@ -139,6 +184,7 @@ class RunContext:
                 ],
             },
             **self.verdicts.to_dict(),
+            "last_attempt": None if self.last_attempt is None else self.last_attempt.to_dict(),
         }
 
     def _questions(self) -> list[dict[str, Any]]:

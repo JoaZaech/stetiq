@@ -34,6 +34,7 @@ from stetiq.tracking.entities import (
     ConstructionRun,
     ConsumerGateResult,
     DriftEvent,
+    EndedRun,
     EvaluationResult,
     GatePreview,
     GatePreviewSource,
@@ -256,6 +257,20 @@ def run_from_json(d: dict[str, Any]) -> ConstructionRun:
         else conformance_from_json(d["conformance"]),
         candidate_version=d.get("candidate_version"),
         ignored_definitions=tuple(d.get("ignored_definitions", ())),
+    )
+
+
+def ended_run_to_json(e: EndedRun) -> dict[str, Any]:
+    return {
+        "run": run_to_json(e.run),
+        "candidate": None if e.candidate is None else ontology_to_json(e.candidate),
+    }
+
+
+def ended_run_from_json(d: dict[str, Any]) -> EndedRun:
+    return EndedRun(
+        run=run_from_json(d["run"]),
+        candidate=None if d.get("candidate") is None else from_dict(d["candidate"]),
     )
 
 
@@ -544,6 +559,7 @@ _CODECS: dict[type, tuple[Callable[[Any], dict[str, Any]], Callable[[dict[str, A
     KnowledgeGraphSummary: (knowledge_graph_summary_to_json, knowledge_graph_summary_from_json),
     OntologyVersion: (ontology_version_to_json, ontology_version_from_json),
     ConstructionRun: (run_to_json, run_from_json),
+    EndedRun: (ended_run_to_json, ended_run_from_json),
     Observation: (observation_to_json, observation_from_json),
     Alias: (alias_to_json, alias_from_json),
     Promotion: (promotion_to_json, promotion_from_json),

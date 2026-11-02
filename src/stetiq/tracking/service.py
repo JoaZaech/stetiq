@@ -73,6 +73,7 @@ from stetiq.tracking.entities import (
     ConstructionRun,
     ConsumerGateResult,
     DriftEvent,
+    EndedRun,
     EvaluationResult,
     EvolutionMode,
     GatePreview,
@@ -219,6 +220,12 @@ class TrackingService(Protocol):
     def latest_finished_run(self, knowledge_graph: str, version: int) -> ConstructionRun | None:
         """The latest finished run standing for Ontology Version `version` (its Candidate,
         else the version it consumed); None when no finished run does."""
+        ...
+
+    def latest_ended_run(self, knowledge_graph: str, version: int) -> EndedRun | None:
+        """The latest ended run that consumed Ontology Version `version`, with what it
+        added: `finished`, or `failed` with an ending Observation (strict Evolution Mode).
+        A run failed without one crashed and is skipped. None when no run ended."""
         ...
 
     def log_params(self, run_id: str, params: dict[str, str]) -> None: ...
@@ -771,6 +778,30 @@ class LocalTrackingService:
             self.get_ontology_version(knowledge_graph, version)
             runs = self._finished_runs_standing_for(knowledge_graph, version)
             return runs[-1] if runs else None
+
+    def latest_ended_run(self, knowledge_graph: str, version: int) -> EndedRun | None:
+        with self._store.transaction():
+            consumed = self.get_ontology_version(knowledge_graph, version)
+            ended = [
+                r
+                for r in self._store.list_runs(knowledge_graph)
+                if r.ontology_version == version
+                and (r.status == "finished" or (r.status == "failed" and r.observation_id))
+            ]
+            if not ended:
+                return None
+            run = ended[-1]
+            if run.candidate_version is not None:
+                candidate = self.get_ontology_version(
+                    knowledge_graph, run.candidate_version
+                ).ontology
+            elif run.status == "failed" and run.observation_id is not None:
+                # Strict Evolution Mode failed it: what `end_run` would have registered.
+                observed = self.get_observation(run.observation_id).schema
+                candidate = candidate_ontology(consumed.ontology, observed)
+            else:
+                candidate = None
+            return EndedRun(run=run, candidate=candidate)
 
     def _running(self, run_id: str) -> ConstructionRun:
         run = self.get_run(run_id)
