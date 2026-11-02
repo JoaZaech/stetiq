@@ -40,7 +40,7 @@ Local mode needs no token. How to issue one is described in [Server & API Tokens
 | `0` | Success. |
 | `1` | An error, printed as `error: …` (unknown Knowledge Graph, missing permission, bad config file…). `stetiq run` also exits 1 when the Construction Run failed. |
 | `2` | A usage error: an unknown command or option, or a missing argument. |
-| `3` | A finding: `stetiq observe` found Drift, `stetiq gate` had a Gate fail, or `stetiq consumer gate` had a Consumer Gate fail. |
+| `3` | A finding: `stetiq observe` found new Drift (any Drift with `--fail-on-persisting`), `stetiq gate` had a Gate fail, or `stetiq consumer gate` had a Consumer Gate fail. |
 
 ## Commands
 
@@ -146,7 +146,17 @@ stetiq observations list support
 stetiq drift list support
 ```
 
-`stetiq observe` takes an Observation now, outside any Construction Run, and compares it with the Contract Alias's version, its counts with the previous Observation and its Violation Rates with the Baseline Observation. Drift thresholds come from the `drift:` section of `stetiq.yaml` (or `--config`). When some checks lacked their input, it prints one `Not comparable: N checks` line; the web UI lists them with the Observation. It exits 3 when it found Drift and 1 when the check could not run, so a cron job, Airflow task or CI step can tell the two apart.
+`stetiq observe` takes an Observation now, outside any Construction Run, and compares it with the Contract Alias's version, its counts with the previous Observation and its Violation Rates with the Baseline Observation. Drift thresholds come from the `drift:` section of `stetiq.yaml` (or `--config`). When some checks lacked their input, it prints one `Not comparable: N checks` line; the web UI lists them with the Observation.
+
+Each finding is printed as `new` or `persisting`. A finding is persisting when the previous Observation had it too; a risen Violation Rate stays persisting until it rises again. Counts are compared with the previous Observation, so a count finding is always new. The summary line says how many are new, e.g. `Drift: 3 finding(s), 1 new, against production (Ontology Version 4)`.
+
+`stetiq observe` exits **3** only when at least one finding is new, so a scheduled job alerts once per change, not on every run while the graph stays as it is. It exits **0** when there was no Drift or every finding was persisting, and **1** when the check could not run, so a cron job, Airflow task or CI step can tell them apart. The Drift event is stored either way. To exit 3 on any finding, as before, pass `--fail-on-persisting`:
+
+```bash
+stetiq observe support --fail-on-persisting
+```
+
+`stetiq drift list` shows, per Drift event, its structural (`STRUCT`) and statistical (`STATS`) findings and how many of them were `NEW`.
 
 ### Gates
 

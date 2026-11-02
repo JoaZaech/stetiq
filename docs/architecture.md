@@ -95,7 +95,7 @@ A new section gets its own parser module. Don't grow `config.py`.
 Exit codes are a contract with CI and schedulers:
 - `stetiq gate`: **0** means all Gates passed, **3** means a Gate failed (`GATE_FAILED_EXIT_CODE`), **1** means an error (missing or bad config, no Gates, unknown Knowledge Graph or version).
 - `stetiq consumer gate`: **0** means every Consumer Gate passed, **3** means one failed, including for a missing baseline or input (`CONSUMER_GATE_FAILED_EXIT_CODE`), **1** means an error (no Consumer declares a Consumer Gate, no finished run, unknown Knowledge Graph, run or Consumer, `--run` with `--version`). It reads `stetiq.yaml` only for `knowledge_graph`.
-- `stetiq observe`: **0** means no Drift, **3** means Drift (`DRIFT_EXIT_CODE`), **1** means an error. A missing *default* `./stetiq.yaml` counts as an empty config. A missing `--config` file is an error.
+- `stetiq observe`: **0** means no Drift or only persisting findings, **3** means new Drift (`DRIFT_EXIT_CODE`; any Drift with `--fail-on-persisting`), **1** means an error. A missing *default* `./stetiq.yaml` counts as an empty config. A missing `--config` file is an error.
 - `stetiq run`: **1** whenever the run's status is not `finished`, which includes a strict Evolution Mode failure. The SDK never raises in that case, so callers must check `status`.
 - Every other command exits 1 on a `StetiqError`. Typer usage errors exit 2.
 
