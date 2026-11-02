@@ -46,7 +46,7 @@ const SHEET_KINDS = ['observation'] as const
 // Recharts is large: load the chart only on this page.
 const MetricChart = lazy(() => import('@/components/MetricChartGrid').then((m) => ({ default: m.MetricChart })))
 
-const GUIDE = `${helpUrl('using-the-web-ui')}#observations`
+const ALIGNMENT_TREND_GUIDE = `${helpUrl('using-the-web-ui')}#observations`
 
 const TREND_X_AXIS = {
   label: 'Observed',
@@ -145,9 +145,9 @@ function ObservationList() {
 function AlignmentTrend({ series, onOpen }: { series: MetricSeries; onOpen: (observationId: string) => void }) {
   return (
     <section aria-labelledby="alignment-trend" className="space-y-2">
-      <h3 id="alignment-trend" className="flex items-center gap-1.5 text-sm font-medium">
+      <h3 id="alignment-trend" className="flex items-center gap-1.5 text-sm font-semibold">
         Alignment trend
-        <InfoTip label="the alignment trend" to={GUIDE}>
+        <InfoTip label="the alignment trend" to={ALIGNMENT_TREND_GUIDE}>
           The Conformance score of each Construction Run and on-demand Observation, over time. It has no threshold
           and raises no Drift.
         </InfoTip>
@@ -286,16 +286,16 @@ function NotComparableList({ observation }: { observation: Observation }) {
   if (rows.length === 0) return null
   return (
     <section aria-labelledby={id} className="space-y-3">
-      <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+      <h3 className="flex items-center gap-1.5 text-sm font-semibold">
         <span id={id}>Not comparable</span>
         <InfoTip label="Not comparable" to={DRIFT_GUIDE}>
           Checks that lacked their input, such as a Violation Rate the Baseline Observation cannot give or a truncated value list. They raise no Drift.
         </InfoTip>
-      </h2>
+      </h3>
       <Table aria-label="Not comparable">
         <TableHeader>
           <TableRow>
-            <TableHead>Subject</TableHead>
+            <TableHead>Concept</TableHead>
             <TableHead>Kind</TableHead>
             <TableHead>Check</TableHead>
             <TableHead>Reason</TableHead>
