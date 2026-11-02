@@ -12,6 +12,8 @@ docker run --rm -p 5000:5000 ghcr.io/joazaech/stetiq
 
 [`plant-kg`](examples/plant-kg/) replays three recorded Claude rounds that build a factory's maintenance Knowledge Graph from maintenance-system exports and free-text reports, offline: a prompt change that is better by the evals passes every Gate and still breaks the reliability dashboard, its Consumer Gate catches it, and binding `WorkOrder.kind` to a Vocabulary fixes it. Run it with `cd examples/plant-kg && uv run python demo.py`, then `uv run stetiq ui` from that folder.
 
+[`showcase/plant-assistant`](showcase/plant-assistant/) is the same story live on stage, as a separate project using stetiq the way a customer would: one `docker compose up` (two Neo4j servers, a stetiq server, a GraphRAG maintenance assistant whose Connector guard asks stetiq before taking a new Ontology Version) plus `show.py`.
+
 ## How we work with agents
 
 This repo uses [Matt Pocock's skills](https://github.com/mattpocock/skills) for Claude Code. Their settings live in `docs/agents/`. Issues go in GitHub Issues, and the triage labels are `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human` and `wontfix`.

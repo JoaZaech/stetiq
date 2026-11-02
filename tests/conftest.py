@@ -112,6 +112,8 @@ NEO4J_IMAGE_ENV = "STETIQ_TEST_NEO4J_IMAGE"
 # Community by default. Set STETIQ_TEST_NEO4J_IMAGE to an Enterprise image to also cover
 # database scoping (a second database) and the built-in `reader` role.
 NEO4J_DEFAULT_IMAGE = "neo4j:2026.10-community"
+# How long the second Neo4j server may take to start (testcontainers' default is 120 s).
+SECOND_NEO4J_STARTUP_SECONDS = 300
 
 
 def _neo4j_image() -> str:
@@ -128,9 +130,8 @@ def neo4j_databases(neo4j_enterprise) -> tuple[str, ...]:
     return ("neo4j", "other") if neo4j_enterprise else ("neo4j",)
 
 
-@pytest.fixture(scope="session")
-def neo4j_container(neo4j_enterprise):
-    """A throwaway Neo4j server for the whole session; skipped when Docker is unavailable."""
+def _neo4j_server(enterprise: bool):
+    """Start a throwaway Neo4j server; skips the test when Docker is unavailable."""
     try:
         import docker
         from testcontainers.community.neo4j import Neo4jContainer
@@ -141,13 +142,41 @@ def neo4j_container(neo4j_enterprise):
     except Exception as exc:  # noqa: BLE001 - any failure means "no Docker here"
         pytest.skip(f"Docker is unavailable: {exc}")
     container = Neo4jContainer(_neo4j_image(), password="testpassword")
-    if neo4j_enterprise:
+    if enterprise:
         container = container.with_env("NEO4J_ACCEPT_LICENSE_AGREEMENT", "yes")
-    with container:
+    return container
+
+
+@pytest.fixture(scope="session")
+def neo4j_container(neo4j_enterprise):
+    """A throwaway Neo4j server for the whole session; skipped when Docker is unavailable."""
+    with _neo4j_server(neo4j_enterprise) as container:
         if neo4j_enterprise:
             with container.get_driver() as driver:
                 driver.execute_query("CREATE DATABASE other IF NOT EXISTS WAIT", database_="system")
         yield container
+
+
+@pytest.fixture(scope="session")
+def neo4j_second_container(neo4j_enterprise):
+    """A second throwaway Neo4j server, for tests that need two graph databases (the
+    plant-assistant showcase's candidate and production graphs); started only by the
+    tests that ask for it. It starts while other tests run in parallel, so it gets a
+    longer startup timeout than testcontainers' default."""
+    from testcontainers.core.config import testcontainers_config
+
+    container = _neo4j_server(neo4j_enterprise)
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(
+            testcontainers_config,
+            "max_tries",
+            int(SECOND_NEO4J_STARTUP_SECONDS / testcontainers_config.sleep_time),
+        )
+        container.start()
+    try:
+        yield container
+    finally:
+        container.stop()
 
 
 @pytest.fixture

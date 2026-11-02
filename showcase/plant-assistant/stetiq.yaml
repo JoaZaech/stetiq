@@ -1,0 +1,56 @@
+# Repo config for the plant maintenance Knowledge Graph (see docs/guide/06-stetiq-yaml.md),
+# copied from examples/plant-kg.
+knowledge_graph: plant-maintenance
+
+# No Construction Entry Point: show.py runs each round through the SDK (see
+# plant_assistant/pipeline.py for why).
+
+drift:
+  max_count_drop: 0.25
+  max_count_increase: 1.0
+
+gates:
+  - name: no-breaking-changes
+    check: ontology_diff
+    max_classification: additive
+  - name: graph-conforms
+    check: conformance
+    min_score: 0.95
+  - name: questions-answerable
+    check: metric
+    evaluator: structural_answerability
+    metric: answerable_ratio
+    min: 0.8
+  - name: questions-run
+    check: metric
+    evaluator: competency_question_execution
+    metric: pass_ratio
+    min: 1.0
+  - name: no-orphans
+    check: metric
+    evaluator: orphan_concepts
+    metric: orphan_concepts
+    max: 0
+  - name: consistent-constraints
+    check: metric
+    evaluator: constraint_consistency
+    metric: inconsistencies
+    max: 0
+  - name: documented            # evaluators.Documented, a custom Ontology Version Evaluator
+    check: metric
+    evaluator: documented
+    metric: undocumented
+    max: 0
+  - name: reports-cover-orders  # evaluators.ReportCoverage, a custom Construction Run Evaluator
+    check: metric
+    evaluator: report_coverage
+    metric: coverage
+    min: 1.0
+  - name: unjustified-additions  # an evolving run may only add what a Competency Question needs
+    check: metric
+    evaluator: unjustified_additions
+    metric: unjustified_additions
+    max: 0
+  - name: no-type-collapses
+    check: count_drop
+    max_drop: 0.25

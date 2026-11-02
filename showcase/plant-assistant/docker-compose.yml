@@ -1,0 +1,97 @@
+# The plant-assistant show's stack (README.md): two Neo4j Community servers, the stetiq
+# server from the repo's Dockerfile without the plant-kg seed, and the maintenance
+# assistant. show.py runs on the host.
+#
+#   cp .env.example .env    # set NEO4J_PASSWORD; change a port if it is taken
+#   docker compose up -d --build --wait
+#
+# The stetiq server accepts only tokens it issued, so none can be preset: once it is up,
+# the one-shot `tokens` service issues an edit token for show.py and a read token for the
+# assistant into .show/tokens/. A rewind (show.py) removes the stetiq service and its
+# volume, starts it again with `tokens`, which issues new ones, and recreates the
+# assistant so it reads its new token. `docker compose down -v` drops them too, and the
+# next `up` issues new ones.
+
+x-neo4j: &neo4j
+  image: neo4j:2026.10-community
+  environment:
+    NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?set NEO4J_PASSWORD in .env}
+  healthcheck:
+    test: ["CMD-SHELL", "cypher-shell -u neo4j -p \"$${NEO4J_AUTH#neo4j/}\" 'RETURN 1' >/dev/null"]
+    interval: 3s
+    timeout: 10s
+    retries: 40
+    start_period: 10s
+
+x-stetiq-build: &stetiq-build
+  context: ../..
+  args:
+    SEED: none
+
+services:
+  graph-candidate:
+    <<: *neo4j
+    ports: ["${CANDIDATE_PORT:-7687}:7687"]
+    volumes: [candidate-data:/data]
+
+  graph-production:
+    <<: *neo4j
+    ports: ["${PRODUCTION_PORT:-7688}:7687"]
+    volumes: [production-data:/data]
+
+  stetiq:
+    build: *stetiq-build
+    image: plant-assistant/stetiq-server
+    ports: ["${STETIQ_PORT:-5000}:5000"]
+    # SQLite in a named volume: the server and `stetiq token create` open the file from
+    # the same Linux kernel. The show's rewind replaces the volume with an empty one.
+    volumes: [stetiq-data:/data]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  tokens:
+    build: *stetiq-build
+    image: plant-assistant/stetiq-server
+    depends_on:
+      stetiq: {condition: service_healthy}
+    # Root, to write the bind-mounted .show/tokens/ whoever owns it on the host.
+    user: root
+    volumes: [stetiq-data:/data, ./.show/tokens:/tokens]
+    restart: "no"
+    command:
+      - sh
+      - -ec
+      - |
+        stetiq token create show --grant '*=edit' | tail -n 1 > /tokens/show
+        stetiq token create maintenance-assistant --grant '*=read' | tail -n 1 > /tokens/maintenance-assistant
+        echo "issued tokens for show.py and the assistant into .show/tokens/"
+
+  assistant:
+    build:
+      context: ../..
+      dockerfile: showcase/plant-assistant/Dockerfile
+    image: plant-assistant/assistant
+    depends_on:
+      tokens: {condition: service_completed_successfully}
+      graph-production: {condition: service_healthy}
+    ports: ["${ASSISTANT_PORT:-8000}:8000"]
+    volumes: [./.show/tokens:/tokens:ro]
+    environment:
+      STETIQ_TRACKING_URI: http://stetiq:5000
+      PLANT_PRODUCTION_URI: bolt://graph-production:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/status')"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  candidate-data:
+  production-data:
+  stetiq-data:
