@@ -15,3 +15,6 @@ src/stetiq/_frontend/
 examples/*/.graphdb/
 .coverage
 coverage.json
+
+# macOS Finder metadata.
+.DS_Store

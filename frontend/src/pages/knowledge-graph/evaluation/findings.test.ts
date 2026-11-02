@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { DriftFinding } from '@/api/observations'
 import type { Mismatch } from '@/api/runs'
-import { countChange, facetCounts, filterFindings, findingsFromDrift, findingsFromMismatches } from './findings'
+import { countChange, facetCounts, filterFindings, findingsFromDrift, findingsFromMismatches, rateChange } from './findings'
 
 const mismatch = (m: Partial<Mismatch>): Mismatch => ({
   subject: 'Sensor',
@@ -18,6 +18,7 @@ const drift = (f: Partial<DriftFinding>): DriftFinding => ({
   detail: 'count dropped from 12 to 6 (-50%)',
   previous_count: 12,
   observed_count: 6,
+  new: true,
   ...f,
 })
 
@@ -57,6 +58,106 @@ describe('findingsFromDrift', () => {
       drift({ kind: 'undeclared', previous_count: null, observed_count: null, detail: '', subject: 'B' }),
     ])
     expect(rows.map((r) => r.change)).toEqual(['', '“x”'])
+  })
+
+  it('shows an undeclared value with its count and its share of the owner, when known', () => {
+    const rows = findingsFromDrift([
+      drift({ kind: 'undeclared_value', previous_count: null, observed_count: null, value: 'x', count: 2, share: 0.25 }),
+      drift({ kind: 'undeclared_value', previous_count: null, observed_count: null, value: 'y', count: 3, subject: 'B' }),
+    ])
+    expect(rows.map((r) => r.change)).toEqual(['“y” × 3', '“x” × 2 (25%)'])
+  })
+
+  it('shows a risen Violation Rate as baseline → now, on its Attribute or pattern', () => {
+    const rows = findingsFromDrift([
+      drift({
+        kind: 'violation_increase',
+        subject: 'Customer.name',
+        subject_kind: 'property',
+        previous_count: null,
+        observed_count: null,
+        violation: 'required_missing',
+        baseline_rate: 0.005,
+        observed_rate: 0.03,
+      }),
+      drift({ kind: 'violation_increase', subject: '(A)-[R]->(B)', subject_kind: 'pattern', previous_count: null, observed_count: null }),
+    ])
+    expect(rows.map((r) => [r.kind, r.finding, r.change])).toEqual([
+      ['Pattern', 'Violation Rate rose', 'count dropped from 12 to 6 (-50%)'],
+      ['Attribute', 'Violation Rate rose', 'Required but not always set: 0.5% → 3% (+2.5 pts)'],
+    ])
+  })
+
+  it('shows a fallen fill rate as baseline → now', () => {
+    const rows = findingsFromDrift([
+      drift({
+        kind: 'fill_rate_drop',
+        subject: 'Ticket.opened_at',
+        subject_kind: 'property',
+        previous_count: null,
+        observed_count: null,
+        baseline_rate: 1,
+        observed_rate: 0.8,
+      }),
+    ])
+    expect(rows.map((r) => [r.kind, r.finding, r.change])).toEqual([['Attribute', 'Fill rate fell', '100% → 80% (−20 pts)']])
+  })
+
+  it('names the degree whose Cardinality Violation Rate rose', () => {
+    const [row] = findingsFromDrift([
+      drift({
+        kind: 'violation_increase',
+        subject: '(WorkOrder)-[PERFORMED_ON]->(Asset)',
+        subject_kind: 'pattern',
+        previous_count: null,
+        observed_count: null,
+        violation: 'cardinality_violation',
+        direction: 'out',
+        baseline_rate: 0,
+        observed_rate: 0.05,
+      }),
+    ])
+    expect(row.change).toBe('Outside the cardinality (out-degree): 0% → 5% (+5 pts)')
+  })
+})
+
+describe('findingsFromDrift Coverage', () => {
+  it('shows a dropped Coverage as baseline → now, with its degree', () => {
+    const rows = findingsFromDrift([
+      drift({
+        kind: 'coverage_drop',
+        subject: '(WorkOrder)-[ASSIGNED_TO]->(Machine)',
+        subject_kind: 'pattern',
+        previous_count: null,
+        observed_count: null,
+        direction: 'out',
+        baseline_rate: 0.95,
+        observed_rate: 0.85,
+      }),
+    ])
+    expect(rows.map((r) => [r.kind, r.finding, r.change])).toEqual([
+      ['Pattern', 'Coverage dropped', 'Out-degree: 95% → 85% (−10 pts)'],
+    ])
+  })
+
+  it('marks each finding new or persisting and lists the new ones first', () => {
+    const rows = findingsFromDrift([
+      drift({ kind: 'count_drop', subject: 'A', new: false }),
+      drift({ kind: 'undeclared', subject: 'B', new: true }),
+      drift({ kind: 'count_drop', subject: 'C', new: true }),
+    ])
+    expect(rows.map((r) => [r.subject, r.new])).toEqual([
+      ['C', true],
+      ['B', true],
+      ['A', false],
+    ])
+  })
+})
+
+describe('rateChange', () => {
+  it('names a change of exactly one point in the singular', () => {
+    expect(rateChange(0.02, 0.03)).toBe('2% → 3% (+1 pt)')
+    expect(rateChange(0.95, 0.85)).toBe('95% → 85% (−10 pts)')
   })
 })
 

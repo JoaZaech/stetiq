@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Literal, NamedTuple
 
-from stetiq.ontology.model import Ontology, Pattern
+from stetiq.ontology.model import Direction, Ontology, Pattern
 
 # A namespace scope selects nodes whose property of this name equals the namespace.
 NAMESPACE_PROPERTY = "namespace"
@@ -60,6 +60,30 @@ def bound_attributes(ontology: Ontology) -> tuple[BoundAttribute, ...]:
     )
 
 
+class PatternBound(NamedTuple):
+    """A Pattern's declared cardinality in one direction, as handed to the adapter:
+    `out` bounds how many `relationship` edges each `source` node has to `target` nodes,
+    `in` how many each `target` node has from `source` nodes. None leaves a side open."""
+
+    source: str
+    relationship: str
+    target: str
+    direction: Direction
+    min: int | None
+    max: int | None
+
+
+def pattern_bounds(ontology: Ontology) -> tuple[PatternBound, ...]:
+    """Every declared cardinality bound of `ontology`'s Patterns, one per bounded
+    direction: what Observation counts the endpoint nodes outside of."""
+    bounds = [
+        PatternBound(p.source, p.relationship, p.target, direction, *p.bounds(direction))
+        for p in ontology.patterns
+        for direction, _ in p.directions
+    ]
+    return tuple(b for b in bounds if b.min is not None or b.max is not None)
+
+
 @dataclass(frozen=True)
 class ValueCount:
     """One distinct string value of an Attribute and how many nodes or relationships of
@@ -105,6 +129,10 @@ class ObservedProperty:
     fill_rate: float  # count / owning type's count
     # Only for a Vocabulary-bound Attribute that Observation was asked to read; else None.
     values: ObservedValues | None = None
+    # How many values of each type in `types` the property holds, as (type, count) sorted
+    # by type. None when the Graph Source did not count them (an older or third-party
+    # Observed Schema): the type-mismatch Violation Rate is then unknown.
+    type_counts: tuple[tuple[str, int], ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -124,19 +152,58 @@ class ObservedRelationshipType:
 
 
 @dataclass(frozen=True)
+class OutsideBounds:
+    """How many endpoint nodes have a degree outside the declared `[min, max]` (None
+    leaves a side open); a zero-degree node counts against a `min`. The bounds are kept
+    so that a count is only compared with the same bounds."""
+
+    min: int | None
+    max: int | None
+    count: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"min": self.min, "max": self.max, "count": self.count}
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> OutsideBounds:
+        return cls(d.get("min"), d.get("max"), d["count"])
+
+
+@dataclass(frozen=True)
 class Degree:
-    """Distribution of per-node relationship counts (zero-degree nodes included)."""
+    """Distribution of per-node relationship counts (zero-degree nodes included).
+
+    `with_edges` is how many endpoint nodes have at least one such relationship; it
+    divided by the endpoint count is the pattern's Coverage. None when the adapter (or a
+    stored or pushed Observed Schema) predates it.
+
+    `outside_bounds` is set only when Observation was given a declared bound for this
+    Pattern and direction; schemas observed without one (or before it existed) lack it."""
 
     min: int
     max: int
     mean: float
+    with_edges: int | None = None
+    outside_bounds: OutsideBounds | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {"min": self.min, "max": self.max, "mean": self.mean}
+        d: dict[str, Any] = {"min": self.min, "max": self.max, "mean": self.mean}
+        if self.with_edges is not None:
+            d["with_edges"] = self.with_edges
+        if self.outside_bounds is not None:
+            d["outside_bounds"] = self.outside_bounds.to_dict()
+        return d
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> Degree:
-        return cls(d["min"], d["max"], float(d["mean"]))
+        outside = d.get("outside_bounds")
+        return cls(
+            d["min"],
+            d["max"],
+            float(d["mean"]),
+            with_edges=d.get("with_edges"),
+            outside_bounds=None if outside is None else OutsideBounds.from_dict(outside),
+        )
 
 
 @dataclass(frozen=True)
@@ -158,6 +225,10 @@ class ObservedPattern:
     def pattern(self) -> Pattern:
         """The endpoint pattern observed, without its statistics."""
         return Pattern(self.source, self.relationship, self.target)
+
+    def degree(self, direction: Direction) -> Degree:
+        """`out_degree` or `in_degree`."""
+        return self.out_degree if direction == "out" else self.in_degree
 
 
 @dataclass(frozen=True)
@@ -181,6 +252,7 @@ class ObservedSchema:
             return [
                 {"name": p.name, "types": list(p.types), "count": p.count, "fill_rate": p.fill_rate}
                 | ({} if p.values is None else {"values": p.values.to_dict()})
+                | ({} if p.type_counts is None else {"type_counts": dict(p.type_counts)})
                 for p in ps
             ]
 
@@ -216,6 +288,9 @@ class ObservedSchema:
                     p["count"],
                     float(p["fill_rate"]),
                     None if p.get("values") is None else ObservedValues.from_dict(p["values"]),
+                    None
+                    if p.get("type_counts") is None
+                    else tuple(sorted((t, int(n)) for t, n in p["type_counts"].items())),
                 )
                 for p in ps
             )

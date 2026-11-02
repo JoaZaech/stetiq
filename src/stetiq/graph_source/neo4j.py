@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import re
+from collections import Counter, defaultdict
 from collections.abc import Collection, Mapping
 from typing import Any, LiteralString, cast
 from urllib.parse import unquote, urlsplit, urlunsplit
@@ -34,6 +35,8 @@ from stetiq.graph_source.model import (
     ObservedRelationshipType,
     ObservedSchema,
     ObservedValues,
+    OutsideBounds,
+    PatternBound,
 )
 
 URI_ENV = "STETIQ_GRAPH_SOURCE_URI"
@@ -100,11 +103,15 @@ class Neo4jGraphSource:
         bound_attributes: Collection[BoundAttribute] = (),
         *,
         value_cap: int = DEFAULT_VALUE_CAP,
+        pattern_bounds: Collection[PatternBound] = (),
     ) -> ObservedSchema:
         params = {"scope_label": scope.label, "namespace": scope.namespace}
         requested = sorted(set(bound_attributes))
+        bounds = sorted(set(pattern_bounds), key=repr)
 
-        def work(tx: neo4j.ManagedTransaction) -> tuple[dict[str, Any], list[list[Any]]]:
+        def work(
+            tx: neo4j.ManagedTransaction,
+        ) -> tuple[dict[str, Any], list[list[Any]], list[int]]:
             stats = {name: tx.run(_cypher(q), params).data() for name, q in _queries(scope).items()}
             # One query per bound Attribute; LIMIT cap + 1 tells whether the cap was hit.
             values = [
@@ -114,10 +121,22 @@ class Neo4jGraphSource:
                 ).values()
                 for b in requested
             ]
-            return stats, values
+            # One query per declared cardinality bound; none when nothing is declared.
+            outside = [
+                tx.run(
+                    _cypher(_outside_bounds_query(scope, b)), {**params, "min": b.min, "max": b.max}
+                ).single(strict=True)["count"]
+                for b in bounds
+            ]
+            return stats, values, outside
 
         with self._session(scope) as session:
-            rows, value_rows = session.execute_read(work)
+            rows, value_rows, outside_counts = session.execute_read(work)
+
+        outside_bounds = {
+            (b.source, b.relationship, b.target, b.direction): OutsideBounds(b.min, b.max, n)
+            for b, n in zip(bounds, outside_counts, strict=True)
+        }
 
         observed_values = {
             (b.owner_kind, b.owner, b.attribute): ObservedValues.capped(
@@ -151,8 +170,16 @@ class Neo4jGraphSource:
                     relationship=type_,
                     target=target,
                     count=out_stats[(source, type_, target)]["total"],
-                    out_degree=_degree(out_stats[(source, type_, target)], node_counts[source]),
-                    in_degree=_degree(in_stats[(source, type_, target)], node_counts[target]),
+                    out_degree=_degree(
+                        out_stats[(source, type_, target)],
+                        node_counts[source],
+                        outside_bounds.get((source, type_, target, "out")),
+                    ),
+                    in_degree=_degree(
+                        in_stats[(source, type_, target)],
+                        node_counts[target],
+                        outside_bounds.get((source, type_, target, "in")),
+                    ),
                 )
                 for source, type_, target in sorted(out_stats)
             ),
@@ -222,7 +249,7 @@ def _queries(scope: GraphSourceScope) -> dict[str, str]:
             MATCH (n) WHERE {n}
             UNWIND {_labels("n")} AS owner
             UNWIND {node_keys} AS key
-            RETURN owner, key, count(*) AS filled, collect(DISTINCT valueType(n[key])) AS types
+            RETURN owner, key, valueType(n[key]) AS type, count(*) AS filled
         """,
         "rel_counts": f"""
             MATCH (a)-[r]->(b) WHERE {a} AND {b}
@@ -231,8 +258,7 @@ def _queries(scope: GraphSourceScope) -> dict[str, str]:
         "rel_properties": f"""
             MATCH (a)-[r]->(b) WHERE {a} AND {b}
             UNWIND keys(r) AS key
-            RETURN type(r) AS owner, key, count(*) AS filled,
-                   collect(DISTINCT valueType(r[key])) AS types
+            RETURN type(r) AS owner, key, valueType(r[key]) AS type, count(*) AS filled
         """,
         # Degree stats over nodes with at least one edge; zero-degree nodes are added
         # back in Python from the label counts.
@@ -270,35 +296,64 @@ def _values_query(scope: GraphSourceScope, attribute: BoundAttribute) -> str:
     """
 
 
+def _outside_bounds_query(scope: GraphSourceScope, bound: PatternBound) -> str:
+    """How many endpoint nodes in scope have a degree outside `[$min, $max]` for one
+    direction of a Pattern; a node without such edges has degree 0. Only the count
+    leaves the database."""
+    a, b = _in_scope("a", scope), _in_scope("b", scope)
+    source, rel, target = _quote(bound.source), _quote(bound.relationship), _quote(bound.target)
+    if bound.direction == "out":
+        match = f"MATCH (a:{source}) WHERE {a} OPTIONAL MATCH (a)-[r:{rel}]->(b:{target}) WHERE {b}"
+        node = "a"
+    else:
+        match = f"MATCH (b:{target}) WHERE {b} OPTIONAL MATCH (a:{source})-[r:{rel}]->(b) WHERE {a}"
+        node = "b"
+    return f"""
+        {match}
+        WITH {node}, count(r) AS d
+        WHERE ($min IS NOT NULL AND d < $min) OR ($max IS NOT NULL AND d > $max)
+        RETURN count({node}) AS count
+    """
+
+
 def _group_properties(
     rows: list[dict[str, Any]],
     owner_counts: Mapping[str, int],
     owner_kind: str,
     observed_values: Mapping[tuple[str, str, str], ObservedValues],
 ) -> dict[str, tuple[ObservedProperty, ...]]:
-    grouped: dict[str, list[ObservedProperty]] = {}
+    """Fold the rows, one per (owner, key, valueType), into one property per (owner, key)
+    with its count per type. Several valueTypes map to one type name (`LIST<…>`)."""
+    type_counts: dict[tuple[str, str], Counter[str]] = defaultdict(Counter)
     for row in rows:
-        owner, filled = row["owner"], row["filled"]
-        types = tuple(sorted({_type_name(t) for t in row["types"]}))
+        type_counts[(row["owner"], row["key"])][_type_name(row["type"])] += row["filled"]
+    grouped: dict[str, list[ObservedProperty]] = {}
+    for (owner, key), counts in type_counts.items():
+        filled = counts.total()
         grouped.setdefault(owner, []).append(
             ObservedProperty(
-                row["key"],
-                types,
+                key,
+                tuple(sorted(counts)),
                 filled,
                 filled / owner_counts[owner],
-                observed_values.get((owner_kind, owner, row["key"])),
+                observed_values.get((owner_kind, owner, key)),
+                tuple(sorted(counts.items())),
             )
         )
     return {owner: tuple(sorted(ps, key=lambda p: p.name)) for owner, ps in grouped.items()}
 
 
-def _degree(stats: Mapping[str, Any], endpoint_count: int) -> Degree:
+def _degree(
+    stats: Mapping[str, Any], endpoint_count: int, outside_bounds: OutsideBounds | None
+) -> Degree:
     """Degree over all `endpoint_count` nodes, `stats` covering only those with edges."""
     has_zero_degree_nodes = stats["nodes"] < endpoint_count
     return Degree(
         min=0 if has_zero_degree_nodes else stats["min"],
         max=stats["max"],
         mean=stats["total"] / endpoint_count,
+        with_edges=stats["nodes"],
+        outside_bounds=outside_bounds,
     )
 
 

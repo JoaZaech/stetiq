@@ -15,13 +15,20 @@ from typing import Any, Literal
 
 from stetiq.graph_source import (
     ObservedNodeType,
+    ObservedPattern,
     ObservedProperty,
     ObservedRelationshipType,
     ObservedSchema,
 )
 from stetiq.ontology import NodeType, Ontology, Pattern, Property, RelationshipType
 from stetiq.ontology.diff import WIDENING_TYPE_CHANGES, AddedConcept, added_concepts
-from stetiq.ontology.model import ConceptKind, Vocabulary, VocabularyValue, is_deprecated
+from stetiq.ontology.model import (
+    ConceptKind,
+    Direction,
+    Vocabulary,
+    VocabularyValue,
+    is_deprecated,
+)
 
 # What a mismatch is about. Concepts are node types, relationship types and properties
 # (identity `Owner.property`, as in the Ontology Diff); patterns are endpoint patterns
@@ -51,6 +58,14 @@ class Mismatch:
     # For a value mismatch: the observed value and how many nodes or relationships hold it.
     value: str | None = None
     count: int | None = None
+    # The Violation Rate: the share of owner nodes or relationships failing this check, for
+    # `required_missing`, `value_outside_vocabulary` and `type_mismatch`, and of endpoint
+    # nodes for `cardinality_violation`. None when unknown (a truncated value list, an
+    # Observed Schema without counts per type, a degree observed without counting the nodes
+    # outside the bound) or for a kind without one.
+    rate: float | None = None
+    # For `cardinality_violation`: which degree breaks the bound, `out` or `in`.
+    direction: Direction | None = None
 
 
 @dataclass(frozen=True)
@@ -110,6 +125,8 @@ class Conformance:
                     m["detail"],
                     m.get("value"),
                     m.get("count"),
+                    m.get("rate"),
+                    m.get("direction"),
                 )
                 for m in d["mismatches"]
             ),
@@ -126,6 +143,10 @@ def _mismatch_to_dict(m: Mismatch) -> dict[str, Any]:
     if m.value is not None:  # only value mismatches carry these
         d["value"] = m.value
         d["count"] = m.count
+    if m.rate is not None:
+        d["rate"] = m.rate
+    if m.direction is not None:
+        d["direction"] = m.direction
     return d
 
 
@@ -151,7 +172,7 @@ def assess_conformance(declared: Ontology, observed: ObservedSchema) -> Conforma
         "node_type",
         declared.node_types,
         observed.node_types,
-        _properties_of(declared),
+        properties_of(declared),
         declared,
     )
     _check_concepts(
@@ -220,8 +241,11 @@ def _check_concepts(
             dp, op = declared_props.get(name), observed_props.get(name)
             present = checks.presence(subject, "property", dp is not None, op is not None)
             if present and dp is not None and op is not None:
-                checks.record(subject, "property", _property_mismatches(subject, label, dp, op))
-                _check_values(checks, subject, ontology, dp, op)
+                owner_count = o.count if o else 0
+                checks.record(
+                    subject, "property", _property_mismatches(subject, label, dp, op, owner_count)
+                )
+                _check_values(checks, subject, ontology, dp, op, owner_count)
 
 
 # The properties declared for a Concept (own, and for node types inherited ones too).
@@ -232,7 +256,7 @@ def _own_properties(concept: NodeType | RelationshipType) -> tuple[Property, ...
     return concept.properties
 
 
-def _properties_of(declared: Ontology) -> PropertiesOf:
+def properties_of(declared: Ontology) -> PropertiesOf:
     """A node type's own properties plus those inherited from its ancestors (the
     nearest declaration of a name wins)."""
     nodes = {n.label: n for n in declared.node_types}
@@ -252,7 +276,7 @@ def _properties_of(declared: Ontology) -> PropertiesOf:
 
 
 def _property_mismatches(
-    subject: str, owner: str, declared: Property, observed: ObservedProperty
+    subject: str, owner: str, declared: Property, observed: ObservedProperty, owner_count: int
 ) -> list[Mismatch]:
     found = []
     if declared.required and observed.fill_rate < 1.0:
@@ -262,6 +286,7 @@ def _property_mismatches(
                 "property",
                 MismatchKind.REQUIRED_MISSING,
                 f"required, but filled on {observed.fill_rate:.0%} of {owner}",
+                rate=1.0 - observed.fill_rate,
             )
         )
     conforming_types = {declared.type} | {
@@ -274,9 +299,22 @@ def _property_mismatches(
                 "property",
                 MismatchKind.TYPE_MISMATCH,
                 f"declared {declared.type}, observed {', '.join(observed.types)}",
+                rate=_type_mismatch_rate(observed, conforming_types, owner_count),
             )
         )
     return found
+
+
+def _type_mismatch_rate(
+    observed: ObservedProperty, conforming_types: set[str], owner_count: int
+) -> float | None:
+    """The share of the `owner_count` owners holding a value of a non-conforming type (each
+    owner holds at most one value). None when the Observed Schema did not count values per
+    type (an older or third-party one)."""
+    if observed.type_counts is None or owner_count <= 0:
+        return None
+    failing = sum(n for t, n in observed.type_counts if t not in conforming_types)
+    return failing / owner_count
 
 
 def _check_values(
@@ -285,16 +323,19 @@ def _check_values(
     ontology: Ontology,
     declared: Property,
     observed: ObservedProperty,
+    owner_count: int,
 ) -> None:
     """A Vocabulary-bound Attribute whose values were observed is one item. Each observed
-    value outside the Vocabulary fails it and is reported with its count; a deprecated
-    value is reported but conforms. Only listed values are checked: a truncated list (more
-    distinct values than the cap) conforms when none of its values is outside the
-    Vocabulary, and the Observed Schema's `truncated` flag says the list is incomplete."""
+    value outside the Vocabulary fails it and is reported with its count and its share of
+    the `owner_count` owners (the Violation Rate); a deprecated value is reported but
+    conforms. Only listed values are checked: a truncated list (more distinct values than
+    the cap) conforms when none of its values is outside the Vocabulary, and the Observed
+    Schema's `truncated` flag says the list is incomplete, so its shares are unknown."""
     vocabulary = ontology.vocabulary(declared.vocabulary) if declared.vocabulary else None
     if vocabulary is None or observed.values is None:
         return
     values = {v.label: v for v in vocabulary.values}
+    known_shares = not observed.values.truncated and owner_count > 0
     outside = False
     for c in observed.values.counts:
         value = values.get(c.value)
@@ -309,6 +350,7 @@ def _check_values(
                     f"{c.value!r} observed {times}, not a value of {vocabulary.label}",
                     c.value,
                     c.count,
+                    c.count / owner_count if known_shares else None,
                 )
             )
         elif is_deprecated(value):
@@ -339,17 +381,16 @@ def _check_patterns(checks: _Checks, declared: Ontology, observed: ObservedSchem
 
 def _check_cardinality(checks: _Checks, declared: Pattern, observed: ObservedSchema) -> None:
     """Each declared bound is one item. A direction with a failing bound is reported once,
-    with the observed degree range against all of that direction's bounds. A pattern that
-    is not observed gives every node of its type degree 0; with no such nodes either, its
-    bounds hold."""
+    with the observed degree range against all of that direction's bounds and its
+    Violation Rate (see `_cardinality_rate`). A pattern that is not observed gives every
+    node of its type degree 0; with no such nodes either, its bounds hold."""
     seen = observed.pattern(declared.source, declared.relationship, declared.target)
-    for direction, node_type in (("out", declared.source), ("in", declared.target)):
-        low = getattr(declared, f"min_{direction}")
-        high = getattr(declared, f"max_{direction}")
+    for direction, node_type in declared.directions:
+        low, high = declared.bounds(direction)
         if low is None and high is None:
             continue
         if seen is not None:
-            degree = seen.out_degree if direction == "out" else seen.in_degree
+            degree = seen.degree(direction)
             observed_range: tuple[int, int] | None = (degree.min, degree.max)
         else:
             nodes = observed.node_type(node_type)
@@ -376,8 +417,33 @@ def _check_cardinality(checks: _Checks, declared: Pattern, observed: ObservedSch
                     MismatchKind.CARDINALITY_VIOLATION,
                     f"{direction}-degree observed {observed_range[0]}..{observed_range[1]}, "
                     f"declared {bounds}",
+                    rate=_cardinality_rate(
+                        seen, direction, low, high, observed.node_type(node_type)
+                    ),
+                    direction=direction,
                 )
             )
+
+
+def _cardinality_rate(
+    seen: ObservedPattern | None,
+    direction: Direction,
+    low: int | None,
+    high: int | None,
+    endpoints: ObservedNodeType | None,
+) -> float | None:
+    """The share of the failing direction's endpoint nodes whose degree is outside the
+    declared bounds. An unobserved pattern leaves every endpoint node at degree 0, so all
+    of them fail its minimum. An observed one needs the adapter's count against these
+    same bounds; without it the rate is unknown."""
+    if endpoints is None or endpoints.count == 0:
+        return None
+    if seen is None:
+        return 1.0
+    outside = seen.degree(direction).outside_bounds
+    if outside is None or (outside.min, outside.max) != (low, high):
+        return None
+    return outside.count / endpoints.count
 
 
 # --- Candidates ---------------------------------------------------------------------
@@ -395,7 +461,7 @@ def candidate_ontology(declared: Ontology, observed: ObservedSchema) -> Ontology
     Observed values outside a bound Vocabulary are added to it as new Values, which is
     additive too."""
     node_types, new_nodes, new_node_props = _extend(
-        declared.node_types, observed.node_types, NodeType, _properties_of(declared)
+        declared.node_types, observed.node_types, NodeType, properties_of(declared)
     )
     relationship_types, new_rels, new_rel_props = _extend(
         declared.relationship_types,
@@ -486,14 +552,14 @@ def _extend_vocabularies(declared: Ontology, observed: ObservedSchema) -> tuple[
     added: those beyond a truncated list's cap are unknown."""
     new: dict[str, set[str]] = {}
     owners = (
-        (declared.node_types, observed.node_type, _properties_of(declared)),
+        (declared.node_types, observed.node_type, properties_of(declared)),
         (declared.relationship_types, observed.relationship_type, _own_properties),
     )
-    for concepts, observed_owner, properties_of in owners:
+    for concepts, observed_owner, declared_properties in owners:
         for concept in concepts:
             o = observed_owner(concept.label)
             observed_props = {p.name: p for p in (o.properties if o else ())}
-            for p in properties_of(concept):
+            for p in declared_properties(concept):
                 op = observed_props.get(p.name)
                 if p.vocabulary and op is not None and op.values is not None:
                     new.setdefault(p.vocabulary, set()).update(c.value for c in op.values.counts)

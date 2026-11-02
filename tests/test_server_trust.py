@@ -575,3 +575,74 @@ def test_the_latest_gate_result_is_read_only_about_a_run_of_the_named_knowledge_
     assert about_run.json()["subject_id"] == run
     assert foreign_run.status_code == 404
     assert http.post(path, headers=reader, json={}).status_code == 405
+
+
+# --- Drift's Baseline Observation and thresholds -----------------------------------------
+
+
+def _observation_body(**extra):
+    return {
+        "scope": {"database": "neo4j", "label": None, "namespace": None},
+        "observed_schema": {"node_types": [], "relationship_types": [], "patterns": []},
+        **extra,
+    }
+
+
+def test_drift_thresholds_from_an_older_sdk_check_violation_rates_at_one_point(
+    server, admin, support
+):
+    _, http = server
+    older = {"max_count_drop": None, "max_count_increase": None}  # no max_violation_increase
+
+    response = http.post(
+        f"{API}/knowledge-graphs/support/observations",
+        json=_observation_body(drift_thresholds=older),
+        headers=_headers(server, "ada", {"support": "edit"}),
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["drift_event"]["thresholds"]["max_violation_increase"] == 0.01
+
+
+def test_the_server_picks_the_baseline_observation_and_what_was_not_comparable(
+    server, admin, support
+):
+    _, http = server
+    run_end = admin.get_run(_run_id(admin, support)).observation_id
+    claimed = {"not_comparable": [{"check": "violation_increase", "subject": "x"}]}
+
+    response = http.post(
+        f"{API}/knowledge-graphs/support/observations",
+        json=_observation_body(baseline_observation_id="forged", observation=claimed),
+        headers=_headers(server, "ada", {"support": "edit"}),
+    )
+
+    assert response.status_code == 201, response.text
+    observation = response.json()["observation"]
+    assert observation["baseline_observation_id"] == run_end
+    assert observation["not_comparable"] == []
+
+
+# --- An on-demand Observation's Conformance score is computed by the server -------------
+
+
+def test_a_client_cannot_supply_an_observations_score(server, admin, support):
+    _, http = server
+    editor = _headers(server, "mallory", {"support": "edit"})
+    body = _end_body(admin, "support", ["Agent"])
+    body["conformance"] = {"score": 1.0, "mismatches": []}
+    body["ontology_version"] = 2
+
+    response = http.post(f"{API}/knowledge-graphs/support/observations", json=body, headers=editor)
+
+    assert response.status_code == 201, response.text
+    observation = response.json()["observation"]
+    assert observation["ontology_version"] == 1  # production, not what the body said
+    assert observation["conformance"]["score"] < 1.0
+    trend = http.get(f"{API}/knowledge-graphs/support/alignment-trend", headers=editor).json()
+    run = admin.list_runs("support")[-1]
+    assert [(p["run_id"], p["observation_id"], p["ontology_version"]) for p in trend] == [
+        (run.id, run.observation_id, 1),
+        (None, observation["id"], 1),
+    ]
+    assert trend[1]["score"] == observation["conformance"]["score"]

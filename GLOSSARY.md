@@ -55,12 +55,20 @@ The formal structure definition a Construction Run is given as input; every Cons
 _Avoid_: Target schema, spec
 
 **Observed Schema**:
-The Ontology as it actually appears in a Graph Source, together with its aggregate statistics (counts per class and relation, cardinalities, attribute fill rates, and the capped set of values each Vocabulary-bound Attribute takes), derived from but never containing instance data.
+The Ontology as it actually appears in a Graph Source, together with its aggregate statistics (counts per class and relation, cardinalities, attribute fill rates, how many values of each type each attribute holds, and the capped set of values each Vocabulary-bound Attribute takes), derived from but never containing instance data.
 _Avoid_: Inferred ontology, actual schema
 
 **Conformance**:
 The degree to which an Observed Schema satisfies its Declared Ontology's Axioms; for a Construction Run that gives rise to a Candidate, that Candidate's Axioms, so what the run added is the Candidate's Ontology Diff rather than a mismatch.
 _Avoid_: Compliance, validity
+
+**Violation Rate**:
+The share of a Conformance check's owner nodes or relationships that fail it, e.g. the share of Customers without their required `name`, or of a Pattern's endpoint nodes whose degree breaks its cardinality; Conformance reports it beside each failing check, and Drift compares it with the Baseline Observation's.
+_Avoid_: Error rate, violation level, failure percentage
+
+**Coverage**:
+The share of a declared pattern's source nodes that have at least one such relation (out-degree), or of its target nodes (in-degree), e.g. the share of WorkOrders on a Machine; Drift compares it with the Baseline Observation's.
+_Avoid_: Mean degree, connectivity, link rate
 
 **Knowledge Graph**:
 A named, long-lived lineage of Ontology Versions, e.g. "customer-support-kg".
@@ -142,6 +150,10 @@ _Avoid_: Release, deploy, approval
 Capturing a Graph Source's current Observed Schema, either at the end of a Construction Run or on demand between runs.
 _Avoid_: Scan, crawl, sync
 
+**Baseline Observation**:
+The first Observation, at the end of a Construction Run or on demand, since the Contract Alias's current Ontology Version became the contract, by a Promotion or by switching the Contract Alias; Drift compares Violation Rates, Coverage and fill rates with it, and an Observation with none before it is its own.
+_Avoid_: Reference observation, snapshot, pinned baseline
+
 **Evolution Mode**:
 A Knowledge Graph's setting for Construction Runs that introduce new Concepts: *strict* fails the run, *evolving* yields a candidate Ontology Version.
 _Avoid_: Schema mode, open/closed world
@@ -167,7 +179,7 @@ Evaluating a Knowledge Graph's most recently used Gates against a Construction R
 _Avoid_: Dry run, simulated gate, gate check
 
 **Drift**:
-A divergence, found by an Observation, between a Graph Source's Observed Schema and the Contract Alias's Ontology Version; it raises an alert unless it is a Pending Migration, and never creates a new Ontology Version by itself.
+A divergence, found by an Observation, between a Graph Source's Observed Schema and the Contract Alias's Ontology Version, or a statistic that moved too far: a count since the previous Observation, or a Violation Rate, Coverage or fill rate since the Baseline Observation; it raises an alert unless it is a Pending Migration, and never creates a new Ontology Version by itself. A check that lacks its input is *not comparable* and raises nothing. Each finding is *new*, or *persisting* when the previous Observation had it too (a rate: no further from its baseline); only new findings make `stetiq observe` alert.
 _Avoid_: Schema change, deviation
 
 **Pending Migration**:

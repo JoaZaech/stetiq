@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { api, kgPath } from './client'
+import type { Conformance, Mismatch, MismatchSubjectKind } from './runs'
 
 /** wire.graph_source_scope_to_json: a database, optionally narrowed by label or namespace. */
 export interface GraphSourceScope {
@@ -27,24 +28,102 @@ export interface Observation {
   run_id: string | null
   observed_at: string
   scope: GraphSourceScope
+  /**
+   * On-demand only: the Observation its Violation Rates were compared with (its own id
+   * when it is the first since the contract's Ontology Version became the contract).
+   */
+  baseline_observation_id: string | null
+  /** The Drift checks that lacked their input, so raised no finding. */
+  not_comparable: NotComparable[]
+  /**
+   * An on-demand Observation's Conformance to `ontology_version`, the Contract Alias's
+   * version when it was made. Null for a run-end Observation (its run holds its
+   * Conformance) and for one made before Observations were scored.
+   */
+  conformance: Conformance | null
+  ontology_version: number | null
 }
 
-/** drift.DriftThresholds: fractions of the previous count (0.1 = 10%); null = check off. */
+/**
+ * wire.alignment_point_to_json: one Conformance score on the alignment trend. A
+ * Construction Run's (`run_id` set; `observation_id` is the Observation it ended with) or
+ * an on-demand Observation's; `ontology_version` is the version it was judged against.
+ */
+export interface AlignmentPoint {
+  at: string
+  score: number
+  ontology_version: number
+  observation_id: string
+  run_id: string | null
+}
+
+/**
+ * drift.DriftThresholds; null = check off. The count ones are fractions of the previous
+ * count (0.1 = 10%), `max_violation_increase` is absolute points above the baseline's
+ * Violation Rate (0.01 = 1 point). Events from before that check lack it.
+ */
 export interface DriftThresholds {
   max_count_drop: number | null
   max_count_increase: number | null
+  max_violation_increase?: number | null
+  /** Absolute points of a declared pattern's Coverage below the baseline's; off when absent. */
+  max_coverage_drop?: number | null
+  /** Absolute points of an optional Attribute's fill rate below the baseline's; off when absent. */
+  max_fill_rate_drop?: number | null
+  /** A type, pattern or owner below this count is not compared; 0 when absent. */
+  min_count?: number
 }
+
+/** drift.DriftKind */
+export type DriftKind =
+  | 'undeclared'
+  | 'vanished'
+  | 'undeclared_value'
+  | 'count_drop'
+  | 'count_increase'
+  | 'violation_increase'
+  | 'coverage_drop'
+  | 'fill_rate_drop'
 
 /** drift.DriftFinding */
 export interface DriftFinding {
-  kind: 'undeclared' | 'vanished' | 'undeclared_value' | 'count_drop' | 'count_increase'
+  kind: DriftKind
   subject: string
-  subject_kind: 'node_type' | 'relationship_type' | 'property'
+  subject_kind: MismatchSubjectKind
   detail: string
   previous_count: number | null
   observed_count: number | null
   /** `undeclared_value` only: the value outside the contract's Vocabulary. */
   value?: string
+  /** `undeclared_value` only: how many owners hold the value, and their share (absent when unknown). */
+  count?: number
+  share?: number
+  /**
+   * `violation_increase`: the Conformance check, and its Violation Rate in the baseline and
+   * now. `fill_rate_drop`: the Attribute's fill rate in the baseline and now.
+   */
+  violation?: Mismatch['kind']
+  baseline_rate?: number
+  observed_rate?: number
+  /**
+   * Which degree of the pattern, `out` over its source nodes or `in` over its target nodes:
+   * on `coverage_drop`, whose Coverage dropped (`baseline_rate` / `observed_rate` hold the
+   * Coverage); on `violation_increase` of a `cardinality_violation`, which degree's rate rose.
+   */
+  direction?: 'out' | 'in'
+  /** False when the previous Observation had it too (a rate finding: at a rate no better). */
+  new: boolean
+}
+
+/** drift.NotComparable: a check that lacked its input, so it raised no finding. */
+export interface NotComparable {
+  /** The finding kind the check would have raised. */
+  check: DriftKind
+  subject: string
+  subject_kind: MismatchSubjectKind
+  reason: string
+  /** For a Violation Rate: the Conformance check behind it. */
+  violation?: Mismatch['kind']
 }
 
 /** wire.drift_event_to_json */
@@ -65,6 +144,7 @@ export const observationQueryKeys = {
   all: (kg: string) => ['observations', kg] as const,
   one: (id: string | null) => ['observation', id] as const,
   driftEvents: (kg: string) => ['drift-events', kg] as const,
+  alignmentTrend: (kg: string) => ['alignment-trend', kg] as const,
 }
 
 /** The Knowledge Graph's Observations, oldest first. */
@@ -80,6 +160,13 @@ export const driftEventsQuery = (kg: string) => ({
   queryFn: () => api<DriftEvent[]>(kgPath(kg) + '/drift-events'),
 })
 export const useDriftEvents = (kg: string) => useQuery(driftEventsQuery(kg))
+
+/** The alignment trend: run and on-demand Conformance scores, oldest first. */
+export const alignmentTrendQuery = (kg: string) => ({
+  queryKey: observationQueryKeys.alignmentTrend(kg),
+  queryFn: () => api<AlignmentPoint[]>(kgPath(kg) + '/alignment-trend'),
+})
+export const useAlignmentTrend = (kg: string) => useQuery(alignmentTrendQuery(kg))
 
 /** The Observed Schema (graph_source.ObservedSchema); the run page reads only its sizes. */
 export interface ObservedSchema {

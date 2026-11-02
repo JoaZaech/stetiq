@@ -144,6 +144,9 @@ observations = Table(
     Column("observed_at", Text, nullable=False),
     Column("scope_json", Text, nullable=False),
     Column("schema_json", Text, nullable=False),
+    # Added later (see `_ADDED_COLUMNS`): what an on-demand Observation's Drift compared with.
+    Column("baseline_observation_id", Text, nullable=True),
+    Column("not_comparable_json", Text, nullable=True),
 )
 
 # --- Aliases and Promotion ---------------------------------------------------------------
@@ -182,6 +185,8 @@ contract_aliases = Table(
     metadata,
     Column("knowledge_graph", Text, ForeignKey("knowledge_graphs.name"), primary_key=True),
     Column("alias", Text, nullable=False),
+    # When the Contract Alias was switched to `alias`; NULL in rows written before.
+    Column("switched_at", Text, nullable=True),
 )
 
 # --- Conformance, Evolution Mode, Candidates: new tables only, so stores
@@ -199,6 +204,17 @@ run_conformance = Table(
     "run_conformance",
     metadata,
     Column("run_id", Text, ForeignKey("construction_runs.id"), primary_key=True),
+    Column("score", Float, nullable=False),
+    Column("conformance_json", Text, nullable=False),
+)
+
+# An on-demand Observation's Conformance to the Contract Alias's Ontology Version at the
+# time. Observations stored before scores existed have no row.
+observation_conformance = Table(
+    "observation_conformance",
+    metadata,
+    Column("observation_id", Text, ForeignKey("observations.id"), primary_key=True),
+    Column("ontology_version", Integer, nullable=False),
     Column("score", Float, nullable=False),
     Column("conformance_json", Text, nullable=False),
 )
@@ -240,6 +256,8 @@ drift_events = Table(
     Column("thresholds_json", Text, nullable=False),
     Column("findings_json", Text, nullable=False),
 )
+# Looked up by Observation when marking the next Observation's findings new or persisting.
+_drift_events_by_observation = Index("ix_drift_events_observation", drift_events.c.observation_id)
 
 
 # Insert-only: a re-run adds rows; readers take the latest row per evaluator.
@@ -298,6 +316,9 @@ _ADDED_COLUMNS = [
     ("evaluation_results", "use_case_version", "INTEGER"),
     ("evaluation_results", "parameters_json", "TEXT NOT NULL DEFAULT '{}'"),
     ("knowledge_graphs", "description", "TEXT"),
+    ("observations", "baseline_observation_id", "TEXT"),
+    ("observations", "not_comparable_json", "TEXT"),
+    ("contract_aliases", "switched_at", "TEXT"),
 ]
 
 
@@ -381,6 +402,8 @@ class SqlStore:
         self._local = threading.local()  # the open transaction's connection, per thread
         metadata.create_all(self._engine)
         _add_missing_columns(self._engine)
+        # `create_all` adds an index only with its table, so stores created before get it here.
+        _drift_events_by_observation.create(self._engine, checkfirst=True)
 
     def drop_all(self) -> None:
         """Delete every table (test helper); they are recreated on next construction."""
@@ -690,8 +713,23 @@ class SqlStore:
                     schema_json=json.dumps(
                         codec.observed_schema_to_json(observation.schema), sort_keys=True
                     ),
+                    baseline_observation_id=observation.baseline_observation_id,
+                    not_comparable_json=json.dumps(
+                        codec.not_comparable_to_json(observation.not_comparable), sort_keys=True
+                    ),
                 )
             )
+            if observation.conformance is not None and observation.ontology_version is not None:
+                conn.execute(
+                    insert(observation_conformance).values(
+                        observation_id=observation.id,
+                        ontology_version=observation.ontology_version,
+                        score=observation.conformance.score,
+                        conformance_json=json.dumps(
+                            codec.conformance_to_json(observation.conformance), sort_keys=True
+                        ),
+                    )
+                )
 
     def _observations(self, *where) -> list[Observation]:
         query = (
@@ -701,6 +739,18 @@ class SqlStore:
         )
         with self._connection() as conn:
             rows = conn.execute(query).mappings().all()
+            ids = [r["id"] for r in rows]
+            scored: dict[str, tuple[int, Conformance]] = {}
+            if ids:
+                for c in conn.execute(
+                    select(observation_conformance).where(
+                        observation_conformance.c.observation_id.in_(ids)
+                    )
+                ):
+                    scored[c.observation_id] = (
+                        c.ontology_version,
+                        codec.conformance_from_json(json.loads(c.conformance_json)),
+                    )
         return [
             Observation(
                 id=r["id"],
@@ -709,6 +759,12 @@ class SqlStore:
                 observed_at=datetime.fromisoformat(r["observed_at"]),
                 schema=codec.observed_schema_from_json(json.loads(r["schema_json"])),
                 run_id=r["run_id"],
+                baseline_observation_id=r["baseline_observation_id"],
+                not_comparable=codec.not_comparable_from_json(
+                    json.loads(r["not_comparable_json"] or "[]")
+                ),
+                conformance=scored[r["id"]][1] if r["id"] in scored else None,
+                ontology_version=scored[r["id"]][0] if r["id"] in scored else None,
             )
             for r in rows
         ]
@@ -741,9 +797,16 @@ class SqlStore:
             )
 
     def list_drift_events(self, knowledge_graph: str) -> list[DriftEvent]:
+        return self._drift_events(drift_events.c.knowledge_graph == knowledge_graph)
+
+    def get_drift_event_for_observation(self, observation_id: str) -> DriftEvent | None:
+        found = self._drift_events(drift_events.c.observation_id == observation_id)
+        return found[0] if found else None
+
+    def _drift_events(self, where) -> list[DriftEvent]:
         query = (
             select(drift_events)
-            .where(drift_events.c.knowledge_graph == knowledge_graph)
+            .where(where)
             .order_by(drift_events.c.detected_at, drift_events.c.id)
         )
         with self._connection() as conn:
@@ -840,7 +903,9 @@ class SqlStore:
             for r in rows
         ]
 
-    def set_contract_alias(self, knowledge_graph: str, alias: str) -> None:
+    def set_contract_alias(
+        self, knowledge_graph: str, alias: str, switched_at: datetime | None = None
+    ) -> None:
         with self._connection() as conn:
             conn.execute(
                 delete(contract_aliases).where(
@@ -848,7 +913,11 @@ class SqlStore:
                 )
             )
             conn.execute(
-                insert(contract_aliases).values(knowledge_graph=knowledge_graph, alias=alias)
+                insert(contract_aliases).values(
+                    knowledge_graph=knowledge_graph,
+                    alias=alias,
+                    switched_at=None if switched_at is None else switched_at.isoformat(),
+                )
             )
 
     def get_contract_alias(self, knowledge_graph: str) -> str | None:
@@ -857,6 +926,14 @@ class SqlStore:
         )
         with self._connection() as conn:
             return conn.execute(query).scalar()
+
+    def get_contract_alias_switched_at(self, knowledge_graph: str) -> datetime | None:
+        query = select(contract_aliases.c.switched_at).where(
+            contract_aliases.c.knowledge_graph == knowledge_graph
+        )
+        with self._connection() as conn:
+            switched_at = conn.execute(query).scalar()
+        return None if switched_at is None else datetime.fromisoformat(switched_at)
 
     def add_evaluation_result(self, result: EvaluationResult) -> None:
         with self._connection() as conn:

@@ -1,7 +1,7 @@
 """Graph Source adapter: the read-only seam between stetiq and an external graph database.
 
-`GraphSource` is the interface (`observe(scope, bound_attributes, value_cap=...) ->
-ObservedSchema`, `execute_read(...)`);
+`GraphSource` is the interface (`observe(scope, bound_attributes, value_cap=...,
+pattern_bounds=...) -> ObservedSchema`, `execute_read(...)`);
 `InMemoryGraphSource` is the fake used in tests; `Neo4jGraphSource` is the real, read-only
 adapter. Both pass the shared contract suite (tests/test_graph_source_contract.py).
 """
@@ -19,8 +19,11 @@ from stetiq.graph_source.model import (
     ObservedRelationshipType,
     ObservedSchema,
     ObservedValues,
+    OutsideBounds,
+    PatternBound,
     ValueCount,
     bound_attributes,
+    pattern_bounds,
 )
 from stetiq.graph_source.neo4j import Neo4jGraphSource, graph_source_from_env
 from stetiq.graph_source.protocol import GraphSource
@@ -40,7 +43,10 @@ __all__ = [
     "ObservedRelationshipType",
     "ObservedSchema",
     "ObservedValues",
+    "OutsideBounds",
+    "PatternBound",
     "ValueCount",
     "bound_attributes",
     "graph_source_from_env",
+    "pattern_bounds",
 ]

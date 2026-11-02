@@ -81,8 +81,8 @@ def test_observed_schema_statistics_appear_as_an_evaluation_result_on_the_run(
     assert by_item["OPENED"].data == {"count": 1, "fill_rates": {}}
     assert by_item["(Customer)-[OPENED]->(Ticket)"].data == {
         "count": 1,
-        "out_degree": {"min": 0, "max": 1, "mean": 0.5},
-        "in_degree": {"min": 1, "max": 1, "mean": 1.0},
+        "out_degree": {"min": 0, "max": 1, "mean": 0.5, "with_edges": 1},
+        "in_degree": {"min": 1, "max": 1, "mean": 1.0, "with_edges": 1},
     }
 
 

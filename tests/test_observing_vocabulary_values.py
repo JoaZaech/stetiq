@@ -126,7 +126,15 @@ def test_an_ontology_without_vocabularies_observes_as_before(
             {
                 "label": "Customer",
                 "count": 1,
-                "properties": [{"name": "name", "types": ["STRING"], "count": 1, "fill_rate": 1.0}],
+                "properties": [
+                    {
+                        "name": "name",
+                        "types": ["STRING"],
+                        "count": 1,
+                        "fill_rate": 1.0,
+                        "type_counts": {"STRING": 1},
+                    }
+                ],
             }
         ]
 

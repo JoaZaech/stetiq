@@ -13,15 +13,41 @@ test.describe('with Drift', () => {
     const rows = page.getByRole('table', { name: 'Observations' }).getByRole('row')
     await expect(rows).toHaveCount(3)
     const [onDemand, fromRun] = [rows.nth(1), rows.nth(2)]
-    await expect(onDemand.getByRole('cell')).toHaveText([/\d/, 'Drift', 'on demand', 'v1', '4'])
+    await expect(onDemand.getByRole('cell')).toHaveText([/\d/, 'Drift', 'on demand', 'v1', '57.1%', '4'])
     await expect(onDemand.locator('time')).toHaveAttribute('datetime', /^\d{4}-\d{2}-\d{2}T/)
     const runId = stetiq.seeded.run_id as string
-    await expect(fromRun.getByRole('cell')).toHaveText([/\d/, 'No Drift', `run ${runId.slice(0, 8)}`, '—', '—'])
+    await expect(fromRun.getByRole('cell')).toHaveText([
+      /\d/,
+      'No Drift',
+      `run ${runId.slice(0, 8)}`,
+      'v1',
+      '88.9%',
+      '—',
+    ])
     await expect(fromRun.getByRole('link', { name: `Run ${runId.slice(0, 8)}` })).toHaveAttribute(
       'href',
       `/ui/kg/support/runs/${runId}`,
     )
     await expect(page.getByText('2 Observations')).toBeVisible()
+  })
+
+  test('the alignment trend is one Conformance line: the run point filled, the on-demand point hollow', async ({
+    page,
+  }) => {
+    await page.goto('/ui/kg/support/observations')
+    const trend = page.getByRole('region', { name: 'Alignment trend' })
+
+    const points = trend.locator('[data-marker]')
+    await expect(points).toHaveCount(2)
+    await expect(points.nth(0)).toHaveAttribute('data-marker', 'run')
+    await expect(points.nth(0)).toHaveAttribute('aria-label', /: 0\.8889, run, v1$/)
+    await expect(points.nth(1)).toHaveAttribute('data-marker', 'on demand')
+    await expect(points.nth(1)).toHaveAttribute('aria-label', /: 0\.5714, on demand, v1$/)
+    await expect(trend).not.toContainText(/min|max/)
+
+    await points.nth(1).click()
+    const tiles = page.getByRole('dialog').getByRole('list', { name: 'Key figures' }).getByRole('listitem')
+    await expect(tiles).toHaveText([/^Conformance57\.1%$/, /^CQ coverage—$/, /^Gates—$/, /^Drift4findings$/])
   })
 
   test('the search and the Status filter narrow the table, and stay in the URL', async ({ page }) => {
@@ -47,19 +73,21 @@ test.describe('with Drift', () => {
     await expect(page).toHaveURL(/sheet=observation%3A/)
     await expect(sheet.getByLabel('Contract Alias')).toHaveText('production')
     await expect(sheet.getByRole('link', { name: 'v1' })).toHaveAttribute('href', '/ui/kg/support/versions/1')
-    await expect(sheet.getByLabel('Thresholds')).toHaveText('max drop off · max rise 50%')
+    await expect(sheet.getByLabel('Thresholds')).toHaveText('max drop off · max rise 50% · max violation rise 1 pt')
+    await expect(sheet).toContainText('baseline:')
+    await expect(sheet.getByRole('table', { name: 'Not comparable' })).toHaveCount(0)
 
     const tiles = sheet.getByRole('list', { name: 'Key figures' }).getByRole('listitem')
-    await expect(tiles).toHaveText([/^Conformance—$/, /^CQ coverage—$/, /^Gates—$/, /^Drift4findings$/])
+    await expect(tiles).toHaveText([/^Conformance57\.1%$/, /^CQ coverage—$/, /^Gates—$/, /^Drift4findings$/])
 
     // Concept kinds in the glossary's words: Class, Relation, Attribute.
     const findings = sheet.getByRole('table', { name: 'Findings' }).getByRole('row')
     await expect(findings).toHaveText([
-      'ConceptKindFindingChange',
-      /^TicketClassCount rose1 → 4 \(\+300%\)$/,
-      /^ESCALATEDRelationObserved but not declared$/,
-      /^RefundClassObserved but not declared$/,
-      /^Ticket\.channelAttributeObserved but not declared$/,
+      'ConceptKindFindingChangeStatus',
+      /^TicketClassCount rose1 → 4 \(\+300%\)New$/,
+      /^ESCALATEDRelationObserved but not declaredNew$/,
+      /^RefundClassObserved but not declaredNew$/,
+      /^Ticket\.channelAttributeObserved but not declaredNew$/,
     ])
     await expect(sheet).not.toContainText(/node type|relationship type|property/)
     await expect(sheet).not.toContainText(/Pending Migration|Adopt into a Candidate|Planned/)
@@ -67,6 +95,51 @@ test.describe('with Drift', () => {
     await page.keyboard.press('Escape')
     await expect(sheet).toBeHidden()
     await expect(page).not.toHaveURL(/sheet=/)
+  })
+})
+
+test.describe('with Violation Rates', () => {
+  test.use({ seed: 'observed_violation_rates' })
+
+  test('the sheet shows a risen Violation Rate against the baseline, and lists what was not comparable', async ({
+    page,
+  }) => {
+    await page.goto('/ui/kg/plant/observations')
+    await page.getByRole('table', { name: 'Observations' }).getByRole('row').nth(1).click()
+
+    const sheet = page.getByRole('dialog')
+    await expect(sheet.getByRole('table', { name: 'Findings' }).getByRole('row')).toHaveText([
+      'ConceptKindFindingChangeStatus',
+      /^WorkOrder\.statusAttributeValue outside the Vocabulary“on_hold” × 2New$/,
+      /^WorkOrder\.codeAttributeViolation Rate roseRequired but not always set: 0% → 50% \(\+50 pts\)New$/,
+    ])
+    await expect(sheet.getByRole('table', { name: 'Not comparable' }).getByRole('row')).toHaveText([
+      'ConceptKindCheckReason',
+      /^WorkOrder\.statusAttributeValue outside the Vocabularyvalue list truncated/,
+    ])
+    await expect(sheet.locator('time')).toHaveCount(2) // the Observation's time and its baseline's
+  })
+
+  test('the baseline itself compares with nothing yet', async ({ page }) => {
+    await page.goto('/ui/kg/plant/observations')
+    await page.getByRole('table', { name: 'Observations' }).getByRole('row').nth(2).click()
+
+    await expect(page.getByRole('dialog')).toContainText('baseline: itself')
+  })
+})
+
+test.describe('with persisting Drift', () => {
+  test.use({ seed: 'observed_persisting_drift' })
+
+  test('the sheet lists new findings first, then those the previous Observation had too', async ({ page }) => {
+    await page.goto('/ui/kg/support/observations')
+    await page.getByRole('table', { name: 'Observations' }).getByRole('row').nth(1).click()
+
+    await expect(page.getByRole('dialog').getByRole('table', { name: 'Findings' }).getByRole('row')).toHaveText([
+      'ConceptKindFindingChangeStatus',
+      /^RefundClassObserved but not declaredNew$/,
+      /^AgentClassObserved but not declaredPersisting$/,
+    ])
   })
 })
 

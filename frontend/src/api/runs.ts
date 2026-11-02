@@ -63,6 +63,14 @@ export interface Mismatch {
   /** Value mismatches only: the observed value and how many hold it. */
   value?: string
   count?: number
+  /**
+   * The Violation Rate: the share of owner nodes or relationships failing this check
+   * (`required_missing`, `value_outside_vocabulary`), or of endpoint nodes
+   * (`cardinality_violation`); absent when unknown.
+   */
+  rate?: number
+  /** `cardinality_violation` only: which degree breaks the bound. */
+  direction?: 'out' | 'in'
 }
 
 /** conformance.Conformance.to_dict */

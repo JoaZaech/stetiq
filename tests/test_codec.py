@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 
 from stetiq.conformance import Conformance, Mismatch, MismatchKind
-from stetiq.drift import DriftFinding, DriftKind, DriftThresholds
+from stetiq.drift import DriftFinding, DriftKind, DriftThresholds, NotComparable
 from stetiq.evaluation.framework import Detail, Evaluation
 from stetiq.gates import ConformanceGate, GateOutcome
 from stetiq.graph_source import (
@@ -27,6 +27,7 @@ from stetiq.ontology import parse_dict
 from stetiq.tracking import codec, entities
 from stetiq.tracking.entities import (
     Alias,
+    AlignmentPoint,
     ConstructionRun,
     ConsumerGateResult,
     DriftEvent,
@@ -108,7 +109,13 @@ SCHEMA = ObservedSchema(
             "Customer",
             3,
             (
-                ObservedProperty("name", ("STRING",), 3, 1.0),
+                ObservedProperty(
+                    "name",
+                    ("INTEGER", "STRING"),
+                    3,
+                    1.0,
+                    type_counts=(("INTEGER", 1), ("STRING", 2)),
+                ),
                 ObservedProperty(
                     "tier",
                     ("STRING",),
@@ -134,6 +141,21 @@ OBSERVATION = Observation(
     observed_at=AT,
     schema=SCHEMA,
     run_id="run-1",
+    baseline_observation_id="obs-0",
+    not_comparable=(
+        NotComparable(
+            DriftKind.VIOLATION_INCREASE,
+            "Customer.name",
+            "property",
+            "no Violation Rate in the Baseline Observation",
+            MismatchKind.REQUIRED_MISSING,
+        ),
+        NotComparable(DriftKind.UNDECLARED_VALUE, "Ticket.status", "property", "truncated"),
+    ),
+    conformance=Conformance(
+        score=0.75, mismatches=(Mismatch("Invoice", "node_type", MismatchKind.UNDECLARED),)
+    ),
+    ontology_version=2,
 )
 DRIFT_EVENT = DriftEvent(
     id="drift-1",
@@ -145,12 +167,44 @@ DRIFT_EVENT = DriftEvent(
     detected_at=LATER,
     findings=(
         DriftFinding(DriftKind.COUNT_DROP, "Customer", "node_type", "fell", 10, 3),
-        DriftFinding(DriftKind.UNDECLARED, "Invoice", "node_type"),
+        DriftFinding(DriftKind.UNDECLARED, "Invoice", "node_type", new=False),
         DriftFinding(
-            DriftKind.UNDECLARED_VALUE, "Ticket.status", "property", "2 times", value="on_hold"
+            DriftKind.UNDECLARED_VALUE,
+            "Ticket.status",
+            "property",
+            "2 times",
+            value="on_hold",
+            count=2,
+            share=0.25,
+        ),
+        DriftFinding(
+            DriftKind.VIOLATION_INCREASE,
+            "Customer.name",
+            "property",
+            "rose",
+            violation=MismatchKind.REQUIRED_MISSING,
+            baseline_rate=0.005,
+            observed_rate=0.03,
+        ),
+        DriftFinding(
+            DriftKind.FILL_RATE_DROP,
+            "Ticket.opened_at",
+            "property",
+            "fell",
+            baseline_rate=1.0,
+            observed_rate=0.8,
+        ),
+        DriftFinding(
+            DriftKind.COUNT_DROP, "(Customer)-[OPENED]->(Ticket)", "pattern", "fell", 10, 5
         ),
     ),
-    thresholds=DriftThresholds(max_count_drop=0.5, max_count_increase=2.0),
+    thresholds=DriftThresholds(
+        max_count_drop=0.5,
+        max_count_increase=2.0,
+        max_violation_increase=0.02,
+        max_fill_rate_drop=0.1,
+        min_count=100,
+    ),
 )
 
 GATE_PREVIEW_SOURCE = GatePreviewSource(
@@ -178,6 +232,7 @@ RUN = ConstructionRun(
                 "2 times",
                 "on_hold",
                 2,
+                0.25,
             ),
         ),
     ),
@@ -186,6 +241,9 @@ RUN = ConstructionRun(
 )
 
 SAMPLES: dict[type, Any] = {
+    AlignmentPoint: AlignmentPoint(
+        at=LATER, score=0.75, ontology_version=2, observation_id="obs-1", run_id="run-1"
+    ),
     KnowledgeGraph: KNOWLEDGE_GRAPH,
     KnowledgeGraphSummary: KnowledgeGraphSummary(
         knowledge_graph=KNOWLEDGE_GRAPH,
@@ -376,3 +434,12 @@ def test_a_run_from_an_older_server_or_store_has_no_ignored_definitions():
     del data["ignored_definitions"]
 
     assert codec.run_from_json(data).ignored_definitions == ()
+
+
+def test_an_observation_from_an_older_server_has_no_score():
+    data = codec.observation_to_json(SAMPLES[Observation])
+    del data["conformance"], data["ontology_version"]
+
+    observation = codec.observation_from_json(data)
+
+    assert (observation.conformance, observation.ontology_version) == (None, None)

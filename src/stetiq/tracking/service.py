@@ -21,7 +21,7 @@ from typing import Protocol, get_args
 
 from stetiq import use_case as use_case_format
 from stetiq.conformance import apply_definitions, assess_conformance, candidate_ontology
-from stetiq.drift import DriftThresholds, assess_drift
+from stetiq.drift import DriftFinding, DriftThresholds, assess_drift, mark_new
 from stetiq.errors import (
     ConflictingArgumentsError,
     EvaluatorError,
@@ -71,6 +71,7 @@ from stetiq.tracking.entities import (
     DEFAULT_CONTRACT_ALIAS,
     DEFAULT_EVOLUTION_MODE,
     Alias,
+    AlignmentPoint,
     ConstructionRun,
     ConsumerGateResult,
     DriftEvent,
@@ -257,10 +258,18 @@ class TrackingService(Protocol):
         thresholds: DriftThresholds | None = None,
     ) -> ObservationOutcome:
         """Store an on-demand Observation (no run) and check it for Drift against the
-        Contract Alias's version and the previous Observation. Never creates a version."""
+        Contract Alias's version, the previous Observation (counts) and the Baseline
+        Observation (Violation Rates), recording that baseline and the checks that were
+        not comparable on the Observation. Never creates a version."""
         ...
 
     def list_drift_events(self, knowledge_graph: str) -> list[DriftEvent]: ...
+
+    def alignment_trend(self, knowledge_graph: str) -> list[AlignmentPoint]:
+        """The Conformance scores of the Knowledge Graph's Construction Runs and on-demand
+        Observations, oldest first. Observations stored before scores existed, and runs
+        that ended without an Observation, have no point."""
+        ...
 
     def set_alias(self, knowledge_graph: str, name: str, version: int, actor: str) -> Alias: ...
 
@@ -962,19 +971,33 @@ class LocalTrackingService:
             self.get_knowledge_graph(knowledge_graph)
             history = self._store.list_observations(knowledge_graph)
             previous = history[-1] if history else None
+            baseline = self._baseline_observation(knowledge_graph, history)
+            contract_alias = self.get_contract_alias(knowledge_graph)
+            contract = self.get_contract_version(knowledge_graph)
+            drift = assess_drift(
+                contract.ontology,
+                schema,
+                None if previous is None else previous.schema,
+                thresholds,
+                baseline=None if baseline is None else baseline.schema,
+            )
+            obs_id = uuid.uuid4().hex
             obs = Observation(
-                id=uuid.uuid4().hex,
+                id=obs_id,
                 knowledge_graph=knowledge_graph,
                 scope=scope,
                 observed_at=_now(),
                 schema=schema,
                 run_id=None,
+                baseline_observation_id=obs_id if baseline is None else baseline.id,
+                not_comparable=drift.not_comparable,
+                conformance=drift.conformance,
+                ontology_version=contract.number,
             )
             self._store.add_observation(obs)
-            contract_alias = self.get_contract_alias(knowledge_graph)
-            contract = self.get_contract_version(knowledge_graph)
-            findings = assess_drift(
-                contract.ontology, schema, None if previous is None else previous.schema, thresholds
+            findings = mark_new(
+                drift.findings,
+                self._previous_findings(history, contract, thresholds, baseline),
             )
             if not findings:
                 return ObservationOutcome(observation=obs)
@@ -992,9 +1015,90 @@ class LocalTrackingService:
             self._store.add_drift_event(event)
             return ObservationOutcome(observation=obs, drift=event)
 
+    def _previous_findings(
+        self,
+        history: list[Observation],
+        contract: OntologyVersion,
+        thresholds: DriftThresholds,
+        baseline: Observation | None,
+    ) -> tuple[DriftFinding, ...]:
+        """The previous Observation's Drift findings: its event's, or, when it raised none
+        (a run-end Observation is never checked), recomputed against today's contract,
+        thresholds and Baseline Observation. None at all when the previous Observation was
+        judged against another Ontology Version than `contract` (e.g. before a Promotion),
+        so that every finding is new: recomputing would pass off a gap the new version
+        introduced as one the graph already had."""
+        if not history:
+            return ()
+        previous = history[-1]
+        if self._judged_against(previous) not in (None, contract.number):
+            return ()
+        event = self._store.get_drift_event_for_observation(previous.id)
+        if event is not None:
+            return event.findings
+        before = history[-2] if len(history) > 1 else None
+        return assess_drift(
+            contract.ontology,
+            previous.schema,
+            None if before is None else before.schema,
+            thresholds,
+            baseline=None if baseline is None else baseline.schema,
+        ).findings
+
+    def _judged_against(self, observation: Observation) -> int | None:
+        """The Contract Ontology Version an Observation was judged against: its own for an
+        on-demand one, its run's for a run-end one; None when unknown (an on-demand
+        Observation stored before Observations recorded it)."""
+        if observation.ontology_version is not None or observation.run_id is None:
+            return observation.ontology_version
+        run = self._store.get_run(observation.run_id)
+        return None if run is None else run.ontology_version
+
+    def _baseline_observation(
+        self, knowledge_graph: str, history: list[Observation]
+    ) -> Observation | None:
+        """The first Observation (run-end ones included) since the Contract Alias's current
+        Ontology Version became the contract, by a Promotion of the Contract Alias or by
+        switching the Contract Alias; None when there is none yet."""
+        alias = self.get_alias(knowledge_graph, self._contract_alias(knowledge_graph))
+        switched_at = self._store.get_contract_alias_switched_at(knowledge_graph)
+        since = alias.updated_at if switched_at is None else max(alias.updated_at, switched_at)
+        return next((o for o in history if o.observed_at >= since), None)
+
     def list_drift_events(self, knowledge_graph: str) -> list[DriftEvent]:
         self.get_knowledge_graph(knowledge_graph)
         return self._store.list_drift_events(knowledge_graph)
+
+    def alignment_trend(self, knowledge_graph: str) -> list[AlignmentPoint]:
+        with self._store.transaction():
+            self.get_knowledge_graph(knowledge_graph)
+            runs = {r.id: r for r in self._store.list_runs(knowledge_graph)}
+            observations = self._store.list_observations(knowledge_graph)
+        # A run's Conformance is its run-end Observation's, so walking the Observations
+        # (stored oldest first) gives every point in time order.
+        trend: list[AlignmentPoint] = []
+        for obs in observations:
+            run = None if obs.run_id is None else runs.get(obs.run_id)
+            if run is not None and run.conformance is not None:
+                trend.append(
+                    AlignmentPoint(
+                        at=obs.observed_at,
+                        score=run.conformance.score,
+                        ontology_version=run.candidate_version or run.ontology_version,
+                        observation_id=obs.id,
+                        run_id=run.id,
+                    )
+                )
+            elif obs.conformance is not None and obs.ontology_version is not None:
+                trend.append(
+                    AlignmentPoint(
+                        at=obs.observed_at,
+                        score=obs.conformance.score,
+                        ontology_version=obs.ontology_version,
+                        observation_id=obs.id,
+                    )
+                )
+        return trend
 
     # --- Aliases and Promotion ------------------------------------------------------
 
@@ -1047,9 +1151,13 @@ class LocalTrackingService:
         return self._store.list_promotions(knowledge_graph)
 
     def set_contract_alias(self, knowledge_graph: str, alias: str) -> None:
+        """Designate the Contract Alias. Switching to another Alias records when, so Drift
+        takes a new Baseline Observation; designating the current one changes nothing."""
         with self._store.transaction():
             self.get_alias(knowledge_graph, alias)
-            self._store.set_contract_alias(knowledge_graph, alias)
+            if self._contract_alias(knowledge_graph) == alias:
+                return
+            self._store.set_contract_alias(knowledge_graph, alias, _now())
 
     def get_contract_alias(self, knowledge_graph: str) -> str:
         self.get_knowledge_graph(knowledge_graph)

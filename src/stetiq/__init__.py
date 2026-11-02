@@ -2,7 +2,7 @@
 
 from stetiq.client import ActiveRun, Client
 from stetiq.conformance import Conformance, Mismatch, MismatchKind
-from stetiq.drift import DriftFinding, DriftKind, DriftThresholds
+from stetiq.drift import DriftFinding, DriftKind, DriftThresholds, NotComparable
 from stetiq.entry_point import EntryPoint, EntryPointError, InvalidEntryPointError
 from stetiq.errors import (
     AuthenticationError,
@@ -42,6 +42,7 @@ from stetiq.ontology.diff import Change, ChangeKind, Classification, OntologyDif
 from stetiq.run_context import LastAttempt, RecordedVerdicts, RunContext
 from stetiq.tracking import (
     Alias,
+    AlignmentPoint,
     ConstructionRun,
     ConsumerGateResult,
     DriftEvent,
@@ -72,6 +73,7 @@ from stetiq.use_case import (
 __all__ = [
     "ActiveRun",
     "Alias",
+    "AlignmentPoint",
     "AuthenticationError",
     "Change",
     "ChangeKind",
@@ -124,6 +126,7 @@ __all__ = [
     "MissingDeclaredOntologyError",
     "NoConsumerGatesError",
     "NoUseCaseError",
+    "NotComparable",
     "NotFoundError",
     "Observation",
     "ObservationOutcome",

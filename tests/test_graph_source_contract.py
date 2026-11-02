@@ -16,6 +16,8 @@ from stetiq.graph_source import (
     Neo4jGraphSource,
     ObservedProperty,
     ObservedValues,
+    OutsideBounds,
+    PatternBound,
     ValueCount,
 )
 
@@ -110,11 +112,32 @@ def test_observes_node_properties_with_types_and_fill_rates(graph):
     customer = graph.source.observe(SCOPE).node_type("Customer")
 
     assert customer.properties == (
-        ObservedProperty("active", ("BOOLEAN",), 1, 0.25),
-        ObservedProperty("age", ("FLOAT", "INTEGER"), 2, 0.5),
-        ObservedProperty("name", ("STRING",), 3, 0.75),
-        ObservedProperty("tags", ("LIST",), 1, 0.25),
+        ObservedProperty("active", ("BOOLEAN",), 1, 0.25, type_counts=(("BOOLEAN", 1),)),
+        ObservedProperty(
+            "age", ("FLOAT", "INTEGER"), 2, 0.5, type_counts=(("FLOAT", 1), ("INTEGER", 1))
+        ),
+        ObservedProperty("name", ("STRING",), 3, 0.75, type_counts=(("STRING", 3),)),
+        ObservedProperty("tags", ("LIST",), 1, 0.25, type_counts=(("LIST", 1),)),
     )
+
+
+def test_counts_how_many_values_of_each_type_a_property_holds(graph):
+    for opened_at in ["2026-01-01", 20260102, 20260103, 4.5]:
+        graph.add_node(["KG", "Ticket"], {"opened_at": opened_at})
+    graph.add_node(["KG", "Ticket"], {"tags": ["a"]})
+    graph.add_node(["KG", "Ticket"], {"tags": [1, 2]})  # another element type: still a LIST
+    ada = graph.add_node(["KG", "Customer"])
+    ticket = graph.add_node(["KG", "Ticket"])
+    graph.add_relationship(ada, "OPENED", ticket, {"via": "email"})
+    graph.add_relationship(ada, "OPENED", ticket, {"via": 3})
+
+    schema = graph.source.observe(SCOPE)
+
+    opened_at, tags = schema.node_type("Ticket").properties
+    assert opened_at.type_counts == (("FLOAT", 1), ("INTEGER", 2), ("STRING", 1))
+    assert tags.type_counts == (("LIST", 2),)
+    [via] = schema.relationship_type("OPENED").properties
+    assert via.type_counts == (("INTEGER", 1), ("STRING", 1))
 
 
 def test_observes_relationship_types_with_counts_and_property_fill_rates(graph):
@@ -129,7 +152,9 @@ def test_observes_relationship_types_with_counts_and_property_fill_rates(graph):
     opened = graph.source.observe(SCOPE).relationship_type("OPENED")
 
     assert opened.count == 2
-    assert opened.properties == (ObservedProperty("via", ("STRING",), 1, 0.5),)
+    assert opened.properties == (
+        ObservedProperty("via", ("STRING",), 1, 0.5, type_counts=(("STRING", 1),)),
+    )
 
 
 def test_observes_patterns_with_counts_and_cardinalities(graph):
@@ -149,8 +174,68 @@ def test_observes_patterns_with_counts_and_cardinalities(graph):
         ("Ticket", "ABOUT", "Customer", 1),
     ]
     opened = schema.pattern("Customer", "OPENED", "Ticket")
-    assert opened.out_degree == Degree(min=0, max=2, mean=1.0)
-    assert opened.in_degree == Degree(min=0, max=2, mean=1.0)
+    assert opened.out_degree == Degree(min=0, max=2, mean=1.0, with_edges=2)
+    assert opened.in_degree == Degree(min=0, max=2, mean=1.0, with_edges=2)
+
+
+def test_a_degree_counts_the_endpoint_nodes_with_at_least_one_edge(graph):
+    orders = [graph.add_node(["KG", "WorkOrder"]) for _ in range(4)]
+    machine = graph.add_node(["KG", "Machine"])
+    graph.add_node(["KG", "Machine"])  # serves no WorkOrder
+    for order in orders[:3]:
+        graph.add_relationship(order, "ON", machine)
+
+    on = graph.source.observe(SCOPE).pattern("WorkOrder", "ON", "Machine")
+
+    assert (on.out_degree.with_edges, on.in_degree.with_edges) == (3, 1)
+
+
+def seed_tickets_opened(graph):
+    """Customers opening 2, 1 and 0 of three in-scope Tickets (the third one twice
+    opened), plus an edge to a Ticket outside the scope, which is not counted."""
+    ada = graph.add_node(["KG", "Customer"])
+    bob = graph.add_node(["KG", "Customer"])
+    graph.add_node(["KG", "Customer"])  # opened nothing
+    tickets = [graph.add_node(["KG", "Ticket"]) for _ in range(3)]
+    graph.add_relationship(ada, "OPENED", tickets[0])
+    graph.add_relationship(ada, "OPENED", tickets[1])
+    graph.add_relationship(bob, "OPENED", tickets[1])
+    graph.add_relationship(bob, "OPENED", graph.add_node(["Ticket"]))  # endpoint out of scope
+
+
+def test_counts_the_endpoint_nodes_outside_each_declared_pattern_bound(graph):
+    seed_tickets_opened(graph)
+    bounds = [
+        PatternBound("Customer", "OPENED", "Ticket", "out", 1, 1),  # ada (2) and the idle one (0)
+        PatternBound("Customer", "OPENED", "Ticket", "in", None, 1),  # the twice-opened Ticket
+    ]
+
+    opened = graph.source.observe(SCOPE, pattern_bounds=bounds).pattern(
+        "Customer", "OPENED", "Ticket"
+    )
+
+    assert opened.out_degree.outside_bounds == OutsideBounds(min=1, max=1, count=2)
+    assert opened.in_degree.outside_bounds == OutsideBounds(min=None, max=1, count=1)
+
+
+def test_a_minimum_counts_zero_degree_endpoint_nodes_against_it(graph):
+    seed_tickets_opened(graph)
+    bound = PatternBound("Customer", "OPENED", "Ticket", "in", 1, None)
+
+    opened = graph.source.observe(SCOPE, pattern_bounds=[bound]).pattern(
+        "Customer", "OPENED", "Ticket"
+    )
+
+    assert opened.in_degree.outside_bounds == OutsideBounds(min=1, max=None, count=1)
+    assert opened.out_degree.outside_bounds is None  # no bound in that direction
+
+
+def test_without_declared_bounds_nothing_is_counted(graph):
+    seed_tickets_opened(graph)
+
+    opened = graph.source.observe(SCOPE).pattern("Customer", "OPENED", "Ticket")
+
+    assert (opened.out_degree.outside_bounds, opened.in_degree.outside_bounds) == (None, None)
 
 
 def test_a_namespace_scope_selects_nodes_by_namespace_property_and_hides_it(graph):

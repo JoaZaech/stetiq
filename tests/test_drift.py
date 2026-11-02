@@ -153,6 +153,7 @@ def test_a_count_dropping_beyond_the_threshold_since_the_previous_observation_is
     assert statistical(second.drift.findings) == [
         ("count_drop", "Ticket", 10, 8),
         ("count_drop", "OPENED", 10, 8),
+        ("count_drop", "(Customer)-[OPENED]->(Ticket)", 10, 8),
     ]
     assert second.drift.structural == ()
     assert second.drift.previous_observation_id == first.observation.id
@@ -185,6 +186,7 @@ def test_a_count_rising_beyond_the_increase_threshold_is_statistical_drift(
     assert statistical(second.drift.findings) == [
         ("count_increase", "Ticket", 2, 4),
         ("count_increase", "OPENED", 2, 4),
+        ("count_increase", "(Customer)-[OPENED]->(Ticket)", 2, 4),
     ]
 
 

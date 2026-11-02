@@ -27,7 +27,7 @@ The file must be a YAML mapping. An empty file is an empty config. Each section 
 | --- | --- | --- |
 | [`knowledge_graph`](#knowledge_graph) | `stetiq run`, `stetiq observe`, `stetiq gate` | The Knowledge Graph to use when the command doesn't name one. |
 | [`entry_point`](#entry_point) | `stetiq run` | The Construction Entry Point: the command a Construction Run starts. |
-| [`drift`](#drift) | `stetiq observe` | Thresholds for statistical Drift. |
+| [`drift`](#drift) | `stetiq observe` | Thresholds for statistical Drift: counts, Violation Rates, Coverage and fill rates. |
 | [`gates`](#gates) | `stetiq gate` | The Gates to evaluate for an Ontology Version or a Construction Run. |
 
 ## knowledge_graph
@@ -82,22 +82,32 @@ Connection details such as `STETIQ_GRAPH_SOURCE_URI` are never put into the comm
 
 ## drift
 
-Thresholds for statistical Drift, checked by `stetiq observe`. Each is a fraction of a type's count in the previous Observation: `0.1` is 10%.
+Thresholds for statistical Drift, checked by `stetiq observe`.
 
 ```yaml
 drift:
-  max_count_drop: 0.1      # a node or relationship type losing more than 10% is Drift
-  max_count_increase: 0.5  # a type growing by more than 50% is Drift
+  max_count_drop: 0.1           # a node or relationship type losing more than 10% is Drift
+  max_count_increase: 0.5       # a type growing by more than 50% is Drift
+  max_violation_increase: 0.02  # a Violation Rate 2 points above its baseline is Drift
+  max_coverage_drop: 0.05       # a declared pattern's Coverage 5 points below its baseline is Drift
+  max_fill_rate_drop: 0.05      # an optional attribute filled 5 points less than at the baseline is Drift
+  min_count: 100                # types, patterns and owners with fewer than 100 aren't compared
 ```
 
-| Key | Drift when |
-| --- | --- |
-| `max_count_drop` | A node or relationship type's count falls by more than this fraction. |
-| `max_count_increase` | A node or relationship type's count rises by more than this fraction. |
+| Key | Compared with | Drift when | Default |
+| --- | --- | --- | --- |
+| `max_count_drop` | the previous Observation | A node or relationship type's or a pattern's count falls by more than this fraction of its previous count (`0.1` is 10%). A pattern's finding is on the pattern, e.g. `(Customer)-[OPENED]->(Ticket)`. | off |
+| `max_count_increase` | the previous Observation | A node or relationship type's or a pattern's count rises by more than this fraction of its previous count. | off |
+| `max_violation_increase` | the [Baseline Observation](./02-concepts.md#observation-and-drift) | A Violation Rate rises more than this many absolute points above its value in the Baseline Observation (`0.01` is one percentage point, e.g. 0.5% to more than 1.5%). The finding is `violation_increase`, with both rates. Today it covers required attributes that aren't always set, attributes holding values of the wrong type (e.g. 2% of `opened_at` values are strings, not dates), and patterns outside their declared [cardinality](#cardinality) (once per direction). | `0.01` |
+| `max_coverage_drop` | the Baseline Observation | A declared pattern's Coverage falls more than this many absolute points below its value in the Baseline Observation. Coverage is the share of the pattern's source nodes with at least one such relation (out-degree), or of its target nodes (in-degree), e.g. the share of WorkOrders on a Machine: 95% in the baseline and 85% now is Drift at `0.05`. The finding is `coverage_drop`, once per degree, with both values. Patterns the contract doesn't declare are never checked. | off |
+| `max_fill_rate_drop` | the Baseline Observation | A declared attribute that isn't required is set on a share of its nodes or relationships more than this many absolute points below its share in the Baseline Observation (`0.05` is 5 points, e.g. 90% to less than 85%). Only drops count. The finding is `fill_rate_drop`, with both fill rates. A required attribute has its Violation Rate instead. | off |
+| `min_count` | the Observation each check compares with | A whole number. A node or relationship type or a pattern with fewer than this many in the previous Observation isn't checked for count changes. A Violation Rate or fill rate whose node or relationship type has fewer than this many, in the Baseline Observation or now, isn't checked either, nor a Coverage or cardinality Violation Rate whose source (out-degree) or target (in-degree) class has fewer. Each skipped check is *not comparable*. | `0` |
 
-Both keys are optional, and each must be a non-negative number. A change exactly at the threshold isn't Drift. Without a `drift:` section, or without a key, that statistical check is off. Structural Drift (Concepts that are observed but not declared by the Contract Alias's Ontology Version, or declared but no longer observed, and values outside a bound attribute's Vocabulary) is always checked.
+Every key is optional. Each threshold must be a non-negative number or `null`, and `min_count` a non-negative whole number. A missing key takes its default, and `null` turns that check off (`max_violation_increase: null`). A change exactly at the threshold isn't Drift. Structural Drift (Concepts that are observed but not declared by the Contract Alias's Ontology Version, or declared but no longer observed, and values outside a bound attribute's Vocabulary) is always checked.
 
-Any other key in `drift:` is an error. `stetiq observe` exits 3 on Drift and 1 on an error. If you run it without `--config` and there is no `./stetiq.yaml`, it uses an empty config. A `--config` file that doesn't exist is an error.
+A check that lacks its input never raises Drift: a Violation Rate whose Attribute the Baseline Observation didn't observe, a wrong-type rate when either Observed Schema doesn't count values per type (one stored by an older stetiq, or pushed by a Graph Source that doesn't), a Coverage the Baseline Observation can't give (it observed no nodes of that class, or it was taken by a Graph Source adapter that doesn't report Coverage), a fill rate whose node or relationship type it didn't observe, a type, pattern or owner below `min_count`, the share of a value outside the Vocabulary when the attribute had more distinct values than stetiq reads, or a cardinality rate when the Graph Source adapter did not count the nodes outside the bounds. `stetiq observe` prints one `Not comparable: N checks` line for them, and the web UI lists them with the Observation.
+
+Any other key in `drift:` is an error. `stetiq observe` exits 3 when at least one finding is new: one the previous Observation didn't have, or one on a Violation Rate, Coverage or fill rate that has moved further from its value in the Baseline Observation since. A finding that persists from the previous Observation is still recorded and printed, but exits 0, unless you pass `--fail-on-persisting` (see [Observations and Drift](./04-cli.md#observations-and-drift)). It exits 1 on an error. If you run it without `--config` and there is no `./stetiq.yaml`, it uses an empty config. A `--config` file that doesn't exist is an error.
 
 ## gates
 
@@ -354,7 +364,7 @@ A Vocabulary has a `label`, an optional `definition` and `alternativeLabels`, an
 - **Ontology Diff:** a Vocabulary change names the Vocabulary (`Status`), and a value change names the value as `Vocabulary.value` (`Status.done`). Adding a value is *additive*, deprecating one *deprecating* and removing one *breaking*. Binding a Vocabulary to an existing attribute, or rebinding an attribute to a different Vocabulary, is *breaking*, because existing values may no longer conform; unbinding is *additive*. Adding or removing a Vocabulary is *additive*, since only a binding constrains data. Changing a Definition or Alternative Labels on a Vocabulary or a value is *cosmetic*.
 - **Observation:** a binding is the only thing that makes an Observation read an attribute's values. It records the distinct values each bound attribute takes in the Graph Source, with a count per value, up to 100 per attribute (see [Vocabulary values](./03-python-sdk.md#vocabulary-values) to change the cap). Unbound attributes are only counted, as before.
 - **Conformance:** each bound attribute whose values were observed is one item in the score. Each observed value outside the Vocabulary fails it and is reported as a `value_outside_vocabulary` mismatch with the value and its count, for example `'on_hold' observed 2 times, not a value of Status`. An observed deprecated value conforms, but is reported as a `deprecated_value` mismatch that names its replacement. Only a value's `label` conforms: an Alternative Label is documentation, not a permitted spelling. When an attribute has more distinct values than the cap, the values beyond it were not read, so only the listed values are checked: the attribute conforms if none of them is outside the Vocabulary. The Observed Schema's `truncated` flag tells you the list is incomplete (see [Vocabulary values](./03-python-sdk.md#vocabulary-values)).
-- **Drift:** each observed value outside the Contract Alias's Vocabulary is an `undeclared_value` finding, so `stetiq observe` exits 3. A value beyond the cap can't be named and raises no Drift.
+- **Drift:** each observed value outside the Contract Alias's Vocabulary is an `undeclared_value` finding, so `stetiq observe` exits 3 the first time it sees the value (it is then persisting until it goes away). A value beyond the cap can't be named and raises no Drift.
 - **Evolution Mode:** an *evolving* run that observes values outside a Vocabulary yields a Candidate whose Vocabulary has them as new values (an additive change); a *strict* run fails, as for other undeclared Concepts. Values beyond the cap are not added.
 
 ### Cardinality
@@ -377,4 +387,4 @@ patterns:
 Bounds are whole numbers of 0 or more, and `min` may not exceed `max`. A pattern's cardinality is part of its Ontology Version; a pattern without one keeps the plain `[source, relationship, target]` form.
 
 - **Ontology Diff:** adding a bound or tightening one (raising a `min`, lowering a `max`) is *breaking*, because existing data may no longer conform. Loosening or removing one is *additive*. Each changed bound is its own change.
-- **Conformance:** each bound is one item in the score. When the observed out- or in-degree (taken over every node of that class, including those with no such relation) falls outside the bounds, the run reports a `cardinality_violation` on the pattern, once per direction, with the observed range against the declared bounds, for example `out-degree observed 0..2, declared min 1, max 1`. A declared pattern that is never observed gives every node of its class degree 0.
+- **Conformance:** each bound is one item in the score. When the observed out- or in-degree (taken over every node of that class, including those with no such relation) falls outside the bounds, the run reports a `cardinality_violation` on the pattern, once per direction, with the observed range against the declared bounds, for example `out-degree observed 0..2, declared min 1, max 1`. A declared pattern that is never observed gives every node of its class degree 0. Its Violation Rate is the share of that class's nodes whose degree is outside the bounds: one WorkOrder with two `PERFORMED_ON` relations among 1,000 against `max: 1` is 0.1%. To count them, each Observation runs one small aggregate query per declared bound (none when nothing is bounded).

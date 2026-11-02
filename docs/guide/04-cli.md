@@ -40,7 +40,7 @@ Local mode needs no token. How to issue one is described in [Server & API Tokens
 | `0` | Success. |
 | `1` | An error, printed as `error: …` (unknown Knowledge Graph, missing permission, bad config file…). `stetiq run` also exits 1 when the Construction Run failed. |
 | `2` | A usage error: an unknown command or option, or a missing argument. |
-| `3` | A finding: `stetiq observe` found Drift, `stetiq gate` had a Gate fail, or `stetiq consumer gate` had a Consumer Gate fail. |
+| `3` | A finding: `stetiq observe` found new Drift (any Drift with `--fail-on-persisting`), `stetiq gate` had a Gate fail, or `stetiq consumer gate` had a Consumer Gate fail. |
 
 ## Commands
 
@@ -53,7 +53,7 @@ Local mode needs no token. How to issue one is described in [Server & API Tokens
 | `stetiq run` | Start the Construction Entry Point as a Construction Run. |
 | `stetiq runs` | Construction Runs: list, show, compare and evaluate them. |
 | `stetiq observe` | Take an Observation now and check it for Drift. |
-| `stetiq observations`, `stetiq drift` | List Observations and Drift events. |
+| `stetiq observations`, `stetiq drift` | List Observations, their alignment trend and Drift events. |
 | `stetiq gate`, `stetiq gate-results` | Evaluate the Gates in `stetiq.yaml`, and list past results. |
 | `stetiq consumer` | Evaluate the Consumer Gates the Use Case declares, and list past results. |
 | `stetiq context` | Print the run context the upstream pipeline extracts with, as JSON. |
@@ -143,10 +143,23 @@ Observing needs your Graph Source credentials, so `stetiq run`, `stetiq observe`
 ```bash
 stetiq observe support
 stetiq observations list support
+stetiq observations trend support
 stetiq drift list support
 ```
 
-`stetiq observe` takes an Observation now, outside any Construction Run, and compares it with the Contract Alias's version and with the previous Observation. Drift thresholds come from the `drift:` section of `stetiq.yaml` (or `--config`). It exits 3 when it found Drift and 1 when the check could not run, so a cron job, Airflow task or CI step can tell the two apart.
+`stetiq observe` takes an Observation now, outside any Construction Run, and compares it with the Contract Alias's version, its counts with the previous Observation and its Violation Rates with the Baseline Observation. Drift thresholds come from the `drift:` section of `stetiq.yaml` (or `--config`). When some checks lacked their input, it prints one `Not comparable: N checks` line; the web UI lists them with the Observation.
+
+Each finding is printed as `new` or `persisting`. A finding is persisting when the previous Observation had it too; a finding on a Violation Rate, Coverage or fill rate becomes new again when that rate moves further from its value in the Baseline Observation. Counts are compared with the previous Observation, so a count finding is always new. The summary line says how many are new, e.g. `Drift: 3 finding(s), 1 new, against production (Ontology Version 4)`.
+
+`stetiq observe` exits **3** only when at least one finding is new, so a scheduled job alerts once per change, not on every run while the graph stays as it is. It exits **0** when there was no Drift or every finding was persisting, and **1** when the check could not run, so a cron job, Airflow task or CI step can tell them apart. The Drift event is stored either way. To exit 3 on any finding, as before, pass `--fail-on-persisting`:
+
+```bash
+stetiq observe support --fail-on-persisting
+```
+
+`stetiq observations trend` lists the alignment trend, oldest first: the Conformance score (`SCORE`) of every Construction Run and every on-demand Observation, with the Ontology Version it was judged against (`VERSION`) and, for a run, its id (`RUN`, `-` for an on-demand Observation). It has no threshold and never fails.
+
+`stetiq drift list` shows, per Drift event, its structural (`STRUCT`) and statistical (`STATS`) findings and how many of them were `NEW`.
 
 ### Gates
 

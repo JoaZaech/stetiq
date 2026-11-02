@@ -121,6 +121,10 @@ class Store(Protocol):
         """Ordered oldest first."""
         ...
 
+    def get_drift_event_for_observation(self, observation_id: str) -> DriftEvent | None:
+        """The Drift event the Observation raised; None when it raised none."""
+        ...
+
     def set_alias(self, alias: Alias) -> None:
         """Create the Alias or move it (upsert on knowledge graph + name)."""
         ...
@@ -139,10 +143,17 @@ class Store(Protocol):
         """Ordered oldest first."""
         ...
 
-    def set_contract_alias(self, knowledge_graph: str, alias: str) -> None: ...
+    def set_contract_alias(
+        self, knowledge_graph: str, alias: str, switched_at: datetime | None = None
+    ) -> None: ...
 
     def get_contract_alias(self, knowledge_graph: str) -> str | None:
         """None when never designated (the service then uses the default)."""
+        ...
+
+    def get_contract_alias_switched_at(self, knowledge_graph: str) -> datetime | None:
+        """When the Contract Alias was last switched to another Alias; None when never, or
+        when that switch was stored before switch times were."""
         ...
 
     def add_evaluation_result(self, result: EvaluationResult) -> None:

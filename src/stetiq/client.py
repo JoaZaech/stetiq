@@ -41,6 +41,7 @@ from stetiq.graph_source import (
     ObservedSchema,
     bound_attributes,
     graph_source_from_env,
+    pattern_bounds,
 )
 from stetiq.impact import UseCaseImpact, consumer_impact
 from stetiq.ontology import Ontology, parse_yaml
@@ -66,7 +67,12 @@ from stetiq.tracking import (
     TrackingService,
     UseCaseVersion,
 )
-from stetiq.tracking.entities import DriftEvent, EvolutionMode, ObservationOutcome
+from stetiq.tracking.entities import (
+    AlignmentPoint,
+    DriftEvent,
+    EvolutionMode,
+    ObservationOutcome,
+)
 from stetiq.tracking.service import (
     RUN_CONTEXT_DETAIL_EVALUATORS,
     check_not_built_in,
@@ -904,16 +910,26 @@ class Client:
         """The Knowledge Graph's Drift events, oldest first."""
         return self._service.list_drift_events(knowledge_graph)
 
+    def alignment_trend(self, knowledge_graph: str) -> list[AlignmentPoint]:
+        """The alignment trend: the Conformance scores of the Knowledge Graph's
+        Construction Runs and on-demand Observations, oldest first. Each on-demand score
+        is judged against the Contract Alias's Ontology Version at the time of its
+        Observation. The trend has no threshold and raises no Drift."""
+        return self._service.alignment_trend(knowledge_graph)
+
 
 def _observe(
     graph_source: GraphSource, scope: GraphSourceScope, ontology: Ontology, value_cap: int
 ) -> ObservedSchema:
     """Observe `scope`, reading values for `ontology`'s Vocabulary-bound Attributes only
-    (ADR 0001). Without such Attributes the adapter is called as before Vocabularies."""
+    (ADR 0001) and counting the endpoint nodes outside its declared Pattern bounds.
+    Without such Attributes or bounds the adapter is called as before them."""
     bound = bound_attributes(ontology)
+    cardinality = pattern_bounds(ontology)
+    extra: dict[str, Any] = {"pattern_bounds": cardinality} if cardinality else {}
     if not bound:
-        return graph_source.observe(scope)
-    return graph_source.observe(scope, bound, value_cap=value_cap)
+        return graph_source.observe(scope, **extra)
+    return graph_source.observe(scope, bound, value_cap=value_cap, **extra)
 
 
 class ActiveRun:

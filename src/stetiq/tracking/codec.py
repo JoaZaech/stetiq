@@ -24,13 +24,14 @@ from typing import Any
 
 from stetiq import use_case as use_case_format
 from stetiq.conformance import Conformance
-from stetiq.drift import DriftFinding, DriftThresholds
+from stetiq.drift import DriftFinding, DriftThresholds, NotComparable
 from stetiq.evaluation.framework import Detail, Evaluation
 from stetiq.gates import GateOutcome, outcome_from_dict, outcome_to_dict
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
 from stetiq.ontology import Ontology, from_dict, to_dict
 from stetiq.tracking.entities import (
     Alias,
+    AlignmentPoint,
     ConstructionRun,
     ConsumerGateResult,
     DriftEvent,
@@ -284,6 +285,10 @@ def observation_to_json(obs: Observation) -> dict[str, Any]:
         "observed_at": obs.observed_at.isoformat(),
         "scope": graph_source_scope_to_json(obs.scope),
         "schema": observed_schema_to_json(obs.schema),
+        "baseline_observation_id": obs.baseline_observation_id,
+        "not_comparable": not_comparable_to_json(obs.not_comparable),
+        "conformance": None if obs.conformance is None else conformance_to_json(obs.conformance),
+        "ontology_version": obs.ontology_version,
     }
 
 
@@ -295,7 +300,21 @@ def observation_from_json(d: dict[str, Any]) -> Observation:
         observed_at=datetime.fromisoformat(d["observed_at"]),
         scope=graph_source_scope_from_json(d["scope"]),
         schema=observed_schema_from_json(d["schema"]),
+        baseline_observation_id=d.get("baseline_observation_id"),
+        not_comparable=not_comparable_from_json(d.get("not_comparable") or ()),
+        conformance=None
+        if d.get("conformance") is None
+        else conformance_from_json(d["conformance"]),
+        ontology_version=d.get("ontology_version"),
     )
+
+
+def not_comparable_to_json(entries: Iterable[NotComparable]) -> list[dict[str, Any]]:
+    return [e.to_dict() for e in entries]
+
+
+def not_comparable_from_json(data: Iterable[dict[str, Any]]) -> tuple[NotComparable, ...]:
+    return tuple(NotComparable.from_dict(e) for e in data)
 
 
 # --- Use Cases ---------------------------------------------------------------------------
@@ -381,8 +400,10 @@ def requested_drift_thresholds_from_json(d: dict[str, Any] | None) -> DriftThres
 
 def recorded_drift_thresholds_from_json(d: dict[str, Any] | None) -> DriftThresholds:
     """The thresholds a Drift event was judged with. None means none were recorded, so
-    every check was off."""
-    return DriftThresholds.from_dict(d or {})
+    every check was off; so was each check whose key an older event lacks (events record
+    the value in effect, so `max_violation_increase` is missing only from events written
+    before that check existed)."""
+    return DriftThresholds.from_dict({"max_violation_increase": None, **(d or {})})
 
 
 def drift_findings_to_json(findings: Iterable[DriftFinding]) -> list[dict[str, Any]]:
@@ -418,6 +439,26 @@ def drift_event_from_json(d: dict[str, Any]) -> DriftEvent:
         detected_at=datetime.fromisoformat(d["detected_at"]),
         findings=drift_findings_from_json(d["findings"]),
         thresholds=recorded_drift_thresholds_from_json(d.get("thresholds")),
+    )
+
+
+def alignment_point_to_json(p: AlignmentPoint) -> dict[str, Any]:
+    return {
+        "at": p.at.isoformat(),
+        "score": p.score,
+        "ontology_version": p.ontology_version,
+        "observation_id": p.observation_id,
+        "run_id": p.run_id,
+    }
+
+
+def alignment_point_from_json(d: dict[str, Any]) -> AlignmentPoint:
+    return AlignmentPoint(
+        at=datetime.fromisoformat(d["at"]),
+        score=float(d["score"]),
+        ontology_version=d["ontology_version"],
+        observation_id=d["observation_id"],
+        run_id=d.get("run_id"),
     )
 
 
@@ -569,6 +610,7 @@ _CODECS: dict[type, tuple[Callable[[Any], dict[str, Any]], Callable[[dict[str, A
     UseCaseVersion: (use_case_version_to_json, use_case_version_from_json),
     DriftEvent: (drift_event_to_json, drift_event_from_json),
     ObservationOutcome: (observation_outcome_to_json, observation_outcome_from_json),
+    AlignmentPoint: (alignment_point_to_json, alignment_point_from_json),
     GateResult: (gate_result_to_json, gate_result_from_json),
     ConsumerGateResult: (consumer_gate_result_to_json, consumer_gate_result_from_json),
     GatePreview: (gate_preview_to_json, gate_preview_from_json),

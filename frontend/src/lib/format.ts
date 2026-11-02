@@ -37,6 +37,20 @@ export function formatPercent(ratio: number): string {
   return percent.format(ratio)
 }
 
+const points = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 })
+const signedPoints = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1, signDisplay: 'exceptZero' })
+
+/**
+ * A difference of two ratios in percentage points, to one decimal at most: 0.025 → "2.5 pts";
+ * only a difference that shows as exactly 1 is singular, "1 pt". `signed` adds the sign, with
+ * a true minus: "+2.5 pts", "−10 pts".
+ */
+export function formatPoints(delta: number, { signed = false } = {}): string {
+  const value = delta * 100
+  const text = (signed ? signedPoints : points).format(value).replace('-', '−')
+  return `${text} ${points.format(Math.abs(value)) === points.format(1) ? 'pt' : 'pts'}`
+}
+
 /** A count out of its total: "5 / 6". */
 export function formatFraction(count: number, total: number): string {
   return `${formatMetric(count)} / ${formatMetric(total)}`

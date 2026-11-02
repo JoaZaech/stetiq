@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Literal
 
 from stetiq.conformance import Conformance
-from stetiq.drift import DriftFinding, DriftThresholds
+from stetiq.drift import DriftFinding, DriftThresholds, NotComparable
 from stetiq.errors import InvalidAliasNameError
 from stetiq.evaluation.framework import Detail, MetricValue, ParameterValue, SubjectKind
 from stetiq.gates import Gate, GateOutcome, Verdict
@@ -111,13 +111,40 @@ class EndedRun:
 @dataclass(frozen=True)
 class Observation:
     """A Graph Source's Observed Schema at one point in time: structure and aggregate
-    statistics only, never instance data. `run_id` is None for on-demand Observations."""
+    statistics only, never instance data. `run_id` is None for on-demand Observations.
+
+    An on-demand Observation also records its Baseline Observation (its own id when it is
+    the first since the contract's Ontology Version became the contract) and the Drift
+    checks that were `not_comparable`; a run-end Observation is checked for neither.
+
+    An on-demand Observation carries its Conformance to the Contract Alias's Ontology
+    Version at the time (`ontology_version`). Both are None for a run-end Observation
+    (its run holds its Conformance) and for one stored before Observations were scored."""
 
     id: str
     knowledge_graph: str
     scope: GraphSourceScope
     observed_at: datetime
     schema: ObservedSchema
+    run_id: str | None = None
+    baseline_observation_id: str | None = None
+    not_comparable: tuple[NotComparable, ...] = ()
+    conformance: Conformance | None = None
+    ontology_version: int | None = None
+
+
+@dataclass(frozen=True)
+class AlignmentPoint:
+    """One Conformance score on a Knowledge Graph's alignment trend, at `at`: a Construction
+    Run's (`run_id` set; `observation_id` is its run-end Observation), judged against the
+    version the run was judged against, or an on-demand Observation's (`run_id` None),
+    judged against the Contract Alias's version at the time. It has no threshold and
+    raises no Drift."""
+
+    at: datetime
+    score: float
+    ontology_version: int
+    observation_id: str
     run_id: str | None = None
 
 
@@ -244,6 +271,12 @@ class DriftEvent:
     @property
     def statistical(self) -> tuple[DriftFinding, ...]:
         return tuple(f for f in self.findings if not f.structural)
+
+    @property
+    def new_findings(self) -> tuple[DriftFinding, ...]:
+        """The findings the previous Observation did not have (or, for a rate, had at a
+        rate no worse); the rest are persisting."""
+        return tuple(f for f in self.findings if f.new)
 
 
 @dataclass(frozen=True)
