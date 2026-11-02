@@ -357,14 +357,14 @@ context = client.run_context("plant", version=4)  # or another Ontology Version
 
 context.ontology_version         # the Ontology Version to extract against, as a suggestion
 context.use_case_version         # the latest Use Case Version (None without a Use Case)
-context.evaluation_results       # that Ontology Version's latest Evaluator results, metrics only
+context.evaluation_results       # that Ontology Version's latest Evaluator results
 context.run                      # the latest finished run standing for it, or None
 context.run_evaluation_results   # its run-level results, metrics only
 context.question_executions      # per Competency Question id: .status and .rows on that run
 data = context.to_dict()         # the JSON shape below
 ```
 
-The run context is built from what the tracking service already holds, so it needs only *read* permission in server mode. It carries Ontology, Use Case, metrics and counts, never instance data. **Evaluation results come with their metrics only, never their details**, because details can quote values observed in the graph (a Conformance mismatch names the value it saw; a custom Evaluator's details can hold anything). Executed Competency Questions appear as a status and a row count, not their rows. For the details, read the results with `get_evaluation_results` and `get_run_evaluation_results`. An unknown Knowledge Graph or Ontology Version raises `NotFoundError`.
+The run context is built from what the tracking service already holds, so it needs only *read* permission in server mode. It carries Ontology, Use Case, metrics, counts and what the version Evaluators found, never instance data. **The built-in Evaluators that judge an Ontology Version keep their details**: the structural checks (`hierarchy`, `isolated_node_types`, `orphan_concepts`, `redundancy`, `constraint_consistency`, `definitions`), `structural_answerability`, `competency_question_coverage` and `unjustified_additions`. They read only the Ontology and the Use Case, so their details name Concepts, Vocabulary Values and Competency Question ids: which added Concepts no question needs, which Concepts each question is missing and which questions regressed against the Contract Alias's version, which Concepts and Vocabulary Values lack a Definition, and which Concepts no question references. **Every other result comes with its metrics only**: the run Evaluators `conformance` and `observed_schema` read the graph, so their details can quote values observed there (a Conformance mismatch names the value it saw), and a custom Evaluator's details can hold anything. Executed Competency Questions appear as a status and a row count, not their rows. For the dropped details, read the results with `get_evaluation_results` and `get_run_evaluation_results`. An unknown Knowledge Graph or Ontology Version raises `NotFoundError`.
 
 `to_dict()` (and [`stetiq context`](./04-cli.md#the-run-context)) gives this shape:
 
@@ -381,7 +381,7 @@ The run context is built from what the tracking service already holds, so it nee
       "execution": {"status": "failed", "rows": 0}
     }
   ],
-  "evaluation_results": [{"evaluator": "structural_answerability", "parameters": {}, "metrics": {"answerable_ratio": 0.875}, "details": [], "use_case_version": 2, "...": "..."}],
+  "evaluation_results": [{"evaluator": "structural_answerability", "parameters": {}, "metrics": {"answerable_ratio": 0.875}, "details": [{"item": "parts-suppliers", "metric": "answerable_questions", "data": {"status": "unanswerable", "missing": ["Supplier"], "...": "..."}, "...": "..."}], "use_case_version": 2, "...": "..."}],
   "run": {"id": "5d0c1f2e...", "evaluation_results": [{"evaluator": "competency_question_execution", "parameters": {}, "metrics": {"pass_ratio": 0.8}, "details": [], "use_case_version": 2, "...": "..."}]}
 }
 ```
@@ -389,7 +389,7 @@ The run context is built from what the tracking service already holds, so it nee
 - `ontology_version.ontology` is the Ontology in its `stetiq.yaml` form, as a mapping: write it out as YAML and it registers as is.
 - `use_case_version` is null without a Use Case; `use_case` is the Use Case in its `use-case.yaml` form.
 - `competency_questions` lists every question of that Use Case Version with the Consumer and Task pairs it serves (empty when it serves none), and `execution`: its `status` (`passed`, `failed` or `error`) and `rows` on `run`, or null when it wasn't executed there (no `query`, or no run).
-- `evaluation_results` and `run.evaluation_results` are the latest Evaluator results in the form the REST API returns them (`evaluator`, `parameters`, `metrics`, the `use_case_version` judged against or null, the subject and `created_at`), **metrics only**: `details` is always an empty list.
+- `evaluation_results` and `run.evaluation_results` are the latest Evaluator results in the form the REST API returns them (`evaluator`, `parameters`, `metrics`, `details`, the `use_case_version` judged against or null, the subject and `created_at`). `details` is filled only for the version built-ins named above; in `run.evaluation_results` and for custom Evaluators it is always an empty list.
 - `run` is null when no finished Construction Run stands for that Ontology Version (a run stands for its Candidate, or else for the version it consumed).
 
 An upstream pipeline that may extend the Ontology should do so only where a Competency Question needs it. Declare that question in the Use Case before the run; an evolving run's additions are then judged by `unjustified_additions` (see [Evaluators and their metrics](./06-stetiq-yaml.md#evaluators-and-their-metrics)).
