@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, get_args
 
 from stetiq.errors import EvaluatorError
 from stetiq.evaluation.framework import (
@@ -218,7 +218,7 @@ class CompetencyQuestionExecution(ConstructionRunEvaluator):
         else:
             ok = matches_expected_answer(rows, question.expected_answer)
             message = "matches the expected answer" if ok else "does not match the expected answer"
-        status = "passed" if ok else "failed"
+        status: QuestionStatus = "passed" if ok else "failed"
         return Detail(
             item=question.id,
             message=message,
@@ -227,12 +227,16 @@ class CompetencyQuestionExecution(ConstructionRunEvaluator):
         )
 
 
+# An executed Competency Question's verdict: its query ran and the check held (passed),
+# ran and did not (failed), or raised (error).
+QuestionStatus = Literal["passed", "failed", "error"]
+
+
 @dataclass(frozen=True)
 class QuestionExecution:
-    """One executed Competency Question's verdict: `status` (passed, failed or error) and
-    the row count, never the rows."""
+    """One executed Competency Question's verdict and its row count, never the rows."""
 
-    status: str
+    status: QuestionStatus
     rows: int
 
 
@@ -248,8 +252,12 @@ def executed_questions(results: Iterable[EvaluationResult]) -> dict[str, Questio
     executed = {}
     for d in execution.details:
         data = d.data or {}
-        if isinstance(data.get("rows"), int) and isinstance(data.get("status"), str):
-            executed[d.item] = QuestionExecution(status=data["status"], rows=data["rows"])
+        rows = data.get("rows")
+        status: QuestionStatus | None = next(
+            (s for s in get_args(QuestionStatus) if s == data.get("status")), None
+        )
+        if isinstance(rows, int) and status is not None:
+            executed[d.item] = QuestionExecution(status=status, rows=rows)
     return executed
 
 
