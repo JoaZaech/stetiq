@@ -1,11 +1,29 @@
 name: CI
 
+# Docs-only changes (Markdown anywhere, anything under docs/) skip CI: they cannot change
+# behaviour. The exceptions are docs/guide/ and docs/vision.md, which the web UI bundles
+# and the tests check (ADR 0004), so they still run it. Later patterns override earlier
+# ones. GitHub ignores path filters on tag pushes, so a release always runs.
 on:
   push:
     branches: [main]
     # A release: the image job publishes :X.Y.Z, :X.Y and :latest.
     tags: ['v*']
+    paths:
+      - '**'
+      - '!**.md'
+      - '!docs/**'
+      - '!.claude/**'
+      - 'docs/guide/**'
+      - 'docs/vision.md'
   pull_request:
+    paths:
+      - '**'
+      - '!**.md'
+      - '!docs/**'
+      - '!.claude/**'
+      - 'docs/guide/**'
+      - 'docs/vision.md'
 
 jobs:
   frontend:
