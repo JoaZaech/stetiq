@@ -74,6 +74,8 @@ export interface DriftFinding {
   violation?: Mismatch['kind']
   baseline_rate?: number
   observed_rate?: number
+  /** `violation_increase` of a `cardinality_violation` only: which degree of the pattern. */
+  direction?: 'out' | 'in'
 }
 
 /** drift.NotComparable: a check that lacked its input, so it raised no finding. */

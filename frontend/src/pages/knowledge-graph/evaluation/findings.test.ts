@@ -86,6 +86,23 @@ describe('findingsFromDrift', () => {
       ['Attribute', 'Violation Rate rose', 'Required but not always set: 0.5% → 3% (+2.5 pts)'],
     ])
   })
+
+  it('names the degree whose Cardinality Violation Rate rose', () => {
+    const [row] = findingsFromDrift([
+      drift({
+        kind: 'violation_increase',
+        subject: '(WorkOrder)-[PERFORMED_ON]->(Asset)',
+        subject_kind: 'pattern',
+        previous_count: null,
+        observed_count: null,
+        violation: 'cardinality_violation',
+        direction: 'out',
+        baseline_rate: 0,
+        observed_rate: 0.05,
+      }),
+    ])
+    expect(row.change).toBe('Outside the cardinality (out-degree): 0% → 5% (+5 pts)')
+  })
 })
 
 describe('countChange', () => {

@@ -63,7 +63,7 @@ The degree to which an Observed Schema satisfies its Declared Ontology's Axioms;
 _Avoid_: Compliance, validity
 
 **Violation Rate**:
-The share of a Conformance check's owner nodes or relationships that fail it, e.g. the share of Customers without their required `name`; Conformance reports it beside each failing check, and Drift compares it with the Baseline Observation's.
+The share of a Conformance check's owner nodes or relationships that fail it, e.g. the share of Customers without their required `name`, or of a Pattern's endpoint nodes whose degree breaks its cardinality; Conformance reports it beside each failing check, and Drift compares it with the Baseline Observation's.
 _Avoid_: Error rate, violation level, failure percentage
 
 **Knowledge Graph**:
