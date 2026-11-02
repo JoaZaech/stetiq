@@ -63,7 +63,8 @@ const points = new Intl.NumberFormat('en', { maximumFractionDigits: 1 })
 
 /**
  * `max drop off · max rise 50% · max violation rise 1 pt`; an event from before Violation
- * Rates lacks the last one, which was off.
+ * Rates lacks the last one, which was off. `max coverage drop 5 pts` follows only when that
+ * check was on.
  */
 export function formatThresholds(thresholds: DriftThresholds): string {
   const part = (label: string, value: number | null) => `${label} ${value === null ? 'off' : percent.format(value)}`
@@ -73,6 +74,7 @@ export function formatThresholds(thresholds: DriftThresholds): string {
     part('max drop', thresholds.max_count_drop),
     part('max rise', thresholds.max_count_increase),
     `max violation rise ${violation === null ? 'off' : inPoints(violation)}`,
+    ...(thresholds.max_coverage_drop == null ? [] : [`max coverage drop ${inPoints(thresholds.max_coverage_drop)}`]),
   ].join(' · ')
 }
 

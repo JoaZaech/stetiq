@@ -37,6 +37,7 @@ export const DRIFT_FINDING: Record<DriftFinding['kind'], string> = {
   count_drop: 'Count dropped',
   count_increase: 'Count rose',
   violation_increase: 'Violation Rate rose',
+  coverage_drop: 'Coverage dropped',
 }
 
 export const subjectKindLabel = (kind: MismatchSubjectKind) => (kind === 'pattern' ? 'Pattern' : conceptKindLabel(kind))
@@ -56,7 +57,8 @@ export function findingsFromMismatches(mismatches: readonly Mismatch[]): Finding
 
 /**
  * An Observation's Drift findings as rows: a count change as `12 → 6 (−50%)`, a risen
- * Violation Rate as `Required but not always set: 0.5% → 3% (+2.5 pts)`.
+ * Violation Rate as `Required but not always set: 0.5% → 3% (+2.5 pts)`, a dropped
+ * Coverage as `Out-degree: 95% → 85% (−10 pts)`.
  */
 export function findingsFromDrift(findings: readonly DriftFinding[]): FindingRow[] {
   return sortRows(
@@ -74,6 +76,9 @@ function driftChange(f: DriftFinding): string {
   if (f.previous_count !== null && f.observed_count !== null) return countChange(f.previous_count, f.observed_count)
   if (f.violation !== undefined && f.baseline_rate !== undefined && f.observed_rate !== undefined) {
     return `${MISMATCH_FINDING[f.violation]}: ${rateChange(f.baseline_rate, f.observed_rate)}`
+  }
+  if (f.direction !== undefined && f.baseline_rate !== undefined && f.observed_rate !== undefined) {
+    return `${f.direction === 'out' ? 'Out' : 'In'}-degree: ${rateChange(f.baseline_rate, f.observed_rate)}`
   }
   if (f.value !== undefined) {
     const change = valueChange(f.value, f.count)

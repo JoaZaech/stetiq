@@ -88,6 +88,26 @@ describe('findingsFromDrift', () => {
   })
 })
 
+describe('findingsFromDrift Coverage', () => {
+  it('shows a dropped Coverage as baseline → now, with its degree', () => {
+    const rows = findingsFromDrift([
+      drift({
+        kind: 'coverage_drop',
+        subject: '(WorkOrder)-[ASSIGNED_TO]->(Machine)',
+        subject_kind: 'pattern',
+        previous_count: null,
+        observed_count: null,
+        direction: 'out',
+        baseline_rate: 0.95,
+        observed_rate: 0.85,
+      }),
+    ])
+    expect(rows.map((r) => [r.kind, r.finding, r.change])).toEqual([
+      ['Pattern', 'Coverage dropped', 'Out-degree: 95% → 85% (−10 pts)'],
+    ])
+  })
+})
+
 describe('countChange', () => {
   it('has no percentage from zero', () => {
     expect(countChange(0, 4)).toBe('0 → 4')

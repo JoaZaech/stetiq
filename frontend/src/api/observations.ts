@@ -66,6 +66,8 @@ export interface DriftThresholds {
   max_count_drop: number | null
   max_count_increase: number | null
   max_violation_increase?: number | null
+  /** Absolute points of a declared pattern's Coverage below the baseline's; off when absent. */
+  max_coverage_drop?: number | null
 }
 
 /** drift.DriftKind */
@@ -76,6 +78,7 @@ export type DriftKind =
   | 'count_drop'
   | 'count_increase'
   | 'violation_increase'
+  | 'coverage_drop'
 
 /** drift.DriftFinding */
 export interface DriftFinding {
@@ -94,6 +97,11 @@ export interface DriftFinding {
   violation?: Mismatch['kind']
   baseline_rate?: number
   observed_rate?: number
+  /**
+   * `coverage_drop` only: whose Coverage dropped, `out` over the pattern's source nodes or
+   * `in` over its target nodes; `baseline_rate` / `observed_rate` hold the Coverage.
+   */
+  direction?: 'out' | 'in'
 }
 
 /** drift.NotComparable: a check that lacked its input, so it raised no finding. */
