@@ -1,132 +1,160 @@
-"""The plant maintenance example (examples/plant-kg) runs end to end, offline, and tells
-the story its README promises: declare, build, evaluate, improve, gate, promote, operate.
+"""The plant maintenance example (examples/plant-kg) replays its three recorded Claude
+rounds offline and tells the story its README promises: v1 is promoted; prompt v2 is
+better by the evals but breaks the reliability dashboard, so it stays unpromoted; the
+fix binds `WorkOrder.kind` to a Vocabulary and is promoted.
 
 It drives the SDK in local mode over a temporary SQLite tracking database and the
-example's file-backed graph store, with the deterministic rule-based extractors (the
-Claude extractor needs the `claude` CLI and is not exercised here)."""
+example's file-backed graph store, reading Claude's answers from the committed
+llm-cache/ only: the `claude` CLI is never started."""
 
 import importlib
-import sys
 from pathlib import Path
 
 import pytest
 
 EXAMPLE_DIR = Path(__file__).resolve().parent.parent / "examples" / "plant-kg"
-
-
-@pytest.fixture(scope="module")
-def demo(tmp_path_factory):
-    workspace = tmp_path_factory.mktemp("plant-kg")
-    sys.path.insert(0, str(EXAMPLE_DIR))
-    try:
-        module = importlib.import_module("demo")
-        return module.run_demo(
-            tracking_uri=f"sqlite:///{workspace / 'stetiq.db'}",
-            graph_file=workspace / "plant.json",
-            llm_cache=workspace / "llm-cache",
-            extractor="rules",
-            quiet=True,
-        )
-    finally:
-        sys.path.remove(str(EXAMPLE_DIR))
-
-
 KG = "plant-maintenance"
 
 
-def result(results, evaluator):
-    [found] = [r for r in results if r.evaluator == evaluator]
-    return found
+def _no_claude(*args, **kwargs):
+    raise AssertionError("the demo called the claude CLI; the replay must stay offline")
 
 
-def test_the_initial_ontology_cannot_answer_every_competency_question(demo):
-    answerability = result(demo.priya.get_evaluation_results(KG, 1), "structural_answerability")
-    assert answerability.metrics["questions"] == 8
-    assert answerability.metrics["answerable_questions"] == 5
-    statuses = {d.item: d.data["status"] for d in answerability.details}
-    assert statuses["root-causes"] == "unanswerable"
-    assert statuses["downtime-by-kind"] == "unanswerable"
-    assert statuses["repeat-faults"] == "unmapped"
+def _run_demo(workspace: Path, **kwargs):
+    with pytest.MonkeyPatch.context() as mp:
+        mp.syspath_prepend(str(EXAMPLE_DIR))
+        pipeline = importlib.import_module("pipeline")
+        mp.setattr(pipeline.ClaudeExtractor, "_call", _no_claude)
+        demo = importlib.import_module("demo")
+        return demo.run_demo(
+            tracking_uri=f"sqlite:///{workspace / 'stetiq.db'}",
+            graph_file=workspace / "plant.json",
+            quiet=True,
+            **kwargs,
+        )
 
 
-def test_the_first_run_shows_the_gaps_and_proposes_a_candidate(demo):
-    run = demo.run1
-    assert run.status == "finished"
-    assert run.ontology_version == 1
-    # Judged against Candidate v2, which adds the undeclared WorkOrder.downtime_minutes.
-    assert run.conformance.score == pytest.approx(31 / 33)
-    assert {(str(m.kind), m.subject) for m in run.conformance.mismatches} == {
-        ("required_missing", "Technician.badge"),
-        ("absent", "SUPPLIED_BY"),
-    }
-    assert run.candidate_version == 2
-    assert demo.priya.get_ontology_version(KG, 2).origin == "run"
-    added = demo.priya.diff_ontology_versions(KG, 1, 2).changes
-    assert [c.concept for c in added] == ["WorkOrder.downtime_minutes"]
-
-    results = demo.priya.get_run_evaluation_results(run.id)
-    execution = result(results, "competency_question_execution")
-    assert execution.metrics["pass_ratio"] == pytest.approx(4 / 6)
-    failed = {d.item for d in execution.details if d.data["status"] != "passed"}
-    assert failed == {"downstream-of-press", "root-causes"}
-    assert result(results, "report_coverage").metrics["coverage"] == 0.875
+@pytest.fixture(scope="module")
+def workspace(tmp_path_factory):
+    return tmp_path_factory.mktemp("plant-kg")
 
 
-def test_the_candidate_fails_most_gates(demo):
-    gates = demo.gates_candidate
-    assert gates.ontology_version == 2
-    assert {o.gate.name for o in gates.outcomes if o.passed} == {
-        "no-breaking-changes",
-        "no-type-collapses",
-    }
-    assert {o.gate.name for o in gates.failed} == {
-        "graph-conforms",
-        "questions-answerable",
-        "questions-run",
-        "no-orphans",
-        "consistent-constraints",
-        "documented",
-        "reports-cover-orders",
-    }
+@pytest.fixture(scope="module")
+def demo(workspace):
+    return _run_demo(workspace)
 
 
-def test_the_revised_ontology_and_pipeline_pass_every_gate_and_get_promoted(demo):
-    client = demo.priya
-    assert client.diff_ontology_versions(KG, 1, 3).classification == "additive"
-    answerability = result(client.get_evaluation_results(KG, 3), "structural_answerability")
-    assert answerability.use_case_version == 2
-    assert answerability.metrics["answerable_questions"] == 8
-    assert answerability.metrics["questions"] == 9
+def consumer_gate(round_result, consumer):
+    [result] = [c for c in round_result.consumer_gates if c.consumer == consumer]
+    [outcome] = result.outcomes
+    return result, outcome
 
-    assert demo.run2.conformance.score == 1.0
-    execution = result(
-        client.get_run_evaluation_results(demo.run2.id), "competency_question_execution"
+
+def test_v1_is_the_baseline_and_is_promoted(demo):
+    v1 = demo.rounds["v1"]
+    assert v1.run.status == "finished"
+    assert v1.gates.passed
+    assert v1.promoted
+    assert v1.gates.ontology_version == 1
+    # production points at v1 from the start; the passing Gate keeps it there.
+    production = [p for p in demo.priya.list_promotions(KG) if p.alias == "production"]
+    assert (production[0].from_version, production[0].to_version) == (None, 1)
+
+
+def test_prompt_v2_proposes_an_additive_candidate_with_suppliers(demo):
+    v2 = demo.rounds["v2"]
+    assert v2.run.ontology_version == 1
+    assert v2.run.candidate_version == 2
+    diff = demo.priya.diff_ontology_versions(KG, 1, 2)
+    assert diff.classification == "additive"
+    assert [c.concept for c in diff.changes] == ["Supplier", "SUPPLIED_BY"]
+
+
+def test_prompt_v2_passes_the_gate_and_fails_the_reliability_dashboard(demo):
+    v2 = demo.rounds["v2"]
+    assert v2.gates.passed
+    dashboard, outcome = consumer_gate(v2, "reliability-dashboard")
+    assert not dashboard.passed
+    assert outcome.gate.name == "triage-rows-hold"
+    [finding] = outcome.findings
+    assert (finding.task, finding.competency_question) == (
+        "triage-breakdowns",
+        "breakdown-technicians",
     )
-    assert execution.metrics == {
-        "questions": 7,
-        "passed_questions": 7,
-        "failed_questions": 0,
-        "skipped_questions": 2,
-        "pass_ratio": 1.0,
-    }
-    assert demo.nightly.status == "finished"
-    assert demo.nightly.params["entry_point.exit_code"] == "0"
-    assert demo.nightly.conformance.score == 1.0
+    assert (finding.before, finding.after, finding.limit) == (6, 4, 0.10)
+    assert finding.change == pytest.approx(-1 / 3)
 
-    comparison = client.compare_runs([demo.run1.id, demo.run2.id, demo.nightly.id])
-    assert comparison.ontology_versions == (1, 3, 3)
-    assert comparison.metrics["reports_read"] == (7.0, 8.0, None)
 
-    assert demo.gates_revised.passed
-    assert client.get_contract_version(KG).number == 3
-    production = [p for p in client.list_promotions(KG) if p.alias == "production"]
+def test_prompt_v2_passes_the_maintenance_assistant_with_parts_suppliers_not_compared(demo):
+    assistant, outcome = consumer_gate(demo.rounds["v2"], "maintenance-assistant")
+    assert assistant.passed
+    assert outcome.findings == ()
+    assert outcome.new_questions == ("parts-suppliers",)
+
+
+def test_prompt_v2_stays_unpromoted(demo):
+    assert not demo.rounds["v2"].promoted
+    production = [p.to_version for p in demo.priya.list_promotions(KG) if p.alias == "production"]
+    assert 2 not in production
+
+
+def test_the_fix_binds_kind_passes_every_check_and_is_promoted(demo):
+    fix = demo.rounds["fix"]
+    assert fix.run.ontology_version == 3
+    assert fix.run.candidate_version is None  # the graph is what the fix declares
+    assert fix.gates.passed
+    [diff_gate] = [o for o in fix.gates.outcomes if o.gate.name == "no-breaking-changes"]
+    assert diff_gate.reasons == (
+        "binding WorkOrder.kind -> WorkOrderKind accepted: all observed values are in the "
+        "Vocabulary",
+    )
+    assert all(c.passed for c in fix.consumer_gates)
+    assert sorted(c.consumer for c in fix.consumer_gates) == [
+        "maintenance-assistant",
+        "reliability-dashboard",
+    ]
+    _, dashboard = consumer_gate(fix, "reliability-dashboard")
+    assert dashboard.findings == ()
+    assert fix.promoted
+    assert demo.priya.get_contract_version(KG).number == 3
+    production = [p for p in demo.priya.list_promotions(KG) if p.alias == "production"]
     assert [(p.from_version, p.to_version, p.actor, p.gate_result) for p in production] == [
         (None, 1, "stetiq", None),
         (1, 3, "ci-bot", "passed"),
     ]
 
 
-def test_an_observation_between_runs_finds_the_hand_edits_as_drift(demo):
+def test_a_cache_miss_is_an_error_naming_record(demo, workspace, monkeypatch, capsys):
+    monkeypatch.syspath_prepend(str(EXAMPLE_DIR))
+    pipeline = importlib.import_module("pipeline")
+    monkeypatch.setattr(pipeline.ClaudeExtractor, "_call", _no_claude)
+    monkeypatch.setenv("STETIQ_TRACKING_URI", demo.tracking_uri)
+    empty = workspace / "empty-cache"
+    empty.mkdir()
+
+    exit_code = pipeline.main(
+        [
+            "--knowledge-graph",
+            KG,
+            "--ontology-version",
+            "1",
+            "--round",
+            "v1",
+            "--llm-cache",
+            str(empty),
+            "--graph",
+            str(workspace / "miss.json"),
+        ]
+    )
+
+    assert exit_code == 1
+    error = capsys.readouterr().err
+    assert "cache miss" in error and "rerun with --record" in error
+
+
+def test_the_epilogue_records_drift_from_hand_edits(tmp_path):
+    demo = _run_demo(tmp_path, epilogue=True)
+
     drift = demo.drift
     assert drift is not None
     assert drift.ontology_version == 3
@@ -136,61 +164,21 @@ def test_an_observation_between_runs_finds_the_hand_edits_as_drift(demo):
     }
     follow_ups = next(f for f in drift.statistical if f.subject == "FollowUp")
     assert (follow_ups.previous_count, follow_ups.observed_count) == (12, 6)
-    # Drift never creates an Ontology Version.
-    assert [v.number for v in demo.priya.list_ontology_versions(KG)] == [1, 2, 3, 4]
 
 
-def test_strict_evolution_mode_fails_a_run_that_introduces_concepts(demo):
-    assert demo.strict_run.status == "failed"
-    assert demo.strict_run.candidate_version is None
-    undeclared = {
-        m.subject for m in demo.strict_run.conformance.mismatches if str(m.kind) == "undeclared"
-    }
-    assert "Sensor" in undeclared and "HAS_SENSOR" in undeclared
-
-
-def test_a_breaking_proposal_is_rejected_by_the_gates_but_never_promoted(demo):
-    gates = demo.gates_proposal
-    assert gates.ontology_version == 4
-    [diff_gate] = [o for o in gates.outcomes if o.gate.name == "no-breaking-changes"]
-    assert not diff_gate.passed
-    assert any("WorkOrder" in reason and "breaking" in reason for reason in diff_gate.reasons)
-    assert demo.priya.get_contract_version(KG).number == 3
-    assert demo.priya.get_evolution_mode(KG) == "evolving"
-
-
-def consumers_of(use_case_version):
-    return {
-        c.id: (c.name, c.kind, {t.id: set(t.competency_questions) for t in c.tasks})
-        for c in use_case_version.use_case.consumers
-    }
-
-
-def test_the_use_case_names_the_consumers_and_the_tasks_they_need_answered(demo):
-    # The latest Use Case Version: parts-suppliers, added later, keeps the Consumers and
-    # serves no Task yet, nor does repeat-faults; root-causes serves two Tasks.
+def test_the_use_case_names_the_two_consumers_and_their_tasks(demo):
     latest = demo.priya.get_use_case_version(KG)
-    assert latest.number == 2
-    assert consumers_of(latest) == {
-        "maintenance-assistant": (
-            "Maintenance assistant",
-            "agent",
-            {
-                "triage-breakdown": {"root-causes", "breakdown-technicians", "line-for-order"},
-                "chase-follow-ups": {"open-follow-ups"},
-            },
-        ),
-        "downtime-dashboard": (
-            "Downtime dashboard",
+    consumers = {
+        c.id: (c.kind, {t.id: list(t.competency_questions) for t in c.tasks})
+        for c in latest.use_case.consumers
+    }
+    assert consumers == {
+        "reliability-dashboard": (
             "dashboard",
-            {
-                "machine-league": {"orders-per-machine", "downtime-by-kind"},
-                "starvation-risk": {"downstream-of-press"},
-            },
+            {"triage-breakdowns": ["breakdown-technicians", "downtime-by-kind"]},
         ),
-        "reliability-team": (
-            "Reliability engineering",
-            "team",
-            {"weekly-reliability-review": {"root-causes", "orders-per-machine"}},
+        "maintenance-assistant": (
+            "agent",
+            {"explain-root-causes": ["parts-suppliers", "root-causes"]},
         ),
     }

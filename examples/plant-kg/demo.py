@@ -53,10 +53,14 @@ are in `use-case.yaml`."""
 
 WITHOUT_STETIQ = """\
 Without stetiq: the plant's pipeline has Claude read the technicians' reports into a
-knowledge graph. A better prompt lifts every eval the team watches, so it ships. But
-Claude now also writes each work order's `kind` from the report, and the reliability
-dashboard counts breakdowns with `kind = 'breakdown'`. Nothing errors: the dashboard
-quietly shows fewer breakdowns, and the stand-up misses a repeat fault.
+knowledge graph. One pull request brings a better prompt (it also pulls out who supplied
+each replacement part) and takes in the export of Line 2's new maintenance system. Every
+check the team runs passes, so it ships. But the new system's order types call a
+breakdown `corrective`, the pipeline copies `kind` from the export as it always has, and
+the reliability dashboard counts breakdowns with `kind = 'breakdown'`. Nothing errors:
+the dashboard quietly drops Line 2's breakdowns (CNC-04's worn spindle bearing,
+Lathe-02's sticking chuck valve) from the morning stand-up. Claude read them right; the
+new export's codes broke the dashboard.
 
 With stetiq, three recorded Claude rounds:"""
 
@@ -251,9 +255,9 @@ class Demo:
             f"production -> v{production}. The same verdicts in the web UI and in CI"
             + ("" if here else f" (from {EXAMPLE_DIR})")
             + ":",
-            "  uv run stetiq ui                                   # http://127.0.0.1:5000/ui",
-            f"  uv run stetiq gate {KG} --run <run id>           # the Gates of stetiq.yaml",
-            f"  uv run stetiq consumer gate {KG} --run <run id>  # every Consumer Gate",
+            f"  {'uv run stetiq ui':<60}  # http://127.0.0.1:5000/ui",
+            f"  {f'uv run stetiq gate {KG} --run <run id>':<60}  # the Gates of stetiq.yaml",
+            f"  {f'uv run stetiq consumer gate {KG} --run <run id>':<60}  # every Consumer Gate",
         )
 
 
@@ -268,18 +272,18 @@ def summary_line(r: RoundResult) -> str:
     """One PR-style line per round."""
     parts = [f"{ROUND_LABEL[r.round]:<11} Gate {_mark(r.gates.passed)}"]
     if r.consumer_gates:
-        failing = [
-            f"{c.consumer}: {f.competency_question} {f.before} → {f.after}, {_percent(f.change)}"
-            for c in r.consumer_gates
-            for o in c.outcomes
-            if not o.passed
-            for f in o.findings
-            if f.change is not None
-        ]
-        parts.append(
-            f"Consumer Gate {_mark(r.consumer_gates_passed)}"
-            + (f" ({'; '.join(failing)})" if failing else "")
-        )
+        per_consumer = []
+        for c in sorted(r.consumer_gates, key=lambda c: c.passed):  # failures first
+            notes = [
+                f"{f.competency_question} {f.before} → {f.after}, {_percent(f.change)}"
+                for o in c.outcomes
+                for f in o.findings
+                if f.change is not None
+            ] + [f"{q} new, not compared" for o in c.outcomes for q in o.new_questions]
+            per_consumer.append(
+                f"{c.consumer} {_mark(c.passed)}" + (f" {', '.join(notes)}" if notes else "")
+            )
+        parts.append(f"Consumer Gate {_mark(r.consumer_gates_passed)} ({'; '.join(per_consumer)})")
     if r.promoted:
         parts.append(f"promoted: production -> v{r.gates.ontology_version}")
     elif r.consumer_gates:

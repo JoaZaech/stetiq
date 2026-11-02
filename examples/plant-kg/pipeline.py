@@ -7,6 +7,7 @@ Sources, under data/:
 | assets/machines.csv         | structured   | Machine, Line, PART_OF                             |
 | assets/material_flow.json   | structured   | FEEDS, as drawn in the layout (can be stale)       |
 | cmms/work_orders.csv        | structured   | WorkOrder, PERFORMED_ON, ASSIGNED_TO, Technician   |
+| cmms/eam_line2_orders.csv   | structured   | The same, for Line 2, from the new EAM system      |
 | hr/technicians.csv          | structured   | Technician.badge                                   |
 | reports/*.txt, *.eml        | unstructured | Component, FollowUp, Fault, FEEDS stated in prose, and what Claude adds |
 
@@ -20,15 +21,20 @@ run (`ActiveRun.propose_definitions`), so the Candidate carries them.
 
 There are two prompt versions, and each round of the demo picks one:
 
-| Round | Prompt | Declared Ontology                    |
-| ----- | ------ | ------------------------------------ |
-| v1    | v1     | ontology/v1.yaml                     |
-| v2    | v2     | production (v1)                      |
-| fix   | v2     | ontology/fix.yaml                    |
+| Round | Prompt | Work order exports            | Declared Ontology  |
+| ----- | ------ | ----------------------------- | ------------------ |
+| v1    | v1     | legacy CMMS                   | ontology/v1.yaml   |
+| v2    | v2     | Line 2's EAM, then legacy     | production (v1)    |
+| fix   | v2     | Line 2's EAM, then legacy     | ontology/fix.yaml  |
 
 Prompt v2 also reads the email report for root causes and suppliers, and fills a work
-order's fields from its report where the report is more specific; the pipeline lets the
-report's `kind` override the CMMS export's.
+order's fields from its report where the report is more specific. The same change takes
+in the export of Line 2's new maintenance system (EAM), its system of record for Line 2's
+work orders, so its rows win over the legacy CMMS's copy. A work order's `kind` is copied
+from the export, as it always was, and the EAM's order types call a breakdown
+`corrective`. Where the Declared Ontology binds `WorkOrder.kind` to a Vocabulary and the
+export's code is not one of its Vocabulary Values, the pipeline takes the `kind` Claude
+read from the report, if that is one (Claude sees the Vocabulary in the Ontology).
 
 Claude's answers are cached by (prompt version, model, prompt). Three modes:
 
@@ -142,7 +148,52 @@ class Draft:
 # --- Structured sources ----------------------------------------------------------------
 
 
-def load_structured(data_dir: Path = DATA_DIR) -> Draft:
+@dataclass(frozen=True)
+class WorkOrderExport:
+    """One maintenance system's work order export, and the names of its columns."""
+
+    path: str  # under data/
+    id: str
+    machine: str
+    kind: str
+    opened_at: str
+    technician: str
+    downtime_minutes: str
+    title: str
+
+
+LEGACY_CMMS = WorkOrderExport(
+    "cmms/work_orders.csv",
+    "work_order_id",
+    "machine_id",
+    "kind",
+    "opened_at",
+    "technician",
+    "downtime_minutes",
+    "title",
+)
+# Line 2 moved to a new EAM system; its export is the system of record for Line 2.
+LINE2_EAM = WorkOrderExport(
+    "cmms/eam_line2_orders.csv",
+    "order_number",
+    "equipment",
+    "order_type",
+    "created_on",
+    "responsible",
+    "downtime_min",
+    "short_text",
+)
+# In order: the first export holding a work order gives its fields.
+EXPORTS_OF_ROUND: dict[Round, tuple[WorkOrderExport, ...]] = {
+    "v1": (LEGACY_CMMS,),
+    "v2": (LINE2_EAM, LEGACY_CMMS),
+    "fix": (LINE2_EAM, LEGACY_CMMS),
+}
+
+
+def load_structured(
+    data_dir: Path = DATA_DIR, exports: Sequence[WorkOrderExport] = (LEGACY_CMMS,)
+) -> Draft:
     draft = Draft()
     for row in _csv(data_dir / "assets" / "machines.csv"):
         machine = draft.node(
@@ -154,18 +205,19 @@ def load_structured(data_dir: Path = DATA_DIR) -> Draft:
         draft.relate(
             draft.node("Machine", edge["from"]), "FEEDS", draft.node("Machine", edge["to"])
         )
-    for row in _csv(data_dir / "cmms" / "work_orders.csv"):
-        order = draft.node(
-            "WorkOrder",
-            row["work_order_id"],
-            id=row["work_order_id"],
-            title=row["title"],
-            kind=row["kind"],
-            opened_at=dt.date.fromisoformat(row["opened_at"]),
-            downtime_minutes=int(row["downtime_minutes"]),
-        )
-        draft.relate(order, "PERFORMED_ON", draft.node("Machine", row["machine_id"]))
-        draft.relate(order, "ASSIGNED_TO", draft.node("Technician", row["technician"]))
+    for export in exports:
+        for row in _csv(data_dir / export.path):
+            order = draft.node(
+                "WorkOrder",
+                row[export.id],
+                id=row[export.id],
+                title=row[export.title],
+                kind=row[export.kind],
+                opened_at=dt.date.fromisoformat(row[export.opened_at]),
+                downtime_minutes=int(row[export.downtime_minutes]),
+            )
+            draft.relate(order, "PERFORMED_ON", draft.node("Machine", row[export.machine]))
+            draft.relate(order, "ASSIGNED_TO", draft.node("Technician", row[export.technician]))
     for row in _csv(data_dir / "hr" / "technicians.csv"):
         draft.node("Technician", row["name"], name=row["name"], badge=row["badge"])
     return draft
@@ -382,11 +434,6 @@ class ClaudeExtractor:
         self.calls = 0
         self.cache_hits = 0
 
-    @property
-    def report_kind_overrides(self) -> bool:
-        """Whether a report's WorkOrder.kind replaces the CMMS export's (prompt v2)."""
-        return self.prompt_version == "v2"
-
     def extract_all(self, reports: Sequence[Report], context: Context) -> list[Draft]:
         with ThreadPoolExecutor(max_workers=self.workers) as pool:
             return list(pool.map(lambda r: self.extract(r, context), reports))
@@ -551,18 +598,37 @@ class BuildStats:
     definitions: dict[str, str]  # Claude's Definitions for the Concepts it added
 
 
+def _kind_values(ontology: Ontology) -> frozenset[str] | None:
+    """The Vocabulary Values `WorkOrder.kind` is bound to; None when it is not bound."""
+    bound = next(
+        (
+            p.vocabulary
+            for n in ontology.node_types
+            if n.label == "WorkOrder"
+            for p in n.properties
+            if p.name == "kind"
+        ),
+        None,
+    )
+    vocabulary = next((v for v in ontology.vocabularies if v.label == bound), None)
+    return None if vocabulary is None else frozenset(v.label for v in vocabulary.values)
+
+
 def build(
     graph: LocalGraph,
     *,
     context: RunContext,
     extractor: ClaudeExtractor,
+    exports: Sequence[WorkOrderExport] = (LEGACY_CMMS,),
     data_dir: Path = DATA_DIR,
     database: str = DEFAULT_DATABASE,
 ) -> BuildStats:
-    """Rebuild `database` in `graph` from the data: structured sources first, then every
-    report through `extractor`, prompted with the run context."""
+    """Rebuild `database` in `graph` from the data: the structured sources and the work
+    order `exports` first, then every report through `extractor`, prompted with the run
+    context."""
     ontology = context.ontology_version.ontology
-    draft = load_structured(data_dir)
+    kinds = _kind_values(ontology)
+    draft = load_structured(data_dir, exports)
     prompt_context = Context(
         machines=tuple(sorted(k for (label, k) in draft.nodes if label == "Machine")),
         technicians=tuple(sorted(k for (label, k) in draft.nodes if label == "Technician")),
@@ -571,10 +637,17 @@ def build(
     reports = read_reports(data_dir)
     for extracted in extractor.extract_all(reports, prompt_context):
         draft.merge(extracted)
-        if extractor.report_kind_overrides:
-            for (label, key), props in extracted.nodes.items():
-                if label == "WorkOrder" and props.get("kind") is not None:
-                    draft.nodes[(label, key)]["kind"] = props["kind"]
+        if kinds is None:
+            continue
+        # A bound kind: an export code outside the Vocabulary gives way to Claude's.
+        for (label, key), props in extracted.nodes.items():
+            order = draft.nodes[(label, key)]
+            if (
+                label == "WorkOrder"
+                and order.get("kind") not in kinds
+                and props.get("kind") in kinds
+            ):
+                order["kind"] = props["kind"]
     graph.clear(database)
     nodes, relationships = write(graph, draft, ontology=ontology, database=database)
     graph.save()
@@ -605,6 +678,7 @@ def run_round(
             graph,
             context=context,
             extractor=extractor,
+            exports=EXPORTS_OF_ROUND[round_],
             data_dir=data_dir,
             database=client.get_graph_source(knowledge_graph).database,
         )
@@ -653,6 +727,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             LocalGraph(args.graph),
             context=context,
             extractor=extractor,
+            exports=EXPORTS_OF_ROUND[cast(Round, args.round)],
             data_dir=Path(args.data_dir),
             database=database,
         )

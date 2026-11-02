@@ -4,7 +4,7 @@ stetiq versions, evaluates and governs the Ontology of a Knowledge Graph. **To u
 
 ## Examples
 
-[`plant-kg`](examples/plant-kg/) takes a factory's maintenance Knowledge Graph, built from CMMS exports and free-text reports, through the whole loop offline: Ontology Versions, Competency Questions, Construction Runs, Candidates, custom Evaluators, Gates, Promotion, Drift and strict Evolution Mode. Run it with `cd examples/plant-kg && uv run python demo.py`, then `uv run stetiq ui` from that folder.
+[`plant-kg`](examples/plant-kg/) replays three recorded Claude rounds that build a factory's maintenance Knowledge Graph from maintenance-system exports and free-text reports, offline: a prompt change that is better by the evals passes every Gate and still breaks the reliability dashboard, its Consumer Gate catches it, and binding `WorkOrder.kind` to a Vocabulary fixes it. Run it with `cd examples/plant-kg && uv run python demo.py`, then `uv run stetiq ui` from that folder.
 
 ## How we work with agents
 

@@ -77,5 +77,6 @@ def test_the_image_opens_on_the_seeded_plant_kg_demo(ui):
     runs = ui.get(f"/api/v1/knowledge-graphs/{KG}/runs").json()
 
     assert [kg["name"] for kg in kgs] == [KG]
-    assert [v["number"] for v in versions] == [1, 2, 3, 4]
-    assert len(runs) == 4
+    # The three recorded rounds: v1, prompt v2's Candidate, the fix.
+    assert [v["number"] for v in versions] == [1, 2, 3]
+    assert len(runs) == 3

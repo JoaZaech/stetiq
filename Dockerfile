@@ -21,11 +21,12 @@ RUN useradd --create-home --uid 1000 stetiq \
 COPY --from=build /dist/*.whl /tmp/
 RUN pip install --no-cache-dir /tmp/*.whl && rm /tmp/*.whl
 
-# Seed the demo with the offline rules extractor: reproducible, no LLM, no network. The
-# example's own code is only needed to build the data; the UI reads the tracking database.
+# Seed the demo by replaying its committed Claude recording (examples/plant-kg/llm-cache/,
+# copied with the example): reproducible, no claude CLI, no network. The example's own
+# code is only needed to build the data; the UI reads the tracking database.
 COPY --chown=stetiq:stetiq examples/plant-kg /tmp/plant-kg
 USER stetiq
-RUN python /tmp/plant-kg/demo.py --extractor rules \
+RUN python /tmp/plant-kg/demo.py \
         --tracking-uri sqlite:////data/stetiq.db \
         --graph-file /tmp/plant-kg/.graphdb/plant.json \
     && rm -rf /tmp/plant-kg
