@@ -100,10 +100,15 @@ Two parts of Drift handling are planned, and the web UI shows them where Drift i
 
 ## AI and MCP authoring
 
-Writing a good Use Case is slow: naming the Consumers, splitting their work into Tasks, and phrasing the Competency Questions each Task needs. AI can draft much of it. The plan has two parts:
+Two kinds of agent work around a Knowledge Graph: the coding agents that build the upstream pipeline and so define the Ontology, and the agents inside each Consumer.
+
+**Built: a read-only MCP server for the Ontology's definer.** [`stetiq mcp`](guide/08-agents-and-mcp.md) gives a coding agent (Claude Code, Cursor) improving the upstream pipeline a read-only view of how the pipeline's output was judged: the **Run Context**, the Knowledge Graphs, Ontology Diffs and Consumer impact. Its instructions state the loop's rules: extend the Ontology only where a Competency Question needs it, read a Consumer Gate verdict as a symptom rather than a cause, and leave acceptance to a person reviewing the pull request, where `stetiq gate` and `stetiq consumer gate` judge it. It runs over stdio at the edge, with the CLI's tracking URI and API Token; a hosted MCP endpoint waits for a hosted instance.
+
+**Planned: drafting and proposing.** Writing a good Use Case is slow: naming the Consumers, splitting their work into Tasks, and phrasing the Competency Questions each Task needs. AI can draft much of it, and agents can propose changes. All of this stays planned:
 
 - **Agents propose Consumers, Tasks and Competency Questions.** From the Ontology, the Use Case so far and whatever the team gives it (a product spec, a dashboard's queries, an agent's tool list), an agent drafts new Consumers, Tasks and Competency Questions, and maps each question onto the Ontology's Concepts.
-- **An MCP server lets agents read and edit a Use Case.** An agent working in a Consumer's repository could read the Use Case, see which of its Tasks are ready on the latest Ontology Version, and propose a new Task or Competency Question for the Consumer it serves.
+- **Proposal tools over MCP.** `stetiq mcp` would gain tools that propose a change to the Use Case (a new Task or Competency Question) instead of only reading.
+- **A Consumer-side MCP schema server**, a Connector at the Consumer's edge: an agent working in a Consumer's repository could read the Use Case, see which of its Tasks are ready on the latest Ontology Version, and propose a new Task or Competency Question for the Consumer it serves.
 
 AI only ever **proposes**. A person accepts what becomes a new **Use Case Version**, as with **Adoption**, where the user selects which observed Concepts go into a Candidate. Nothing an agent drafts changes a Use Case until someone accepts it, and the accepted Use Case Version records who did.
 
@@ -116,6 +121,7 @@ The MVP **builds**:
 - **Consumers and Tasks** in the Use Case: who uses the Knowledge Graph, the Tasks they perform, and the Competency Questions each Task needs, versioned with the Use Case and editable in the web UI.
 - **Consumer impact** of an Ontology Diff, in the SDK, the CLI, the Ontology Diff view and the Promotion confirmation.
 - **Task readiness**: how many of a Task's Competency Questions the Ontology Version being viewed can answer, and which questions serve no Task.
+- **A read-only MCP server for coding agents** (`stetiq mcp`), serving the Run Context, Ontology Diffs and Consumer impact to the agents that improve the upstream pipeline, with the loop's rules as its instructions.
 - **The Consumer Gate, checked in CI on a Candidate**: Consumer Gates declared on each Consumer in the Use Case (`row_count_drop`), evaluated and recorded by the server against the Contract Alias baseline, run by `stetiq consumer gate` in the upstream pipeline's CI, and shown on each Consumer tile with its latest verdict (in full in the Consumer's sheet) and in the pipeline strip on the Knowledge Graph overview.
 
 The MVP **shows, as "Planned"** (placeholders in the web UI that link to this page, or notes in the guide):
@@ -127,4 +133,4 @@ The MVP **shows, as "Planned"** (placeholders in the web UI that link to this pa
 - drafting Tasks and Competency Questions with AI, on the Use Case page;
 - a hosted stetiq instance, installing from PyPI, and a quickstart for bringing your own pipeline, in the guide's Getting started.
 
-Everything else on this page, the Connector and its events, the other Consumer Gate kinds, Gates over Consumer impact and the MCP server, is left for a later team.
+Everything else on this page, the Connector and its events, the other Consumer Gate kinds, Gates over Consumer impact, MCP proposal tools and the Consumer-side MCP schema server, is left for a later team.
