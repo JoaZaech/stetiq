@@ -240,13 +240,19 @@ class QuestionExecution:
     rows: int
 
 
-def executed_questions(results: Iterable[EvaluationResult]) -> dict[str, QuestionExecution]:
-    """Per question id, what the unparameterised `competency_question_execution` result
-    among a run's `results` recorded; empty when there is none."""
-    execution = next(
+def question_execution_result(results: Iterable[EvaluationResult]) -> EvaluationResult | None:
+    """The unparameterised `competency_question_execution` result among a run's
+    `results`; None when the run executed no Competency Question."""
+    return next(
         (r for r in results if r.evaluator == CQ_EXECUTION_EVALUATOR and not r.parameters),
         None,
     )
+
+
+def executed_questions(results: Iterable[EvaluationResult]) -> dict[str, QuestionExecution]:
+    """Per question id, what the `question_execution_result` among a run's `results`
+    recorded; empty when there is none."""
+    execution = question_execution_result(results)
     if execution is None:
         return {}
     executed = {}

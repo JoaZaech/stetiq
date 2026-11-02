@@ -58,6 +58,7 @@ from stetiq.evaluation.run import (
     NoGraphSource,
     RunSubject,
     executed_questions,
+    question_execution_result,
 )
 from stetiq.evaluation.structural import BUILT_IN_EVALUATORS
 from stetiq.gates import Gate, GateInputs
@@ -1259,10 +1260,8 @@ class LocalTrackingService:
     ) -> UseCaseVersion | None:
         """The Use Case Version the run's Competency Questions were executed under; None
         when it executed none."""
-        results = self.get_evaluation_results(knowledge_graph, "construction_run", run.id)
-        execution = next(
-            (r for r in results if r.evaluator == CQ_EXECUTION_EVALUATOR and not r.parameters),
-            None,
+        execution = question_execution_result(
+            self.get_evaluation_results(knowledge_graph, "construction_run", run.id)
         )
         if execution is None or execution.use_case_version is None:
             return None
