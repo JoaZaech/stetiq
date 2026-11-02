@@ -2,6 +2,12 @@
 
 stetiq versions, evaluates and governs the Ontology of a Knowledge Graph. **To use it, read the [user guide](docs/guide/)**, starting with [Getting started](docs/guide/01-getting-started.md). The web UI shows the same guide under **Help**.
 
+Try it without installing anything: run the demo, then open <http://localhost:5000/ui> ([more](docs/guide/01-getting-started.md#try-it-with-docker)).
+
+```bash
+docker run --rm -p 5000:5000 ghcr.io/joazaech/stetiq
+```
+
 ## Examples
 
 [`plant-kg`](examples/plant-kg/) takes a factory's maintenance Knowledge Graph, built from CMMS exports and free-text reports, through the whole loop offline: Ontology Versions, Competency Questions, Construction Runs, Candidates, custom Evaluators, Gates, Promotion, Drift and strict Evolution Mode. Run it with `cd examples/plant-kg && uv run python demo.py`, then `uv run stetiq ui` from that folder.

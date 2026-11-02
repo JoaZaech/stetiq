@@ -10,6 +10,29 @@ flowchart LR
   install[Install stetiq] --> ui[Open the web UI] --> kg[Create a Knowledge Graph] --> run[Track a Construction Run]
 ```
 
+## Try it with Docker
+
+To look around before installing anything, run the demo image:
+
+```bash
+docker run --rm -p 5000:5000 ghcr.io/joazaech/stetiq
+```
+
+Then open <http://localhost:5000/ui>. The web UI shows the *plant-kg* example: a factory's maintenance Knowledge Graph with its Ontology Versions, Construction Runs, Gates and Promotions, and actions recorded under the actor `demo`. What you change is kept only inside the container, so the demo starts over when the container restarts.
+
+To open your own tracking database instead, mount its folder and point `$STETIQ_TRACKING_URI` at it:
+
+```bash
+docker run --rm -p 5000:5000 \
+  -v "$PWD/.stetiq:/data/mine" \
+  -e STETIQ_TRACKING_URI=sqlite:////data/mine/stetiq.db \
+  ghcr.io/joazaech/stetiq
+```
+
+This opens `.stetiq/stetiq.db` from the current folder, the default `stetiq ui` uses, and changes are written back to it. A `postgresql://` URI works too, with no volume. On Linux the container runs as user ID 1000, which needs write access to the mounted folder.
+
+The web UI in the image has no sign-in: anyone who can reach the port can read and change your Knowledge Graphs. To keep it on your own machine, publish the port as `-p 127.0.0.1:5000:5000` rather than on a public interface.
+
 ## Install
 
 stetiq needs Python 3.12 or later, [uv](https://docs.astral.sh/uv/) and, to build the web UI, Node.js. Install it from a clone of the repository:

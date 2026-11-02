@@ -3,6 +3,8 @@ name: CI
 on:
   push:
     branches: [main]
+    # A release: the image job publishes :X.Y.Z, :X.Y and :latest.
+    tags: ['v*']
   pull_request:
 
 jobs:
@@ -73,7 +75,7 @@ jobs:
       - run: uv run pytest -m "not image"
 
   # The demo image (Dockerfile). Every run builds both architectures and tests amd64;
-  # only a push to main publishes it.
+  # only a push to main or of a v* tag publishes it.
   image:
     needs: check
     runs-on: ubuntu-latest
@@ -82,9 +84,20 @@ jobs:
       packages: write
     env:
       IMAGE: ghcr.io/joazaech/stetiq
-      PUBLISH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      PUBLISH: >-
+        ${{ github.event_name == 'push'
+          && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
     steps:
       - uses: actions/checkout@v4
+      # A release tag must name the version the wheel in the image carries.
+      - name: Check the tag matches the pyproject.toml version
+        if: github.ref_type == 'tag'
+        run: |
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match project.version $version in pyproject.toml"
+            exit 1
+          fi
       # The UI that passed the frontend job's tests, not a second build.
       - uses: actions/download-artifact@v4
         with:
@@ -92,14 +105,20 @@ jobs:
           path: src/stetiq/_frontend
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
-      # One place for the image's tags and OCI labels: main gives :main and :sha-<short>.
+      # One place for the image's tags and OCI labels: main gives :main and :sha-<short>;
+      # a tag vX.Y.Z gives :X.Y.Z, :X.Y and :latest. latest=false stops metadata-action
+      # adding :latest on its own, so only a release tag moves it.
       - id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.IMAGE }}
+          flavor: latest=false
           tags: |
             type=ref,event=branch
-            type=sha
+            type=sha,enable=${{ github.ref_type != 'tag' }}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
       - name: Build amd64 for the image test
         uses: docker/build-push-action@v6
         with:
@@ -124,8 +143,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       # Pull requests still build both architectures, so a Dockerfile that breaks arm64
-      # fails before merge; only main pushes.
-      - name: Build amd64 + arm64, and push from main
+      # fails before merge; only main and release tags push.
+      - name: Build amd64 + arm64, and push from main or a release tag
         uses: docker/build-push-action@v6
         with:
           context: .
