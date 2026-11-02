@@ -7,7 +7,7 @@ an undeclared rename is a removal plus an addition.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 
 from stetiq.ontology.canonical import Deprecatable, Documented
@@ -72,6 +72,9 @@ class Change:
     # A Vocabulary change's Vocabulary, and the Vocabulary Value it concerns, if any.
     vocabulary: str | None = None
     value: str | None = None
+    # The Vocabulary an attribute change binds the attribute to (from none, or from
+    # another Vocabulary); None for any other change, unbinding included.
+    bound_vocabulary: str | None = None
 
 
 @dataclass(frozen=True)
@@ -506,58 +509,8 @@ def _diff_binding(
         return []
     if new is None:
         return [change(Classification.ADDITIVE, f"no longer bound to Vocabulary {old}")]
-    if old is None:
-        return [change(Classification.BREAKING, f"bound to Vocabulary {new}")]
-    return [change(Classification.BREAKING, f"Vocabulary {old} -> {new}")]
-
-
-@dataclass(frozen=True)
-class VocabularyBinding:
-    """An Attribute bound to a Vocabulary from `base` to `target` (from none, or from
-    another Vocabulary): the breaking `change` the Ontology Diff lists for it, and the
-    Vocabulary label it is now bound to."""
-
-    change: Change
-    owner_kind: ConceptKind
-    owner: str
-    attribute: str
-    vocabulary: str
-
-
-def vocabulary_bindings(base: Ontology, target: Ontology) -> tuple[VocabularyBinding, ...]:
-    """Every binding change of `diff_ontologies(base, target)` with what it binds, so a
-    reader can tell a binding change from the other changes to the same Attribute
-    without reading `detail`."""
-    return _bindings("node_type", base.node_types, target.node_types) + _bindings(
-        "relationship_type", base.relationship_types, target.relationship_types
-    )
-
-
-def _bindings(
-    kind: ConceptKind,
-    old_owners: tuple[NodeType, ...] | tuple[RelationshipType, ...],
-    new_owners: tuple[NodeType, ...] | tuple[RelationshipType, ...],
-) -> tuple[VocabularyBinding, ...]:
-    old_by_label = {o.label: o for o in old_owners}
-    bindings: list[VocabularyBinding] = []
-    for new_owner in new_owners:
-        old_owner = old_by_label.get(new_owner.label)
-        if old_owner is None:
-            continue
-        old = {p.name: p for p in old_owner.properties}
-        for new in new_owner.properties:
-            if new.name not in old or new.vocabulary is None:
-                continue
-            attribute = _Attribute(new_owner.label, kind, new.name)
-            bindings += [
-                VocabularyBinding(change, kind, new_owner.label, new.name, new.vocabulary)
-                for change in _diff_binding(
-                    lambda c, d, a=attribute: a.change(ChangeKind.CHANGED, c, d),
-                    old[new.name].vocabulary,
-                    new.vocabulary,
-                )
-            ]
-    return tuple(bindings)
+    detail = f"bound to Vocabulary {new}" if old is None else f"Vocabulary {old} -> {new}"
+    return [replace(change(Classification.BREAKING, detail), bound_vocabulary=new)]
 
 
 # --- Added Concepts ------------------------------------------------------------------

@@ -27,12 +27,7 @@ import yaml
 from stetiq.conformance import Conformance
 from stetiq.errors import GateConfigError
 from stetiq.graph_source import ObservedSchema
-from stetiq.ontology.diff import (
-    Classification,
-    OntologyDiff,
-    VocabularyBinding,
-    vocabulary_bindings,
-)
+from stetiq.ontology.diff import Change, Classification, OntologyDiff
 from stetiq.ontology.model import Ontology
 
 if TYPE_CHECKING:
@@ -46,9 +41,7 @@ class GateInputs:
     ontology_version: int  # the version the subject stands for
     contract_version: int | None = None
     diff: OntologyDiff | None = None  # contract_version -> ontology_version
-    # The two ends of `diff`: the Contract Alias's Ontology and the subject's.
-    contract_ontology: Ontology | None = None
-    ontology: Ontology | None = None
+    ontology: Ontology | None = None  # the subject's: `diff`'s target
     conformance: Conformance | None = None
     evaluations: Sequence[EvaluationResult] = ()  # latest per Evaluator (and parameters)
     observed: ObservedSchema | None = None  # the subject's Observed Schema
@@ -107,18 +100,9 @@ class OntologyDiffGate(Gate):
             return self._outcome(False, "No Contract Alias version to diff against")
         limit = self.max_classification.severity
         worse = [c for c in inputs.diff.changes if c.classification.severity > limit]
-        bindings = (
-            {b.change: b for b in vocabulary_bindings(inputs.contract_ontology, inputs.ontology)}
-            if inputs.contract_ontology is not None and inputs.ontology is not None
-            else {}
-        )
-        accepted = [
-            c
-            for c in worse
-            if c in bindings and _observed_inside(bindings[c], inputs.ontology, inputs.observed)
-        ]
+        accepted = [c for c in worse if _observed_inside(c, inputs.ontology, inputs.observed)]
         acceptances = tuple(
-            f"binding {bindings[c].owner}.{bindings[c].attribute} -> {bindings[c].vocabulary} "
+            f"binding {c.concept} -> {c.bound_vocabulary} "
             "accepted: all observed values are in the Vocabulary"
             for c in accepted
         )
@@ -138,23 +122,28 @@ class OntologyDiffGate(Gate):
 
 
 def _observed_inside(
-    binding: VocabularyBinding, ontology: Ontology | None, observed: ObservedSchema | None
+    change: Change, ontology: Ontology | None, observed: ObservedSchema | None
 ) -> bool:
-    """Whether `observed` proves every value of the bound Attribute is in its new
-    Vocabulary: the values were read, the list is complete, and none lies outside.
-    Reading them relies on ADR 0001's Vocabulary exception."""
-    vocabulary = None if ontology is None else ontology.vocabulary(binding.vocabulary)
-    if vocabulary is None or observed is None:
+    """Whether `change` binds an Attribute to a Vocabulary and `observed` proves every
+    value of that Attribute is in the new Vocabulary: the values were read, the list is
+    complete, and none lies outside. Reading them relies on ADR 0001's Vocabulary
+    exception."""
+    if change.bound_vocabulary is None or change.owner is None or ontology is None:
+        return False
+    if observed is None:
+        return False
+    vocabulary = ontology.vocabulary(change.bound_vocabulary)
+    if vocabulary is None:
         return False
     owner = (
-        observed.node_type(binding.owner)
-        if binding.owner_kind == "node_type"
-        else observed.relationship_type(binding.owner)
+        observed.node_type(change.owner)
+        if change.owner_kind == "node_type"
+        else observed.relationship_type(change.owner)
     )
     prop = (
         None
         if owner is None
-        else next((p for p in owner.properties if p.name == binding.attribute), None)
+        else next((p for p in owner.properties if p.name == change.attribute), None)
     )
     if prop is None or prop.values is None or prop.values.truncated:
         return False

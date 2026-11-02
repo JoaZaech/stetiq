@@ -537,6 +537,7 @@ def test_binding_a_vocabulary_to_an_existing_attribute_is_breaking(client):
     assert summary(d) == [("WorkOrder.status", "changed", "breaking")]
     assert attributes(d) == [("WorkOrder", "node_type", "status")]
     assert d.changes[0].detail == "bound to Vocabulary Status"
+    assert d.changes[0].bound_vocabulary == "Status"
 
 
 def test_binding_an_attribute_to_another_vocabulary_is_breaking(client):
@@ -548,6 +549,7 @@ def test_binding_an_attribute_to_another_vocabulary_is_breaking(client):
 
     assert summary(d) == [("WorkOrder.status", "changed", "breaking")]
     assert d.changes[0].detail == "Vocabulary Status -> Phase"
+    assert d.changes[0].bound_vocabulary == "Phase"
 
 
 def test_unbinding_a_vocabulary_is_additive(client):
@@ -555,6 +557,7 @@ def test_unbinding_a_vocabulary_is_additive(client):
 
     assert summary(d) == [("WorkOrder.status", "changed", "additive")]
     assert d.changes[0].detail == "no longer bound to Vocabulary Status"
+    assert d.changes[0].bound_vocabulary is None
 
 
 def test_adding_or_removing_an_unbound_vocabulary_is_additive(client):
