@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 from typing import Protocol, get_args
 
 from stetiq import use_case as use_case_format
-from stetiq.conformance import assess_conformance, candidate_ontology
+from stetiq.conformance import apply_definitions, assess_conformance, candidate_ontology
 from stetiq.drift import DriftThresholds, assess_drift
 from stetiq.errors import (
     ConflictingArgumentsError,
@@ -31,18 +31,22 @@ from stetiq.errors import (
     NoConsumerGatesError,
     NotFoundError,
     NoUseCaseError,
+    OntologyValidationError,
     RunNotActiveError,
     RunNotFinishedError,
 )
 from stetiq.evaluation.answerability import (
     ANSWERABILITY_EVALUATOR,
     COVERAGE_EVALUATOR,
+    UNJUSTIFIED_ADDITIONS_EVALUATOR,
     CompetencyQuestionCoverage,
     CompetencyQuestionMapper,
     StructuralAnswerability,
+    UnjustifiedAdditions,
 )
 from stetiq.evaluation.framework import (
     Evaluation,
+    OntologyVersionEvaluator,
     ParameterValue,
     SubjectKind,
     check_evaluation,
@@ -53,6 +57,8 @@ from stetiq.evaluation.run import (
     SERVER_RUN_EVALUATORS,
     NoGraphSource,
     RunSubject,
+    executed_questions,
+    question_execution_result,
 )
 from stetiq.evaluation.structural import BUILT_IN_EVALUATORS
 from stetiq.gates import Gate, GateInputs
@@ -85,7 +91,13 @@ from stetiq.tracking.entities import (
 )
 from stetiq.tracking.store import Store
 from stetiq.use_case import UseCase
-from stetiq.use_case.consumer_gates import ConsumerGateInputs, QuestionRows, evaluate_consumer_gate
+from stetiq.use_case.concepts import ConceptRef, PropertyRef, parse_concept_reference
+from stetiq.use_case.consumer_gates import (
+    BaselineUseCase,
+    ConsumerGateInputs,
+    QuestionRows,
+    evaluate_consumer_gate,
+)
 
 # What the SDK observed at the end of a run: the scope it read and the Observed Schema.
 # The Observation itself happens SDK-side (the Graph Source adapter and its credentials
@@ -95,7 +107,12 @@ ObservationInput = tuple[GraphSourceScope, ObservedSchema]
 # Evaluator names stetiq computes itself; custom Evaluators cannot take them.
 RESERVED_EVALUATOR_NAMES = frozenset(
     {e.name for e in BUILT_IN_EVALUATORS}
-    | {ANSWERABILITY_EVALUATOR, COVERAGE_EVALUATOR, CQ_EXECUTION_EVALUATOR}
+    | {
+        ANSWERABILITY_EVALUATOR,
+        COVERAGE_EVALUATOR,
+        UNJUSTIFIED_ADDITIONS_EVALUATOR,
+        CQ_EXECUTION_EVALUATOR,
+    }
     | {e.name for e in SERVER_RUN_EVALUATORS}
 )
 
@@ -109,6 +126,31 @@ def check_not_built_in(evaluator: str) -> None:
         raise EvaluatorError(
             f"{evaluator!r} is a built-in Evaluator; its results are computed by stetiq"
         )
+
+
+def check_proposed_definitions(proposals: Mapping[str, str]) -> dict[str, str]:
+    """Proposed Definitions, checked: each key a Class, Relation or Attribute reference
+    (`Label`, `Owner.name`), each value a non-empty string. The service applies it to the
+    end call; the SDK also applies it in `propose_definitions`, so the message is the same
+    in every mode."""
+    if not isinstance(proposals, Mapping):
+        raise OntologyValidationError("proposed Definitions must map Concepts to Definitions")
+    checked = {}
+    for ref, text in proposals.items():
+        try:
+            parsed = parse_concept_reference(ref) if isinstance(ref, str) else None
+        except ValueError:
+            parsed = None
+        if not isinstance(parsed, ConceptRef | PropertyRef):
+            raise OntologyValidationError(
+                f"{ref!r} is not a Concept reference (expected Label or Owner.attribute)"
+            )
+        if not isinstance(text, str) or not text.strip():
+            raise OntologyValidationError(
+                f"the proposed Definition of {ref!r} must be a non-empty string"
+            )
+        checked[ref.strip()] = text.strip()
+    return checked
 
 
 # The audit-log actor for Alias moves stetiq makes itself (the Contract Alias on creation).
@@ -168,11 +210,25 @@ class TrackingService(Protocol):
 
     def list_runs(self, knowledge_graph: str) -> list[ConstructionRun]: ...
 
+    def latest_finished_run(self, knowledge_graph: str, version: int) -> ConstructionRun | None:
+        """The latest finished run standing for Ontology Version `version` (its Candidate,
+        else the version it consumed); None when no finished run does."""
+        ...
+
     def log_params(self, run_id: str, params: dict[str, str]) -> None: ...
 
     def log_metrics(self, run_id: str, metrics: dict[str, float]) -> None: ...
 
-    def end_run(self, run_id: str, observation: ObservationInput) -> ConstructionRun: ...
+    def end_run(
+        self,
+        run_id: str,
+        observation: ObservationInput,
+        definitions: Mapping[str, str] | None = None,
+    ) -> ConstructionRun:
+        """Finish the run with its ending Observation. `definitions` are the run's
+        proposed Definitions (Concept reference -> text), applied only to Concepts its
+        Candidate adds; the others are listed in `ignored_definitions`."""
+        ...
 
     def fail_run(self, run_id: str) -> ConstructionRun: ...
 
@@ -381,8 +437,15 @@ class LocalTrackingService:
             return self._register(knowledge_graph, ontology, "registered")
 
     def _register(
-        self, knowledge_graph: str, ontology: Ontology, origin: Origin
+        self,
+        knowledge_graph: str,
+        ontology: Ontology,
+        origin: Origin,
+        *,
+        base: OntologyVersion | None = None,
     ) -> OntologyVersion:
+        """Register `ontology` (deduped by content hash) and run the version built-ins on
+        a new version. `base` is the version a Candidate's run consumed."""
         # Hold the canonical form, so the returned version equals it fetched back.
         ontology = from_dict(to_dict(ontology))
         digest = content_hash(ontology)
@@ -400,37 +463,66 @@ class LocalTrackingService:
         )
         self._store.add_ontology_version(version)
         self._run_built_ins(version)
-        self._run_use_case_evaluators(version)
+        self._run_use_case_evaluators(version, base=base)
         return version
 
+    def _candidate_base(self, version: OntologyVersion) -> OntologyVersion | None:
+        """The version the run that gave rise to `version` consumed; None unless
+        `version` is a run's Candidate."""
+        if version.origin != "run":
+            return None
+        kg = version.knowledge_graph
+        run = next(
+            (r for r in self._store.list_runs(kg) if r.candidate_version == version.number),
+            None,
+        )
+        return None if run is None else self._store.get_ontology_version(kg, run.ontology_version)
+
     def _run_use_case_evaluators(
-        self, version: OntologyVersion, use_case_version: int | None = None
+        self,
+        version: OntologyVersion,
+        use_case_version: int | None = None,
+        *,
+        base: OntologyVersion | None = None,
     ) -> list[EvaluationResult]:
         """Structural answerability and Competency Question coverage against a Use Case
         version (default: the latest), with regressions judged against the Contract
-        Alias's version. Both read one Concept mapping, so the mapper runs once."""
-        try:
-            use_case = self.get_use_case_version(version.knowledge_graph, use_case_version)
-        except NoUseCaseError:
-            return []
+        Alias's version, and unjustified additions (also without a Use Case). All read
+        one Concept mapping, so the mapper runs once. `base` is the version a new
+        Candidate's run consumed; otherwise it is looked up."""
         kg = version.knowledge_graph
-        contract_alias = self._store.get_alias(kg, self._contract_alias(kg))
-        contract = (
-            None
-            if contract_alias is None
-            else self._store.get_ontology_version(kg, contract_alias.version)
+        if base is None:
+            base = self._candidate_base(version)
+        try:
+            use_case: UseCaseVersion | None = self.get_use_case_version(kg, use_case_version)
+        except NoUseCaseError:
+            use_case = None
+        evaluators: list[OntologyVersionEvaluator] = []
+        answerability = None
+        if use_case is not None:
+            contract_alias = self._store.get_alias(kg, self._contract_alias(kg))
+            contract = (
+                None
+                if contract_alias is None
+                else self._store.get_ontology_version(kg, contract_alias.version)
+            )
+            answerability = StructuralAnswerability(
+                use_case.use_case, self._question_mapper, contract
+            )
+            evaluators += [answerability, CompetencyQuestionCoverage(answerability)]
+        evaluators.append(
+            UnjustifiedAdditions(answerability, None if base is None else base.ontology)
         )
-        answerability = StructuralAnswerability(use_case.use_case, self._question_mapper, contract)
         return [
             self._store_result(
-                version.knowledge_graph,
+                kg,
                 "ontology_version",
                 str(version.number),
                 evaluator.name,
                 check_evaluation(evaluator.name, evaluator.evaluate(version)),
-                use_case_version=use_case.number,
+                use_case_version=None if use_case is None else use_case.number,
             )
-            for evaluator in (answerability, CompetencyQuestionCoverage(answerability))
+            for evaluator in evaluators
         ]
 
     def _run_built_ins(self, version: OntologyVersion) -> list[EvaluationResult]:
@@ -668,6 +760,12 @@ class LocalTrackingService:
         self.get_knowledge_graph(knowledge_graph)
         return self._store.list_runs(knowledge_graph)
 
+    def latest_finished_run(self, knowledge_graph: str, version: int) -> ConstructionRun | None:
+        with self._store.transaction():
+            self.get_ontology_version(knowledge_graph, version)
+            runs = self._finished_runs_standing_for(knowledge_graph, version)
+            return runs[-1] if runs else None
+
     def _running(self, run_id: str) -> ConstructionRun:
         run = self.get_run(run_id)
         if run.status != "running":
@@ -684,11 +782,17 @@ class LocalTrackingService:
             self._running(run_id)
             self._store.set_run_metrics(run_id, metrics)
 
-    def end_run(self, run_id: str, observation: ObservationInput) -> ConstructionRun:
+    def end_run(
+        self,
+        run_id: str,
+        observation: ObservationInput,
+        definitions: Mapping[str, str] | None = None,
+    ) -> ConstructionRun:
         """Finish the run with the Observation of its Graph Source made at its end."""
         scope, schema = observation
         with self._store.transaction():
-            run = self._running(run_id)
+            run = self._running(run_id)  # an ended run is not active, whatever it proposes
+            proposals = check_proposed_definitions(definitions or {})
             ended = _now()
             obs = Observation(
                 id=uuid.uuid4().hex,
@@ -699,19 +803,32 @@ class LocalTrackingService:
                 run_id=run_id,
             )
             self._store.add_observation(obs)
-            # Conformance, then Evolution Mode handling: a run introducing new Concepts
-            # fails (strict) or gives rise to a Candidate linked to it (evolving).
+            # Evolution Mode handling, then Conformance: a run introducing new Concepts
+            # fails (strict) or gives rise to a Candidate linked to it (evolving). An
+            # evolving run is judged against its Candidate, so what it added is the
+            # Candidate's Ontology Diff, not a mismatch; any other run against its
+            # Declared Ontology.
             declared = self.get_ontology_version(run.knowledge_graph, run.ontology_version)
-            conformance = assess_conformance(declared.ontology, schema)
-            self._store.set_run_conformance(run_id, conformance)
+            judged_against = declared
             status: RunStatus = "finished"
+            ignored = tuple(sorted(proposals))
             candidate = candidate_ontology(declared.ontology, schema)
             if candidate is not None:
                 if self.get_evolution_mode(run.knowledge_graph) == "strict":
                     status = "failed"
                 else:
-                    version = self._register(run.knowledge_graph, candidate, "run")
-                    self._store.set_run_candidate(run_id, run.knowledge_graph, version.number)
+                    # Proposed Definitions document only what the Candidate adds.
+                    candidate, ignored = apply_definitions(declared.ontology, candidate, proposals)
+                    judged_against = self._register(
+                        run.knowledge_graph, candidate, "run", base=declared
+                    )
+                    self._store.set_run_candidate(
+                        run_id, run.knowledge_graph, judged_against.number
+                    )
+            self._store.set_run_conformance(
+                run_id, assess_conformance(judged_against.ontology, schema)
+            )
+            self._store.set_run_ignored_definitions(run_id, ignored)
             self._store.end_run(run_id, status, ended, obs.id)
             run = self.get_run(run_id)
             self._run_run_built_ins(run)
@@ -970,6 +1087,7 @@ class LocalTrackingService:
             ontology_version=number,
             contract_version=contract.number,
             diff=diff_ontologies(contract.ontology, target.ontology),
+            ontology=target.ontology,
             conformance=None if run is None else run.conformance,
             evaluations=tuple(
                 self.get_evaluation_results(knowledge_graph, "ontology_version", str(number))
@@ -1062,6 +1180,9 @@ class LocalTrackingService:
                     None,
                 )
             )
+            baseline_use_case = (
+                None if baseline is None else self._executed_use_case(knowledge_graph, baseline)
+            )
             inputs = ConsumerGateInputs(
                 task_questions={t.id: t.competency_questions for c in gated for t in c.tasks},
                 candidate=self._question_rows(knowledge_graph, subject),
@@ -1069,6 +1190,14 @@ class LocalTrackingService:
                 if baseline is None
                 else self._question_rows(knowledge_graph, baseline),
                 baseline_version=contract,
+                baseline_use_case=None
+                if baseline_use_case is None
+                else BaselineUseCase(
+                    version=baseline_use_case.number,
+                    questions=frozenset(
+                        q.id for q in baseline_use_case.use_case.competency_questions
+                    ),
+                ),
             )
             evaluated_at = _now()
             results = []
@@ -1110,14 +1239,13 @@ class LocalTrackingService:
                 )
             return subject
         if version is not None:
-            self.get_ontology_version(knowledge_graph, version)
-            runs = self._finished_runs_standing_for(knowledge_graph, version)
-            if not runs:
+            standing = self.latest_finished_run(knowledge_graph, version)
+            if standing is None:
                 raise NotFoundError(
                     f"No finished Construction Run of {knowledge_graph!r} stands for Ontology "
                     f"Version {version}"
                 )
-            return runs[-1]
+            return standing
         runs = [r for r in self.list_runs(knowledge_graph) if r.status == "finished"]
         if not runs:
             raise NotFoundError(
@@ -1134,21 +1262,25 @@ class LocalTrackingService:
             if r.status == "finished" and _stands_for(r) == version
         ]
 
+    def _executed_use_case(
+        self, knowledge_graph: str, run: ConstructionRun
+    ) -> UseCaseVersion | None:
+        """The Use Case Version the run's Competency Questions were executed under; None
+        when it executed none."""
+        execution = question_execution_result(
+            self.get_evaluation_results(knowledge_graph, "construction_run", run.id)
+        )
+        if execution is None or execution.use_case_version is None:
+            return None
+        return self.get_use_case_version(knowledge_graph, execution.use_case_version)
+
     def _question_rows(self, knowledge_graph: str, run: ConstructionRun) -> dict[str, QuestionRows]:
         """The row count `competency_question_execution` recorded per question on the run."""
         results = self.get_evaluation_results(knowledge_graph, "construction_run", run.id)
-        execution = next(
-            (r for r in results if r.evaluator == CQ_EXECUTION_EVALUATOR and not r.parameters),
-            None,
-        )
-        if execution is None:
-            return {}
-        rows = {}
-        for d in execution.details:
-            data = d.data or {}
-            if isinstance(data.get("rows"), int):
-                rows[d.item] = QuestionRows(rows=data["rows"], error=data.get("status") == "error")
-        return rows
+        return {
+            question: QuestionRows(rows=e.rows, error=e.status == "error")
+            for question, e in executed_questions(results).items()
+        }
 
     def list_consumer_gate_results(
         self, knowledge_graph: str, *, consumer: str | None = None, version: int | None = None

@@ -184,7 +184,7 @@ Every Consumer Gate reads only the inputs the glossary allows: **Observed Schema
 
 ### The baseline
 
-A Consumer Gate judges what the Consumer would lose against the Ontology Version it takes. Until a Connector can say which version that is, it is the **Contract Alias**'s: the baseline is the latest finished Construction Run, other than the Candidate, standing for the Contract Alias's version (a run stands for its Candidate version, or else for the version it consumed). With no baseline run, every Consumer Gate fails. A Consumer that pins its own version needs a Connector, which is planned.
+A Consumer Gate judges what the Consumer would lose against the Ontology Version it takes. Until a Connector can say which version that is, it is the **Contract Alias**'s: the baseline is the latest finished Construction Run, other than the Candidate, standing for the Contract Alias's version (a run stands for its Candidate version, or else for the version it consumed). With no baseline run, every Consumer Gate fails. A Competency Question that was not in the Use Case Version the baseline run was judged by (declared since) is new: it has no baseline, so it is listed in the outcome's `new_questions` and a reason, and it is not compared and fails nothing. A question that was in that Use Case Version but has no row count on the baseline still fails. A Consumer that pins its own version needs a Connector, which is planned.
 
 ### The request
 
@@ -220,7 +220,8 @@ Content-Type: application/json
         "findings": [
           { "task": "triage-breakdowns", "competency_question": "cq-open-workorders-per-machine",
             "before": 5, "after": 2, "change": -0.6, "limit": 0.1 }
-        ]
+        ],
+        "new_questions": []
       }
     ],
     "evaluated_at": "2026-11-03T09:20:05Z"
@@ -228,7 +229,7 @@ Content-Type: application/json
 ]
 ```
 
-`findings` lists each failing question as fields: the counts and relative `change`, or, when it could not be compared, `missing` (`no_baseline_run`, `baseline_missing`, `baseline_error`, `candidate_missing`, `candidate_error`) with whichever counts exist. Code reads `findings`; `reasons` is for people and no code may parse it. A verdict names the symptom, never a cause ([ADR 0001](../adr/0001-ontology-not-instance-data.md)).
+`findings` lists each failing question as fields: the counts and relative `change`, or, when it could not be compared, `missing` (`no_baseline_run`, `baseline_missing`, `baseline_error`, `candidate_missing`, `candidate_error`) with whichever counts exist. `new_questions` lists the Task's questions that are new since the baseline run's Use Case Version and were not compared. Code reads `findings` and `new_questions`; `reasons` is for people and no code may parse it. A verdict names the symptom, never a cause ([ADR 0001](../adr/0001-ontology-not-instance-data.md)).
 
 `GET` on the same path (needs *read*) lists recorded results oldest first, filtered by `?consumer=` and `?version=` (the Ontology Version the judged run stands for). The web UI shows a Consumer's latest one on its card. A verdict never changes an Alias and never feeds the Promotion audit, which only counts Gate results.
 

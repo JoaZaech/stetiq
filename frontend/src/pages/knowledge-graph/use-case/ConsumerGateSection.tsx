@@ -81,6 +81,7 @@ function LatestVerdict({ knowledgeGraph, consumer }: { knowledgeGraph: string; c
 
 function Verdict({ knowledgeGraph, result }: { knowledgeGraph: string; result: ConsumerGateResult }) {
   const failing = result.outcomes.filter((o) => !o.passed)
+  const newQuestions = result.outcomes.flatMap((o) => o.new_questions ?? [])
   return (
     <div role="group" aria-label="Latest verdict" className="space-y-1 rounded-md border p-2">
       <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -127,6 +128,15 @@ function Verdict({ knowledgeGraph, result }: { knowledgeGraph: string; result: C
           )}
         </div>
       ))}
+      {newQuestions.length > 0 && (
+        <ul aria-label="New Competency Questions" className="space-y-0.5 text-muted-foreground">
+          {newQuestions.map((q) => (
+            <li key={q}>
+              <code className="font-mono">{q}</code>: new since the baseline run, not compared
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

@@ -28,7 +28,7 @@ test('selected runs compare side by side, from a URL that can be shared', async 
   await expect(overview.getByRole('row').first()).toHaveText(new RegExp(`${short(finished)}.*${short(rerun)}`))
   await expect(overview).toContainText(/Status\s*Finished\s*Finished/)
   await expect(overview).toContainText(/Declared Ontology\s*v1\s*v1/)
-  await expect(overview).toContainText(/Conformance\s*0\.5455\s*0\.5455/)
+  await expect(overview).toContainText(/Conformance\s*0\.8182\s*0\.8182/)
   const params = page.getByRole('table', { name: 'Params' })
   await expect(params).toContainText(/extractor\s*llm\s*llm/)
   await expect(params).toContainText(/temperature\s*0\.2\s*0\.5/)

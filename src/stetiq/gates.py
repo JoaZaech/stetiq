@@ -27,7 +27,8 @@ import yaml
 from stetiq.conformance import Conformance
 from stetiq.errors import GateConfigError
 from stetiq.graph_source import ObservedSchema
-from stetiq.ontology.diff import Classification, OntologyDiff
+from stetiq.ontology.diff import Change, Classification, OntologyDiff
+from stetiq.ontology.model import Ontology
 
 if TYPE_CHECKING:
     from stetiq.tracking.entities import EvaluationResult
@@ -40,6 +41,7 @@ class GateInputs:
     ontology_version: int  # the version the subject stands for
     contract_version: int | None = None
     diff: OntologyDiff | None = None  # contract_version -> ontology_version
+    ontology: Ontology | None = None  # the subject's: `diff`'s target
     conformance: Conformance | None = None
     evaluations: Sequence[EvaluationResult] = ()  # latest per Evaluator (and parameters)
     observed: ObservedSchema | None = None  # the subject's Observed Schema
@@ -79,7 +81,12 @@ class Gate(ABC):
 @dataclass(frozen=True)
 class OntologyDiffGate(Gate):
     """No change in the Ontology Diff from the Contract Alias's version may be classed
-    more severe than `max_classification`."""
+    more severe than `max_classification`.
+
+    One exception weighs evidence: binding an Attribute to a Vocabulary is breaking in
+    the Diff (it may reject values), but the Gate accepts it when the subject's Observed
+    Schema lists that Attribute's values, the list is not truncated, and every value is
+    a Value of the new Vocabulary (ADR 0009). Missing evidence is never a pass."""
 
     name: str
     max_classification: Classification
@@ -93,17 +100,55 @@ class OntologyDiffGate(Gate):
             return self._outcome(False, "No Contract Alias version to diff against")
         limit = self.max_classification.severity
         worse = [c for c in inputs.diff.changes if c.classification.severity > limit]
-        if not worse:
-            return self._outcome(True)
+        accepted = [c for c in worse if _observed_inside(c, inputs.ontology, inputs.observed)]
+        acceptances = tuple(
+            f"binding {c.concept} -> {c.bound_vocabulary} "
+            "accepted: all observed values are in the Vocabulary"
+            for c in accepted
+        )
+        rejected = [c for c in worse if c not in accepted]
+        if not rejected:
+            return self._outcome(True, *acceptances)
         against = f"v{inputs.contract_version} -> v{inputs.ontology_version}"
         return self._outcome(
             False,
             *(
                 f"{c.classification} change ({against}): {c.kind} {c.concept}"
                 + (f": {c.detail}" if c.detail else "")
-                for c in worse
+                for c in rejected
             ),
+            *acceptances,
         )
+
+
+def _observed_inside(
+    change: Change, ontology: Ontology | None, observed: ObservedSchema | None
+) -> bool:
+    """Whether `change` binds an Attribute to a Vocabulary and `observed` proves every
+    value of that Attribute is in the new Vocabulary: the values were read, the list is
+    complete, and none lies outside. Reading them relies on ADR 0001's Vocabulary
+    exception."""
+    if change.bound_vocabulary is None or change.owner is None or ontology is None:
+        return False
+    if observed is None:
+        return False
+    vocabulary = ontology.vocabulary(change.bound_vocabulary)
+    if vocabulary is None:
+        return False
+    owner = (
+        observed.node_type(change.owner)
+        if change.owner_kind == "node_type"
+        else observed.relationship_type(change.owner)
+    )
+    prop = (
+        None
+        if owner is None
+        else next((p for p in owner.properties if p.name == change.attribute), None)
+    )
+    if prop is None or prop.values is None or prop.values.truncated:
+        return False
+    allowed = {v.label for v in vocabulary.values}
+    return all(c.value in allowed for c in prop.values.counts)
 
 
 MAX_LISTED_REASONS = 20  # per Gate; the rest are summarised in one line

@@ -8,7 +8,7 @@ as a Candidate).
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any, Literal
@@ -20,7 +20,7 @@ from stetiq.graph_source import (
     ObservedSchema,
 )
 from stetiq.ontology import NodeType, Ontology, Pattern, Property, RelationshipType
-from stetiq.ontology.diff import WIDENING_TYPE_CHANGES
+from stetiq.ontology.diff import WIDENING_TYPE_CHANGES, AddedConcept, added_concepts
 from stetiq.ontology.model import ConceptKind, Vocabulary, VocabularyValue, is_deprecated
 
 # What a mismatch is about. Concepts are node types, relationship types and properties
@@ -422,6 +422,61 @@ def candidate_ontology(declared: Ontology, observed: ObservedSchema) -> Ontology
         relationship_types=relationship_types,
         patterns=tuple(sorted(patterns)),
         vocabularies=vocabularies,
+    )
+
+
+def apply_definitions(
+    base: Ontology, candidate: Ontology, proposals: Mapping[str, str]
+) -> tuple[Ontology, tuple[str, ...]]:
+    """`candidate` with each proposed Definition applied to the Concept it names, if that
+    Concept is one the candidate adds to `base` (a Class or Relation by `Label`, an
+    Attribute by `Owner.name`); also the references of the proposals it ignored, sorted.
+
+    Proposals never touch a Concept `base` declares: when a Class and a Relation share a
+    label (or an Attribute name on such owners), a proposal applies only to the added one.
+    """
+    targets = {
+        added: proposals[added.identity]
+        for added in added_concepts(base, candidate)
+        if added.identity in proposals
+    }
+    applied_refs = {added.identity for added in targets}
+    ignored = tuple(sorted(ref for ref in proposals if ref not in applied_refs))
+    if not targets:
+        return candidate, ignored
+    return (
+        replace(
+            candidate,
+            node_types=tuple(
+                _with_definitions(n, "node_type", targets) for n in candidate.node_types
+            ),
+            relationship_types=tuple(
+                _with_definitions(r, "relationship_type", targets)
+                for r in candidate.relationship_types
+            ),
+        ),
+        ignored,
+    )
+
+
+def _with_definitions[C: (NodeType, RelationshipType)](
+    concept: C, kind: ConceptKind, targets: Mapping[AddedConcept, str]
+) -> C:
+    """`concept` (of `kind`) with the Definitions `targets` holds for it and its own
+    Attributes, each keyed by the added Concept it is (so never a declared Concept that
+    merely shares a label)."""
+    own_key = AddedConcept(kind, concept.label)
+
+    def documented(p: Property) -> Property:
+        text = targets.get(AddedConcept("property", f"{concept.label}.{p.name}", own_key.key))
+        return p if text is None else replace(p, definition=text)
+
+    properties = tuple(documented(p) for p in concept.properties)
+    own = targets.get(own_key)
+    return replace(
+        concept,
+        definition=concept.definition if own is None else own,
+        properties=properties,
     )
 
 

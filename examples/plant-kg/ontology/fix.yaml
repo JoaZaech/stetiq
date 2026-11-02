@@ -1,6 +1,12 @@
-# A proposal from a pull request: rename WorkOrder to MaintenanceEvent.
-# stetiq sees a rename as a removal plus an addition, so this is breaking
-# for every consumer that queries WorkOrder. The Gates in stetiq.yaml reject it.
+# Plant maintenance Knowledge Graph, the fix: Ontology Version 1 plus what prompt v2's
+# Candidate added (Supplier and SUPPLIED_BY), and WorkOrder.kind bound to the
+# WorkOrderKind Vocabulary, so every Consumer that filters on kind can rely on its values.
+vocabularies:
+  - label: WorkOrderKind
+    description: Whether a work order repaired a failure or was planned maintenance
+    values:
+      - {label: breakdown, description: Unplanned repair after a failure}
+      - {label: preventive, description: Planned maintenance on a schedule}
 node_types:
   - label: Machine
     description: A production machine from the asset register
@@ -20,12 +26,12 @@ node_types:
     properties:
       - {name: name, type: STRING, required: true}
       - {name: badge, type: STRING, description: "HR badge number, when known"}
-  - label: MaintenanceEvent
+  - label: WorkOrder
     description: One maintenance job from the CMMS, breakdown or preventive
     properties:
       - {name: id, type: STRING, required: true}
       - {name: title, type: STRING}
-      - {name: kind, type: STRING, description: breakdown or preventive}
+      - {name: kind, type: STRING, vocabulary: WorkOrderKind, description: breakdown or preventive}
       - {name: opened_at, type: DATE}
       - {name: downtime_minutes, type: INTEGER, description: Production time lost}
   - label: FollowUp
@@ -43,31 +49,31 @@ node_types:
       - {name: name, type: STRING, required: true}
 relationship_types:
   - label: PERFORMED_ON
-    description: The machine a maintenance event was carried out on
+    description: The machine a work order was carried out on
   - label: PART_OF
     description: The line a machine sits on
   - label: INVOLVED
-    description: The components a maintenance event touched
+    description: The components a work order touched
   - label: ASSIGNED_TO
     description: The technician responsible
   - label: FEEDS
     description: Material flows from the source machine to the target machine
   - label: HAS_FOLLOW_UP
-    description: The follow-up tasks recorded for a maintenance event
+    description: The follow-up tasks recorded for a work order
+  - label: CAUSED_BY
+    description: The root cause of a work order
   - label: SUPPLIED_BY
     description: The supplier a replacement component was ordered from
-  - label: CAUSED_BY
-    description: The root cause of a maintenance event
 patterns:
-  - [MaintenanceEvent, PERFORMED_ON, Machine]
+  - [WorkOrder, PERFORMED_ON, Machine]
   - [Machine, PART_OF, Line]
-  - [MaintenanceEvent, INVOLVED, Component]
-  - [MaintenanceEvent, ASSIGNED_TO, Technician]
+  - [WorkOrder, INVOLVED, Component]
+  - [WorkOrder, ASSIGNED_TO, Technician]
   - [Machine, FEEDS, Machine]
-  - [MaintenanceEvent, HAS_FOLLOW_UP, FollowUp]
+  - [WorkOrder, HAS_FOLLOW_UP, FollowUp]
   - [FollowUp, ASSIGNED_TO, Technician]
+  - [WorkOrder, CAUSED_BY, Fault]
   - [Component, SUPPLIED_BY, Supplier]
-  - [MaintenanceEvent, CAUSED_BY, Fault]
 constraints:
-  - {type: UNIQUENESS, node_type: MaintenanceEvent, property_name: id}
+  - {type: UNIQUENESS, node_type: WorkOrder, property_name: id}
   - {type: UNIQUENESS, node_type: Machine, property_name: name}

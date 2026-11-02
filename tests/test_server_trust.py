@@ -12,7 +12,7 @@ from stetiq.auth import TokenRegistry
 from stetiq.gates import gate_from_dict
 from stetiq.graph_source import InMemoryGraphSource
 from stetiq.server import create_app
-from stetiq.tracking import RemoteTrackingService, wire
+from stetiq.tracking import RemoteTrackingService, codec, wire
 
 API = wire.API_PREFIX
 
@@ -416,3 +416,64 @@ def test_consumer_gate_results_need_edit_to_record_and_read_to_list(server, admi
 
     assert http.post(path, headers=reader, json={}).status_code == 403
     assert http.get(path, headers=reader).status_code == 200
+
+
+# --- Proposed Definitions are applied by the server, to what the Candidate adds ----------
+
+
+def _end_body(admin, kg, *nodes):
+    graph = InMemoryGraphSource()
+    for labels in nodes:
+        graph.add_node(labels)
+    scope = admin.get_graph_source(kg)
+    return {
+        "scope": codec.graph_source_scope_to_json(scope),
+        "observed_schema": codec.observed_schema_to_json(graph.observe(scope)),
+    }
+
+
+def test_proposed_definitions_never_redefine_a_declared_concept(server, admin, support):
+    _, http = server
+    editor = _headers(server, "mallory", {"support": "edit"})
+    run = admin.start_run("support", ontology_version=1)
+    body = _end_body(admin, "support", ["Ticket"], ["Agent"])
+    body["definitions"] = {"Ticket": "rewritten by the client", "Agent": "Who handles tickets"}
+
+    response = http.post(f"{API}/runs/{run.id}/end", json=body, headers=editor)
+
+    assert response.status_code == 200
+    ended = response.json()
+    assert ended["ignored_definitions"] == ["Ticket"]
+    candidate = admin.get_ontology_version("support", ended["candidate_version"]).ontology
+    assert candidate.node_type("Ticket").definition == "A support request"
+    assert candidate.node_type("Agent").definition == "Who handles tickets"
+
+
+@pytest.mark.parametrize(
+    "definitions", [{"Agent": ""}, {"Agent": 3}, {"(A)-[R]->(B)": "a path"}, ["Agent"]]
+)
+def test_malformed_proposed_definitions_are_refused_and_the_run_keeps_running(
+    server, admin, support, definitions
+):
+    _, http = server
+    editor = _headers(server, "mallory", {"support": "edit"})
+    run = admin.start_run("support", ontology_version=1)
+    body = _end_body(admin, "support", ["Agent"])
+    body["definitions"] = definitions
+
+    response = http.post(f"{API}/runs/{run.id}/end", json=body, headers=editor)
+
+    assert response.status_code == 422
+    assert admin.get_run(run.id).status == "running"
+
+
+def test_ending_an_ended_run_is_not_active_before_its_proposals_are_judged(server, admin, support):
+    _, http = server
+    editor = _headers(server, "mallory", {"support": "edit"})
+    body = _end_body(admin, "support", ["Agent"])
+    body["definitions"] = {"Agent": ""}
+
+    response = http.post(f"{API}/runs/{_run_id(admin, 'support')}/end", json=body, headers=editor)
+
+    assert response.status_code == 409
+    assert response.json()["error"]["type"] == "RunNotActiveError"

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import ipaddress
+import json
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Annotated
@@ -807,12 +808,17 @@ GATE_FAILED_EXIT_CODE = 3
 
 
 def _echo_outcomes(
-    outcomes: Iterable[Verdict], *, indent: str = "", with_reasons: bool = True
+    outcomes: Iterable[Verdict],
+    *,
+    indent: str = "",
+    with_reasons: bool = True,
+    pass_reasons: bool = False,
 ) -> None:
-    """`PASS`/`FAIL  <name>` per Gate or Consumer Gate outcome, then a failure's reasons."""
+    """`PASS`/`FAIL  <name>` per Gate or Consumer Gate outcome, then a failure's reasons
+    (and, with `pass_reasons`, a pass's)."""
     for outcome in outcomes:
         typer.echo(f"{indent}{'PASS' if outcome.passed else 'FAIL'}  {outcome.gate.name}")
-        if with_reasons and not outcome.passed:
+        if with_reasons and (pass_reasons or not outcome.passed):
             for reason in outcome.reasons:
                 typer.echo(f"{indent}      - {reason}")
 
@@ -925,7 +931,8 @@ def consumer_gate(
     for c in use_case.consumers:
         if c.id in by_consumer:
             typer.echo(c.id)
-            _echo_outcomes(by_consumer[c.id].outcomes, indent="  ")
+            # A pass's reasons name the new questions it did not compare.
+            _echo_outcomes(by_consumer[c.id].outcomes, indent="  ", pass_reasons=True)
         elif consumer is None:
             typer.echo(f"{c.id}: no Consumer Gate declared (skipped)")
     first = results[0]
@@ -969,7 +976,42 @@ def consumer_gate_results(
             f"run {r.run_id} (Ontology Version {r.ontology_version}), baseline {baseline} "
             f"(Ontology Version {r.baseline_ontology_version})"
         )
-        _echo_outcomes(r.outcomes, indent="  ")
+        _echo_outcomes(r.outcomes, indent="  ", pass_reasons=True)
+
+
+# --- The run context ---------------------------------------------------------------------
+
+
+@app.command("context")
+def context(
+    knowledge_graph: Annotated[
+        str | None, typer.Argument(help="Default: `knowledge_graph` from the repo config")
+    ] = None,
+    version: Annotated[
+        int | None,
+        typer.Option("--version", help="Ontology Version (default: the Contract Alias's)"),
+    ] = None,
+    as_json: Annotated[
+        bool, typer.Option("--json", help="Accepted for clarity; the output is always JSON")
+    ] = False,
+    config: ConfigPath = None,
+    tracking_uri: TrackingUri = None,
+) -> None:
+    """Print the run context as JSON: the Ontology Version to extract against, the latest
+    Use Case Version, that version's evaluation results and the executed Competency
+    Questions of the latest finished run standing for it. Metrics only, no instance data.
+    Needs read. `--json` changes nothing: the output is always JSON."""
+    del as_json  # the output is always JSON
+    try:
+        kg = knowledge_graph or _repo_config(config).get("knowledge_graph")
+        if not kg:
+            raise StetiqError(
+                "no Knowledge Graph given (argument or `knowledge_graph` in the repo config)"
+            )
+        data = _client(tracking_uri).run_context(kg, version=version).to_dict()
+    except StetiqError as e:
+        raise _fail(e) from None
+    typer.echo(json.dumps(data, indent=2, ensure_ascii=False))
 
 
 # --- Construction Runs and Observations -------------------------------------------------

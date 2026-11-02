@@ -21,6 +21,9 @@ answering it.
 `competency_question_coverage` reads the same Concept mapping the other way round: which
 Concepts of the version no Competency Question references. It shares the mapping (and
 so the mapper's answers) with `structural_answerability`, so the two always agree.
+
+`unjustified_additions` reads that mapping too, for an evolving run's Candidate: which
+Concepts the Candidate adds to the version its run consumed that no question needs.
 """
 
 from __future__ import annotations
@@ -30,6 +33,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from stetiq.evaluation.framework import Detail, Evaluation, OntologyVersionEvaluator
 from stetiq.ontology import Ontology
+from stetiq.ontology.diff import added_concepts
 from stetiq.ontology.model import ConceptKind, live_concepts
 from stetiq.use_case.concepts import (
     ConceptRef,
@@ -49,6 +53,7 @@ if TYPE_CHECKING:
 
 ANSWERABILITY_EVALUATOR = "structural_answerability"
 COVERAGE_EVALUATOR = "competency_question_coverage"
+UNJUSTIFIED_ADDITIONS_EVALUATOR = "unjustified_additions"
 
 
 class CompetencyQuestionMapper(Protocol):
@@ -214,9 +219,6 @@ class StructuralAnswerability(OntologyVersionEvaluator):
                     )
                 )
         total = len(self.use_case.competency_questions)
-        needed = {
-            q for c in self.use_case.consumers for t in c.tasks for q in t.competency_questions
-        }
         return Evaluation(
             metrics={
                 "questions": total,
@@ -226,7 +228,7 @@ class StructuralAnswerability(OntologyVersionEvaluator):
                 "answerable_ratio": counts["answerable"] / total if total else 1.0,
                 "regressed_questions": len(regressions),
                 "questions_serving_no_task": sum(
-                    q.id not in needed for q in self.use_case.competency_questions
+                    not self.use_case.serving(q.id) for q in self.use_case.competency_questions
                 ),
             },
             details=details + regressions,
@@ -324,6 +326,67 @@ class CompetencyQuestionCoverage(OntologyVersionEvaluator):
                     data={"kind": kind},
                 )
                 for kind, identity in untraced
+            ],
+        )
+
+
+class UnjustifiedAdditions(OntologyVersionEvaluator):
+    """Which Concepts an evolving run's Candidate adds that no Competency Question needs.
+
+    `base` is the Ontology the run consumed; the added Concepts are the Ontology Diff's
+    additions from it to the judged version: Classes and Relations (each with its
+    Attributes) and Attributes added to a declared Class or Relation. Added Vocabulary
+    Values are left out. An added Class or Relation is justified when a question's
+    Concept requirements (as `answerability` maps them, so including mapped questions)
+    name it; an added Attribute when they name it or when its owner is an added,
+    justified Concept. An unmapped question justifies nothing, and without a Use Case
+    (`answerability` None) nothing is justified.
+
+    Metrics: `unjustified_additions`, `added_concepts`, `justified_ratio` (1.0 when
+    nothing was added). One Detail per unjustified Concept (`item` = `Label` or
+    `Owner.attribute`, `metric` = `unjustified_additions`, `data` = `{kind}`). Without
+    a `base` (a version that is not a run's Candidate) nothing counts as added.
+    """
+
+    name = UNJUSTIFIED_ADDITIONS_EVALUATOR
+
+    def __init__(
+        self, answerability: StructuralAnswerability | None, base: Ontology | None
+    ) -> None:
+        self.answerability = answerability
+        self.base = base
+
+    def evaluate(self, version) -> Evaluation:
+        ontology = version.ontology
+        added = [] if self.base is None else added_concepts(self.base, ontology)
+        needed: set[tuple[ConceptKind, str]] = set()
+        if self.answerability is not None:
+            index = _OntologyIndex(ontology)
+            for _, required, _ in self.answerability.concept_mapping(ontology).values():
+                for req in required:
+                    needed |= index.referenced(req)
+        added_keys = {a.key for a in added}
+        unjustified = [
+            a
+            for a in added
+            if a.key not in needed
+            and not (a.owner is not None and a.owner in added_keys and a.owner in needed)
+        ]
+        total = len(added)
+        return Evaluation(
+            metrics={
+                "unjustified_additions": len(unjustified),
+                "added_concepts": total,
+                "justified_ratio": (total - len(unjustified)) / total if total else 1.0,
+            },
+            details=[
+                Detail(
+                    item=a.identity,
+                    message="added, but no Competency Question needs it",
+                    metric="unjustified_additions",
+                    data={"kind": a.kind},
+                )
+                for a in unjustified
             ],
         )
 

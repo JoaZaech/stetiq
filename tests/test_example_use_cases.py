@@ -23,7 +23,7 @@ def test_an_examples_use_case_keeps_its_consumers_and_tasks_once_registered(clie
 
     # Each example starts from its first Ontology.
     client_factory().create_knowledge_graph(
-        path.parent.name, ontology=path.parent / "ontology" / "initial.yaml"
+        path.parent.name, ontology=path.parent / "ontology" / "v1.yaml"
     )
     client_factory().register_use_case(path.parent.name, path)
     stored = client_factory().get_use_case_version(path.parent.name).use_case

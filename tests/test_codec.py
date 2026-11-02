@@ -198,6 +198,7 @@ SAMPLES: dict[type, Any] = {
             ),
         ),
         candidate_version=2,
+        ignored_definitions=("Shift",),
     ),
     Observation: OBSERVATION,
     Alias: Alias(knowledge_graph="support", name="staging", version=2, updated_at=AT),
@@ -364,3 +365,10 @@ def test_a_knowledge_graph_payload_that_names_a_steward_and_authority_still_pars
     }
 
     assert codec.knowledge_graph_from_json(data) == KNOWLEDGE_GRAPH
+
+
+def test_a_run_from_an_older_server_or_store_has_no_ignored_definitions():
+    data = codec.run_to_json(SAMPLES[ConstructionRun])
+    del data["ignored_definitions"]
+
+    assert codec.run_from_json(data).ignored_definitions == ()

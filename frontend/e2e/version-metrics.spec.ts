@@ -51,14 +51,14 @@ test('the chart view shows one chart per Evaluator metric, and the search narrow
   const grid = page.getByRole('region', { name: 'Metric charts' })
   // 5 constraint_consistency + 3 definitions + 4 hierarchy + 2 isolated_node_types
   // + 4 orphan_concepts + 3 redundancy + 7 structural_answerability
-  // + 4 competency_question_coverage + 1 review
-  await expect(grid.getByRole('figure')).toHaveCount(33)
+  // + 4 competency_question_coverage + 3 unjustified_additions + 1 review
+  await expect(grid.getByRole('figure')).toHaveCount(36)
   const score = grid.getByRole('figure', { name: 'review/score' })
   await expect(score.getByText('v1')).toBeVisible()
   await expect(score.getByText('v3')).toBeVisible()
 
   await page.getByRole('searchbox', { name: 'Search metric charts' }).fill('RATIO')
-  await expect(grid.getByRole('figure')).toHaveCount(5)
+  await expect(grid.getByRole('figure')).toHaveCount(6)
   await expect(grid.getByRole('figure', { name: 'structural_answerability/answerable_ratio' })).toBeVisible()
   await expect(grid.getByRole('figure', { name: 'definitions/definition_ratio' })).toBeVisible()
 
@@ -93,7 +93,9 @@ test('a version’s Overview leads with its Gate result, then one card per Evalu
   await expect(evaluators.getByRole('article', { name: 'Concepts with a Definition' })).toContainText(/Defined\s*[\d.]+%/)
   await expect(evaluators.getByRole('article', { name: 'Class hierarchy' })).toContainText(/Max depth\s*\d+\s*Root Classes\s*\d+/)
   await expect(evaluators.getByRole('article', { name: 'review' })).toHaveText(/^review\s*score\s*0\.7$/)
-  await expect(evaluators.getByRole('article')).toHaveCount(9)
+  // v3 is an evolving run's Candidate: one Concept added, which no Competency Question needs.
+  await expect(evaluators.getByRole('article', { name: 'Unjustified additions' })).toContainText(/Unjustified\s*1 \/ 1/)
+  await expect(evaluators.getByRole('article')).toHaveCount(10)
 
   await answerable.getByRole('button', { name: 'About Answerable questions' }).hover()
   await expect(page.getByRole('tooltip')).toContainText('Competency Questions whose Concepts this Ontology has')

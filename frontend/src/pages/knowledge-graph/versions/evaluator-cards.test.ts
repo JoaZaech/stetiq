@@ -34,6 +34,7 @@ describe('EVALUATOR_DISPLAY', () => {
       'orphan_concepts',
       'redundancy',
       'structural_answerability',
+      'unjustified_additions',
     ])
   })
 })

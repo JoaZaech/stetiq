@@ -19,8 +19,9 @@ test.describe('with Construction Runs', () => {
     const finished = String(stetiq.seeded.finished)
     // `support` was never gated: no Gate result and no Gate Preview.
     await expect(rows.nth(1)).toHaveText(new RegExp(`^${aborted.slice(0, 8)}extractor: rules.*Failed.*v1.*—.*—.*—`))
+    // The evolving run is judged against its Candidate v2.
     await expect(rows.nth(2)).toHaveText(
-      new RegExp(`^${finished.slice(0, 8)}extractor: llmtemperature: 0\\.2.*Finished.*v1.*54\\.5%.*—.*v2`),
+      new RegExp(`^${finished.slice(0, 8)}extractor: llmtemperature: 0\\.2.*Finished.*v1.*81\\.8%.*—.*v2`),
     )
     await expect(rows.nth(2).getByRole('list', { name: 'Params' }).getByRole('listitem')).toHaveText([
       'extractor: llm',
@@ -118,24 +119,31 @@ test.describe('with Construction Runs', () => {
     await expect(observation).toContainText(/Relations\s*2/)
   })
 
-  test('the Conformance tab shows the score and the per-Concept breakdown', async ({ page, stetiq }) => {
+  test('the Conformance tab shows the score and the per-Concept breakdown, judged against the Candidate', async ({
+    page,
+    stetiq,
+  }) => {
     await page.goto(`/ui/kg/support/runs/${String(stetiq.seeded.finished)}`)
     await page.getByRole('link', { name: 'Conformance' }).click()
     await expect(page).toHaveURL(/\/conformance$/)
 
-    await expect(page.getByRole('region', { name: 'Score' })).toContainText('0.5455')
+    const score = page.getByRole('region', { name: 'Score' })
+    await expect(score).toContainText('0.8182')
+    await expect(score.getByRole('note', { name: 'Judged against' })).toContainText('Judged against Candidate v2')
     const absent = page.getByRole('table', { name: 'Declared but not observed' })
     await expect(absent.getByRole('row')).toHaveCount(3)
     await expect(absent.getByRole('row').nth(1)).toHaveText(/Party\s*Class/)
     await expect(absent.getByRole('row').nth(2)).toHaveText(/Party\.name\s*Attribute/)
-    const undeclared = page.getByRole('table', { name: 'Observed but not declared' })
-    await expect(undeclared.getByRole('row')).toHaveCount(3)
-    await expect(undeclared.getByRole('row').nth(1)).toHaveText(/ESCALATED\s*Relation/)
-    await expect(undeclared.getByRole('row').nth(2)).toHaveText(/Ticket\.priority\s*Attribute/)
-    const patterns = page.getByRole('table', { name: 'Other mismatches' })
-    await expect(patterns.getByRole('row').nth(1)).toHaveText(
-      /\(Ticket\)-\[ESCALATED\]->\(Customer\)\s*pattern\s*Observed but not declared/,
-    )
+    // ESCALATED, Ticket.priority and their pattern are Candidate v2's additions, not mismatches.
+    await expect(page.getByRole('table', { name: 'Observed but not declared' })).toHaveCount(0)
+    await expect(page.getByRole('table', { name: 'Other mismatches' })).toHaveCount(0)
+
+    await score.getByRole('link', { name: 'v2' }).click()
+    await expect(page).toHaveURL('/ui/kg/support/versions/2')
+    // Neither Competency Question needs ESCALATED or Ticket.priority.
+    await expect(
+      page.getByRole('region', { name: 'Evaluator results' }).getByRole('article', { name: 'Unjustified additions' }),
+    ).toContainText(/Unjustified\s*2 \/ 2/)
   })
 
   test('the Evaluations tab shows Evaluator cards and each executed Competency Question, never row data', async ({
@@ -150,7 +158,7 @@ test.describe('with Construction Runs', () => {
     await expect(evaluators.getByRole('article', { name: 'Questions executed' })).toContainText(
       /Passed\s*1 \/ 2\s*Failed\s*1/,
     )
-    await expect(evaluators.getByRole('article', { name: 'Conformance' })).toContainText(/Score\s*54\.5%/)
+    await expect(evaluators.getByRole('article', { name: 'Conformance' })).toContainText(/Score\s*81\.8%/)
     await expect(evaluators.getByRole('article', { name: 'Observed graph' })).toBeVisible()
     await expect(evaluators.getByRole('article', { name: 'review (min_confidence=0.5)' })).toContainText('0.9')
 
@@ -159,7 +167,7 @@ test.describe('with Construction Runs', () => {
     await expect(results).toBeHidden()
     await evaluators.getByRole('button', { name: 'Show all metrics' }).click()
     await expect(results).toContainText(/competency_question_execution\s*pass_ratio\s*0\.5\s*1/)
-    await expect(results).toContainText(/conformance\s*score\s*0\.5455/)
+    await expect(results).toContainText(/conformance\s*score\s*0\.8182/)
     await expect(results).toContainText(/observed_schema\s*node_types\s*2/)
 
     const questions = page.getByRole('list', { name: 'Competency Questions' }).getByRole('listitem')
@@ -223,6 +231,7 @@ test.describe('with Construction Runs', () => {
     await expect(alert).toContainText('This Construction Run failed')
     await expect(alert).toContainText('Evolution Mode is strict')
     await page.getByRole('link', { name: 'Conformance' }).click()
+    await expect(page.getByRole('note', { name: 'Judged against' })).toHaveCount(0)
     await expect(page.getByRole('table', { name: 'Observed but not declared' })).toContainText('ESCALATED')
   })
 

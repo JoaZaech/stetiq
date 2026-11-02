@@ -39,6 +39,7 @@ from stetiq.gates import Gate, GateOutcome, load_gates
 from stetiq.graph_source import GraphSource, GraphSourceScope, InMemoryGraphSource
 from stetiq.impact import ConsumerImpact, QuestionImpact, TaskImpact, UseCaseImpact
 from stetiq.ontology.diff import Change, ChangeKind, Classification, OntologyDiff
+from stetiq.run_context import RunContext
 from stetiq.tracking import (
     Alias,
     ConstructionRun,
@@ -133,6 +134,7 @@ __all__ = [
     "RowCountDropGate",
     "RowCountFinding",
     "RunComparison",
+    "RunContext",
     "RunNotActiveError",
     "RunNotFinishedError",
     "StetiqError",

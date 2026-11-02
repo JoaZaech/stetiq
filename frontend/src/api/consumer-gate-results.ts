@@ -31,6 +31,8 @@ export interface ConsumerGateOutcome {
   /** For people; the UI renders `findings`, and shows these only when there are none. */
   reasons: string[]
   findings: RowCountFinding[]
+  /** The Task's questions new since the baseline run's Use Case Version: not compared. */
+  new_questions?: string[]
 }
 
 /** codec.consumer_gate_result_to_json: one Consumer's recorded Consumer Gate evaluation. */

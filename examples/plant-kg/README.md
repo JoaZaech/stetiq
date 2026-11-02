@@ -1,126 +1,132 @@
-# Plant maintenance: a complete stetiq walkthrough
+# Plant maintenance: better by your evals, broken for your Consumer
 
-A self-contained example of using stetiq the way a team would: a maintenance lead at a
-factory wants a Knowledge Graph of the plant's work orders, machines, technicians and
-parts, built from the data the plant already has. stetiq versions the graph's
-Ontology, judges every build against the lead's Competency Questions, gates changes in
-CI and watches the live graph for Drift.
+A factory's maintenance team builds a Knowledge Graph of its work orders, machines,
+technicians and parts. Claude reads the technicians' free-text reports; the structured
+data comes from the asset register and the maintenance systems' exports. Two Consumers
+read the graph: the **reliability dashboard** the morning stand-up triages breakdowns
+from, and the **maintenance assistant**, an agent that explains why a machine stopped.
 
-Everything runs on your laptop. The tracking database is SQLite, the "graph database"
-is a JSON file, and the technicians' reports are read either by Claude (through the
-Claude Code CLI) or by a regex script, so the example also works offline.
+`demo.py` replays three real, recorded Claude rounds from the committed cache in
+`llm-cache/`: offline, deterministic, free, with no `claude` CLI and no API key.
 
 ```bash
 cd examples/plant-kg
-uv run python demo.py                 # Claude reads the reports (needs the `claude` CLI, signed in)
-uv run python demo.py --extractor rules   # fully offline, deterministic
-uv run stetiq ui                      # browse the result at http://127.0.0.1:5000/ui
+uv run python demo.py --reset      # the three rounds (--reset starts over)
+uv run python demo.py --reset --epilogue   # ... then hand edits to the graph, and Drift
+uv run stetiq ui                   # the same verdicts at http://127.0.0.1:5000/ui
 ```
 
-`demo.py --reset` starts over. `uv run pytest tests/test_example_plant_kg.py` runs the
-offline story as a test and pins its outcomes. The CLI works on the same tracking database
-from this folder (it reads `./stetiq.yaml` and `.stetiq/stetiq.db` by default):
+## Without stetiq
 
-```bash
-uv run stetiq runs list plant-maintenance
-uv run stetiq gate-results plant-maintenance        # every Gate evaluation the story recorded
-uv run stetiq gate plant-maintenance --run <id>     # gate the nightly run again: all nine pass
-uv run stetiq ontology diff plant-maintenance 1 3
-uv run stetiq alias log plant-maintenance
-uv run stetiq drift list plant-maintenance
+One pull request changes two things. It brings prompt v2, which also pulls out who
+supplied each replacement part, so the maintenance assistant can answer a new question,
+"Which suppliers' components keep failing?". And it takes in the export of Line 2's new
+maintenance system (an EAM), which since the migration is the system of record for
+Line 2's work orders. Every check the team runs passes, so it ships.
+
+But the EAM's order types call a breakdown `corrective`, not `breakdown`, and the
+pipeline copies a work order's `kind` from the export, as it always has. The reliability
+dashboard counts breakdowns with `kind = 'breakdown'`. Nothing errors: the dashboard
+quietly drops Line 2's two breakdowns (CNC-04's worn spindle bearing, Lathe-02's sticking
+chuck valve) from the stand-up. Claude read those reports right; the new export's codes
+broke the dashboard.
+
+## With stetiq
+
+The demo prints one PR-style line per round (these are the recording's real numbers):
+
+```text
+v1          Gate ✅   promoted: production -> v1
+prompt v2   Gate ✅   Consumer Gate ❌ (reliability-dashboard ❌ breakdown-technicians 6 → 4, −33%; maintenance-assistant ✅ parts-suppliers new, not compared)   not promoted (Candidate stays at v2)
+fix         Gate ✅   Consumer Gate ✅ (maintenance-assistant ✅ parts-suppliers new, not compared; reliability-dashboard ✅)   promoted: production -> v3
 ```
 
-`stetiq gate plant-maintenance --version 3` at the end of the story fails two Gates, and
-that is correct: a version is gated with the latest run that consumed it, which by then is
-the deliberate strict-mode failure with its `Sensor` nodes.
+**1. v1, the baseline.** Prompt v1 on `ontology/v1.yaml`, where `WorkOrder.kind` is a
+plain string. Every Gate in `stetiq.yaml` passes: Conformance 1.0, 6 of 6 executed
+Competency Questions pass, every work order has a report. `production` stays on v1, and
+this run is the baseline every Consumer Gate compares with.
+
+**2. Prompt v2.** First the maintenance assistant's Task gains the Competency Question
+`parts-suppliers` (a new Use Case Version), so the pipeline has a reason to add
+`Supplier`. The pipeline hands Claude the run context (`Client.run_context`: the
+Ontology as a suggestion, the Tasks and Competency Questions, and the latest results).
+Claude adds `Supplier` and `SUPPLIED_BY` with a Definition for each, and the evolving run
+proposes **Candidate v2**, an additive Ontology Diff. By the evals it is better: 7 of 7
+questions pass, `parts-suppliers` returns 5 rows, Conformance stays 1.0, and
+`unjustified_additions` is 0 because `parts-suppliers` needs what was added. The front
+Gate passes.
+
+The reliability dashboard's Consumer Gate (`triage-rows-hold`: no Competency Question of
+*Triage breakdowns* may lose more than 10% of its rows) fails: `breakdown-technicians`
+goes from 6 rows to 4, −33%. The verdict names the symptom, not the cause: stetiq never
+reads instance values. The maintenance assistant's Consumer Gate passes: `root-causes`
+keeps its 8 rows, and `parts-suppliers` was not in the Use Case Version the baseline run
+was judged by, so it has no baseline and is reported as new, not compared. Candidate v2
+stays unpromoted, like an open red pull request.
+
+**3. The fix.** `ontology/fix.yaml` is v1 plus what Candidate v2 added, with
+`WorkOrder.kind` bound to the `WorkOrderKind` Vocabulary {`breakdown`, `preventive`}.
+Prompt v2 runs again on it (v3). Claude sees the Vocabulary in the Ontology, and wherever
+an export's code is not a Vocabulary Value, the pipeline takes the `kind` Claude read from
+the report. The Ontology Diff still classes the binding as breaking, but the
+`no-breaking-changes` Gate accepts it on evidence: "binding WorkOrder.kind ->
+WorkOrderKind accepted: all observed values are in the Vocabulary". Both Consumer Gates
+pass (`breakdown-technicians` is back at 6), and `production` moves to v3.
+
+The demo ends with the CI commands that give the same verdicts in a pipeline's pull
+request: `stetiq gate` (the Gates of `stetiq.yaml`) and `stetiq consumer gate` (every
+Consumer Gate). `stetiq ui` shows the two Consumers, their Tasks and the recorded
+Consumer Gate verdicts.
+
+**Epilogue (`--epilogue`).** Someone edits the graph database by hand: adds `SparePart`
+nodes and deletes the done follow-ups. The next Observation records Drift against
+`production`: two undeclared Concepts and three count drops past the 25% in
+`stetiq.yaml`.
+
+## Claude and the cache
+
+Each report is one `claude -p` call (model `claude-opus-5-5`) with a JSON schema for the
+output, no tools and a replaced system prompt. Answers are cached by prompt version,
+model and prompt text. Every committed entry is a real, unedited Claude response that
+records its model and recording date.
+
+| Flag | Calls Claude | Cache |
+| --- | --- | --- |
+| (none) | never | reads `llm-cache/`; a miss is an error: "cache miss, rerun with --record" |
+| `--live` | on a miss | the gitignored `.graphdb/llm-cache/` |
+| `--record [v1 v2 fix]` | for every report of those rounds (default all) | overwrites `llm-cache/` |
+
+`pipeline.py --round v1|v2|fix` runs one round as the Construction Entry Point of
+`stetiq.yaml` (`PLANT_ROUND=v2 uv run stetiq run`), the way a pipeline's CI would. An entry
+point process cannot propose Definitions to its run, so there the Concepts Claude adds stay
+undocumented.
 
 ## The data
 
 | Source | Kind | What it holds |
 | --- | --- | --- |
-| `data/assets/machines.csv` | structured | The asset register: seven machines, their model and line |
-| `data/assets/material_flow.json` | structured | Which machine feeds which, as drawn in the line layout. Stale: the January re-route is missing |
-| `data/cmms/work_orders.csv` | structured | Eight work orders from the CMMS, with a `downtime_minutes` column nobody told the ontology about |
+| `data/assets/machines.csv` | structured | The asset register: seven machines on two lines |
+| `data/assets/material_flow.json` | structured | Which machine feeds which, as drawn in the line layout |
+| `data/cmms/work_orders.csv` | structured | The legacy CMMS export: eight work orders, `kind` `breakdown` or `preventive` |
+| `data/cmms/eam_line2_orders.csv` | structured | Line 2's EAM export (from prompt v2's round): its three work orders, order types `corrective` or `preventive` |
 | `data/hr/technicians.csv` | structured | Technicians and their badge numbers |
-| `data/reports/WO-*.txt`, `WO-2038.eml` | unstructured | The technicians' free-text reports: components, root causes, replacement parts and their suppliers, follow-ups. One is an email |
-
-The structured sources load deterministically. The reports go through an extractor
-(`pipeline.py`):
-
-- **rules-v1**, the plant's original regex script: reads the header line, the components and
-  the follow-ups. Cannot read the email, ignores causes and suppliers, and trusts the stale
-  layout file for material flow.
-- **rules-v2**, the script after a fix round. The offline stand-in for Claude.
-- **claude**: one `claude -p` call per report, with the Declared Ontology stetiq hands the run in
-  the prompt, a JSON schema for the output, no tools and a replaced system prompt. The
-  example model is `claude-opus-5-5` (`--model` or `PLANT_EXTRACTION_MODEL` to change it).
-  Results are cached in `.graphdb/llm-cache/` by model, ontology and report, so re-running the
-  demo or the nightly rebuild costs nothing. Expect about eight calls per fresh walkthrough.
-
-Every extractor returns the same shape (nodes keyed by label and key, plus relationships),
-and the writer gives each property the type the Declared Ontology declares (a `DATE` string
-becomes a date, an `INTEGER` a number).
-
-## The story
-
-**1. Declare.** `ontology/initial.yaml` becomes Ontology Version 1 of the Knowledge Graph
-`plant-maintenance`, with `production` pointing at it. `use-case.yaml` names the graph's
-three Consumers and their Tasks: the maintenance assistant (an agent that triages breakdowns
-and chases follow-ups), the shop-floor downtime dashboard, and the reliability engineering
-team's weekly review. `root-causes` serves both the assistant and the review; `repeat-faults`
-serves no Task yet. The Tasks need eight Competency Questions: some with a Cypher query, one
-with an explicit Concept mapping, one with neither. stetiq judges them structurally against v1 at once: five are answerable, two need
-Concepts v1 lacks (`Fault`, `WorkOrder.downtime_minutes`), one is unmapped.
-
-**2. Build.** The first Construction Run uses rules-v1 inside `client.start_run`, logging its
-params and metrics. stetiq observes the graph and finds three Conformance mismatches: the
-required `Technician.badge` is filled on a third of technicians, `WorkOrder.downtime_minutes`
-is undeclared (so evolving mode registers **Candidate v2**), and `SUPPLIED_BY` is declared but
-never observed. Executing the questions shows two failures: the blast-radius question returns
-the stale layout's answer, and the root-cause question returns nothing. The custom run
-Evaluator `report_coverage` reports one work order without a readable report (the email).
-
-**3. Evaluate.** `client.evaluate` on the Candidate runs the built-in Evaluators again, the
-custom `documented` Evaluator: one orphan relationship type, one constraint inconsistency
-(uniqueness on an optional property), nine undocumented Concepts. The Gates in `stetiq.yaml` reject the
-Candidate, 7 of 9 failing.
-
-**4. Improve.** `ontology/revised.yaml` adopts the Candidate's discovery, adds `Fault` and
-`Supplier` with their patterns, relaxes the badge, drops the bad constraint and documents
-everything: v3, an additive change from v1. A ninth question is added with
-`add_competency_question` (Use Case Version 2). The second run reads the reports with Claude
-(or rules-v2) and reaches Conformance 1.0 with every executed question passing. A nightly
-rebuild goes through the Construction Entry Point in `stetiq.yaml`, the way `stetiq run`
-would. `compare_runs` lines the three runs up. All nine Gates
-pass, the engineer promotes `staging` and the CI user promotes `production`, and the audit
-log records who moved what, and that the Gates had passed.
-
-**5. Operate.** An Observation between runs finds no Drift. Then a fix script adds
-`SparePart` nodes straight into the database and deletes the done follow-ups: the next
-Observation raises a Drift event with two undeclared Concepts and three count drops beyond
-the configured 25 %. In strict Evolution Mode, a run that switches on experimental `Sensor`
-nodes is failed instead of yielding a Candidate. Finally a pull request's proposal to rename
-`WorkOrder` is registered as v4 and the Gates reject it as breaking; `production` stays on v3.
+| `data/reports/WO-*.txt`, `WO-2038.eml` | unstructured | The technicians' reports: components, root causes, part suppliers, follow-ups. One is an email |
 
 ## Files
 
 | File | Role |
 | --- | --- |
-| `demo.py` | The walkthrough, act by act. `run_demo()` returns the state for the test |
-| `pipeline.py` | The Construction Entry Point: structured loaders, the three extractors, the writer |
-| `graphdb.py` | `LocalGraph`, the file-backed stand-in for Neo4j implementing stetiq's `GraphSource` protocol, and the Cypher queries it can answer |
+| `demo.py` | The three rounds; `run_demo()` returns the state for the test |
+| `pipeline.py` | The pipeline: the exports and other structured sources, Claude's extraction, the writer, `--round` |
+| `graphdb.py` | `LocalGraph`, a file-backed stand-in for Neo4j implementing stetiq's `GraphSource`, and the Cypher queries it answers |
 | `evaluators.py` | `Documented` (Ontology Version) and `ReportCoverage` (Construction Run), both named by Gates |
-| `stetiq.yaml` | Knowledge Graph name, Entry Point, Drift thresholds and the nine Gates |
-| `use-case.yaml` | The Consumers, their Tasks and the Competency Questions |
-| `ontology/` | `initial`, `revised` and the breaking `proposal-rename-work-order` |
+| `stetiq.yaml` | Knowledge Graph name, Entry Point, Drift thresholds and the Gates |
+| `use-case.yaml` | The two Consumers, their Tasks and Consumer Gates, and the Competency Questions |
+| `ontology/` | `v1.yaml` and `fix.yaml` |
+| `llm-cache/` | The recorded Claude responses |
 
-The local graph store does not run Cypher. It answers the fixed set of queries in
-`use-case.yaml` and `evaluators.py` by text (`graphdb.QUERIES`); any other query fails the
-question with `UnsupportedQueryError`, which stetiq records by type name only. On a real
-deployment, bind the Knowledge Graph to Neo4j, set `STETIQ_GRAPH_SOURCE_URI` and drop the
-`graph_source=` argument: the pipeline, the Use Case and the Gates stay as they are.
-
-Two findings are left standing on purpose. The `redundancy` Evaluator flags `Line`,
-`Component` and `Supplier` as having the same structure (each is just a `name`), which is a
-judgement call for the team, not a Gate. And `repeat-faults` stays unmapped until someone
-gives it a query, a Concept mapping, or a question mapper (`STETIQ_QUESTION_MAPPER`).
+`uv run pytest tests/test_example_plant_kg.py` replays the demo offline and pins its
+verdicts. The local graph store does not run Cypher: it answers the fixed set of queries
+in `use-case.yaml` and `evaluators.py` by text (`graphdb.QUERIES`). On a real deployment,
+bind the Knowledge Graph to Neo4j, set `STETIQ_GRAPH_SOURCE_URI` and drop the
+`graph_source=` argument.

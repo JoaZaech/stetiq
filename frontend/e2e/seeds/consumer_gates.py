@@ -73,6 +73,19 @@ consumers:
 """
 
 
+# Declared after the baseline run: the Maintenance assistant's new question has no baseline.
+PLANT_USE_CASE_WITH_MODELS = PLANT_USE_CASE.replace(
+    "consumers:",
+    f"""  - id: machine-models
+    question: Which model is each machine?
+    query: "{MACHINES}"
+consumers:""",
+).replace(
+    "competency_questions: [machines]\n    consumer_gates:\n      - check: row_count_drop\n        task: list-machines",
+    "competency_questions: [machines, machine-models]\n    consumer_gates:\n      - check: row_count_drop\n        task: list-machines",
+)
+
+
 def _run(client: stetiq.Client, *, technicians: int, machines: int) -> str:
     """A finished run whose executed questions return the given row counts."""
     graph = stetiq.InMemoryGraphSource()
@@ -88,11 +101,13 @@ def plant_consumer_gates(client: stetiq.Client) -> dict[str, Any]:
     """`plant`, whose Use Case declares a Consumer Gate on three Consumers and none on the
     Planning team. Run 1 (the baseline) finds 5 breakdown technicians, run 2 finds 2: the
     Reliability dashboard's `triage-rows-hold` failed (5 -> 2, a 60% drop against 10% allowed), the
-    Maintenance assistant's passed, and the Safety team was never evaluated."""
+    Maintenance assistant's passed (its `machine-models`, declared after the baseline run, new
+    and not compared), and the Safety team was never evaluated."""
     client.create_knowledge_graph("plant", ontology=PLANT_ONTOLOGY)
     client.bind_graph_source("plant", GraphSourceScope(database="neo4j"))
     client.register_use_case("plant", PLANT_USE_CASE)
     baseline = _run(client, technicians=5, machines=4)
+    client.register_use_case("plant", PLANT_USE_CASE_WITH_MODELS)
     candidate = _run(client, technicians=2, machines=4)
     client.evaluate_consumer_gates("plant", consumer="reliability-dashboard")
     client.evaluate_consumer_gates("plant", consumer="maintenance-assistant")

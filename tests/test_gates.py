@@ -359,6 +359,8 @@ def test_a_candidate_is_gated_with_the_conformance_of_the_run_that_gave_rise_to_
 ):
     seed_conforming_graph(graph_source)
     graph_source.add_node(["Agent"], {"name": "Grace"})  # new Concept -> Candidate v2
+    # The Candidate absorbs Agent; a Customer without its required name still mismatches.
+    graph_source.add_node(["Customer"], {})
     run = run_once(client, bound_kg)
     assert run.candidate_version == 2
 

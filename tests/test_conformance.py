@@ -49,6 +49,9 @@ def subjects(mismatches):
 def test_the_breakdown_lists_declared_but_absent_and_present_but_undeclared_concepts(
     client, support_kg, graph_source
 ):
+    # Strict, so the undeclared Agent is judged against the Declared Ontology (an evolving
+    # run would be judged against the Candidate that adds it).
+    client.set_evolution_mode(support_kg, "strict")
     graph_source.add_node(["Customer"], {"name": "Ada"})
     graph_source.add_node(["Agent"], {"name": "Grace"})
 
@@ -442,3 +445,96 @@ def test_runs_producing_the_same_candidate_share_its_version(client, support_kg,
     second = run_once(client, support_kg)
 
     assert first.candidate_version == second.candidate_version == 2
+
+
+# --- Conformance of an evolving run: judged against the Candidate it gave rise to ---------
+
+
+def conformance_result(client, run):
+    [result] = [
+        r for r in client.get_run_evaluation_results(run.id) if r.evaluator == "conformance"
+    ]
+    return result
+
+
+def test_an_evolving_run_is_judged_against_its_candidate(client, support_kg, graph_source):
+    seed_graph_with_new_concepts(graph_source)
+
+    run = run_once(client, support_kg)
+
+    # Agent, HANDLES (with their Attributes and pattern) and Ticket.priority are the
+    # Candidate's additions, its Ontology Diff from version 1, not mismatches.
+    assert run.candidate_version == 2
+    assert run.conformance.mismatches == ()
+    assert run.conformance.score == 1.0
+    diff = client.diff_ontology_versions(support_kg, 1, run.candidate_version)
+    assert {c.concept for c in diff.changes} == {"Agent", "HANDLES", "Ticket.priority"}
+
+
+def test_the_conformance_run_result_and_gate_read_the_candidate_judgement(
+    client, support_kg, graph_source
+):
+    seed_graph_with_new_concepts(graph_source)
+    run = run_once(client, support_kg)
+
+    gate = client.evaluate_gates(
+        support_kg, "gates:\n  - {name: conforms, check: conformance, min_score: 1.0}\n", run=run.id
+    )
+
+    result = conformance_result(client, run)
+    assert result.metrics["score"] == 1.0
+    assert result.metrics["undeclared"] == 0
+    assert gate.passed
+
+
+def test_an_evolving_run_still_mismatches_what_its_candidate_does_not_absorb(
+    client, support_kg, graph_source
+):
+    seed_graph_with_new_concepts(graph_source)
+    graph_source.add_node(["Customer"], {})  # `name` is required
+
+    run = run_once(client, support_kg)
+
+    assert run.candidate_version == 2
+    assert [(m.subject, m.kind) for m in run.conformance.mismatches] == [
+        ("Customer.name", "required_missing")
+    ]
+    assert conformance_result(client, run).metrics["property_mismatches"] == 1
+
+
+def test_an_evolving_run_with_appended_vocabulary_values_conforms_to_its_candidate(
+    client, graph_source
+):
+    client.create_knowledge_graph("orders", ontology=STATUS_ONTOLOGY)
+    client.bind_graph_source("orders", GraphSourceScope(database="neo4j"))
+    graph_source.add_node(["Order"], {"status": "open"})
+    graph_source.add_node(["Order"], {"status": "on_hold"})  # not a value of Status
+
+    run = run_once(client, "orders")
+
+    assert run.candidate_version == 2
+    assert run.conformance.mismatches == ()
+
+
+def test_a_strict_run_is_still_judged_against_its_declared_ontology(
+    client, support_kg, graph_source
+):
+    client.set_evolution_mode(support_kg, "strict")
+    seed_graph_with_new_concepts(graph_source)
+
+    run = run_once(client, support_kg)
+
+    assert run.status == "failed"
+    assert "Agent" in subjects(run.conformance.undeclared)
+    assert conformance_result(client, run).metrics["undeclared"] == 4
+
+
+STATUS_ONTOLOGY = """
+node_types:
+  - label: Order
+    properties:
+      - {name: status, type: STRING, vocabulary: Status}
+vocabularies:
+  - label: Status
+    values: [open, closed]
+"""

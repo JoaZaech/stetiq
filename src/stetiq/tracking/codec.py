@@ -236,6 +236,7 @@ def run_to_json(run: ConstructionRun) -> dict[str, Any]:
         "observation_id": run.observation_id,
         "conformance": None if run.conformance is None else conformance_to_json(run.conformance),
         "candidate_version": run.candidate_version,
+        "ignored_definitions": list(run.ignored_definitions),
     }
 
 
@@ -254,6 +255,7 @@ def run_from_json(d: dict[str, Any]) -> ConstructionRun:
         if d.get("conformance") is None
         else conformance_from_json(d["conformance"]),
         candidate_version=d.get("candidate_version"),
+        ignored_definitions=tuple(d.get("ignored_definitions", ())),
     )
 
 

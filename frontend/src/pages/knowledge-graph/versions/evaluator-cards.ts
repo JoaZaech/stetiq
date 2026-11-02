@@ -39,6 +39,11 @@ export const EVALUATOR_DISPLAY: Readonly<Record<string, EvaluatorDisplay>> = {
     tooltip: 'The share of Concepts that at least one Competency Question references.',
     headlines: [{ metric: 'traced_concept_ratio', label: 'Traced', percent: true }],
   },
+  unjustified_additions: {
+    title: 'Unjustified additions',
+    tooltip: 'Concepts the evolving run behind this Candidate added that no Competency Question needs.',
+    headlines: [{ metric: 'unjustified_additions', label: 'Unjustified', of: 'added_concepts' }],
+  },
   definitions: {
     title: 'Concepts with a Definition',
     tooltip: 'The share of Classes, Relations, Attributes and Vocabulary Values that have a Definition.',

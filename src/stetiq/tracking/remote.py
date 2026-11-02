@@ -156,18 +156,30 @@ class RemoteTrackingService:
         data = self._call("GET", self._kg_path(knowledge_graph) + "/runs")
         return [codec.run_from_json(r) for r in data]
 
+    def latest_finished_run(self, knowledge_graph: str, version: int) -> ConstructionRun | None:
+        path = f"{self._kg_path(knowledge_graph)}/ontology-versions/{version}/latest-finished-run"
+        data = self._call("GET", path)
+        return None if data is None else codec.run_from_json(data)
+
     def log_params(self, run_id: str, params: dict[str, str]) -> None:
         self._call("POST", self._run_path(run_id) + "/params", {"params": params})
 
     def log_metrics(self, run_id: str, metrics: dict[str, float]) -> None:
         self._call("POST", self._run_path(run_id) + "/metrics", {"metrics": metrics})
 
-    def end_run(self, run_id: str, observation: ObservationInput) -> ConstructionRun:
+    def end_run(
+        self,
+        run_id: str,
+        observation: ObservationInput,
+        definitions: Mapping[str, str] | None = None,
+    ) -> ConstructionRun:
         scope, schema = observation
-        body = {
+        body: dict[str, Any] = {
             "scope": codec.graph_source_scope_to_json(scope),
             "observed_schema": codec.observed_schema_to_json(schema),
         }
+        if definitions:  # omitted otherwise, so older servers accept the call
+            body["definitions"] = dict(definitions)
         return codec.run_from_json(self._call("POST", self._run_path(run_id) + "/end", body))
 
     def fail_run(self, run_id: str) -> ConstructionRun:

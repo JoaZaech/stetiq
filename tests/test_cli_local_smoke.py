@@ -2,6 +2,8 @@
 Graph listing, Graph Source binding, Evolution Mode, runs and their evaluations,
 Observations, Gate results and Competency Questions."""
 
+import json
+
 import pytest
 import yaml
 from typer.testing import CliRunner
@@ -147,3 +149,39 @@ def test_cli_adds_a_competency_question(cli_env):
     [version] = cli_env.list_use_case_versions("support")
     [question] = version.use_case.competency_questions
     assert (question.id, question.concepts) == ("cq1", ("(Customer)-[OPENED]->(Ticket)",))
+
+
+def test_cli_prints_the_run_context_as_json(cli_env):
+    cli_env.add_competency_question(
+        "support", {"id": "customers", "question": "Who are our customers?"}
+    )
+
+    data = json.loads(_invoke("context", "support"))
+
+    assert data["knowledge_graph"] == "support"
+    assert data["ontology_version"]["number"] == 1
+    assert data["use_case_version"]["number"] == 1
+    assert [q["id"] for q in data["competency_questions"]] == ["customers"]
+    assert data["run"] is None
+
+
+def test_cli_context_takes_a_version_and_the_knowledge_graph_from_the_repo_config(
+    cli_env, support_ontology, tmp_path, monkeypatch
+):
+    cli_env.register_ontology("support", support_ontology + "  - [Ticket, OPENED, Customer]\n")
+    (tmp_path / "stetiq.yaml").write_text("knowledge_graph: support\n")
+    monkeypatch.chdir(tmp_path)
+
+    data = json.loads(_invoke("context", "--version", "2"))
+    assert json.loads(_invoke("context", "support", "--json")) == json.loads(
+        _invoke("context", "support")
+    )
+
+    assert (data["knowledge_graph"], data["ontology_version"]["number"]) == ("support", 2)
+
+
+def test_cli_context_of_an_unknown_knowledge_graph_exits_1(cli_env):
+    result = CliRunner().invoke(app, ["context", "nope"])
+
+    assert result.exit_code == 1
+    assert "error:" in result.output
