@@ -8,7 +8,6 @@ import {
 import type { Consumer } from '@/api/use-cases'
 import { kgUrl } from '@/app/knowledge-graph-sections'
 import { ErrorAlert } from '@/components/ErrorAlert'
-import { Planned } from '@/components/Planned'
 import { StatusLabel } from '@/components/StatusLabel'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatDateTime, formatRelativeTime } from '@/lib/format'
@@ -35,13 +34,6 @@ export function ConsumerGateSection({ knowledgeGraph, consumer }: ConsumerGateSe
         <h3 id={titleId} className="font-medium text-muted-foreground">
           Consumer Gate
         </h3>
-        <Planned
-          label="Evaluated on each Observation"
-          section="consumer-gate"
-          tooltip="Consumer Gates will also be evaluated on each scheduled Observation, not only in the pipeline's CI."
-        >
-          Evaluated on each Observation
-        </Planned>
       </div>
       {gates.length === 0 ? (
         <p className="text-muted-foreground">No Consumer Gate declared</p>

@@ -6,7 +6,7 @@ import { expect, test } from './fixtures'
 test.use({ seed: 'support_task_readiness' })
 
 test('a Consumer tile says how many of its Tasks the latest Ontology Version is ready for', async ({ page }) => {
-  await page.goto('/ui/kg/support/use-case')
+  await page.goto('/ui/kg/support/use-case?tab=consumers')
 
   const bot = page.getByRole('region', { name: 'Consumers' }).getByRole('article', { name: 'Triage bot' })
   await expect(bot).toContainText('0 of 1 Tasks ready')
@@ -14,7 +14,7 @@ test('a Consumer tile says how many of its Tasks the latest Ontology Version is 
 })
 
 test('the Consumer sheet shows each Task’s readiness, and its questions with their status', async ({ page }) => {
-  await page.goto('/ui/kg/support/use-case')
+  await page.goto('/ui/kg/support/use-case?tab=consumers')
   await page.getByRole('button', { name: 'Triage bot' }).click()
   const sheet = page.getByRole('dialog', { name: 'Triage bot' })
 
@@ -32,12 +32,17 @@ test('the Consumer sheet shows each Task’s readiness, and its questions with t
   await expect(sheet).not.toContainText('unmapped')
 })
 
-test('the Competency Questions list marks the questions no Task uses', async ({ page }) => {
+test('the question catalog marks the questions no Task uses, and filters by Task', async ({ page }) => {
   await page.goto('/ui/kg/support/use-case')
 
-  const list = page.getByRole('list', { name: 'Competency Questions' })
-  await expect(list.getByText('Not used by any Task')).toHaveCount(1)
-  await expect(list.getByRole('listitem').filter({ hasText: 'How many tickets are there?' })).toContainText(
-    'Not used by any Task',
-  )
+  const tiles = page.getByRole('list', { name: 'Competency Questions' }).getByRole('listitem')
+  await expect(tiles.filter({ hasText: 'Not used by any Task' })).toContainText('1')
+  const rows = page.getByRole('table', { name: 'Competency Questions' }).getByRole('row').filter({ has: page.getByRole('cell') })
+  await expect(rows.filter({ hasText: 'How many tickets are there?' })).toContainText('No Task')
+  await expect(rows.filter({ hasText: 'No Task' })).toHaveCount(1)
+
+  await page.getByRole('button', { name: 'Task: All' }).click()
+  await page.getByRole('menuitemradio', { name: /route-ticket/ }).click()
+  await expect(rows).toHaveCount(4)
+  await expect(page).toHaveURL(/[?&]task=route-ticket/)
 })

@@ -15,7 +15,7 @@ const gateSection = async (page: Page, name: string) => {
 }
 
 test('a tile shows its Consumer Gate’s latest verdict only when it declares one', async ({ page }) => {
-  await page.goto('/ui/kg/plant/use-case')
+  await page.goto('/ui/kg/plant/use-case?tab=consumers')
 
   await expect(tile(page, 'Reliability dashboard')).toContainText('Consumer Gate failed')
   await expect(tile(page, 'Maintenance assistant')).toContainText('Consumer Gate passed')
@@ -28,7 +28,7 @@ test('the Consumer sheet shows the declared Consumer Gate and the failed verdict
   page,
   stetiq,
 }) => {
-  await page.goto('/ui/kg/plant/use-case')
+  await page.goto('/ui/kg/plant/use-case?tab=consumers')
 
   const section = await gateSection(page, 'Reliability dashboard')
   await expect(section.getByRole('list', { name: 'Declared Consumer Gates' }).getByRole('listitem')).toHaveText([
@@ -48,7 +48,7 @@ test('the Consumer sheet shows the declared Consumer Gate and the failed verdict
 test('a passing verdict, a gate never evaluated and a Consumer without gates read differently', async ({
   page,
 }) => {
-  await page.goto('/ui/kg/plant/use-case')
+  await page.goto('/ui/kg/plant/use-case?tab=consumers')
 
   const passed = (await gateSection(page, 'Maintenance assistant')).getByRole('group', { name: 'Latest verdict' })
   await expect(passed).toContainText('Passed')
@@ -69,17 +69,3 @@ test('a passing verdict, a gate never evaluated and a Consumer without gates rea
   await expect(planning).not.toContainText(/Passed|Failed|Not evaluated yet|use-case\.yaml/)
 })
 
-test('the Consumer sheet badges evaluation on each Observation as planned; the tile does not', async ({
-  page,
-}) => {
-  await page.goto('/ui/kg/plant/use-case')
-
-  for (const name of ['Reliability dashboard', 'Planning team']) {
-    await expect(tile(page, name).getByRole('link', { name: /^Planned: Evaluated/ })).toHaveCount(0)
-    const gate = await gateSection(page, name)
-    await expect(
-      gate.getByRole('link', { name: 'Planned: Evaluated on each Observation', exact: true }),
-    ).toHaveAttribute('href', '/ui/help/vision#consumer-gate')
-    await page.keyboard.press('Escape')
-  }
-})
