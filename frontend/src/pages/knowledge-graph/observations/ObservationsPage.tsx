@@ -1,43 +1,40 @@
-import { useId, useMemo, useState, type ReactNode } from 'react'
-import {
-  Ban,
-  ChevronDown,
-  ChevronRight,
-  CircleCheck,
-  CircleMinus,
-  CirclePlus,
-  TrendingDown,
-  TrendingUp,
-} from 'lucide-react'
+import { useMemo } from 'react'
 import { Link } from 'react-router'
-import {
-  type DriftEvent,
-  type DriftFinding,
-  type DriftThresholds,
-  type Observation,
-  useDriftEvents,
-  useObservations,
-} from '@/api/observations'
+import { type DriftEvent, type Observation, useDriftEvents, useObservations } from '@/api/observations'
 import { knowledgeGraphSection, kgUrl } from '@/app/knowledge-graph-sections'
 import { ErrorAlert } from '@/components/ErrorAlert'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Planned } from '@/components/Planned'
+import { FilterMenu } from '@/components/FilterMenu'
+import { KpiTiles } from '@/components/KpiTiles'
+import { ListCount, ListToolbar } from '@/components/ListToolbar'
 import { StatusLabel } from '@/components/StatusLabel'
-import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
-import { conceptKindLabel } from '@/lib/concept-kind'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { useSearchParam } from '@/hooks/use-search-param'
 import { formatDateTime } from '@/lib/format'
+import { useSheetParam } from '@/lib/sheet-param'
+import { evaluationKpis } from '../evaluation/evaluation-kpis'
+import { findingsFromDrift } from '../evaluation/findings'
+import { FindingsTable } from '../evaluation/FindingsTable'
 import { KnowledgeGraphSectionPage } from '../KnowledgeGraphSectionPage'
 import { useKnowledgeGraphName } from '../params'
 import { shortRunId } from '../runs/runs'
+import { focusSheetItself } from '../use-case/sheet-focus'
+import {
+  filterObservationRows,
+  formatThresholds,
+  OBSERVATION_STATUSES,
+  type ObservationRow,
+  observationRows,
+} from './observation-rows'
 
 const SECTION = knowledgeGraphSection('observations')
+const SHEET_KINDS = ['observation'] as const
 
 /**
- * `/kg/:name/observations`: a timeline of when the Graph Source was inspected, newest
- * first, one row each; only a row with Drift expands, to what it found against the
- * Contract Alias. Read-only: an Observation needs graph credentials, which never leave
- * the SDK process (`stetiq observe`).
+ * `/kg/:name/observations`: when the Graph Source was inspected, newest first, as a
+ * table; a row opens a sheet with its Drift (`?sheet=observation:<id>`). Read-only: an
+ * Observation needs graph credentials, which never leave the SDK process (`stetiq observe`).
  */
 export function ObservationsPage() {
   return (
@@ -51,203 +48,164 @@ function ObservationList() {
   const name = useKnowledgeGraphName()
   const observations = useObservations(name)
   const driftEvents = useDriftEvents(name)
-  const driftByObservation = useMemo(
-    () => new Map((driftEvents.data ?? []).map((e) => [e.observation_id, e])),
-    [driftEvents.data],
+  const [query, setQuery] = useSearchParam()
+  const [status, setStatus] = useSearchParam('status')
+  const { sheet, openSheet, closeSheet } = useSheetParam(SHEET_KINDS)
+  const rows = useMemo(
+    () => observationRows(observations.data ?? [], driftEvents.data ?? []),
+    [observations.data, driftEvents.data],
   )
+  const shown = useMemo(() => filterObservationRows(rows, query, status), [rows, query, status])
 
   if (observations.isError || driftEvents.isError) {
     return <ErrorAlert error={observations.error ?? driftEvents.error} />
   }
-  if (observations.isPending || driftEvents.isPending) {
-    return <Skeleton className="h-32 w-full" />
-  }
-  if (observations.data.length === 0) {
+  if (observations.isPending || driftEvents.isPending) return <Skeleton className="h-32 w-full" />
+  if (rows.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        No Observations yet. Run <code className="font-mono">stetiq observe</code>, or end a
-        Construction Run, to inspect the Graph Source.
+        No Observations yet. Run <code className="font-mono">stetiq observe</code> or end a Construction Run.
       </p>
     )
   }
-  const newestFirst = [...observations.data].reverse()
+  const statusCounts = OBSERVATION_STATUSES.map((s) => [s, rows.filter((r) => r.status === s).length] as const)
+  const open = sheet && rows.find((r) => r.observation.id === sheet.id)
   return (
-    <div className="space-y-4">
-      {driftEvents.data.length === 0 && (
-        <Alert>
-          <CircleCheck aria-hidden />
-          <AlertDescription>No Drift. The Knowledge Graph matches the Ontology Version of its Contract Alias.</AlertDescription>
-        </Alert>
-      )}
-      <ol aria-label="Observations" className="divide-y rounded-lg border">
-        {newestFirst.map((observation) => (
-          <ObservationRow
-            key={observation.id}
-            name={name}
-            observation={observation}
-            drift={driftByObservation.get(observation.id)}
-          />
-        ))}
-      </ol>
+    <div className="space-y-3">
+      <ListToolbar search={query} onSearch={setQuery} searchLabel="Search Observations">
+        <FilterMenu label="Status" value={status} options={statusCounts} onChange={setStatus} />
+      </ListToolbar>
+      <Table aria-label="Observations">
+        <TableHeader>
+          <TableRow>
+            <TableHead>Time</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Source</TableHead>
+            <TableHead>Ontology Version</TableHead>
+            <TableHead className="text-right">Findings</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {shown.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={5} className="text-muted-foreground">
+                No Observation matches these filters.
+              </TableCell>
+            </TableRow>
+          ) : (
+            shown.map((row) => (
+              <ObservationTableRow
+                key={row.observation.id}
+                name={name}
+                row={row}
+                onOpen={() => openSheet({ kind: 'observation', id: row.observation.id })}
+              />
+            ))
+          )}
+        </TableBody>
+      </Table>
+      <ListCount shown={shown.length} total={rows.length} noun="Observations" />
+      <ObservationSheet name={name} row={open || undefined} onClose={closeSheet} />
     </div>
   )
 }
 
-/** `✓ No Drift · Oct 30, 2026, 14:05 · from run 1201b6ce`; a row with Drift expands to it. */
-function ObservationRow({
-  name,
-  observation,
-  drift,
-}: {
-  name: string
-  observation: Observation
-  drift: DriftEvent | undefined
-}) {
-  const id = useId()
-  const [open, setOpen] = useState(false)
-  const Chevron = open ? ChevronDown : ChevronRight
+function ObservationTableRow({ name, row, onOpen }: { name: string; row: ObservationRow; onOpen: () => void }) {
+  const { observation, drift } = row
   return (
-    <li className="px-3 py-2">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-        {drift ? (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="-ml-1 size-7"
-            aria-label="Drift details"
-            aria-expanded={open}
-            aria-controls={id}
-            onClick={() => setOpen(!open)}
-          >
-            <Chevron aria-hidden className="size-4" />
-          </Button>
-        ) : (
-          <span aria-hidden className="-ml-1 size-7" />
-        )}
-        <StatusLabel tone={drift ? 'warning' : 'success'} label={drift ? 'Drift' : 'No Drift'} />
-        <time dateTime={observation.observed_at} className="text-muted-foreground">
-          {formatDateTime(observation.observed_at)}
-        </time>
-        {observation.run_id ? (
-          <span className="text-muted-foreground">
-            from run{' '}
-            <Link
-              to={kgUrl(name, 'runs', observation.run_id)}
-              className="font-mono text-xs text-primary underline-offset-4 hover:underline"
-            >
-              {shortRunId(observation.run_id)}
-            </Link>
-          </span>
-        ) : (
-          <span className="text-muted-foreground">on demand</span>
-        )}
-      </div>
-      {drift && (
-        <div id={id} hidden={!open} className="pt-3 pb-1 pl-10">
-          <DriftDetails name={name} drift={drift} />
-        </div>
-      )}
-    </li>
-  )
-}
-
-function DriftDetails({ name, drift }: { name: string; drift: DriftEvent }) {
-  return (
-    <section aria-label="Drift" className="space-y-3">
-      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2 text-sm">
-        <Fact label="Contract Alias">{drift.contract_alias}</Fact>
-        <Fact label="Ontology Version">
-          <Link
-            to={kgUrl(name, 'versions', drift.ontology_version)}
-            className="text-primary underline-offset-4 hover:underline"
-          >
-            v{drift.ontology_version}
-          </Link>
-        </Fact>
-        <Fact label="Thresholds">{formatThresholds(drift.thresholds)}</Fact>
-      </dl>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
-        <Planned
-          label="Pending Migration"
-          section="pending-migration-and-adoption"
-          tooltip="Drift that the Ontology Diff since the last version the Graph Source conformed to explains will be shown as a Pending Migration, raising no alert until a grace period ends."
+    <TableRow className="cursor-pointer" onClick={onOpen}>
+      <TableCell>
+        <button
+          type="button"
+          className="text-primary underline-offset-4 hover:underline"
+          onClick={(e) => {
+            e.stopPropagation()
+            onOpen()
+          }}
         >
-          Pending Migration
-        </Planned>
-        {drift.findings.some((f) => ADOPTABLE.has(f.kind)) && (
-          <Planned
-            label="Adoption"
-            section="pending-migration-and-adoption"
-            tooltip="Selected undeclared Concepts will be added to a new Candidate, and selected vanished ones deprecated."
-          >
-            <Button size="sm" variant="outline" disabled>
-              Adopt into a Candidate
-            </Button>
-          </Planned>
-        )}
-      </div>
-      <ul aria-label="Drift findings" className="space-y-1.5 text-sm">
-        {drift.findings.map((finding) => (
-          <Finding
-            key={`${finding.kind}/${finding.subject_kind}/${finding.subject}/${finding.value ?? ''}`}
-            finding={finding}
-          />
-        ))}
-      </ul>
-    </section>
+          <time dateTime={observation.observed_at}>{formatDateTime(observation.observed_at)}</time>
+        </button>
+      </TableCell>
+      <TableCell>
+        <StatusLabel tone={drift ? 'warning' : 'success'} label={row.status} />
+      </TableCell>
+      <TableCell>
+        <Source name={name} observation={observation} />
+      </TableCell>
+      <TableCell>{drift ? <VersionLink name={name} number={drift.ontology_version} /> : <Dash />}</TableCell>
+      <TableCell className="text-right tabular-nums">{drift ? row.findings : <Dash />}</TableCell>
+    </TableRow>
   )
 }
 
-/** Each Drift finding kind's icon, and what it means when the finding has no detail of its own. */
-const FINDING_KIND = {
-  undeclared: { Icon: CirclePlus, label: 'observed but not declared' },
-  vanished: { Icon: CircleMinus, label: 'no longer observed' },
-  undeclared_value: { Icon: Ban, label: 'value outside the Vocabulary' },
-  count_drop: { Icon: TrendingDown, label: 'count dropped' },
-  count_increase: { Icon: TrendingUp, label: 'count rose' },
-} as const satisfies Record<DriftFinding['kind'], { Icon: unknown; label: string }>
-
-/** `⊕ Refund Class — observed but not declared`, `↗ Ticket Class — count rose from 1 to 4 (+300%)` */
-function Finding({ finding }: { finding: DriftFinding }) {
-  const { Icon, label } = FINDING_KIND[finding.kind]
+function Source({ name, observation }: { name: string; observation: Observation }) {
+  if (!observation.run_id) return <span className="text-muted-foreground">on demand</span>
   return (
-    <li className="flex items-start gap-2">
-      <Icon aria-hidden className="mt-0.5 size-4 shrink-0 text-warning" />
-      <span className="min-w-0">
-        {finding.detail && <span className="sr-only">{label}: </span>}
-        <span className="font-mono text-xs">{finding.subject}</span>{' '}
-        <span className="text-muted-foreground">{conceptKindLabel(finding.subject_kind)}</span>
-        <span className="text-muted-foreground"> — {finding.detail || label}</span>
-      </span>
-    </li>
+    <Link
+      to={kgUrl(name, 'runs', observation.run_id)}
+      onClick={(e) => e.stopPropagation()}
+      aria-label={`Run ${shortRunId(observation.run_id)}`}
+      className="font-mono text-xs text-primary underline-offset-4 hover:underline"
+    >
+      run {shortRunId(observation.run_id)}
+    </Link>
   )
 }
 
-/** Drift finding kinds an Adoption could take into a Candidate: undeclared and vanished Concepts. */
-const ADOPTABLE = new Set(['undeclared', 'vanished'])
+function VersionLink({ name, number }: { name: string; number: number }) {
+  return (
+    <Link
+      to={kgUrl(name, 'versions', number)}
+      onClick={(e) => e.stopPropagation()}
+      className="text-primary underline-offset-4 hover:underline"
+    >
+      v{number}
+    </Link>
+  )
+}
 
-function Fact({ label, children }: { label: string; children: ReactNode }) {
+const Dash = () => <span className="text-muted-foreground">—</span>
+
+/** One Observation: its metadata line, the four evaluation tiles (only Drift applies) and its findings. */
+function ObservationSheet({ name, row, onClose }: { name: string; row: ObservationRow | undefined; onClose: () => void }) {
+  return (
+    <Sheet open={row !== undefined} onOpenChange={(open) => !open && onClose()}>
+      <SheetContent className="overflow-y-auto sm:max-w-2xl" onOpenAutoFocus={focusSheetItself}>
+        {row && <ObservationSheetContent name={name} row={row} />}
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+function ObservationSheetContent({ name, row }: { name: string; row: ObservationRow }) {
+  const { observation, drift } = row
   return (
     <>
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="min-w-0">{children}</dd>
+      <SheetHeader className="gap-2 pr-12">
+        <SheetDescription>Observation</SheetDescription>
+        <SheetTitle>
+          <time dateTime={observation.observed_at}>{formatDateTime(observation.observed_at)}</time>
+        </SheetTitle>
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          <StatusLabel tone={drift ? 'warning' : 'success'} label={row.status} />
+          <Source name={name} observation={observation} />
+          {drift && <DriftMeta name={name} drift={drift} />}
+        </p>
+      </SheetHeader>
+      <div className="space-y-6 px-4 pb-6">
+        <KpiTiles tiles={evaluationKpis({ drift: row.findings })} />
+        <FindingsTable rows={drift ? findingsFromDrift(drift.findings) : []} empty="No Drift." />
+      </div>
     </>
   )
 }
 
-const percent = new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 1 })
-
-/** `max count drop off · max count increase 50%` */
-function formatThresholds(thresholds: DriftThresholds): string {
-  return (['max_count_drop', 'max_count_increase'] as const)
-    .map((key) => {
-      const value = thresholds[key]
-      return `${humanize(key)} ${value === null ? 'off' : percent.format(value)}`
-    })
-    .join(' · ')
-}
-
-/** `max_count_drop` → `max count drop` */
-function humanize(identifier: string): string {
-  return identifier.replaceAll('_', ' ')
+function DriftMeta({ name, drift }: { name: string; drift: DriftEvent }) {
+  return (
+    <>
+      <span aria-label="Contract Alias">{drift.contract_alias}</span>
+      <VersionLink name={name} number={drift.ontology_version} />
+      <span aria-label="Thresholds">{formatThresholds(drift.thresholds)}</span>
+    </>
+  )
 }
