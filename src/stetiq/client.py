@@ -143,6 +143,19 @@ def _without_details(results: Sequence[EvaluationResult]) -> tuple[EvaluationRes
     )
 
 
+def _without_observed_values(added: OntologyDiff) -> tuple[OntologyDiff, int]:
+    """A strict-failed run's would-be Ontology Diff without the Vocabulary Values it
+    would have added, and how many were withheld. That Candidate was never registered,
+    so those values were observed in the graph and never became Ontology: the run context
+    withholds them for the reason it drops Conformance details (ADR 0010)."""
+    kept = tuple(
+        c
+        for c in added.changes
+        if not (c.concept_kind == "vocabulary" and c.value is not None and c.kind == "added")
+    )
+    return OntologyDiff(kept), len(added.changes) - len(kept)
+
+
 def _to_ontology(ontology: OntologyInput) -> Ontology:
     if isinstance(ontology, Ontology):
         return ontology
@@ -472,9 +485,14 @@ class Client:
             return None
         run = ended.run
         results = self._service.get_evaluation_results(knowledge_graph, "construction_run", run.id)
+        added = diff_ontologies(consumed.ontology, ended.candidate or consumed.ontology)
+        withheld = 0
+        if run.candidate_version is None:  # never registered: what it saw is not Ontology
+            added, withheld = _without_observed_values(added)
         return LastAttempt(
             run=run,
-            added=diff_ontologies(consumed.ontology, ended.candidate or consumed.ontology),
+            added=added,
+            withheld_vocabulary_values=withheld,
             evaluation_results=_without_details(results),
             question_executions=executed_questions(results),
             verdicts=self._recorded_verdicts(

@@ -98,13 +98,17 @@ class LastAttempt:
 
     - `run`: the run, `finished` or `failed` by strict Evolution Mode.
     - `added`: the Ontology Diff from the version it consumed to its Candidate, or to the
-      Candidate it would have produced (strict); empty when it added nothing.
+      Candidate it would have produced (strict); empty when it added nothing. A
+      strict-failed run's would-be Vocabulary Values are left out, since they are values
+      observed in the graph that never became Ontology (ADR 0010);
+      `withheld_vocabulary_values` counts them.
     - `evaluation_results`: its run-level results (metrics only), `question_executions`
       each executed Competency Question's status and row count, and `verdicts` the
       recorded Gate and Consumer Gate verdicts about it."""
 
     run: ConstructionRun
     added: OntologyDiff
+    withheld_vocabulary_values: int = 0
     evaluation_results: tuple[EvaluationResult, ...] = ()
     question_executions: Mapping[str, QuestionExecution] = field(default_factory=dict)
     verdicts: RecordedVerdicts = field(default_factory=RecordedVerdicts)
@@ -116,6 +120,7 @@ class LastAttempt:
             "ontology_version": self.run.ontology_version,
             "candidate_version": self.run.candidate_version,
             "added": wire.ontology_diff_to_json(self.added),
+            "withheld_vocabulary_values": self.withheld_vocabulary_values,
             "evaluation_results": [
                 codec.evaluation_result_to_json(r) for r in self.evaluation_results
             ],

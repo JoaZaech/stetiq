@@ -595,3 +595,43 @@ def test_a_strict_failed_attempt_never_borrows_its_versions_gate_result(
 
     assert data["gate_result"]["status"] == "passed"  # about version 1
     assert data["last_attempt"]["gate_result"] == NOT_EVALUATED
+
+
+def vocabulary_attempt(client, graph_source, mode):
+    """A run against `orders` whose WorkOrder takes "Press 9", outside its Vocabulary, and
+    adds a Shift node type."""
+    client.create_knowledge_graph("orders", ontology=VOCABULARY_ONTOLOGY)
+    client.set_evolution_mode("orders", mode)
+    client.bind_graph_source("orders", GraphSourceScope(database="neo4j"))
+    graph_source.add_node(["WorkOrder"], {"status": "open"})
+    graph_source.add_node(["WorkOrder"], {"status": "Press 9"})
+    graph_source.add_node(["Shift"])
+    with client.start_run("orders") as run:
+        pass
+    return client.get_run(run.id)
+
+
+def test_a_strict_failed_attempt_withholds_the_vocabulary_values_it_saw(client, graph_source):
+    run = vocabulary_attempt(client, graph_source, "strict")
+
+    data = client.run_context("orders").to_dict()
+
+    assert run.status == "failed"
+    attempt = data["last_attempt"]
+    assert attempt["id"] == run.id
+    # Values observed in the graph that never became Ontology (ADR 0010)...
+    assert "Press 9" not in json.dumps(data)
+    assert attempt["withheld_vocabulary_values"] == 1
+    # ...while the Concepts it would have added stay.
+    assert [c["concept"] for c in attempt["added"]["changes"]] == ["Shift"]
+
+
+def test_an_evolving_attempt_keeps_the_vocabulary_values_its_candidate_added(client, graph_source):
+    run = vocabulary_attempt(client, graph_source, "evolving")
+
+    attempt = client.run_context("orders").to_dict()["last_attempt"]
+
+    assert run.candidate_version is not None
+    assert attempt["withheld_vocabulary_values"] == 0
+    values = [c["value"] for c in attempt["added"]["changes"] if "value" in c]
+    assert values == ["Press 9"]  # part of the registered Candidate's Ontology
