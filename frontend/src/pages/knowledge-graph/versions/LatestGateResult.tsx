@@ -1,12 +1,15 @@
-import { latestGateResult, useGateResults } from '@/api/gate-results'
+import { type GateResult, latestGateResult, useGateResults } from '@/api/gate-results'
+import { Disclosure } from '@/components/Disclosure'
 import { ErrorAlert } from '@/components/ErrorAlert'
-import { Badge } from '@/components/ui/badge'
+import { StatusLabel } from '@/components/StatusLabel'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatCount, formatDateTime } from '@/lib/format'
+import { formatDateTime, formatRelativeTime } from '@/lib/format'
+import { gateResultSummary } from './gate-summary'
 
 /**
- * An Ontology Version's latest Gate result: Passed, Failed or None, with when it was
- * evaluated and which Gates failed. Shown on the Overview tab and in the Promote dialog.
+ * An Ontology Version's latest Gate result: "2 of 9 Gates failed" or "All 9 Gates
+ * passed", each failed Gate with its reasons, and the passed ones folded. "Not gated"
+ * when no Gate was evaluated on it. Shown on the Overview tab and in the Promote dialog.
  */
 export function LatestGateResult({ name, number }: { name: string; number: number }) {
   const results = useGateResults(name)
@@ -15,20 +18,58 @@ export function LatestGateResult({ name, number }: { name: string; number: numbe
   const latest = latestGateResult(results.data, 'ontology_version', String(number))
   if (!latest) {
     return (
-      <p className="flex items-center gap-2 text-sm">
-        <Badge variant="outline">None</Badge>
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+        <StatusLabel tone="neutral" label="Not gated" />
         <span className="text-muted-foreground">No Gates have been evaluated on this version.</span>
       </p>
     )
   }
-  const failed = latest.outcomes.filter((o) => !o.passed).map((o) => o.gate.name)
+  return <GateOutcomes result={latest} />
+}
+
+function GateOutcomes({ result }: { result: GateResult }) {
+  const failed = result.outcomes.filter((o) => !o.passed)
+  const passed = result.outcomes.filter((o) => o.passed)
   return (
-    <p className="flex flex-wrap items-center gap-2 text-sm">
-      <Badge variant={latest.passed ? 'default' : 'destructive'}>{latest.passed ? 'Passed' : 'Failed'}</Badge>
-      <span className="text-muted-foreground">
-        {formatDateTime(latest.evaluated_at)} · {formatCount(latest.outcomes.length, 'Gate')}
-        {failed.length > 0 && `, failed: ${failed.join(', ')}`}
-      </span>
-    </p>
+    <div className="space-y-2 text-sm">
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="font-medium">
+          <StatusLabel tone={result.passed ? 'success' : 'failure'} label={gateResultSummary(result)} />
+        </span>
+        <span className="text-muted-foreground">
+          evaluated{' '}
+          <time dateTime={result.evaluated_at} title={formatDateTime(result.evaluated_at)}>
+            {formatRelativeTime(result.evaluated_at)}
+          </time>
+        </span>
+      </p>
+      {failed.length > 0 && (
+        <ul aria-label="Failed Gates" className="space-y-1.5">
+          {failed.map((outcome) => (
+            <li key={outcome.gate.name}>
+              <StatusLabel tone="failure" label={outcome.gate.name} />
+              {outcome.reasons.length > 0 && (
+                <ul className="mt-0.5 space-y-0.5 pl-5.5 text-muted-foreground">
+                  {outcome.reasons.map((reason) => (
+                    <li key={reason}>{reason}</li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {passed.length > 0 && (
+        <Disclosure label={`${passed.length} passed`}>
+          <ul aria-label="Passed Gates" className="space-y-1">
+            {passed.map((outcome) => (
+              <li key={outcome.gate.name}>
+                <StatusLabel tone="success" label={outcome.gate.name} />
+              </li>
+            ))}
+          </ul>
+        </Disclosure>
+      )}
+    </div>
   )
 }

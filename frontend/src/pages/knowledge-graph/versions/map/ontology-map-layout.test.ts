@@ -165,9 +165,10 @@ describe('layoutOntologyMap', () => {
     expect(right).toEqual([])
   })
 
-  it('lays out an Ontology of 100 classes in under 0.4 s', async () => {
+  it('lays out an Ontology of 100 classes in under 1 s', async () => {
     const map = ontologyMap(generatedOntology(100))
-    // The fastest of three, so a moment of load on a shared machine does not count.
+    // The budget docs/ontology-view-abstraction.md sets. A tighter one failed under the load
+    // of parallel builds (0.4-0.55 s). The fastest of three, so a moment of load does not count.
     const times: number[] = []
     for (let run = 0; run < 3; run++) {
       const started = performance.now()
@@ -175,7 +176,7 @@ describe('layoutOntologyMap', () => {
       times.push(performance.now() - started)
     }
 
-    expect(Math.min(...times)).toBeLessThan(400)
+    expect(Math.min(...times)).toBeLessThan(1000)
   })
 })
 

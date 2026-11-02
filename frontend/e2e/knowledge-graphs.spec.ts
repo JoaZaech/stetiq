@@ -50,8 +50,8 @@ test.describe('with Knowledge Graphs', () => {
 
     await page.getByRole('table').getByRole('link', { name: 'support' }).click()
 
-    // A Knowledge Graph opens on its first section.
-    await expect(page).toHaveURL('/ui/kg/support/versions')
+    // A Knowledge Graph opens on its Overview.
+    await expect(page).toHaveURL('/ui/kg/support/overview')
   })
 
   test('the Knowledge Graphs breadcrumb comes first inside a Knowledge Graph and leads back to /kg', async ({

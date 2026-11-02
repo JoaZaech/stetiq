@@ -19,7 +19,8 @@ export function AliasChips({ aliases, contractAlias }: { aliases: string[]; cont
   )
 }
 
-function ContractAliasChip({ alias }: { alias: string }) {
+/** The Contract Alias's chip: a star, `alias` (its name, or e.g. `production → v3`), described as the Contract Alias. */
+export function ContractAliasChip({ alias }: { alias: string }) {
   const id = useId()
   return (
     <Badge aria-describedby={id}>

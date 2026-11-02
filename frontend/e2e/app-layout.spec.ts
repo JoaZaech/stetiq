@@ -1,8 +1,8 @@
 import { expect, test } from './fixtures'
 
-const SECTIONS = ['Ontology Versions', 'Construction Runs', 'Use Case', 'Observations', 'Promotions']
+const SECTIONS = ['Overview', 'Ontology Versions', 'Construction Runs', 'Use Case', 'Observations', 'Promotions']
 
-test('the sidebar lists Home, the Knowledge Graph switcher, the five sections, Help and Settings', async ({
+test('the sidebar lists Home, the Knowledge Graph switcher, the six sections, Help and Settings', async ({
   page,
 }) => {
   await page.goto('/ui/settings')

@@ -3,7 +3,7 @@ import { type Promotion, usePromotions } from '@/api/aliases'
 import { knowledgeGraphSection, kgUrl } from '@/app/knowledge-graph-sections'
 import { DataTable } from '@/components/DataTable'
 import { ErrorAlert } from '@/components/ErrorAlert'
-import { Badge } from '@/components/ui/badge'
+import { StatusLabel } from '@/components/StatusLabel'
 import { Skeleton } from '@/components/ui/skeleton'
 import { createDataTableColumnHelper, useDataTable } from '@/lib/data-table'
 import { formatDateTime } from '@/lib/format'
@@ -50,16 +50,17 @@ const columns = column.columns([
   column.accessor('gate_result', {
     header: 'Gate result',
     enableSorting: false,
-    cell: ({ getValue }) => <GateResultBadge result={getValue()} />,
+    cell: ({ getValue }) => <GateResultStatus result={getValue()} />,
   }),
 ])
 
-function GateResultBadge({ result }: { result: Promotion['gate_result'] }) {
-  if (result === null) return <Badge variant="outline">None</Badge>
-  return (
-    <Badge variant={result === 'passed' ? 'default' : 'destructive'}>
-      {result === 'passed' ? 'Passed' : 'Failed'}
-    </Badge>
+/** The version's latest Gate result when it was promoted; "Not gated" when it had none. */
+function GateResultStatus({ result }: { result: Promotion['gate_result'] }) {
+  if (result === null) return <StatusLabel tone="neutral" label="Not gated" />
+  return result === 'passed' ? (
+    <StatusLabel tone="success" label="Passed" />
+  ) : (
+    <StatusLabel tone="failure" label="Failed" />
   )
 }
 

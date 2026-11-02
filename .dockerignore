@@ -1,0 +1,11 @@
+# Only what the Dockerfile copies: the package (with its built UI) and the plant-kg example.
+*
+!pyproject.toml
+!uv.lock
+!README.md
+!src/
+!examples/plant-kg/
+**/__pycache__
+**/*.pyc
+examples/plant-kg/.stetiq/
+examples/plant-kg/.graphdb/

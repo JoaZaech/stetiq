@@ -1,36 +1,23 @@
-import { useCallback, useId, useMemo, useState, type ReactNode } from 'react'
-import { Pencil, Plus, Trash2 } from 'lucide-react'
-import {
-  useUseCaseVersions,
-  type CompetencyQuestion,
-  type Consumer,
-  type SavedUseCase,
-  type Task,
-  type UseCase,
-  type UseCaseVersion,
-} from '@/api/use-cases'
+import { useCallback, useId, useState, type ReactNode } from 'react'
+import { Plus } from 'lucide-react'
+import { useUseCaseVersions, type SavedUseCase, type UseCase, type UseCaseVersion } from '@/api/use-cases'
 import { knowledgeGraphSection } from '@/app/knowledge-graph-sections'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { NeedsEditAccess } from '@/components/NeedsEditAccess'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatDateTime } from '@/lib/format'
+import { useSheetParam } from '@/lib/sheet-param'
 import { KnowledgeGraphSectionPage } from '../KnowledgeGraphSectionPage'
 import { useKnowledgeGraphName } from '../params'
 import { CompetencyQuestionDialog } from './CompetencyQuestionDialog'
-import { CompetencyQuestionsTable } from './CompetencyQuestionsTable'
-import { ConfirmRemoveDialog, TaskList } from './ConfirmRemoveDialog'
-import { ConsumerCards } from './ConsumerCards'
-import { ConsumerGateSection } from './ConsumerGateSection'
+import { CompetencyQuestionSheet } from './CompetencyQuestionSheet'
+import { CompetencyQuestionsList } from './CompetencyQuestionsList'
 import { ConsumerDialog } from './ConsumerDialog'
-import { withoutConsumer, withoutTask } from './consumer-form'
+import { ConsumerSheet } from './ConsumerSheet'
+import { ConsumerTiles } from './ConsumerTiles'
 import { DraftWithAiPlanned } from './planned'
-import { RemoveCompetencyQuestionDialog } from './RemoveCompetencyQuestionDialog'
-import { questionsServingNoTask } from './readiness'
 import { savedMessage } from './saved-message'
-import { StructuralAnswerability } from './StructuralAnswerability'
-import { TaskDialog } from './TaskDialog'
-import { TaskReadiness } from './TaskReadiness'
 import { UseCaseVersionsTable } from './UseCaseVersionsTable'
 
 const SECTION = knowledgeGraphSection('use-case')
@@ -38,18 +25,32 @@ const SECTION = knowledgeGraphSection('use-case')
 /** What an editor adds the first Competency Question to. */
 const NO_USE_CASE: UseCase = { competency_questions: [] }
 
+/** The side sheets this page opens (`?sheet=`). */
+const SHEET_KINDS = ['question', 'consumer'] as const
+
 /**
  * `/kg/:name/use-case`: the latest Use Case Version (description, Competency Questions,
  * and its Consumers with their Tasks), then every Use Case Version, to compare.
  *
  * Editors add, edit and remove Competency Questions, Consumers and their Tasks here; each
- * save sends the complete edited Use Case and registers a new Use Case Version.
+ * save sends the complete edited Use Case and registers a new Use Case Version. A
+ * Competency Question and a Consumer each open in a side sheet, kept in the URL
+ * (`?sheet=question:<id>`, `?sheet=consumer:<id>`). A question opened from a Consumer's
+ * sheet replaces its content, and `?sheet-back=consumer:<id>` keeps where its Back returns.
  */
 export function UseCasePage() {
   const name = useKnowledgeGraphName()
   const versions = useUseCaseVersions(name)
   const [saved, setSaved] = useState<SavedUseCase>()
   const latest = versions.data?.at(-1)
+  const { sheet, back, openSheet, closeSheet, goBack } = useSheetParam(SHEET_KINDS)
+  const openQuestion = useCallback((id: string) => openSheet({ kind: 'question', id }), [openSheet])
+  const openConsumer = useCallback((id: string) => openSheet({ kind: 'consumer', id }), [openSheet])
+  const sheetQuestion =
+    sheet?.kind === 'question' ? latest?.use_case.competency_questions.find((q) => q.id === sheet.id) : undefined
+  // The Consumer sheet is open on its Consumer, or on a question opened from it.
+  const consumerId = sheet?.kind === 'consumer' ? sheet.id : back?.kind === 'consumer' ? back.id : undefined
+  const sheetConsumer = latest?.use_case.consumers?.find((c) => c.id === consumerId)
 
   return (
     <KnowledgeGraphSectionPage
@@ -83,12 +84,32 @@ export function UseCasePage() {
           {saved && <SavedStatus saved={saved} />}
           {latest ? (
             <>
-              <LatestVersion name={name} version={latest} onSaved={setSaved} />
-              <Consumers name={name} version={latest} onSaved={setSaved} />
-              <StructuralAnswerability knowledgeGraph={name} useCaseVersion={latest.number} />
+              <LatestVersion name={name} version={latest} onOpenQuestion={openQuestion} />
+              <Consumers name={name} version={latest} onSaved={setSaved} onOpenConsumer={openConsumer} />
               <Panel title="Use Case Versions">
                 <UseCaseVersionsTable name={name} versions={versions.data} />
               </Panel>
+              <CompetencyQuestionSheet
+                knowledgeGraph={name}
+                useCaseVersion={latest}
+                question={sheetConsumer ? undefined : sheetQuestion}
+                onClose={closeSheet}
+                onSaved={setSaved}
+                onRemoved={closeSheet}
+              />
+              <ConsumerSheet
+                knowledgeGraph={name}
+                useCaseVersion={latest}
+                consumer={sheetConsumer}
+                question={sheetQuestion}
+                onOpenQuestion={(id) =>
+                  sheetConsumer && openSheet({ kind: 'question', id }, { kind: 'consumer', id: sheetConsumer.id })
+                }
+                onBack={goBack}
+                onClose={closeSheet}
+                onSaved={setSaved}
+                onRemoved={closeSheet}
+              />
             </>
           ) : (
             <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
@@ -113,49 +134,12 @@ function SavedStatus({ saved }: { saved: SavedUseCase }) {
 interface LatestVersionProps {
   name: string
   version: UseCaseVersion
-  onSaved: (saved: SavedUseCase) => void
+  /** Opens the Competency Question's sheet. */
+  onOpenQuestion: (id: string) => void
 }
 
-function LatestVersion({ name, version, onSaved }: LatestVersionProps) {
+function LatestVersion({ name, version, onOpenQuestion }: LatestVersionProps) {
   const useCase = version.use_case
-  const rowActions = useCallback(
-    (question: CompetencyQuestion) => (
-      <>
-        <NeedsEditAccess knowledgeGraph={name}>
-          {(disabled) => (
-            <CompetencyQuestionDialog
-              knowledgeGraph={name}
-              useCase={useCase}
-              question={question}
-              onSaved={onSaved}
-              trigger={
-                <Button variant="ghost" size="icon-sm" disabled={disabled} aria-label={`Edit ${question.id}`}>
-                  <Pencil />
-                </Button>
-              }
-            />
-          )}
-        </NeedsEditAccess>
-        <NeedsEditAccess knowledgeGraph={name}>
-          {(disabled) => (
-            <RemoveCompetencyQuestionDialog
-              knowledgeGraph={name}
-              useCase={useCase}
-              question={question}
-              onSaved={onSaved}
-              trigger={
-                <Button variant="ghost" size="icon-sm" disabled={disabled} aria-label={`Remove ${question.id}`}>
-                  <Trash2 />
-                </Button>
-              }
-            />
-          )}
-        </NeedsEditAccess>
-      </>
-    ),
-    [name, useCase, onSaved],
-  )
-  const servingNoTask = useMemo(() => questionsServingNoTask(useCase), [useCase])
   return (
     <Panel title={`Use Case Version ${version.number}`}>
       <p className="text-xs text-muted-foreground">
@@ -164,11 +148,7 @@ function LatestVersion({ name, version, onSaved }: LatestVersionProps) {
       <p className="text-sm">
         {useCase.description ?? <span className="text-muted-foreground">No description</span>}
       </p>
-      <CompetencyQuestionsTable
-        questions={useCase.competency_questions}
-        rowActions={rowActions}
-        servingNoTask={servingNoTask}
-      />
+      <CompetencyQuestionsList knowledgeGraph={name} version={version} onOpen={(q) => onOpenQuestion(q.id)} />
     </Panel>
   )
 }
@@ -177,138 +157,37 @@ interface ConsumersProps {
   name: string
   version: UseCaseVersion
   onSaved: (saved: SavedUseCase) => void
+  /** Opens the Consumer's sheet, where it and its Tasks are edited. */
+  onOpenConsumer: (id: string) => void
 }
 
-/** The latest Use Case Version's Consumer cards, with their Tasks' readiness and edit controls. */
-function Consumers({ name, version, onSaved }: ConsumersProps) {
-  const useCase = version.use_case
-  const consumerActions = useCallback(
-    (consumer: Consumer) => (
-      <>
-        <NeedsEditAccess knowledgeGraph={name}>
-          {(disabled) => (
-            <TaskDialog
-              knowledgeGraph={name}
-              useCase={useCase}
-              consumer={consumer}
-              onSaved={onSaved}
-              trigger={
-                <Button variant="ghost" size="icon-sm" disabled={disabled} aria-label={`Add Task to ${consumer.id}`}>
-                  <Plus />
-                </Button>
-              }
-            />
-          )}
-        </NeedsEditAccess>
-        <NeedsEditAccess knowledgeGraph={name}>
-          {(disabled) => (
-            <ConsumerDialog
-              knowledgeGraph={name}
-              useCase={useCase}
-              consumer={consumer}
-              onSaved={onSaved}
-              trigger={
-                <Button variant="ghost" size="icon-sm" disabled={disabled} aria-label={`Edit Consumer ${consumer.id}`}>
-                  <Pencil />
-                </Button>
-              }
-            />
-          )}
-        </NeedsEditAccess>
-        <NeedsEditAccess knowledgeGraph={name}>
-          {(disabled) => (
-            <ConfirmRemoveDialog
-              knowledgeGraph={name}
-              title={`Remove ${consumer.name}?`}
-              description={
-                consumer.tasks?.length
-                  ? 'It will not be in the new Use Case Version, and neither will its Tasks. The Competency Questions stay.'
-                  : 'It will not be in the new Use Case Version. The Competency Questions stay.'
-              }
-              next={() => withoutConsumer(useCase, consumer.id)}
-              onSaved={onSaved}
-              trigger={
-                <Button variant="ghost" size="icon-sm" disabled={disabled} aria-label={`Remove Consumer ${consumer.id}`}>
-                  <Trash2 />
-                </Button>
-              }
-            >
-              {consumer.tasks?.length ? <TaskList label="Tasks removed with it" tasks={consumer.tasks} /> : null}
-            </ConfirmRemoveDialog>
-          )}
-        </NeedsEditAccess>
-      </>
-    ),
-    [name, useCase, onSaved],
-  )
-  const taskActions = useCallback(
-    (task: Task, consumer: Consumer) => (
-      <>
-        <NeedsEditAccess knowledgeGraph={name}>
-          {(disabled) => (
-            <TaskDialog
-              knowledgeGraph={name}
-              useCase={useCase}
-              consumer={consumer}
-              task={task}
-              onSaved={onSaved}
-              trigger={
-                <Button variant="ghost" size="icon-xs" disabled={disabled} aria-label={`Edit Task ${task.id}`}>
-                  <Pencil />
-                </Button>
-              }
-            />
-          )}
-        </NeedsEditAccess>
-        <NeedsEditAccess knowledgeGraph={name}>
-          {(disabled) => (
-            <ConfirmRemoveDialog
-              knowledgeGraph={name}
-              title={`Remove ${task.id}?`}
-              description={`“${task.description}” will not be in the new Use Case Version. The Competency Questions it needs stay.`}
-              next={() => withoutTask(useCase, task.id)}
-              onSaved={onSaved}
-              trigger={
-                <Button variant="ghost" size="icon-xs" disabled={disabled} aria-label={`Remove Task ${task.id}`}>
-                  <Trash2 />
-                </Button>
-              }
-            />
-          )}
-        </NeedsEditAccess>
-      </>
-    ),
-    [name, useCase, onSaved],
-  )
+/** The latest Use Case Version's Consumers as tiles; each opens its sheet. */
+function Consumers({ name, version, onSaved, onOpenConsumer }: ConsumersProps) {
   return (
     <Panel
       title="Consumers"
       actions={
-        <NeedsEditAccess knowledgeGraph={name}>
-          {(disabled) => (
-            <ConsumerDialog
-              knowledgeGraph={name}
-              useCase={useCase}
-              onSaved={onSaved}
-              trigger={
-                <Button variant="outline" size="sm" disabled={disabled}>
-                  <Plus />
-                  Add Consumer
-                </Button>
-              }
-            />
-          )}
-        </NeedsEditAccess>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <DraftWithAiPlanned />
+          <NeedsEditAccess knowledgeGraph={name}>
+            {(disabled) => (
+              <ConsumerDialog
+                knowledgeGraph={name}
+                useCase={version.use_case}
+                onSaved={onSaved}
+                trigger={
+                  <Button variant="outline" size="sm" disabled={disabled}>
+                    <Plus />
+                    Add Consumer
+                  </Button>
+                }
+              />
+            )}
+          </NeedsEditAccess>
+        </div>
       }
     >
-      <DraftWithAiPlanned />
-      <ConsumerCards
-        useCase={useCase}
-        taskStatus={(task) => <TaskReadiness knowledgeGraph={name} useCaseVersion={version.number} task={task} />}
-        consumerActions={consumerActions}
-        taskActions={taskActions}
-        consumerGate={(consumer) => <ConsumerGateSection knowledgeGraph={name} consumer={consumer} />}
-      />
+      <ConsumerTiles knowledgeGraph={name} version={version} onOpen={(c) => onOpenConsumer(c.id)} />
     </Panel>
   )
 }

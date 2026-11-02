@@ -46,6 +46,7 @@ addopts = "-q"
 markers = [
     "postgres: needs a Postgres database (set STETIQ_TEST_POSTGRES_URL)",
     "neo4j: needs Docker (throwaway Neo4j testcontainer); skipped when Docker is unavailable",
+    "image: builds or runs the Docker image (set STETIQ_TEST_IMAGE to use a built one); skipped when Docker is unavailable",
 ]
 
 [tool.ruff]

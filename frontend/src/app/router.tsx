@@ -37,6 +37,7 @@ const ObservationsPage = lazyPage(() => import('@/pages/knowledge-graph/observat
 const OntologyTab = lazyPage(() => import('@/pages/knowledge-graph/versions/OntologyTab'), (m) => m.OntologyTab)
 const OntologyVersionPage = lazyPage(() => import('@/pages/knowledge-graph/versions/OntologyVersionPage'), (m) => m.OntologyVersionPage)
 const OntologyVersionsPage = lazyPage(() => import('@/pages/knowledge-graph/versions/OntologyVersionsPage'), (m) => m.OntologyVersionsPage)
+const OverviewPage = lazyPage(() => import('@/pages/knowledge-graph/overview/OverviewPage'), (m) => m.OverviewPage)
 const OverviewTab = lazyPage(() => import('@/pages/knowledge-graph/versions/OverviewTab'), (m) => m.OverviewTab)
 const PromotionsPage = lazyPage(() => import('@/pages/knowledge-graph/promotions/PromotionsPage'), (m) => m.PromotionsPage)
 const SettingsPage = lazyPage(() => import('@/pages/settings/SettingsPage'), (m) => m.SettingsPage)
@@ -47,7 +48,7 @@ const UseCasePage = lazyPage(() => import('@/pages/knowledge-graph/use-case/UseC
 /**
  * What each Knowledge Graph section shows at `/kg/:name/<section>`:
  * - `page`: its landing page, which starts with `<KnowledgeGraphSectionPage section=…>`
- *   (Knowledge Graph header + section title). Omitted: a placeholder.
+ *   (Knowledge Graph header + section title), except the Overview's. Omitted: a placeholder.
  * - `children`: detail pages under it, e.g. `{ path: ':number', … }`; they get the
  *   section's breadcrumb first and render their own `PageHeader`.
  */
@@ -55,6 +56,7 @@ const knowledgeGraphSectionRoutes: Record<
   KnowledgeGraphSectionPath,
   { page?: ReactNode; children?: RouteObject[] }
 > = {
+  overview: { page: <OverviewPage /> },
   versions: {
     page: <OntologyVersionsPage />,
     children: [

@@ -1,18 +1,24 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router'
+import type { GatePreview } from '@/api/gate-previews'
+import type { GateResult } from '@/api/gate-results'
 import type { ConstructionRun } from '@/api/runs'
 import { kgUrl } from '@/app/knowledge-graph-sections'
 import { RunStatusLabel } from '@/components/RunStatusLabel'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Skeleton } from '@/components/ui/skeleton'
 import { createDataTableColumnHelper, useDataTable } from '@/lib/data-table'
 import { formatDateTime, formatMetric } from '@/lib/format'
 import { metricColumnId, paramColumnId } from '@/lib/metric-view-params'
-import { formatDuration, runDurationMs, shortRunId } from './runs'
+import { ConformancePercent, ParamChips, RunGateLabel } from './run-labels'
+import { formatDuration, type RunGate, runDurationMs, runGate, shortRunId } from './runs'
 
 /** One row of the run table. */
 export interface RunRow {
   run: ConstructionRun
   durationMs: number
+  /** Undefined while the Gate results and previews load. */
+  gate: RunGate | undefined
 }
 
 const column = createDataTableColumnHelper<RunRow>()
@@ -51,11 +57,14 @@ const baseColumns = column.columns([
     header: 'Run',
     enableSorting: false,
     cell: ({ row }) => {
-      const { id, knowledge_graph } = row.original.run
+      const { id, knowledge_graph, params } = row.original.run
       return (
-        <Link to={kgUrl(knowledge_graph, 'runs', id)} title={id} className={`font-mono ${linkClass}`}>
-          {shortRunId(id)}
-        </Link>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <Link to={kgUrl(knowledge_graph, 'runs', id)} title={id} className={`font-mono ${linkClass}`}>
+            {shortRunId(id)}
+          </Link>
+          <ParamChips params={params} />
+        </div>
       )
     },
   }),
@@ -86,7 +95,15 @@ const baseColumns = column.columns([
     sortUndefined: 'last',
     cell: ({ getValue }) => {
       const score = getValue()
-      return score === undefined ? none : <span className="tabular-nums">{formatMetric(score)}</span>
+      return score === undefined ? none : <ConformancePercent score={score} />
+    },
+  }),
+  column.display({
+    id: 'gate',
+    header: 'Gate',
+    cell: ({ row }) => {
+      const { gate } = row.original
+      return gate === undefined ? <Skeleton className="h-4 w-16" /> : <RunGateLabel gate={gate} />
     },
   }),
   column.accessor((r) => r.run.candidate_version ?? undefined, {
@@ -100,7 +117,8 @@ const baseColumns = column.columns([
 /**
  * The run table over `runs` (already filtered), with a selection column and one
  * optional column per param and metric key; `visible` names the optional columns shown
- * (`paramColumnId`/`metricColumnId`). Read the selection with
+ * (`paramColumnId`/`metricColumnId`). The Gate column shows `runGate` over `gateResults`
+ * and `gatePreviews`, a placeholder while either is undefined. Read the selection with
  * `table.getSelectedRowModel()` (row ids are run ids), e.g. to compare runs.
  */
 export function useRunTable({
@@ -109,6 +127,8 @@ export function useRunTable({
   metrics,
   visible,
   now,
+  gateResults,
+  gatePreviews,
 }: {
   runs: readonly ConstructionRun[]
   params: readonly string[]
@@ -116,6 +136,8 @@ export function useRunTable({
   visible: ReadonlySet<string>
   /** The time running runs' durations are measured to. */
   now: number
+  gateResults: readonly GateResult[] | undefined
+  gatePreviews: readonly GatePreview[] | undefined
 }) {
   const columns = useMemo(
     () =>
@@ -144,8 +166,15 @@ export function useRunTable({
     [params, metrics],
   )
   const data = useMemo(
-    () => runs.map((run): RunRow => ({ run, durationMs: runDurationMs(run, now) })),
-    [runs, now],
+    () =>
+      runs.map(
+        (run): RunRow => ({
+          run,
+          durationMs: runDurationMs(run, now),
+          gate: gateResults && gatePreviews && runGate(run.id, gateResults, gatePreviews),
+        }),
+      ),
+    [runs, now, gateResults, gatePreviews],
   )
   const columnVisibility = useMemo(
     () =>

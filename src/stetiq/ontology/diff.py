@@ -109,11 +109,12 @@ class OntologyDiff:
         return self.by_classification(Classification.COSMETIC)
 
 
+# A Change's detail names its Concept kind in GLOSSARY.md's words, not the wire's.
 _KIND_NAMES: dict[str, str] = {
-    "node_type": "node type",
-    "relationship_type": "relationship type",
-    "property": "property",
-    "vocabulary": "vocabulary",
+    "node_type": "Class",
+    "relationship_type": "Relation",
+    "property": "Attribute",
+    "vocabulary": "Vocabulary",
 }
 
 
@@ -193,10 +194,10 @@ class _VocabularyItem:
     def change(
         self, kind: ChangeKind, classification: Classification, detail: str, prefix: bool = True
     ) -> Change:
-        """With `prefix`, `detail` follows the item's name (`value Status.done removed`);
+        """With `prefix`, `detail` follows the item's name (`Vocabulary Value Status.done removed`);
         a change to an item that is still there says only what changed."""
         if prefix:
-            noun = "vocabulary" if self.value is None else "value"
+            noun = "Vocabulary" if self.value is None else "Vocabulary Value"
             detail = f"{noun} {self.concept} {detail}"
         return Change(
             self.concept,
@@ -449,7 +450,7 @@ def _diff_properties(
                 attribute.change(
                     ChangeKind.ADDED,
                     Classification.BREAKING if required else Classification.ADDITIVE,
-                    f"{'required' if required else 'optional'} property {attribute.concept} added",
+                    f"{'required' if required else 'optional'} Attribute {attribute.concept} added",
                     required=required,
                 )
             )
@@ -458,7 +459,7 @@ def _diff_properties(
                 attribute.change(
                     ChangeKind.REMOVED,
                     Classification.BREAKING,
-                    f"property {attribute.concept} removed",
+                    f"Attribute {attribute.concept} removed",
                 )
             )
         else:

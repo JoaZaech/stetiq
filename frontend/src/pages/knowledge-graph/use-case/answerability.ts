@@ -1,15 +1,34 @@
 import type { EvaluationResult } from '@/api/ontology-versions'
+import type { StatusTone } from '@/components/status-tones'
 
 /** evaluation/answerability.py `ANSWERABILITY_EVALUATOR`. */
 export const ANSWERABILITY_EVALUATOR = 'structural_answerability'
 
 export type AnswerabilityStatus = 'answerable' | 'unanswerable' | 'unmapped'
 
+/**
+ * How the UI shows each status. *Unmapped* reads as the neutral "Can't check": stetiq
+ * cannot tell, which is neither a pass nor a failure.
+ */
+export const ANSWERABILITY_LABELS: Record<AnswerabilityStatus, { tone: StatusTone; label: string; hint?: string }> = {
+  answerable: { tone: 'success', label: 'Answerable' },
+  unanswerable: { tone: 'failure', label: 'Unanswerable' },
+  unmapped: { tone: 'neutral', label: "Can't check", hint: "No Concept mapping or query, so stetiq can't tell" },
+}
+
 export interface Answerability {
   questions: number
   answerable: number
   /** One per Competency Question, sorted by id. */
-  rows: { id: string; status: AnswerabilityStatus; missing: string[] }[]
+  rows: AnswerabilityRow[]
+}
+
+export interface AnswerabilityRow {
+  /** The Competency Question's id. */
+  id: string
+  status: AnswerabilityStatus
+  /** The Concepts an unanswerable question needs and the Ontology Version lacks. */
+  missing: string[]
 }
 
 /**

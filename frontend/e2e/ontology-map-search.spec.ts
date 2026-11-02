@@ -31,10 +31,10 @@ test('the search lists name matches, then other matches with their reasons, and 
 
   await expect(page).toHaveURL('/ui/kg/retail/versions/1/ontology?q=Warehouse')
   const list = results(page)
-  await expect(list.getByRole('list', { name: 'Name matches' }).getByRole('listitem')).toHaveText([/^Warehouse\s*class$/])
+  await expect(list.getByRole('list', { name: 'Name matches' }).getByRole('listitem')).toHaveText([/^Warehouse\s*Class$/])
   await expect(list.getByRole('list', { name: 'Other matches' }).getByRole('listitem')).toHaveText([
-    /^Bin\s*class\s*description mentions 'warehouse'; attribute warehouse$/,
-    /^SHIPPED_FROM\s*relation\s*description mentions 'warehouse'$/,
+    /^Bin\s*Class\s*description mentions 'warehouse'; attribute warehouse$/,
+    /^SHIPPED_FROM\s*Relation\s*description mentions 'warehouse'$/,
   ])
 
   await expect(shape(map, 'Warehouse')).toHaveAttribute('data-match')
@@ -44,7 +44,7 @@ test('the search lists name matches, then other matches with their reasons, and 
   // The Table keeps full-text filtering: Bin is there by its description and attribute.
   await page.getByRole('radio', { name: 'Table' }).click()
   await expect(page.getByRole('table', { name: 'Classes' }).getByRole('row')).toHaveText([/Class/, /^Bin/, /^Warehouse/])
-  await expect(page.getByRole('table', { name: 'Attributes' }).getByRole('row')).toHaveText([/Attribute/, /^Bin · class/, /^warehouse/])
+  await expect(page.getByRole('table', { name: 'Attributes' }).getByRole('row')).toHaveText([/Attribute/, /^Bin · Class/, /^warehouse/])
 })
 
 test('picking a result selects it and centres the Map on it, by mouse or keyboard', async ({ page }) => {

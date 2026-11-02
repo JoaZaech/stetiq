@@ -7,6 +7,7 @@ import { ErrorAlert } from '@/components/ErrorAlert'
 import { SearchInput } from '@/components/SearchInput'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { conceptKindLabel } from '@/lib/concept-kind'
 import { createDataTableColumnHelper, filterColumn, useDataTable } from '@/lib/data-table'
 import { type DataTableParamsOptions, useDataTableParams } from '@/lib/data-table-params'
 import { formatCount } from '@/lib/format'
@@ -30,7 +31,12 @@ const columns = column.columns([
     ...filterColumn('text'),
     cell: ({ getValue }) => <span className="font-mono text-xs">{getValue()}</span>,
   }),
-  column.accessor('conceptKind', { header: 'Concept kind', ...filterColumn('values') }),
+  // Filtered and searched by the glossary's word for the kind, as shown.
+  column.accessor((r) => conceptKindLabel(r.conceptKind), {
+    id: 'conceptKind',
+    header: 'Concept kind',
+    ...filterColumn('values'),
+  }),
   column.accessor('change', { header: 'Change', ...filterColumn('values') }),
   // Filtered and searched by the UI's name for the level (cosmetic is "documentation-only").
   column.accessor((r) => CLASSIFICATION_LABEL[r.level], {
