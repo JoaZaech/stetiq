@@ -13,15 +13,41 @@ test.describe('with Drift', () => {
     const rows = page.getByRole('table', { name: 'Observations' }).getByRole('row')
     await expect(rows).toHaveCount(3)
     const [onDemand, fromRun] = [rows.nth(1), rows.nth(2)]
-    await expect(onDemand.getByRole('cell')).toHaveText([/\d/, 'Drift', 'on demand', 'v1', '4'])
+    await expect(onDemand.getByRole('cell')).toHaveText([/\d/, 'Drift', 'on demand', 'v1', '57.1%', '4'])
     await expect(onDemand.locator('time')).toHaveAttribute('datetime', /^\d{4}-\d{2}-\d{2}T/)
     const runId = stetiq.seeded.run_id as string
-    await expect(fromRun.getByRole('cell')).toHaveText([/\d/, 'No Drift', `run ${runId.slice(0, 8)}`, '—', '—'])
+    await expect(fromRun.getByRole('cell')).toHaveText([
+      /\d/,
+      'No Drift',
+      `run ${runId.slice(0, 8)}`,
+      'v1',
+      '88.9%',
+      '—',
+    ])
     await expect(fromRun.getByRole('link', { name: `Run ${runId.slice(0, 8)}` })).toHaveAttribute(
       'href',
       `/ui/kg/support/runs/${runId}`,
     )
     await expect(page.getByText('2 Observations')).toBeVisible()
+  })
+
+  test('the alignment trend is one Conformance line: the run point filled, the on-demand point hollow', async ({
+    page,
+  }) => {
+    await page.goto('/ui/kg/support/observations')
+    const trend = page.getByRole('region', { name: 'Alignment trend' })
+
+    const points = trend.locator('[data-marker]')
+    await expect(points).toHaveCount(2)
+    await expect(points.nth(0)).toHaveAttribute('data-marker', 'run')
+    await expect(points.nth(0)).toHaveAttribute('aria-label', /: 0\.8889, run, v1$/)
+    await expect(points.nth(1)).toHaveAttribute('data-marker', 'on demand')
+    await expect(points.nth(1)).toHaveAttribute('aria-label', /: 0\.5714, on demand, v1$/)
+    await expect(trend).not.toContainText(/min|max/)
+
+    await points.nth(1).click()
+    const tiles = page.getByRole('dialog').getByRole('list', { name: 'Key figures' }).getByRole('listitem')
+    await expect(tiles).toHaveText([/^Conformance57\.1%$/, /^CQ coverage—$/, /^Gates—$/, /^Drift4findings$/])
   })
 
   test('the search and the Status filter narrow the table, and stay in the URL', async ({ page }) => {
@@ -52,7 +78,7 @@ test.describe('with Drift', () => {
     await expect(sheet.getByRole('table', { name: 'Not comparable' })).toHaveCount(0)
 
     const tiles = sheet.getByRole('list', { name: 'Key figures' }).getByRole('listitem')
-    await expect(tiles).toHaveText([/^Conformance—$/, /^CQ coverage—$/, /^Gates—$/, /^Drift4findings$/])
+    await expect(tiles).toHaveText([/^Conformance57\.1%$/, /^CQ coverage—$/, /^Gates—$/, /^Drift4findings$/])
 
     // Concept kinds in the glossary's words: Class, Relation, Attribute.
     const findings = sheet.getByRole('table', { name: 'Findings' }).getByRole('row')
