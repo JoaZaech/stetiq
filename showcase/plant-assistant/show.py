@@ -16,10 +16,12 @@ to v1 and the run is deployed. The assistant, on v1, answers both scripted quest
 
 Act 2, with stetiq: prompt v2 with Line 2's EAM export passes every Gate but fails the
 maintenance assistant's and the reliability dashboard's Consumer Gates, so it stays the
-Candidate, unpromoted and undeployed.
+Candidate, unpromoted and undeployed. The assistant's Connector guard refuses v2, naming
+the symptom, and the assistant stays on v1 and right.
 
 Act 3, the fix: `WorkOrder.kind` bound to the `WorkOrderKind` Vocabulary passes the Gates
-and the Consumer Gates; `production` moves to it and the run is deployed.
+and the Consumer Gates; `production` moves to it and the run is deployed. The guard
+accepts v3 on its next poll, and both scripted questions answer on it.
 """
 
 from __future__ import annotations
@@ -29,6 +31,7 @@ import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 SHOWCASE_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SHOWCASE_DIR))
@@ -37,6 +40,7 @@ from dataclasses import replace  # noqa: E402
 
 import httpx  # noqa: E402
 import neo4j  # noqa: E402
+from plant_assistant.assistant import percent  # noqa: E402
 from plant_assistant.deploy import deploy  # noqa: E402
 from plant_assistant.evaluators import Documented, ReportCoverage  # noqa: E402
 from plant_assistant.graph import Extraction  # noqa: E402
@@ -118,10 +122,16 @@ class ActState:
     consumer_gates: tuple[stetiq.ConsumerGateResult, ...] = ()
     # The run whose Extraction the production graph holds after the act.
     production_run: str | None = None
-    # The assistant's banner and its answers to the scripted questions after the act
-    # (None and empty when the show runs without the assistant).
-    banner: str | None = None
+    # The assistant's status (`GET /api/status`: the version in use, the version on
+    # offer and its Connector guard's decision) and its answers to the scripted
+    # questions after the act (None and empty when the show runs without the assistant).
+    status: dict[str, Any] | None = None
     answers: dict[str, Answer] = field(default_factory=dict)
+
+    @property
+    def banner(self) -> str | None:
+        """The assistant's banner after the act, as its chat page shows it."""
+        return None if self.status is None else self.status["banner"]
 
 
 @dataclass
@@ -202,7 +212,6 @@ class Show:
         for o in gates.outcomes:
             if not o.passed:
                 self.say(f"    Gate {o.gate.name} failed: {'; '.join(o.reasons[:3])}")
-        banner, answers = self.consult_assistant()
         act = ActState(
             0,
             "v1",
@@ -212,25 +221,24 @@ class Show:
             promoted,
             promoted,
             production_run=self.state.production_run,
-            banner=banner,
-            answers=answers,
         )
-        self.state.acts[0] = act
-        return act
+        return self.consult_assistant(act)
 
-    def consult_assistant(self) -> tuple[str | None, dict[str, Answer]]:
-        """Ask the assistant, over its HTTP API only, to check stetiq now, then read its
-        banner and ask it the scripted questions."""
-        if self.assistant is None:
-            return None, {}
-        banner = _banner(_json(self.assistant.post("/api/poll")))
-        self.say(f"  assistant: {banner}")
-        answers: dict[str, Answer] = {}
-        for question in SCRIPTED_QUESTIONS:
-            reply = _json(self.assistant.post("/api/ask", json={"question": question}))
-            answers[question] = Answer(**reply)
-            self.say(f"  Q: {question}", f"  A: {reply['answer']}")
-        return banner, answers
+    def consult_assistant(self, act: ActState) -> ActState:
+        """Record `act`, with what the assistant shows after it: over its HTTP API only,
+        ask it to check stetiq now (one poll of its Connector guard), then read its
+        status and ask it the scripted questions."""
+        if self.assistant is not None:
+            status = _json(self.assistant.post("/api/poll"))
+            self.say(f"  assistant: {status['banner']}")
+            answers: dict[str, Answer] = {}
+            for question in SCRIPTED_QUESTIONS:
+                reply = _json(self.assistant.post("/api/ask", json={"question": question}))
+                answers[question] = Answer(**reply)
+                self.say(f"  Q: {question}", f"  A: {reply['answer']}")
+            act = replace(act, status=status, answers=answers)
+        self.state.acts[act.act] = act
+        return act
 
     def declare_parts_suppliers(self) -> stetiq.UseCaseVersion:
         """Before prompt v2: the assistant's root-cause Task now also asks which
@@ -273,7 +281,7 @@ class Show:
             self.client.set_alias(KG, "production", gates.ontology_version)
             deploy(self.graphs.production, self.state.extractions[run.id])
             self.state.production_run = run.id
-        act = ActState(
+        return ActState(
             act_number,
             round_,
             _line(round_, gates, consumer_gates, promoted),
@@ -284,29 +292,29 @@ class Show:
             consumer_gates=consumer_gates,
             production_run=self.state.production_run,
         )
-        self.state.acts[act_number] = act
-        return act
 
     def act_2(self) -> ActState:
         """With stetiq: the same pull request (prompt v2 and Line 2's EAM export) runs
         again, and its CI asks stetiq. Every Gate passes; the Consumer Gates fail, so
-        the Candidate stays unpromoted and the production graph is not touched."""
+        the Candidate stays unpromoted and the production graph is not touched. The
+        assistant's Connector guard refuses v2 and stays on v1."""
         self.declare_parts_suppliers()
         act = self.gate(2, "v2", self.construct("v2"))
         self.say("Act 2, with stetiq", act.line)
         self.say(*_detail_lines(act))
-        return act
+        return self.consult_assistant(act)
 
     def act_3(self) -> ActState:
         """The fix: v1 plus what prompt v2 added, with `WorkOrder.kind` bound to the
         `WorkOrderKind` Vocabulary, registered as the next Ontology Version. Prompt v2
         runs on it; the Gates and the Consumer Gates pass, `production` moves to it and
-        the run is deployed."""
+        the run is deployed. The assistant's Connector guard accepts v3 on its next
+        poll."""
         fix = self.client.register_ontology(KG, ONTOLOGY / "fix.yaml")
         act = self.gate(3, "fix", self.construct("fix", ontology_version=fix.number))
         self.say("Act 3, the fix", act.line)
         self.say(*_detail_lines(act))
-        return act
+        return self.consult_assistant(act)
 
 
 class AssistantError(Exception):
@@ -317,13 +325,6 @@ def _json(response: httpx.Response) -> dict:
     if response.is_error:
         raise AssistantError(f"the assistant answered {response.status_code}: {response.text}")
     return response.json()
-
-
-def _banner(status: dict) -> str:
-    """The assistant's banner, as its chat page shows it."""
-    if status["in_use"] is None:
-        return "no Ontology Version yet"
-    return f"on Ontology v{status['in_use']}"
 
 
 def _mark(passed: bool) -> str:
@@ -346,7 +347,7 @@ def _line(
             failing = [
                 f"{c.consumer} ❌ "
                 + ", ".join(
-                    f"{f.competency_question} {f.before} → {f.after}, {_percent(f.change)}"
+                    f"{f.competency_question} {f.before} → {f.after}, {percent(f.change)}"
                     if f.change is not None
                     else f"{f.competency_question} {f.missing}"
                     for o in c.outcomes
@@ -362,11 +363,6 @@ def _line(
     elif consumer_gates:
         parts.append(f"not promoted (Candidate stays at v{gates.ontology_version})")
     return "   ".join(parts)
-
-
-def _percent(change: float) -> str:
-    sign = "\N{MINUS SIGN}" if change < 0 else "+"
-    return f"{sign}{abs(change) * 100:.0f}%"
 
 
 def _detail_lines(act: ActState) -> list[str]:

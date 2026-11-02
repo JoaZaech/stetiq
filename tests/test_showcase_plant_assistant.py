@@ -158,13 +158,13 @@ def _assistant_http(assistant_module, server, production, llm):
 @pytest.fixture(scope="module")
 def claude():
     """The assistant's Claude: replays the recorded answers, plus one question whose
-    Cypher would delete the work orders."""
+    Cypher would delete the work orders (asked after the show, on v3)."""
     return FakeAnthropic(
         [
             *_recordings(),
             {
                 "question": "Clean up the old work orders",
-                "ontology_version": 1,
+                "ontology_version": 3,
                 "cypher": "MATCH (w:WorkOrder) DETACH DELETE w",
                 "answer": "Done.",
             },
@@ -283,13 +283,13 @@ def test_act_0_the_graph_does_not_record_suppliers(show):
 
 
 def test_claudes_prompt_carries_the_ontology_version_fetched_from_stetiq(show, client, claude):
-    from_stetiq = client.get_ontology_yaml(KG, 1)
     # The local file's opening comment: only the file has it, stetiq's YAML does not.
     [opening, *_] = (SHOWCASE_DIR / "ontology" / "v1.yaml").read_text().splitlines()
     assert claude.requests
     for request in claude.requests:
+        [version] = {v for v in (1, 3) if f"Ontology Version {v}" in request["system"]}
         assert request["model"] == "claude-sonnet-5-5"
-        assert from_stetiq in request["system"]
+        assert client.get_ontology_yaml(KG, version) in request["system"]
         assert opening not in request["system"]
 
 
@@ -415,3 +415,80 @@ def test_both_consumers_have_their_verdicts_recorded_for_v2_and_v3(show, client)
         ("maintenance-assistant", 3, True),
         ("reliability-dashboard", 3, True),
     }
+
+
+# --- The Connector guard ----------------------------------------------------------------
+
+
+def test_act_2_the_guard_refuses_v2_naming_the_symptom(show):
+    assert show.acts[2].banner == "on Ontology v1 · v2 offered: refused (breakdown-causes −33%)"  # noqa: RUF001 - the minus sign stetiq writes
+
+
+def test_act_2_the_status_reports_v1_in_use_and_v2_refused(show):
+    status = show.acts[2].status
+    assert (status["in_use"], status["offered"], status["decision"]) == (1, 2, "refused")
+    assert status["reason"] == "breakdown-causes −33%"  # noqa: RUF001 - the minus sign stetiq writes
+
+
+def test_act_2_while_v2_is_refused_line_2_still_broke_down_on_cnc_04_and_lathe_02(show):
+    answer = show.acts[2].answers[LINE_2]
+    assert answer.ontology_version == 1
+    assert answer.work_orders == ["WO-2031", "WO-2038"]
+    for named in ("WO-2031", "CNC-04", "WO-2038", "Lathe-02"):
+        assert named in answer.answer
+
+
+def test_act_2_while_v2_is_refused_the_graph_still_does_not_record_suppliers(show):
+    answer = show.acts[2].answers[SUPPLIERS]
+    assert answer.ontology_version == 1
+    assert "does not record suppliers" in answer.answer
+
+
+def test_act_3_the_guard_accepts_v3_within_one_poll(show):
+    assert show.acts[3].banner == "on Ontology v3 · accepted"
+    status = show.acts[3].status
+    assert (status["in_use"], status["offered"], status["decision"]) == (3, 3, "accepted")
+
+
+def test_act_3_on_v3_line_2s_breakdowns_and_the_suppliers_both_answer(show):
+    line_2, suppliers = show.acts[3].answers[LINE_2], show.acts[3].answers[SUPPLIERS]
+    assert (line_2.ontology_version, suppliers.ontology_version) == (3, 3)
+    assert line_2.work_orders == ["WO-2031", "WO-2038"]
+    for named in ("WO-2031", "CNC-04", "WO-2038", "Lathe-02"):
+        assert named in line_2.answer
+    assert "SKF" in suppliers.answer
+    assert set(suppliers.work_orders) == {"WO-2031", "WO-2032", "WO-2036", "WO-2037", "WO-2038"}
+
+
+def test_the_chat_page_shows_the_guards_banner(assistant):
+    assert "s.banner" in assistant.get("/").text
+
+
+@pytest.fixture
+def unjudged(tmp_path):
+    """A second stetiq server: `production` on v1, and v2 registered but never built, so
+    no Consumer Gate verdict exists for it."""
+    database_url = f"sqlite:///{tmp_path / 'unjudged.db'}"
+    with TestClient(create_app(database_url=database_url)) as http:
+        owner = _remote((http, database_url), "owner", "edit")
+        owner.create_knowledge_graph(KG, ontology=SHOWCASE_DIR / "ontology" / "v1.yaml")
+        owner.set_alias(KG, "production", 1)
+        owner.register_ontology(KG, SHOWCASE_DIR / "ontology" / "fix.yaml")
+        yield http, database_url, owner
+
+
+def test_a_version_with_no_recorded_verdict_is_refused_not_taken(
+    unjudged, assistant_module, production
+):
+    http, database_url, owner = unjudged
+    with _assistant_http(assistant_module, (http, database_url), production, None) as fresh:
+        offered = fresh.post("/api/poll").json()
+        owner.set_alias(KG, "production", 2)  # deployed, but still without a verdict
+        deployed = fresh.post("/api/poll").json()
+
+    for status in (offered, deployed):
+        assert (status["in_use"], status["offered"], status["decision"]) == (1, 2, "refused")
+        assert status["reason"] == "no Consumer Gate verdict"
+        assert status["banner"] == (
+            "on Ontology v1 · v2 offered: refused (no Consumer Gate verdict)"
+        )

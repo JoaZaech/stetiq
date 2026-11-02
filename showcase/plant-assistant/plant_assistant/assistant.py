@@ -15,9 +15,28 @@ free-form questions are refused.
 reads `STETIQ_TRACKING_URI` / `STETIQ_TOKEN` (stetiq), `PLANT_PRODUCTION_URI` with
 `NEO4J_USER` / `NEO4J_PASSWORD` (the production graph) and `ANTHROPIC_API_KEY`.
 
+The Connector guard decides which Ontology Version is in use. It polls stetiq on startup
+and every 5 s, through stetiq's public client calls only. The first time, it takes the
+version the `production` Contract Alias points to: nothing is in use yet, so there is
+nothing to protect. After that a version is *on offer* when `production` points to
+another version than the one in use, or else when the latest Candidate is newer than it.
+The guard reads the assistant's latest recorded Consumer Gate result for the version on
+offer:
+
+- passed, and `production` points to it: switch to it (`accepted`);
+- passed, but `production` does not point to it yet: stay (`waiting`), since the
+  assistant answers from the production graph;
+- failed, or no verdict recorded: stay (`refused`), naming the symptom the verdict gives
+  (each failing question and its row change), or "no Consumer Gate verdict".
+
+The last decision stays on the banner until another version is on offer.
+
 HTTP API:
-- `GET /api/status`: `{in_use, free_form, message}`, the Ontology Version in use (null
-  before stetiq has a Contract version), whether free-form questions are answered;
+- `GET /api/status`: `{in_use, offered, decision, reason, banner, free_form, message}`:
+  the Ontology Version in use (null before stetiq has a Contract version), the version on
+  offer and the guard's decision on it (`accepted`, `waiting` or `refused`; nulls before
+  any offer) with its reason, the banner the chat page shows, and whether free-form
+  questions are answered;
 - `POST /api/ask` `{question}`: `{question, answer, cypher, work_orders,
   ontology_version, source}`, `source` being `live` (Claude) or `recorded`;
 - `POST /api/poll`: check stetiq now instead of waiting for the next poll; returns the
@@ -34,7 +53,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, LiteralString, Protocol, cast
+from typing import Any, Literal, LiteralString, Protocol, cast
 
 import neo4j
 import neo4j.exceptions
@@ -45,6 +64,7 @@ from pydantic import BaseModel
 import stetiq
 
 KG = "plant-maintenance"
+CONSUMER = "maintenance-assistant"  # the assistant's Consumer id in the Use Case
 MODEL = "claude-sonnet-5-5"
 PRODUCTION_DATABASE = "neo4j"  # Neo4j Community has the one database
 POLL_SECONDS = 5.0
@@ -122,6 +142,9 @@ class Answer:
     source: str  # live | recorded
 
 
+Decision = Literal["accepted", "waiting", "refused"]
+
+
 class Refused(Exception):
     """A question the assistant will not answer; `status` is the HTTP status it sends."""
 
@@ -161,6 +184,7 @@ class Assistant:
         llm: Claude | None,
         recordings: dict[tuple[str, int], Recording] | None = None,
         knowledge_graph: str = KG,
+        consumer: str = CONSUMER,
         model: str = MODEL,
     ) -> None:
         self.stetiq = stetiq_client
@@ -168,28 +192,73 @@ class Assistant:
         self.llm = llm
         self.recordings = load_recordings() if recordings is None else recordings
         self.knowledge_graph = knowledge_graph
+        self.consumer = consumer
         self.model = model
         self.in_use: int | None = None
         self.ontology_yaml: str | None = None
+        # The Connector guard's last decision: the version on offer, and why.
+        self.offered: int | None = None
+        self.decision: Decision | None = None
+        self.reason: str | None = None
         self._lock = threading.Lock()
 
     # --- The Ontology Version in use ------------------------------------------------
 
     def poll(self) -> None:
-        """Take the Ontology Version the `production` Contract Alias points to, fetching
-        its YAML from stetiq. Before stetiq has one, nothing is in use."""
+        """The Connector guard: look for a version on offer and decide whether to take
+        it (see the module docstring). While stetiq is unreachable, or before it has a
+        Contract version, nothing changes."""
+        kg = self.knowledge_graph
         try:
-            number = self.stetiq.get_contract_version(self.knowledge_graph).number
+            production = self.stetiq.get_contract_version(kg).number
+            if self.in_use is None:
+                self._take(production)
+                return
+            if production != self.in_use:
+                offered = production
+            else:
+                candidate = self.stetiq.latest_candidate(kg).number
+                if candidate <= self.in_use:
+                    return  # nothing new on offer: the last decision stands
+                offered = candidate
+            decision, reason = self._judge(offered, in_production=offered == production)
+            if decision == "accepted":
+                self._take(offered)
         except stetiq.StetiqError:
             return
-        if number != self.in_use:
-            ontology_yaml = self.stetiq.get_ontology_yaml(self.knowledge_graph, number)
-            with self._lock:
-                self.in_use, self.ontology_yaml = number, ontology_yaml
+        with self._lock:
+            self.offered, self.decision, self.reason = offered, decision, reason
+
+    def _judge(self, version: int, *, in_production: bool) -> tuple[Decision, str | None]:
+        """The guard's decision on `version`, from the assistant's latest recorded
+        Consumer Gate result for it."""
+        results = self.stetiq.list_consumer_gate_results(
+            self.knowledge_graph, consumer=self.consumer, version=version
+        )
+        if not results:
+            return "refused", "no Consumer Gate verdict"
+        verdict = results[-1]
+        if not verdict.passed:
+            return "refused", _symptom(verdict)
+        if not in_production:
+            return "waiting", "Consumer Gate passed, not in production yet"
+        return "accepted", None
+
+    def _take(self, version: int) -> None:
+        ontology_yaml = self.stetiq.get_ontology_yaml(self.knowledge_graph, version)
+        with self._lock:
+            self.in_use, self.ontology_yaml = version, ontology_yaml
 
     def status(self) -> dict[str, Any]:
+        with self._lock:
+            in_use, offered = self.in_use, self.offered
+            decision, reason = self.decision, self.reason
         return {
-            "in_use": self.in_use,
+            "in_use": in_use,
+            "offered": offered,
+            "decision": decision,
+            "reason": reason,
+            "banner": _banner(in_use, offered, decision, reason),
             "free_form": self.llm is not None,
             "message": None if self.llm is not None else NO_KEY,
         }
@@ -265,6 +334,39 @@ class Assistant:
                     422, "The generated Cypher tried to write; the assistant runs read-only."
                 ) from None
             raise Refused(422, f"The generated Cypher failed: {e.code}") from None
+
+
+def _symptom(verdict: stetiq.ConsumerGateResult) -> str:
+    """What a failed verdict names, from its findings: each failing question and its row
+    change, or the input that was missing. Never a cause: stetiq reads no instance data."""
+    symptoms = [
+        f"{f.competency_question} {percent(f.change)}"
+        if f.change is not None
+        else f"{f.competency_question} {f.missing}"
+        for o in verdict.failed
+        for f in o.findings
+    ]
+    return ", ".join(symptoms) or "Consumer Gate failed"
+
+
+def percent(change: float) -> str:
+    """A relative row change as the verdict lines and the banner write it, with a minus sign."""
+    sign = "\N{MINUS SIGN}" if change < 0 else "+"
+    return f"{sign}{abs(change) * 100:.0f}%"
+
+
+def _banner(
+    in_use: int | None, offered: int | None, decision: Decision | None, reason: str | None
+) -> str:
+    """The chat page's banner: the version in use and the guard's last decision."""
+    if in_use is None:
+        return "no Ontology Version yet"
+    banner = f"on Ontology v{in_use}"
+    if decision == "accepted" and offered == in_use:
+        return f"{banner} · accepted"
+    if decision is not None:
+        return f"{banner} · v{offered} offered: {decision} ({reason})"
+    return banner
 
 
 def _work_orders(rows: list[dict[str, Any]]) -> list[str]:
