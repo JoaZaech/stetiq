@@ -46,7 +46,7 @@ from stetiq.impact import UseCaseImpact, consumer_impact
 from stetiq.ontology import Ontology, parse_yaml
 from stetiq.ontology.diff import OntologyDiff, diff_ontologies
 from stetiq.ontology.yaml_format import to_yaml
-from stetiq.run_context import RunContext
+from stetiq.run_context import RecordedVerdicts, RunContext, without_quoted_reasons
 from stetiq.tracking import (
     Alias,
     ConstructionRun,
@@ -450,6 +450,48 @@ class Client:
             run=run,
             run_evaluation_results=_without_details(run_results),
             question_executions=executed_questions(run_results),
+            verdicts=self._recorded_verdicts(
+                knowledge_graph,
+                run=None if run is None else run.id,
+                ontology_version=ontology_version.number,
+                use_case_version=use_case_version,
+            ),
+        )
+
+    def _recorded_verdicts(
+        self,
+        knowledge_graph: str,
+        *,
+        run: str | None,
+        ontology_version: int,
+        use_case_version: UseCaseVersion | None,
+    ) -> RecordedVerdicts:
+        """The verdicts CI recorded about Construction Run `run` (None: no run), read
+        and never evaluated (ADR 0007): the latest Gate result about the run, else about
+        Ontology Version `ontology_version`, and for each Consumer of `use_case_version`
+        declaring a Consumer Gate its latest Consumer Gate result about the run."""
+        gate_results = self.list_gate_results(knowledge_graph)  # oldest first
+
+        def latest_about(kind: str, subject: str | None) -> GateResult | None:
+            about = [r for r in gate_results if (r.subject_kind, r.subject_id) == (kind, subject)]
+            return about[-1] if about else None
+
+        gated = (
+            []
+            if use_case_version is None
+            else [c.id for c in use_case_version.use_case.consumers if c.consumer_gates]
+        )
+        latest: dict[str, ConsumerGateResult] = {}
+        if run is not None and gated:
+            for result in self.list_consumer_gate_results(knowledge_graph):  # oldest first
+                if result.run_id == run:
+                    latest[result.consumer] = result
+        gate_result = latest_about("construction_run", run) or latest_about(
+            "ontology_version", str(ontology_version)
+        )
+        return RecordedVerdicts(
+            gate_result=None if gate_result is None else without_quoted_reasons(gate_result),
+            consumer_gate_results={consumer: latest.get(consumer) for consumer in gated},
         )
 
     # --- Use Cases ------------------------------------------------------------------

@@ -10,19 +10,84 @@ drops them; `to_dict` writes the results in their wire form).
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
 from stetiq import use_case as use_case_format
 from stetiq.evaluation.run import QuestionExecution
+from stetiq.gates import ConformanceGate, MetricGate
 from stetiq.tracking import codec
 from stetiq.tracking.entities import (
     ConstructionRun,
+    ConsumerGateResult,
     EvaluationResult,
+    GateResult,
     OntologyVersion,
     UseCaseVersion,
 )
+
+NOT_EVALUATED: dict[str, Any] = {"status": "not_evaluated"}
+
+
+@dataclass(frozen=True)
+class RecordedVerdicts:
+    """The verdicts CI recorded about one Construction Run, read and never computed
+    (ADR 0007): `Client._recorded_verdicts` reads them for any run.
+
+    - `gate_result`: the latest Gate result about the run, else about its Ontology
+      Version (None: not evaluated).
+    - `consumer_gate_results`: each Consumer declaring a Consumer Gate, in Use Case
+      order, with its latest Consumer Gate result about the run (None: not evaluated).
+    """
+
+    gate_result: GateResult | None = None
+    consumer_gate_results: Mapping[str, ConsumerGateResult | None] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        """`gate_result` and `consumer_gate_results`, each verdict with a `status` of
+        `passed` or `failed`, or `{"status": "not_evaluated"}` when none was recorded."""
+        return {
+            "gate_result": NOT_EVALUATED
+            if self.gate_result is None
+            else _gate_result_to_dict(self.gate_result),
+            "consumer_gate_results": [
+                {"consumer": consumer, **NOT_EVALUATED}
+                if result is None
+                else {
+                    "status": _status(result.passed),
+                    **codec.consumer_gate_result_to_json(result),
+                }
+                for consumer, result in self.consumer_gate_results.items()
+            ],
+        }
+
+
+_QUOTING_CHECKS = frozenset({MetricGate.check, ConformanceGate.check})
+
+
+def without_quoted_reasons(result: GateResult) -> GateResult:
+    """`result` with only the reasons stetiq writes itself. A `metric` or `conformance`
+    Gate's first reason states the observed value against its limit; the rest list the
+    Evaluator's details or Conformance mismatches, which can quote values observed in the
+    graph, so they are dropped (ADR 0001, ADR 0010). Other Gates' reasons name only
+    Concepts and type counts."""
+    return dataclasses.replace(
+        result,
+        outcomes=tuple(
+            dataclasses.replace(o, reasons=o.reasons[:1]) if o.gate.check in _QUOTING_CHECKS else o
+            for o in result.outcomes
+        ),
+    )
+
+
+def _status(passed: bool) -> str:
+    return "passed" if passed else "failed"
+
+
+def _gate_result_to_dict(result: GateResult) -> dict[str, Any]:
+    return {"status": _status(result.passed), **codec.gate_result_to_json(result)}
 
 
 @dataclass(frozen=True)
@@ -34,7 +99,9 @@ class RunContext:
     - `run`: the latest finished Construction Run standing for that version (None when
       there is none), `run_evaluation_results` its run-level results (metrics only), and
       `question_executions` each executed Competency Question's status and row count on
-      it."""
+      it.
+    - `verdicts`: the recorded Gate and Consumer Gate verdicts about `run` (the Gate
+      result falls back to the Ontology Version's)."""
 
     knowledge_graph: str
     ontology_version: OntologyVersion
@@ -43,6 +110,7 @@ class RunContext:
     run: ConstructionRun | None = None
     run_evaluation_results: tuple[EvaluationResult, ...] = ()
     question_executions: Mapping[str, QuestionExecution] = field(default_factory=dict)
+    verdicts: RecordedVerdicts = field(default_factory=RecordedVerdicts)
 
     def to_dict(self) -> dict[str, Any]:
         """A stable, JSON-ready shape (see the guide's "The run context")."""
@@ -70,6 +138,7 @@ class RunContext:
                     codec.evaluation_result_to_json(r) for r in self.run_evaluation_results
                 ],
             },
+            **self.verdicts.to_dict(),
         }
 
     def _questions(self) -> list[dict[str, Any]]:
