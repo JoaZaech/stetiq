@@ -91,8 +91,8 @@ print(v2.number, v2.content_hash)
 Read them back:
 
 ```python
-client.list_ontology_versions("support")      # oldest first
-client.get_ontology_yaml("support", 2)          # stetiq YAML text
+client.list_ontology_versions("support")  # oldest first
+client.get_ontology_yaml("support", 2)  # stetiq YAML text
 client.get_ontology_version_by_alias("support", "production")
 ```
 
@@ -172,7 +172,7 @@ For each bound attribute the Observed Schema records the distinct string values 
 ```python
 work_order = outcome.observation.schema.node_type("WorkOrder")
 status = next(p for p in work_order.properties if p.name == "status")
-status.values.counts     # (ValueCount(value="open", count=2), ValueCount(value="closed", count=1))
+status.values.counts  # (ValueCount(value="open", count=2), ValueCount(value="closed", count=1))
 status.values.truncated  # False: these are all the values
 ```
 
@@ -208,13 +208,15 @@ A Candidate is built from the Observed Schema, which carries no Definitions. Whe
 ```python
 with client.start_run("plant") as run:
     extract(...)  # adds Supplier and SUPPLIED_BY to the graph
-    run.propose_definitions({
-        "Supplier": "A company that supplies components",
-        "SUPPLIED_BY": "Links a component to the company that supplied it",
-        "Supplier.name": "The supplier's registered name",
-    })
+    run.propose_definitions(
+        {
+            "Supplier": "A company that supplies components",
+            "SUPPLIED_BY": "Links a component to the company that supplied it",
+            "Supplier.name": "The supplier's registered name",
+        }
+    )
 
-client.get_run(run.id).ignored_definitions   # e.g. ("Component",)
+client.get_run(run.id).ignored_definitions  # e.g. ("Component",)
 ```
 
 `propose_definitions` takes Concept references (`Label` for a Class or Relation, `Owner.attribute` for an attribute) mapped to their Definitions. Calls merge, and a later proposal for the same Concept wins. The proposals travel with the end of the run. The tracking service applies them only to the Concepts the Candidate adds, which includes the attributes of an added Class or Relation, so the Candidate is born documented and the `definitions` Evaluator counts them. That includes an attribute the run adds to a Class or Relation that was already declared (`Component.weight`). It never changes a Concept that was already declared: when an added Relation shares its label with a declared Class (or an added attribute shares `Owner.attribute` with a declared one), the proposal documents the added Concept only and the declared one keeps its Definition. A proposal for a declared Concept, for something the run didn't add, or for a run that gives rise to no Candidate (strict mode, or nothing added) is ignored, and `ConstructionRun.ignored_definitions` lists those Concept references, as you proposed them, sorted. Definitions are stored with surrounding whitespace removed. A reference that names no Class, Relation or attribute, or a Definition that is empty or only whitespace, raises `OntologyValidationError` when you propose it. Definitions are part of the Ontology, so they count in the Candidate's content hash: runs that add the same Concepts with the same Definitions share one Candidate.
@@ -225,8 +227,8 @@ Then read the result:
 finished = client.get_run(run.id)
 print(finished.status, finished.conformance.score, finished.candidate_version)
 
-client.list_runs("support")                      # oldest first
-client.compare_runs([first_id, second_id])       # params, metrics, Conformance side by side
+client.list_runs("support")  # oldest first
+client.compare_runs([first_id, second_id])  # params, metrics, Conformance side by side
 ```
 
 If your workflow is a command rather than Python code, declare it as the Construction Entry Point in [`stetiq.yaml`](./06-stetiq-yaml.md) and start it with `stetiq run` (see [CLI](./04-cli.md)). `client.run_entry_point(...)` does the same from Python.
@@ -293,11 +295,21 @@ consumers:
 from stetiq import CompetencyQuestion, Consumer, Task, UseCase
 
 UseCase(
-    competency_questions=(CompetencyQuestion(id="customer-names", question="What are our customers called?"),),
+    competency_questions=(
+        CompetencyQuestion(id="customer-names", question="What are our customers called?"),
+    ),
     consumers=(
         Consumer(
-            id="crm", name="CRM sync", kind="application",
-            tasks=(Task(id="sync-names", description="Copy customer names", competency_questions=("customer-names",)),),
+            id="crm",
+            name="CRM sync",
+            kind="application",
+            tasks=(
+                Task(
+                    id="sync-names",
+                    description="Copy customer names",
+                    competency_questions=("customer-names",),
+                ),
+            ),
         ),
     ),
 )
@@ -346,9 +358,9 @@ consumers:
 Registering rejects a Consumer Gate whose `task` is not one of its own Consumer's Tasks, a `max_drop` outside 0–1, a missing `task` or `max_drop`, an unknown key, or two gates with the same `name` in one Consumer, with `ConsumerGateConfigError` (a `UseCaseValidationError`) naming the field. `consumer_impact`, `conformance`, `observed_count`, `fill_rate` and `task_questions` are planned kinds: naming one says so. The same gate is `stetiq.RowCountDropGate(task=..., max_drop=..., name=...)` in a `Consumer`'s `consumer_gates`. Adding or changing a Consumer Gate yields a new Use Case Version; a Use Case without any keeps the content hash it had before Consumer Gates existed.
 
 ```python
-results = client.evaluate_consumer_gates("plant")              # the latest finished run
-client.evaluate_consumer_gates("plant", run="5d0c1f2e...")     # or a named run
-client.evaluate_consumer_gates("plant", version=4)             # or the run standing for v4
+results = client.evaluate_consumer_gates("plant")  # the latest finished run
+client.evaluate_consumer_gates("plant", run="5d0c1f2e...")  # or a named run
+client.evaluate_consumer_gates("plant", version=4)  # or the run standing for v4
 client.evaluate_consumer_gates("plant", consumer="reliability-dashboard")
 client.list_consumer_gate_results("plant", consumer="reliability-dashboard", version=4)
 ```
@@ -362,20 +374,20 @@ A `ConsumerGateResult` has the `consumer`, the `use_case_version` judged by, the
 Before your upstream pipeline extracts, ask stetiq for its context: what to extract against, what the graph is for, and how the Ontology currently scores. Pass it to an LLM agent's prompt, or let a static upstream pipeline read it.
 
 ```python
-context = client.run_context("plant")             # the Contract Alias's version
+context = client.run_context("plant")  # the Contract Alias's version
 context = client.run_context("plant", version=4)  # or another Ontology Version
 
-context.ontology_version         # the Ontology Version to extract against, as a suggestion
-context.use_case_version         # the latest Use Case Version (None without a Use Case)
-context.evaluation_results       # that Ontology Version's latest Evaluator results
-context.run                      # the latest finished run standing for it, or None
-context.run_evaluation_results   # its run-level results, metrics only
-context.question_executions      # per Competency Question id: .status and .rows on that run
-context.verdicts.gate_result     # the latest recorded Gate result about that run (or version), or None
+context.ontology_version  # the Ontology Version to extract against, as a suggestion
+context.use_case_version  # the latest Use Case Version (None without a Use Case)
+context.evaluation_results  # that Ontology Version's latest Evaluator results
+context.run  # the latest finished run standing for it, or None
+context.run_evaluation_results  # its run-level results, metrics only
+context.question_executions  # per Competency Question id: .status and .rows on that run
+context.verdicts.gate_result  # the latest recorded Gate result about that run (or version), or None
 context.verdicts.consumer_gate_results  # per gated Consumer id: its latest recorded verdict, or None
-context.last_attempt             # the latest ended run that consumed the version, or None
-context.last_attempt.added       # the Ontology Diff from that version to what the run added
-data = context.to_dict()         # the JSON shape below
+context.last_attempt  # the latest ended run that consumed the version, or None
+context.last_attempt.added  # the Ontology Diff from that version to what the run added
+data = context.to_dict()  # the JSON shape below
 ```
 
 The run context is built from what the tracking service already holds, so it needs only *read* permission in server mode. It carries Ontology, Use Case, metrics, counts and what the version Evaluators found, never instance data. **The built-in Evaluators that judge an Ontology Version keep their details**: the structural Evaluators (`hierarchy`, `isolated_node_types`, `orphan_concepts`, `redundancy`, `constraint_consistency`, `definitions`), `structural_answerability`, `competency_question_coverage` and `unjustified_additions`. They read only the Ontology and the Use Case, so their details name Concepts, Vocabulary Values and Competency Question ids: which added Concepts no question needs, which Concepts each question is missing and which questions regressed against the Contract Alias's version, which Concepts and Vocabulary Values lack a Definition, and which Concepts no question references. **Every other result comes with its metrics only**: the run Evaluators `conformance` and `observed_schema` read the graph, so their details can quote values observed there (a Conformance mismatch names the value it saw), and a custom Evaluator's details can hold anything. Executed Competency Questions appear as a status and a row count, not their rows. For the dropped details, read the results with `get_evaluation_results` and `get_run_evaluation_results`. An unknown Knowledge Graph or Ontology Version raises `NotFoundError`.
@@ -449,8 +461,8 @@ An upstream pipeline that may extend the Ontology should do so only where a Comp
 An Evaluator measures an Ontology Version or a Construction Run and produces metrics. The built-in ones run in the tracking service whenever a new version is registered or a run ends. Read their results with:
 
 ```python
-client.get_evaluation_results("support", 2)      # an Ontology Version
-client.get_run_evaluation_results(run.id)        # a Construction Run
+client.get_evaluation_results("support", 2)  # an Ontology Version
+client.get_run_evaluation_results(run.id)  # a Construction Run
 ```
 
 ### Custom Evaluators
@@ -509,9 +521,9 @@ If an Evaluator raises, the SDK raises `EvaluatorError`; the version or run it w
 
 ```python
 client.evaluate_gates("support", "stetiq.yaml", version=3)  # Gates from your repo config
-client.set_alias("support", "production", 3)                # Promotion (or rollback)
-client.list_promotions("support")                           # the audit log
-client.preview_gates("support")                             # Gate Previews of every run
+client.set_alias("support", "production", 3)  # Promotion (or rollback)
+client.list_promotions("support")  # the audit log
+client.preview_gates("support")  # Gate Previews of every run
 ```
 
 `evaluate_gates` sends the Gate definitions to the tracking service, which computes and records the outcome. It gates the latest Ontology Version by default, `version=N`, or a Construction Run with `run=ID`; passing both `version` and `run` raises `ConflictingArgumentsError`. Gates never block a Promotion, but the audit log records whether the version's latest Gate result passed. Gates are written in [`stetiq.yaml`](./06-stetiq-yaml.md).
