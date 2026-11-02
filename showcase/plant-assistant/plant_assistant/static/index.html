@@ -58,7 +58,7 @@ const log = document.getElementById("log");
 async function refresh() {
   try {
     const s = await (await fetch("/api/status")).json();
-    banner.textContent = s.in_use === null ? "no Ontology Version yet" : `on Ontology v${s.in_use}`;
+    banner.textContent = s.banner;
     notice.hidden = s.free_form;
     notice.textContent = s.message || "";
     input.disabled = !s.free_form;
