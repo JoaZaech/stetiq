@@ -1,3 +1,5 @@
-# Generated state of the show: the --live extraction cache, and the project's venv.
+# Generated state of the show: the --live extraction cache, the tokens compose issues,
+# and the project venv; and the stack settings (.env.example).
 .show/
 .venv/
+.env

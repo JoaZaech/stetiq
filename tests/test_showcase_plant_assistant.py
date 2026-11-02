@@ -24,6 +24,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import neo4j
 import pytest
 from fastapi.testclient import TestClient
 
@@ -190,8 +191,7 @@ def _run_show(showcase, server, client, candidate, production, assistant, **kwar
         showcase.Graphs(candidate=candidate, production=production),
         rewind_tracking=lambda: showcase.rewind_tracking(database_url),
         assistant=assistant,
-        quiet=True,
-        **kwargs,
+        **{"quiet": True, **kwargs},
     )
 
 
@@ -574,6 +574,102 @@ def test_with_the_guard_off_the_newest_version_is_taken_without_a_verdict(
     assert (restarted["in_use"], restarted["guard"]) == (1, "on")
 
 
+# --- On stage: the stack check, the presenter's pauses, the epilogue --------------------
+
+
+def test_a_container_that_is_down_is_named_before_the_act_starts(
+    show, showcase, server, client, candidate, assistant
+):
+    http, _ = server
+    runs_before = {r.id for r in client.list_runs(KG)}
+    with neo4j.GraphDatabase.driver("bolt://localhost:1", auth=("neo4j", "x")) as stopped:
+        graphs = showcase.Graphs(candidate=candidate, production=stopped)
+        with pytest.raises(showcase.StackDown) as raised:
+            showcase.run_show(
+                client,
+                graphs,
+                rewind_tracking=lambda: pytest.fail("the show rewound with a container down"),
+                assistant=assistant,
+                quiet=True,
+                check=showcase.stack_check(stetiq=http, graphs=graphs, assistant=assistant),
+            )
+
+    assert raised.value.down == ["graph-production"]
+    assert "graph-production is down" in str(raised.value)
+    assert "docker compose up -d graph-production" in str(raised.value)
+    assert {r.id for r in client.list_runs(KG)} == runs_before
+
+
+def test_the_stack_check_names_nothing_when_every_container_is_up(
+    showcase, server, candidate, production, assistant
+):
+    http, _ = server
+    graphs = showcase.Graphs(candidate=candidate, production=production)
+    assert showcase.stack_check(stetiq=http, graphs=graphs, assistant=assistant)() == []
+
+
+def test_non_interactive_pauses_never_wait_for_enter(showcase):
+    def no_terminal(prompt):
+        raise AssertionError(f"waited for Enter: {prompt}")
+
+    showcase.presenter_pause(interactive=False, read=no_terminal)("Act 1, without stetiq")
+
+
+def test_interactive_pauses_wait_for_enter_and_carry_on_when_input_ends(showcase):
+    prompts = []
+    showcase.presenter_pause(interactive=True, read=prompts.append)("Act 1, without stetiq")
+
+    def ended(prompt):
+        raise EOFError
+
+    showcase.presenter_pause(interactive=True, read=ended)("Act 2, with stetiq")
+    assert len(prompts) == 1
+    assert "Enter" in prompts[0]
+    assert "Act 1, without stetiq" in prompts[0]
+
+
+@pytest.fixture(scope="module")
+def epilogue(show, showcase, server, production):
+    """After the show: the hand edit to the production graph, then its Observation."""
+    observer = _remote(server, "ops", "edit", graph_source=Neo4jGraphSource(production))
+    return showcase.run_epilogue(observer, production, quiet=True)
+
+
+def test_the_epilogue_hand_edit_adds_spare_parts_and_deletes_the_done_follow_ups(
+    epilogue, production
+):
+    assert (epilogue.spare_parts_added, epilogue.follow_ups_deleted) == (3, 6)
+    assert len(_names(production, "SparePart")) == 3
+    records, _, _ = production.execute_query(
+        "MATCH (f:FollowUp) RETURN f.status AS status, count(*) AS n"
+    )
+    assert {r["status"]: r["n"] for r in records} == {"open": 6}
+
+
+def test_the_epilogue_records_drift_against_production(epilogue, client):
+    drift = epilogue.outcome.drift
+    assert drift is not None
+    assert (drift.contract_alias, drift.ontology_version) == ("production", 3)
+    assert {(f.kind.value, f.subject) for f in drift.structural} == {
+        ("undeclared", "SparePart"),
+        ("undeclared", "SparePart.name"),
+        ("undeclared", "SparePart.stock"),
+    }
+    # Against the previous Observation (Act 3's run), beyond max_count_drop 0.25.
+    assert {
+        (f.kind.value, f.subject, f.previous_count, f.observed_count) for f in drift.statistical
+    } == {
+        ("count_drop", "FollowUp", 12, 6),
+        ("count_drop", "HAS_FOLLOW_UP", 12, 6),
+        ("count_drop", "ASSIGNED_TO", 20, 14),
+    }
+    assert drift.id in {e.id for e in client.list_drift_events(KG)}
+    assert epilogue.line == (
+        "hand edit: +3 SparePart, −6 done FollowUp   Drift ⚠ against production -> v3 "  # noqa: RUF001 - the minus sign the show writes
+        "(3 structural, 3 statistical)"
+    )
+
+
 # --- --act N: the show from the beginning of an act -----------------------------------
 # Last in the module: these rewind stetiq and both graphs, which the tests above read.
 
@@ -584,14 +680,30 @@ def test_starting_at_an_act_reaches_the_state_the_acts_before_it_leave(
 ):
     # `show.py --act N` is a new process, with a client of its own.
     client = _remote(server, "ci-bot", "edit", graph_source=Neo4jGraphSource(candidate))
+    beats = []
     resumed = _run_show(
-        showcase, server, client, candidate, production, assistant, start_act=start_act
+        showcase,
+        server,
+        client,
+        candidate,
+        production,
+        assistant,
+        start_act=start_act,
+        quiet=False,
+        pause=beats.append,
     )
 
     for n in (0, 2, 3):
         assert resumed.acts[n].line == show.acts[n].line
         assert resumed.acts[n].banner == show.acts[n].banner
     assert resumed.without_stetiq == []
+    # The presenter is paused only at the beats the audience sees: each act it plays, and
+    # each scripted question in it; the acts replayed before it pass without a pause.
+    played = {2: ["Act 2, with stetiq"], 3: []}[start_act] + ["Act 3, the fix"]
+    assert [b for b in beats if b.startswith("Act")] == played
+    assert [b for b in beats if not b.startswith("Act")] == [
+        f"ask: {q}" for _ in played for q in (LINE_2, SUPPLIERS)
+    ]
     # The Act 2 the show starts from (or replays) left production on v1 and its graph.
     assert resumed.acts[2].status["in_use"] == 1
     assert resumed.acts[2].production_run == resumed.acts[0].run.id

@@ -1,0 +1,14 @@
+# The assistant image's build context is the repo root: send stetiq's package and the
+# showcase only.
+*
+!pyproject.toml
+!uv.lock
+!README.md
+!src/
+!showcase/plant-assistant/
+src/stetiq/_frontend/
+**/__pycache__
+**/*.pyc
+showcase/plant-assistant/.venv/
+showcase/plant-assistant/.show/
+showcase/plant-assistant/.env

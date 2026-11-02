@@ -5,18 +5,26 @@
     uv run python show.py --live       # calls Claude (the `claude` CLI) on a cache miss
     uv run python show.py --act 2      # starts at the beginning of Act 2
     uv run python show.py --reset      # rewinds stetiq, both graphs and the assistant
+    uv run python show.py --epilogue   # after Act 3, a hand edit to production: Drift
+    uv run python show.py --no-pause   # straight through, without waiting for Enter
+
+The show pauses for Enter at each beat the audience sees (each act, each scripted
+question), and checks every container before each act, naming any that is down.
 
 stetiq is a remote server (`STETIQ_TRACKING_URI`, an API token in `STETIQ_TOKEN`); the
 pipeline writes two Neo4j servers, the candidate graph every Construction Run builds
 (`PLANT_CANDIDATE_URI`) and the production graph a promoted run is deployed to
 (`PLANT_PRODUCTION_URI`), with `NEO4J_USER` / `NEO4J_PASSWORD`. The maintenance
 assistant runs at `PLANT_ASSISTANT_URL`; the show asks it the scripted questions over
-its HTTP API. STORY.md tells the story and its running order.
+its HTTP API. Each one not set comes from the compose stack (docker-compose.yml): the
+host ports and password in `.env`, and the token compose issued to `.show/tokens/show`.
+README.md tells how to run it on stage; STORY.md tells the story and its running order.
 
 The show is played twice from the start: once without stetiq (Acts 0 and 1), then, after
-a rewind, with it (Acts 0, 2 and 3). The rewind empties stetiq's tracking database
-(`STETIQ_DATABASE_URL`, reachable from where the show runs; its API tokens are kept, so
-the server's clients stay signed in) and both graphs, and resets the assistant, with its
+a rewind, with it (Acts 0, 2 and 3). The rewind empties stetiq's tracking database (its
+API tokens are kept, so the server's clients stay signed in): inside the compose stack's
+stetiq container, or at `STETIQ_DATABASE_URL` when that is set. It also empties both
+graphs, and resets the assistant, with its
 Connector guard off for the first pass and on for the second. `--act N` rewinds and
 replays the acts before N, so it starts Act N from the state they leave.
 
@@ -42,7 +50,10 @@ accepts v3 on its next poll, and both scripted questions answer on it.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import logging
 import os
+import subprocess
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -56,7 +67,8 @@ from dataclasses import replace  # noqa: E402
 
 import httpx  # noqa: E402
 import neo4j  # noqa: E402
-import sqlalchemy  # noqa: E402
+import neo4j.exceptions  # noqa: E402
+import yaml  # noqa: E402
 from plant_assistant.assistant import Guard, percent  # noqa: E402
 from plant_assistant.deploy import PRODUCTION_DATABASE, deploy  # noqa: E402
 from plant_assistant.evaluators import Documented, ReportCoverage  # noqa: E402
@@ -67,6 +79,7 @@ from plant_assistant.pipeline import (  # noqa: E402
     Round,
     run_round,
 )
+from plant_assistant.rewind import rewind_tracking  # noqa: E402
 
 import stetiq  # noqa: E402
 from stetiq import CompetencyQuestion, GraphSourceScope  # noqa: E402
@@ -87,8 +100,13 @@ Competency Questions are in `use-case.yaml`."""
 
 ROUND_LABEL: dict[Round, str] = {"v1": "v1", "v2": "prompt v2", "fix": "fix"}
 ACTS = (0, 1, 2, 3)
-# The table of the server's API tokens: the one a rewind keeps.
-API_TOKENS_TABLE = "api_tokens"
+ACT_TITLES = {
+    0: "Act 0, Monday morning",
+    1: "Act 1, without stetiq",
+    2: "Act 2, with stetiq",
+    3: "Act 3, the fix",
+}
+REWIND = "Rewind: stetiq, both graphs and the assistant back to the start"
 
 LINE_2 = "Why did Line 2's machines break down?"
 SUPPLIERS = "Which suppliers' components keep failing?"
@@ -183,11 +201,15 @@ class Show:
         quiet: bool,
         rewind_tracking: Callable[[], None],
         assistant: httpx.Client | None = None,
+        check: Callable[[], list[str]] | None = None,
+        pause: Callable[[str], None] | None = None,
     ) -> None:
         self.client = client
         self.graphs = graphs
         self.rewind_tracking = rewind_tracking
         self.assistant = assistant
+        self.check = check
+        self.pause = pause
         self.extraction: LlmMode = extraction
         self.quiet = quiet
         self.state = ShowState()
@@ -196,6 +218,19 @@ class Show:
     def say(self, *lines: str) -> None:
         if lines and not self.quiet:
             print(*lines, sep="\n", flush=True)
+
+    def beat(self, label: str) -> None:
+        """A beat the audience sees: the presenter talks, then presses Enter. A quiet
+        replay has none."""
+        if self.pause is not None and not self.quiet:
+            self.pause(label)
+
+    def ready(self, act: int) -> None:
+        """Before `act`: every container the show needs is up, or `StackDown` names the
+        ones that are not."""
+        down = self.check() if self.check is not None else []
+        if down:
+            raise StackDown(down, act)
 
     def declare(self) -> None:
         """The Knowledge Graph, its v1 Ontology, its Use Case, and its Graph Source scope
@@ -232,21 +267,37 @@ class Show:
         if start_act not in ACTS:
             raise ValueError(f"the show has Acts {ACTS[0]} to {ACTS[-1]}, not {start_act}")
         quiet = self.quiet
+        self.ready(start_act)
         if start_act <= 1:
             self.rewind(guard="off")
             self.quiet = quiet or start_act > 0
-            act_0 = self.act_0()
+            act_0 = self.play_act(0, self.act_0)
             self.quiet = quiet
-            self.state.without_stetiq = [act_0, self.act_1()]
-            self.say("", "Rewind: stetiq, both graphs and the assistant back to the start")
+            self.state.without_stetiq = [act_0, self.play_act(1, self.act_1)]
+            self.beat(REWIND)
+            self.say("", REWIND)
+            self.ready(2)
         self.rewind(guard="on")
         for number, act in ((0, self.act_0), (2, self.act_2), (3, self.act_3)):
             # Before `start_act`, an act replays without a word: the show starts after it.
             # Act 0 after the rewind always does: the audience saw it in the first pass.
             self.quiet = quiet or number == 0 or number < start_act
-            act()
+            self.play_act(number, act)
         self.quiet = quiet
         return self.state
+
+    def play_act(self, number: int, act: Callable[[], ActState]) -> ActState:
+        """`act`, once every container is up, after its beat."""
+        self.ready(number)
+        self.beat(ACT_TITLES[number])
+        try:
+            return act()
+        except (*_UNREACHABLE, stetiq.StetiqError, AssistantError) as e:
+            # A container that went down during the act: name it, not the error it caused.
+            down = self.check() if self.check is not None else []
+            if down:
+                raise StackDown(down, number) from e
+            raise
 
     def construct(self, round_: Round, *, ontology_version: int | None = None):
         built = run_round(
@@ -274,7 +325,7 @@ class Show:
         if promoted:
             parts += [f"promoted: production -> v{gates.ontology_version}", "deployed"]
         line = "   ".join(parts)
-        self.say("", "Act 0, Monday morning", line)
+        self.say("", ACT_TITLES[0], line)
         for o in gates.outcomes:
             if not o.passed:
                 self.say(f"    Gate {o.gate.name} failed: {'; '.join(o.reasons[:3])}")
@@ -304,7 +355,7 @@ class Show:
         line = "   ".join(
             [ROUND_LABEL["v2"], f"tests {_mark(tested)}", *(["deployed"] if tested else [])]
         )
-        self.say("", "Act 1, without stetiq", line)
+        self.say("", ACT_TITLES[1], line)
         act = ActState(
             1, "v2", line, run, None, False, tested, production_run=self.state.production_run
         )
@@ -319,6 +370,7 @@ class Show:
             self.say(f"  assistant: {status['banner']}")
             answers: dict[str, Answer] = {}
             for question in SCRIPTED_QUESTIONS:
+                self.beat(f"ask: {question}")
                 reply = _json(self.assistant.post("/api/ask", json={"question": question}))
                 answers[question] = Answer(**reply)
                 self.say(f"  Q: {question}", f"  A: {reply['answer']}")
@@ -386,7 +438,7 @@ class Show:
         assistant's Connector guard refuses v2 and stays on v1."""
         self.declare_parts_suppliers()
         act = self.gate(2, "v2", self.construct("v2"))
-        self.say("", "Act 2, with stetiq", act.line)
+        self.say("", ACT_TITLES[2], act.line)
         self.say(*_detail_lines(act))
         return self.consult_assistant(act)
 
@@ -398,7 +450,7 @@ class Show:
         poll."""
         fix = self.client.register_ontology(KG, ONTOLOGY / "fix.yaml")
         act = self.gate(3, "fix", self.construct("fix", ontology_version=fix.number))
-        self.say("", "Act 3, the fix", act.line)
+        self.say("", ACT_TITLES[3], act.line)
         self.say(*_detail_lines(act))
         return self.consult_assistant(act)
 
@@ -469,20 +521,144 @@ def _detail_lines(act: ActState) -> list[str]:
     return lines
 
 
-def rewind_tracking(database_url: str) -> None:
-    """Empty the stetiq server's tracking database at `database_url`, keeping its API
-    tokens. stetiq has no call to delete a Knowledge Graph, so the rewind is an
-    operator's, on the database itself: every table but the tokens' is emptied."""
-    engine = sqlalchemy.create_engine(database_url)
-    try:
-        tables = sqlalchemy.MetaData()
-        tables.reflect(engine)
-        with engine.begin() as connection:
-            for table in reversed(tables.sorted_tables):
-                if table.name != API_TOKENS_TABLE:
-                    connection.execute(table.delete())
-    finally:
-        engine.dispose()
+class StackDown(Exception):
+    """A container the show needs is down; `down` names each, as compose does."""
+
+    def __init__(self, down: list[str], act: int) -> None:
+        self.down = down
+        self.act = act
+        names = ", ".join(down)
+        super().__init__(
+            f"{names} {'is' if len(down) == 1 else 'are'} down: start "
+            f"{'it' if len(down) == 1 else 'them'} with `docker compose up -d "
+            f"{' '.join(down)}`, then `uv run python show.py --act {act}`"
+        )
+
+
+# What a probe raises when its container does not answer.
+_UNREACHABLE: tuple[type[Exception], ...] = (
+    OSError,
+    httpx.HTTPError,
+    neo4j.exceptions.DriverError,
+    neo4j.exceptions.Neo4jError,
+)
+
+
+def stack_check(
+    *, stetiq: httpx.Client, graphs: Graphs, assistant: httpx.Client
+) -> Callable[[], list[str]]:
+    """The check the show runs before each act: it returns the compose services that do
+    not answer (none when the stack is up). `stetiq` and `assistant` are HTTP clients on
+    the stetiq server's and the assistant's base URLs."""
+
+    def http(client: httpx.Client, path: str) -> Callable[[], object]:
+        return lambda: client.get(path).raise_for_status()
+
+    probes: dict[str, Callable[[], object]] = {
+        "stetiq": http(stetiq, "/health"),
+        "graph-candidate": graphs.candidate.verify_connectivity,
+        "graph-production": graphs.production.verify_connectivity,
+        "assistant": http(assistant, "/api/status"),
+    }
+
+    def check() -> list[str]:
+        down = []
+        for service, probe in probes.items():
+            try:
+                probe()
+            except _UNREACHABLE:
+                down.append(service)
+        return down
+
+    return check
+
+
+def presenter_pause(
+    *, interactive: bool, read: Callable[[str], object] = input
+) -> Callable[[str], None]:
+    """The presenter's pause at a beat: wait for Enter (`read`) when `interactive`, never
+    otherwise. When the input ends (Enter piped in, then EOF), the show carries on."""
+
+    def pause(label: str) -> None:
+        if not interactive:
+            return
+        with contextlib.suppress(EOFError):
+            read(f"\n  [Enter] {label} ")
+        if read is input and not sys.stdin.isatty():
+            print()  # piped Enter is not echoed: end the prompt's line
+
+    return pause
+
+
+# --- The epilogue: a hand edit to the production graph shows up as Drift ----------------
+
+EPILOGUE_TITLE = "Epilogue, a hand edit to graph-production"
+# The spare parts someone adds to the production graph by hand: a type no Ontology
+# Version declares.
+SPARE_PARTS = (
+    {"name": "Spindle bearing 6205-2RS", "stock": 2},
+    {"name": "Hydraulic hose DN13", "stock": 4},
+    {"name": "Chuck valve 5/2", "stock": 1},
+)
+
+
+@dataclass(frozen=True)
+class Epilogue:
+    """What the epilogue did to the production graph, and the Observation of it."""
+
+    spare_parts_added: int
+    follow_ups_deleted: int
+    outcome: stetiq.ObservationOutcome
+    line: str
+    details: tuple[str, ...]
+
+
+def hand_edit(production: neo4j.Driver) -> tuple[int, int]:
+    """Someone edits the production graph by hand: adds `SparePart` nodes and deletes the
+    follow-ups that are done. Returns the nodes added and deleted."""
+    _, added, _ = production.execute_query(
+        "UNWIND $parts AS part CREATE (p:SparePart) SET p = part",
+        parts=list(SPARE_PARTS),
+        database_=PRODUCTION_DATABASE,
+    )
+    _, deleted, _ = production.execute_query(
+        "MATCH (f:FollowUp {status: 'done'}) DETACH DELETE f", database_=PRODUCTION_DATABASE
+    )
+    return added.counters.nodes_created, deleted.counters.nodes_deleted
+
+
+def run_epilogue(
+    observer: stetiq.Client,
+    production: neo4j.Driver,
+    *,
+    quiet: bool = False,
+    pause: Callable[[str], None] | None = None,
+) -> Epilogue:
+    """The optional epilogue, after Act 3: the hand edit, then an Observation of the
+    production graph (`observer`'s Graph Source must be `production`) with the Drift
+    thresholds of `stetiq.yaml`. stetiq compares it with the `production` Contract
+    Alias's Ontology Version (structural Drift) and with the previous Observation
+    (statistical Drift), and records any Drift event."""
+    if pause is not None and not quiet:
+        pause(EPILOGUE_TITLE)
+    added, deleted = hand_edit(production)
+    thresholds = stetiq.DriftThresholds.from_dict(yaml.safe_load(CONFIG.read_text())["drift"])
+    outcome = observer.observe(KG, thresholds=thresholds)
+    edit = f"hand edit: +{added} SparePart, \N{MINUS SIGN}{deleted} done FollowUp"
+    drift = outcome.drift
+    if drift is None:
+        line, details = f"{edit}   No Drift", ()
+    else:
+        line = (
+            f"{edit}   Drift ⚠ against {drift.contract_alias} -> v{drift.ontology_version} "
+            f"({len(drift.structural)} structural, {len(drift.statistical)} statistical)"
+        )
+        details = tuple(
+            f"    {f.kind.value:<15} {f.subject}  {f.detail}".rstrip() for f in drift.findings
+        )
+    if not quiet:
+        print("", EPILOGUE_TITLE, line, *details, sep="\n", flush=True)
+    return Epilogue(added, deleted, outcome, line, details)
 
 
 def run_show(
@@ -494,6 +670,8 @@ def run_show(
     quiet: bool = False,
     assistant: httpx.Client | None = None,
     start_act: int = 0,
+    check: Callable[[], list[str]] | None = None,
+    pause: Callable[[str], None] | None = None,
 ) -> ShowState:
     """Run the show headless: Acts 0 and 1 without stetiq, the rewind, then Acts 0, 2
     and 3 with it; or from the beginning of `start_act` (the acts before it replay
@@ -511,7 +689,12 @@ def run_show(
     `assistant` is an HTTP client on the maintenance assistant's base URL (an
     `httpx.Client(base_url=...)`, or a FastAPI TestClient over its app); after an act
     the show reads its banner and asks it the scripted questions, over its HTTP API
-    only."""
+    only.
+
+    `check` (e.g. `stack_check(...)`) runs before the show and before each act; when it
+    names a container that is down, the show stops with `StackDown`. `pause` is called
+    at each beat the audience sees (e.g. `presenter_pause(...)`), never in a quiet
+    replay."""
     show = Show(
         client,
         graphs,
@@ -519,13 +702,80 @@ def run_show(
         quiet=quiet,
         rewind_tracking=rewind_tracking,
         assistant=assistant,
+        check=check,
+        pause=pause,
     )
     return show.play(start_act)
 
 
-def _driver(uri_env: str, default: str) -> neo4j.Driver:
-    auth = (os.environ.get("NEO4J_USER", "neo4j"), os.environ.get("NEO4J_PASSWORD", ""))
-    return neo4j.GraphDatabase.driver(os.environ.get(uri_env, default), auth=auth)
+# --- On stage: show.py against the compose stack ----------------------------------------
+
+ENV_FILE = SHOWCASE_DIR / ".env"
+# The edit token compose's `tokens` service issues for the show once the server is up.
+TOKEN_FILE = SHOWCASE_DIR / ".show" / "tokens" / "show"
+REWIND_SCRIPT = SHOWCASE_DIR / "plant_assistant" / "rewind.py"
+
+
+class RewindError(Exception):
+    """The rewind inside the stetiq container failed."""
+
+
+def _dotenv(path: Path = ENV_FILE) -> dict[str, str]:
+    """The `KEY=value` lines of compose's `.env` (no quoting, no interpolation)."""
+    if not path.exists():
+        return {}
+    pairs = (
+        line.split("=", 1)
+        for line in path.read_text().splitlines()
+        if "=" in line and not line.lstrip().startswith("#")
+    )
+    return {key.strip(): value.strip() for key, value in pairs}
+
+
+def stage_settings(environ: dict[str, str] | None = None) -> dict[str, str]:
+    """Where show.py finds the stack: the environment, else what compose's `.env` sets up
+    (its host ports and the Neo4j password), and the token compose issued for the show."""
+    env = dict(os.environ if environ is None else environ)
+    dotenv = _dotenv()
+
+    def port(name: str, default: str) -> str:
+        return env.get(name) or dotenv.get(name) or default
+
+    token = env.get("STETIQ_TOKEN") or (
+        TOKEN_FILE.read_text().strip() if TOKEN_FILE.exists() else ""
+    )
+    return {
+        "STETIQ_TRACKING_URI": env.get("STETIQ_TRACKING_URI")
+        or f"http://localhost:{port('STETIQ_PORT', '5000')}",
+        "STETIQ_TOKEN": token,
+        "PLANT_CANDIDATE_URI": env.get("PLANT_CANDIDATE_URI")
+        or f"bolt://localhost:{port('CANDIDATE_PORT', '7687')}",
+        "PLANT_PRODUCTION_URI": env.get("PLANT_PRODUCTION_URI")
+        or f"bolt://localhost:{port('PRODUCTION_PORT', '7688')}",
+        "PLANT_ASSISTANT_URL": env.get("PLANT_ASSISTANT_URL")
+        or f"http://localhost:{port('ASSISTANT_PORT', '8000')}",
+        "NEO4J_USER": env.get("NEO4J_USER") or "neo4j",
+        "NEO4J_PASSWORD": env.get("NEO4J_PASSWORD") or dotenv.get("NEO4J_PASSWORD", ""),
+        "STETIQ_DATABASE_URL": env.get("STETIQ_DATABASE_URL", ""),
+    }
+
+
+def rewind_in_container() -> None:
+    """The rewind as compose runs it: inside the stetiq container, on the SQLite file in
+    its volume, next to the server that holds it open (the host never opens that file)."""
+    try:
+        done = subprocess.run(
+            ["docker", "compose", "exec", "-T", "stetiq", "python", "-"],
+            input=REWIND_SCRIPT.read_text(),
+            text=True,
+            capture_output=True,
+            cwd=SHOWCASE_DIR,
+            check=False,
+        )
+    except FileNotFoundError:
+        raise RewindError("the rewind needs the docker CLI on the PATH") from None
+    if done.returncode != 0:
+        raise RewindError(f"the rewind in the stetiq container failed: {done.stderr.strip()}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -556,47 +806,95 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="only rewind: stetiq, both graphs and the assistant back to the start",
     )
+    parser.add_argument(
+        "--epilogue",
+        action="store_true",
+        help="after Act 3, hand-edit the production graph and observe it: Drift",
+    )
+    parser.add_argument(
+        "--no-pause",
+        action="store_true",
+        help="run straight through without waiting for Enter at each beat",
+    )
     args = parser.parse_args(argv)
+    # The driver's retry warnings while a Neo4j container is down: the stack check names it.
+    logging.getLogger("neo4j").setLevel(logging.ERROR)
     mode: LlmMode = "record" if args.record else "live" if args.live else "replay"
-    database_url = os.environ.get("STETIQ_DATABASE_URL")
-    if not database_url:
+    settings = stage_settings()
+    if not settings["STETIQ_TOKEN"]:
         print(
-            "error: set STETIQ_DATABASE_URL to the stetiq server's tracking database, "
-            "which the show rewinds",
+            f"error: no API token: set STETIQ_TOKEN, or run `docker compose up`, which "
+            f"issues one to {TOKEN_FILE.relative_to(SHOWCASE_DIR)}",
             file=sys.stderr,
         )
         return 2
+    database_url = settings["STETIQ_DATABASE_URL"]
+    rewind = (lambda: rewind_tracking(database_url)) if database_url else rewind_in_container
+    pause = presenter_pause(interactive=not args.no_pause)
+    auth = (settings["NEO4J_USER"], settings["NEO4J_PASSWORD"])
+    tracking_uri = settings["STETIQ_TRACKING_URI"]
     with (
-        _driver("PLANT_CANDIDATE_URI", "bolt://localhost:7687") as candidate,
-        _driver("PLANT_PRODUCTION_URI", "bolt://localhost:7688") as production,
-        httpx.Client(
-            base_url=os.environ.get("PLANT_ASSISTANT_URL", "http://localhost:8000"), timeout=120
-        ) as assistant,
+        neo4j.GraphDatabase.driver(
+            settings["PLANT_CANDIDATE_URI"], auth=auth, max_transaction_retry_time=5
+        ) as candidate,
+        neo4j.GraphDatabase.driver(
+            settings["PLANT_PRODUCTION_URI"], auth=auth, max_transaction_retry_time=5
+        ) as production,
+        httpx.Client(base_url=settings["PLANT_ASSISTANT_URL"], timeout=120) as assistant,
+        httpx.Client(base_url=tracking_uri, timeout=5) as stetiq_http,
     ):
-        client = stetiq.Client(graph_source=Neo4jGraphSource(candidate))
+        client = stetiq.Client(
+            tracking_uri, token=settings["STETIQ_TOKEN"], graph_source=Neo4jGraphSource(candidate)
+        )
         graphs = Graphs(candidate, production)
+        check = stack_check(stetiq=stetiq_http, graphs=graphs, assistant=assistant)
         try:
             if args.reset:
-                Show(
+                show = Show(
                     client,
                     graphs,
                     extraction=mode,
                     quiet=False,
-                    rewind_tracking=lambda: rewind_tracking(database_url),
+                    rewind_tracking=rewind,
                     assistant=assistant,
-                ).rewind(guard="on")
+                    check=check,
+                )
+                show.ready(0)
+                show.rewind(guard="on")
                 print("Rewound: stetiq, both graphs and the assistant are back at the start")
                 return 0
             run_show(
                 client,
                 graphs,
-                rewind_tracking=lambda: rewind_tracking(database_url),
+                rewind_tracking=rewind,
                 extraction=mode,
                 assistant=assistant,
                 start_act=args.act,
+                check=check,
+                pause=pause,
             )
-        except (stetiq.StetiqError, ExtractionError, AssistantError, httpx.HTTPError) as e:
+            if args.epilogue:
+                observer = stetiq.Client(
+                    tracking_uri,
+                    token=settings["STETIQ_TOKEN"],
+                    graph_source=Neo4jGraphSource(production),
+                )
+                run_epilogue(observer, production, pause=pause)
+        except StackDown as e:
             print(f"error: {e}", file=sys.stderr)
+            return 1
+        except (
+            stetiq.StetiqError,
+            ExtractionError,
+            AssistantError,
+            RewindError,
+            httpx.HTTPError,
+            neo4j.exceptions.DriverError,
+            neo4j.exceptions.Neo4jError,
+        ) as e:
+            # A container that went down mid-act: name it rather than the error it caused.
+            down = check()
+            print(f"error: {StackDown(down, args.act) if down else e}", file=sys.stderr)
             return 1
     return 0
 
