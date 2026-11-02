@@ -2,9 +2,10 @@
 
 `Client.run_context` composes it from existing service calls; `stetiq context` prints
 `RunContext.to_dict()` as JSON for upstream pipelines that don't use the Python SDK. It
-holds Ontology, Use Case, metrics and counts only, never instance data (ADR 0001):
-evaluation results come without their details, which can quote observed values
-(`Client.run_context` drops them; `to_dict` writes the results in their wire form).
+holds Ontology, Use Case, metrics and counts, never instance data (ADR 0001): only the
+built-ins that judge an Ontology Version keep their details (ADR 0010); every other
+result comes without them, since they can quote observed values (`Client.run_context`
+drops them; `to_dict` writes the results in their wire form).
 """
 
 from __future__ import annotations
@@ -28,8 +29,8 @@ from stetiq.tracking.entities import (
 class RunContext:
     """- `ontology_version`: the version to extract against, as a suggestion.
     - `use_case_version`: the latest Use Case Version (None without a Use Case).
-    - `evaluation_results`: the latest result of every Evaluator for that version,
-      metrics only (`details` is always empty).
+    - `evaluation_results`: the latest result of every Evaluator for that version, with
+      `details` only for the built-ins in `RUN_CONTEXT_DETAIL_EVALUATORS`.
     - `run`: the latest finished Construction Run standing for that version (None when
       there is none), `run_evaluation_results` its run-level results (metrics only), and
       `question_executions` each executed Competency Question's status and row count on

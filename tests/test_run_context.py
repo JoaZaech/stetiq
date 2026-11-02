@@ -150,6 +150,13 @@ def test_the_context_carries_the_executed_questions_of_the_latest_finished_run(
     assert questions["orders-per-machine"]["execution"] == {"status": "passed", "rows": 2}
     assert questions["machine-names"]["execution"] == {"status": "failed", "rows": 0}
     assert questions["unused"]["execution"] is None  # no query, never executed
+    # Executed questions stay a status and a row count: their details are dropped.
+    [execution] = [
+        r
+        for r in data["run"]["evaluation_results"]
+        if r["evaluator"] == "competency_question_execution"
+    ]
+    assert execution["details"] == []
 
 
 def test_a_run_standing_for_another_version_is_not_the_contexts_run(client, plant, graph_source):
@@ -189,6 +196,18 @@ class QuotesTheGraph(stetiq.ConstructionRunEvaluator):
         )
 
 
+class VersionQuotesTheGraph(stetiq.OntologyVersionEvaluator):
+    """A custom version Evaluator whose free-form details hold a graph value anyway."""
+
+    name = "version_quotes_the_graph"
+
+    def evaluate(self, version):
+        return stetiq.Evaluation(
+            metrics={"quoted": 1},
+            details=[stetiq.Detail("Press 9", "remembered", data={"value": "Press 9"})],
+        )
+
+
 def keys(value):
     if isinstance(value, dict):
         return set(value) | {k for v in value.values() for k in keys(v)}
@@ -197,7 +216,7 @@ def keys(value):
     return set()
 
 
-def test_the_context_carries_metrics_only_never_values_from_the_graph(client, graph_source):
+def test_the_context_never_carries_values_from_the_graph(client, graph_source):
     client.create_knowledge_graph("orders", ontology=VOCABULARY_ONTOLOGY)
     client.set_evolution_mode("orders", "strict")
     client.bind_graph_source("orders", GraphSourceScope(database="neo4j"))
@@ -206,6 +225,7 @@ def test_the_context_carries_metrics_only_never_values_from_the_graph(client, gr
     with client.start_run("orders") as run:
         pass
     client.evaluate_run(run.id, evaluators=[QuotesTheGraph()])
+    client.evaluate("orders", 1, evaluators=[VersionQuotesTheGraph()])
     recorded = client.get_run_evaluation_results(run.id)
     # The recorded results do quote observed values: the context must drop them.
     [conformance] = [r for r in recorded if r.evaluator == "conformance"]
@@ -216,15 +236,19 @@ def test_the_context_carries_metrics_only_never_values_from_the_graph(client, gr
 
     assert context.run is not None and context.run.id == run.id
     assert all(r.details == () for r in context.run_evaluation_results)
-    assert all(r.details == () for r in context.evaluation_results)
     assert {r["evaluator"] for r in data["run"]["evaluation_results"]} >= {
         "conformance",
+        "observed_schema",
         "quotes_the_graph",
     }
-    results = data["evaluation_results"] + data["run"]["evaluation_results"]
-    assert all(r["details"] == [] for r in results)
+    assert all(r["details"] == [] for r in data["run"]["evaluation_results"])
+    [custom] = [
+        r for r in data["evaluation_results"] if r["evaluator"] == "version_quotes_the_graph"
+    ]
+    assert custom["details"] == []
     assert {"value", "count"}.isdisjoint(keys(data))
     assert "Press 7" not in json.dumps(data)
+    assert "Press 9" not in json.dumps(data)
 
 
 def test_without_a_use_case_the_context_has_none(client):
@@ -266,3 +290,33 @@ def test_a_read_token_is_enough_for_the_context(tmp_path):
 
     assert context.ontology_version.number == 1
     assert context.run is not None
+    [definitions] = [r for r in context.evaluation_results if r.evaluator == "definitions"]
+    assert definitions.details  # a reader sees what the version Evaluators found
+
+
+def test_the_context_names_what_each_version_evaluator_found(client, plant, graph_source):
+    finish_a_run(client, graph_source)
+    graph_source.add_node(["Shift"])  # an evolving run adds a Concept no question needs
+    with client.start_run("plant"):
+        pass
+
+    data = client.run_context("plant", version=2).to_dict()
+
+    found = {
+        r["evaluator"]: {(d["metric"], d["item"]) for d in r["details"]}
+        for r in data["evaluation_results"]
+    }
+    assert ("unjustified_additions", "Shift") in found["unjustified_additions"]
+    assert ("untraced_concepts", "Shift") in found["competency_question_coverage"]
+    assert ("concepts_without_definition", "Machine") in found["definitions"]
+    assert ("isolated_node_types", "Shift") in found["isolated_node_types"]
+    assert ("orphan_node_types", "Shift") in found["orphan_concepts"]
+    [answerability] = [
+        r for r in data["evaluation_results"] if r["evaluator"] == "structural_answerability"
+    ]
+    assert {d["item"]: d["data"] for d in answerability["details"]}["machine-names"] == {
+        "status": "answerable",
+        "source": "query",
+        "required": ["Machine", "Machine.name"],
+        "missing": [],
+    }

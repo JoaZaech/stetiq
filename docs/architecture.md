@@ -76,6 +76,7 @@ An Ontology Diff `Change` states what it concerns as fields: `owner`, `owner_kin
 
 - `Client.register_evaluator` and the one-off `evaluators=` reject these names, before running anything, through the service's `check_not_built_in`, so the message is the same as the service's. `record_evaluation` refuses them too, with one exception: `competency_question_execution` is accepted on a `construction_run` subject, because it is a built-in that has to run on the SDK side.
 - Gates name these Evaluators and their metrics in users' `stetiq.yaml`, so **renaming one is a breaking change**. A new built-in must be added to this set.
+- The set is the union of two halves (ADR 0010): `RUN_CONTEXT_DETAIL_EVALUATORS`, the built-ins that judge an Ontology Version from the Ontology and Use Case alone, whose details the Run Context carries, and `RUN_CONTEXT_WITHHELD_EVALUATORS`, the ones that read the Graph Source, whose details it drops (as it drops every custom Evaluator's). A new built-in goes in exactly one half, by what it reads.
 - `get_evaluation_results` returns the latest result per (evaluator, parameters), so an evaluator name can appear more than once in the list.
 
 ## Repo config (`stetiq.yaml`)

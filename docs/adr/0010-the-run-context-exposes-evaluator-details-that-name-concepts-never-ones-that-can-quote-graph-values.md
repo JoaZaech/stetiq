@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # The Run Context exposes Evaluator details that name Concepts, never ones that can quote graph values

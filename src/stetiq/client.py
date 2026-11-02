@@ -67,7 +67,11 @@ from stetiq.tracking import (
     UseCaseVersion,
 )
 from stetiq.tracking.entities import DriftEvent, EvolutionMode, ObservationOutcome
-from stetiq.tracking.service import check_not_built_in, check_proposed_definitions
+from stetiq.tracking.service import (
+    RUN_CONTEXT_DETAIL_EVALUATORS,
+    check_not_built_in,
+    check_proposed_definitions,
+)
 from stetiq.use_case import (
     CompetencyQuestion,
     UseCase,
@@ -129,9 +133,14 @@ def service_for_uri(tracking_uri: str, *, token: str | None = None) -> TrackingS
 
 
 def _without_details(results: Sequence[EvaluationResult]) -> tuple[EvaluationResult, ...]:
-    """Results without their details, which can quote observed values: the one place the
-    run context drops them, so neither `RunContext` nor its JSON carries any."""
-    return tuple(dataclasses.replace(r, details=()) for r in results)
+    """Results without the details that can quote observed values: the one place the run
+    context drops them, so neither `RunContext` nor its JSON carries any. Only the
+    built-ins in `RUN_CONTEXT_DETAIL_EVALUATORS` keep theirs (ADR 0010); custom
+    Evaluators cannot take those names."""
+    return tuple(
+        r if r.evaluator in RUN_CONTEXT_DETAIL_EVALUATORS else dataclasses.replace(r, details=())
+        for r in results
+    )
 
 
 def _to_ontology(ontology: OntologyInput) -> Ontology:
@@ -411,9 +420,11 @@ class Client:
         latest Use Case Version (its Consumers, Tasks and Competency Questions), that
         Ontology Version's evaluation results, and the latest finished Construction Run
         standing for it with its run-level results and each executed Competency
-        Question's status and row count. Only Ontology, Use Case, metrics and counts:
-        evaluation results come without their details, which can quote observed values,
-        so there is no instance data. Needs *read*."""
+        Question's status and row count. Only Ontology, Use Case, metrics, counts and the
+        details of the built-ins that judge an Ontology Version (ADR 0010): run
+        Evaluators that read the Graph Source and custom Evaluators come without their
+        details, which can quote observed values, so there is no instance data. Needs
+        *read*."""
         ontology_version = (
             self.get_contract_version(knowledge_graph)
             if version is None

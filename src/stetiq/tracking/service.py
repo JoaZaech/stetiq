@@ -104,17 +104,23 @@ from stetiq.use_case.consumer_gates import (
 # live with the user's process, never on the stetiq server).
 ObservationInput = tuple[GraphSourceScope, ObservedSchema]
 
-# Evaluator names stetiq computes itself; custom Evaluators cannot take them.
-RESERVED_EVALUATOR_NAMES = frozenset(
+# The built-ins whose details the Run Context carries (ADR 0010): they judge an Ontology
+# Version from the Ontology and the Use Case alone, so their details name Concepts,
+# Vocabulary Values and Competency Question ids and cannot hold a graph value.
+RUN_CONTEXT_DETAIL_EVALUATORS = frozenset(
     {e.name for e in BUILT_IN_EVALUATORS}
-    | {
-        ANSWERABILITY_EVALUATOR,
-        COVERAGE_EVALUATOR,
-        UNJUSTIFIED_ADDITIONS_EVALUATOR,
-        CQ_EXECUTION_EVALUATOR,
-    }
-    | {e.name for e in SERVER_RUN_EVALUATORS}
+    | {ANSWERABILITY_EVALUATOR, COVERAGE_EVALUATOR, UNJUSTIFIED_ADDITIONS_EVALUATOR}
 )
+
+# The built-ins whose details the Run Context drops: they read the Graph Source, so their
+# details can quote observed values.
+RUN_CONTEXT_WITHHELD_EVALUATORS = frozenset(
+    {CQ_EXECUTION_EVALUATOR} | {e.name for e in SERVER_RUN_EVALUATORS}
+)
+
+# Evaluator names stetiq computes itself; custom Evaluators cannot take them. A new
+# built-in goes in one of the two sets above.
+RESERVED_EVALUATOR_NAMES = RUN_CONTEXT_DETAIL_EVALUATORS | RUN_CONTEXT_WITHHELD_EVALUATORS
 
 
 def check_not_built_in(evaluator: str) -> None:
