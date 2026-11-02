@@ -3,10 +3,8 @@ import { latestGateResult, type GateResult } from '@/api/gate-results'
 import type { DriftEvent, Observation } from '@/api/observations'
 import type { Ontology } from '@/api/ontology-versions'
 import type { ConstructionRun } from '@/api/runs'
-import type { Consumer } from '@/api/use-cases'
 import type { Answerability } from '../use-case/answerability'
 import type { Ratio } from '../evaluation/evaluation-kpis'
-import { consumerReadiness } from '../use-case/readiness'
 
 /**
  * What the Overview's KPI tiles and cards show, derived from data the server already
@@ -51,19 +49,6 @@ export function latestDriftFindings(
   const latest = observations.at(-1)
   if (!latest) return null
   return driftEvents.find((e) => e.observation_id === latest.id)?.findings.length ?? 0
-}
-
-/**
- * Consumers the latest Ontology Version is ready for, of those it could be checked for
- * (as the pipeline strip counts them); null when none could be.
- */
-export function consumersRatio(consumers: readonly Consumer[], answerability: Answerability | undefined): Ratio | null {
-  const checked = consumers.flatMap((c) => {
-    const r = consumerReadiness(c, answerability)
-    return r.state === 'checked' ? [r] : []
-  })
-  if (checked.length === 0) return null
-  return { count: checked.filter((r) => r.ready === r.tasks).length, total: checked.length }
 }
 
 /** An Observation with how many Drift findings it had (0: no Drift). */

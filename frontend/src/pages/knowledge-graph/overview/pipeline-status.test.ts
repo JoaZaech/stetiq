@@ -133,7 +133,7 @@ describe('consumerGateStatus', () => {
   it('fails when any latest verdict failed, counting every Consumer that declares one', () => {
     const consumers = [gated('a'), gated('b'), gated('c'), { id: 'd', name: 'd' }]
     const results = [verdict('a', true), verdict('b', true), verdict('b', false)]
-    expect(consumerGateStatus(consumers, results)).toEqual({ tone: 'failure', status: 'Failed', fact: '1 of 3 passed' })
+    expect(consumerGateStatus(consumers, results)).toEqual({ tone: 'failure', status: 'Failed', fact: '1 of 3 passed', ratio: { count: 1, total: 3 } })
   })
 
   it('passes only when every latest verdict passed', () => {
@@ -142,6 +142,7 @@ describe('consumerGateStatus', () => {
       tone: 'success',
       status: 'Passed',
       fact: '2 of 2 passed',
+      ratio: { count: 2, total: 2 },
     })
   })
 
@@ -150,6 +151,7 @@ describe('consumerGateStatus', () => {
       tone: 'neutral',
       status: 'Not evaluated yet',
       fact: '1 of 2 passed',
+      ratio: { count: 1, total: 2 },
     })
   })
 })
@@ -183,7 +185,7 @@ describe('consumersStatus', () => {
 
   it('is ready when every Consumer with Tasks is ready for all of them; one without Tasks does not count', () => {
     const consumers = [consumer('a', ['yes']), consumer('b', [], ['yes']), { id: 'c', name: 'c' }]
-    expect(consumersStatus(consumers, answerability)).toEqual({ tone: 'success', status: 'Ready', fact: '2 of 2 ready' })
+    expect(consumersStatus(consumers, answerability)).toEqual({ tone: 'success', status: 'Ready', fact: '2 of 2 ready', ratio: { count: 2, total: 2 } })
   })
 
   it('is not ready when a Consumer has a Task the version is not ready for', () => {
@@ -192,6 +194,7 @@ describe('consumersStatus', () => {
       tone: 'failure',
       status: 'Not ready',
       fact: '1 of 3 ready',
+      ratio: { count: 1, total: 3 },
     })
   })
 })

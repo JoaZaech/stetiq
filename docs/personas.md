@@ -21,7 +21,7 @@ Curates the Ontology: reviews Candidates, promotes Ontology Versions to the Cont
 - **First question:** is the graph healthy right now?
 - **Then:** what is drifting? What would promoting this Candidate change, and does it pass its Gates?
 - **Lands on:** Overview, Ontology Versions (Map, Changes), Observations, Promotions.
-- **Needs in five seconds:** the dashboard's KPI tiles and which alias points at which version.
+- **Needs in five seconds:** the Overview's pipeline row: each stage's status, its numbers and what to do next.
 - **Frustrated by:** an empty Overview, and the same evaluation laid out differently on each page.
 
 ## Use case owner

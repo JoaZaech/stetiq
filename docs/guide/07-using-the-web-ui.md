@@ -57,33 +57,22 @@ A Knowledge Graph opens on its [Overview](#overview). Every other section starts
 The Overview is the Knowledge Graph's dashboard. From the top:
 
 - **About**: the first sentence of the description, with the rest behind **More**, the Evolution Mode (*strict* or *evolving*) and **Edit description**.
-- **The pipeline chain** (below).
-- **Five KPI tiles**, each linking to where its value comes from:
-
-  | Tile | Shows |
-  | --- | --- |
-  | **CQ coverage** | Competency Questions the latest Ontology Version answers, e.g. `2/9` |
-  | **Conformance** | The latest assessed Construction Run's score |
-  | **Gates** | Gates the newest Ontology Version passed, e.g. `3/9` |
-  | **Drift** | Findings of the latest Observation |
-  | **Consumers** | Consumers the latest Ontology Version is ready for |
-
-  A tile that has nothing to show yet reads `—`.
+- **The pipeline** (below): where the Knowledge Graph stands, with its key numbers.
 - **Four cards**, each with a link to its whole list:
   - **Recent runs**: the last five runs.
   - **Latest Observations**: the last five, with any Drift.
   - **Current Ontology Version**: the version the Contract Alias points to, its Aliases, and how many Classes, Relations, Attributes and patterns it has.
   - **Recent Promotions**: the last five, with their Gate results.
 
-The pipeline chain shows where the Knowledge Graph sits as five steps: upstream pipeline → Gate → Knowledge Graph → Consumer Gate → Consumers. Each step shows a status with its icon and one fact, and its name links to its page. A grey dashed status means stetiq has nothing to judge yet, never a pass.
+The pipeline is one row of five numbered stages: upstream pipeline → Gate → Knowledge Graph → Consumer Gate → Consumers. Each stage shows a status with its icon, its numbers (`—` while there is nothing to count) and one fact, and its name links to its page. A grey dashed status means stetiq has nothing to judge yet, never a pass. A stage that isn't green ends with its **next step**: a link to the page where it is fixed, or the command that moves it on, with a copy button.
 
-| Step | Shows | Status | Links to |
+| Stage | Numbers | Status | Next step |
 | --- | --- | --- | --- |
-| **Upstream pipeline** | How long ago the latest Construction Run ended, or when a running one started | ✓ *Finished*, ✗ *Failed* or *Running*; *No runs* | [Construction Runs](#construction-runs) |
-| **Gate** | The newest Ontology Version and its latest recorded Gate result, e.g. `v3 · 6 of 9 Gates failed` | ✓ *Passed* or ✗ *Failed*; *Not gated* | That version's page |
-| **Knowledge Graph** | Where the Contract Alias points, e.g. `production → v3`, and when it was last observed | ✓ *No Drift* or ⚠ *Drift*, from the latest Observation; *Not observed* | [Observations](#observations) |
-| **Consumer Gate** | How many Consumers that declare a Consumer Gate passed it in their latest verdict, e.g. `1 of 2 passed` | ✗ *Failed* if any failed, ✓ *Passed* if all passed; *Not evaluated yet* while one has no verdict, *None declared* when no Consumer declares one | [Use Case](#use-case-and-competency-questions) |
-| **Consumers** | How many Consumers the latest Ontology Version is ready for, e.g. `2 of 3 ready`, as on their tiles. A Consumer without Tasks isn't counted | ✓ *Ready* if all are, ✗ *Not ready* otherwise; *Not checked yet*, *No Tasks* or *No Consumers* | [Use Case](#use-case-and-competency-questions) |
+| **Upstream pipeline** | The latest assessed run's **Conformance**; the fact says how long ago the latest run ended | ✓ *Finished*, ✗ *Failed* or *Running*; *No runs* | *Track a run* (`stetiq run`), or *Why run … failed*, opening its Evaluation tab |
+| **Gate** | **Gates passed** by the newest Ontology Version, e.g. `2/3`, with its latest Gate result as the fact | ✓ *Passed* or ✗ *Failed*; *Not gated* | *Evaluate its Gates* (`stetiq gate <name> --version <n>`), or *See the failed Gates* on that version's page |
+| **Knowledge Graph** | **Drift findings** of the latest Observation; the fact says where the Contract Alias points, e.g. `production → v3`, and when it was observed | ✓ *No Drift* or ⚠ *Drift*; *Not observed* | *Take an Observation* (`stetiq observe <name>`), or *Review n Drift findings*, opening that Observation |
+| **Consumer Gate** | **Consumer Gates passed** in each Consumer's latest verdict, e.g. `1/2` | ✗ *Failed* if any failed, ✓ *Passed* if all passed; *Not evaluated yet* while one has no verdict, *None declared* when no Consumer declares one | *Declare one on a Consumer* or *See the failing Consumers* (the Use Case's Consumers tab), or *Evaluate them* (`stetiq consumer gate <name>`) |
+| **Consumers** | Consumers the latest Ontology Version is **ready** for, e.g. `2/3` (a Consumer without Tasks isn't counted), and the Competency Questions it answers (**CQs answerable**) | ✓ *Ready* if all are, ✗ *Not ready* otherwise; *Not checked yet*, *No Tasks* or *No Consumers* | *n questions unanswerable*, or *n questions can't be checked*, opening the question catalog filtered to them |
 
 The Consumers and the Consumer Gate are those of the latest Use Case Version. The Consumer Gate is checked by `stetiq consumer gate` in your pipeline's CI.
 
