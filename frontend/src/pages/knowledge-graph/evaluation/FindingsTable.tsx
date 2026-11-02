@@ -9,7 +9,8 @@ import { facetCounts, filterFindings, type FindingRow } from './findings'
 /**
  * The one findings table every evaluation shares (a run's Conformance mismatches, an
  * Observation's Drift): Concept · Kind · Finding · Change, filterable by kind and
- * finding. `initialFinding` opens it filtered, e.g. from a failed run's banner.
+ * finding, plus New or Persisting for Drift. `initialFinding` opens it filtered, e.g.
+ * from a failed run's banner.
  */
 export function FindingsTable({
   rows,
@@ -26,6 +27,7 @@ export function FindingsTable({
   const kinds = useMemo(() => facetCounts(rows, 'kind'), [rows])
   const findings = useMemo(() => facetCounts(rows, 'finding'), [rows])
   const shown = useMemo(() => filterFindings(rows, { kind, finding, query }), [rows, kind, finding, query])
+  const withStatus = rows.some((r) => r.status !== undefined)
 
   if (rows.length === 0) return <p className="text-sm text-muted-foreground">{empty}</p>
   return (
@@ -42,12 +44,13 @@ export function FindingsTable({
             <TableHead>Kind</TableHead>
             <TableHead>Finding</TableHead>
             <TableHead>Change</TableHead>
+            {withStatus && <TableHead>Status</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
           {shown.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={4} className="text-muted-foreground">
+              <TableCell colSpan={withStatus ? 5 : 4} className="text-muted-foreground">
                 No finding matches these filters.
               </TableCell>
             </TableRow>
@@ -63,6 +66,11 @@ export function FindingsTable({
                   </span>
                 </TableCell>
                 <TableCell className="text-muted-foreground tabular-nums">{row.change}</TableCell>
+                {withStatus && (
+                  <TableCell className={row.status === 'New' ? 'font-medium' : 'text-muted-foreground'}>
+                    {row.status}
+                  </TableCell>
+                )}
               </TableRow>
             ))
           )}

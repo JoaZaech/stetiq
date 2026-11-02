@@ -18,6 +18,7 @@ const drift = (f: Partial<DriftFinding>): DriftFinding => ({
   detail: 'count dropped from 12 to 6 (-50%)',
   previous_count: 12,
   observed_count: 6,
+  new: true,
   ...f,
 })
 
@@ -84,6 +85,19 @@ describe('findingsFromDrift', () => {
     expect(rows.map((r) => [r.kind, r.finding, r.change])).toEqual([
       ['Pattern', 'Violation Rate rose', 'count dropped from 12 to 6 (-50%)'],
       ['Attribute', 'Violation Rate rose', 'Required but not always set: 0.5% → 3% (+2.5 pts)'],
+    ])
+  })
+
+  it('marks each finding new or persisting and lists the new ones first', () => {
+    const rows = findingsFromDrift([
+      drift({ kind: 'count_drop', subject: 'A', new: false }),
+      drift({ kind: 'undeclared', subject: 'B', new: true }),
+      drift({ kind: 'count_drop', subject: 'C', new: true }),
+    ])
+    expect(rows.map((r) => [r.subject, r.status])).toEqual([
+      ['C', 'New'],
+      ['B', 'New'],
+      ['A', 'Persisting'],
     ])
   })
 })

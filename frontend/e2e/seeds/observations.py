@@ -74,4 +74,30 @@ def observed_violation_rates(_client: stetiq.Client) -> dict[str, Any]:
     return {"baseline_id": baseline.observation.id, "observation_id": outcome.observation.id}
 
 
-SCENARIOS: tuple[Scenario, ...] = (observed_support, observed_violation_rates)
+def observed_persisting_drift(_client: stetiq.Client) -> dict[str, Any]:
+    """`support` observed twice on demand: first with an undeclared `Agent` class, then
+    with the `Agent` still there (persisting) and an undeclared `Refund` (new)."""
+    graph = stetiq.InMemoryGraphSource()
+    client = stetiq.Client(_client.tracking_uri, graph_source=graph)
+    client.create_knowledge_graph("support", ontology=SUPPORT_V1)
+    client.bind_graph_source("support", GraphSourceScope(database="neo4j", label="Support"))
+    add_ada_and_ticket(
+        graph,
+        ada_labels=("Support", "Party", "Customer"),
+        ticket_labels=("Support", "Ticket"),
+        priority=None,
+    )
+    graph.add_node(["Support", "Agent"], {})
+    first = client.observe("support")
+    graph.add_node(["Support", "Refund"], {})
+    second = client.observe("support")
+    assert first.drift is not None and second.drift is not None
+    assert [f.new for f in second.drift.findings].count(False) == 1
+    return {"observation_id": second.observation.id}
+
+
+SCENARIOS: tuple[Scenario, ...] = (
+    observed_support,
+    observed_violation_rates,
+    observed_persisting_drift,
+)

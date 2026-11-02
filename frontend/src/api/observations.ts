@@ -74,6 +74,8 @@ export interface DriftFinding {
   violation?: Mismatch['kind']
   baseline_rate?: number
   observed_rate?: number
+  /** False when the previous Observation had it too (a rate finding: at a rate no better). */
+  new: boolean
 }
 
 /** drift.NotComparable: a check that lacked its input, so it raised no finding. */
