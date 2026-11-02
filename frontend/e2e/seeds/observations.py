@@ -14,13 +14,14 @@ from ._shared import SUPPORT_V1, Scenario, add_ada_and_ticket
 
 def observed_support(_client: stetiq.Client) -> dict[str, Any]:
     """`support` observed twice: once at the end of a Construction Run (no Drift), then
-    on demand after a `Refund` node type and more Tickets appeared, which raises a Drift
-    event against the Contract Alias (`production` -> v1)."""
+    on demand after a `Refund` class, more Tickets (one with a `channel` attribute) and an
+    `ESCALATED` relation appeared, which raises a Drift event against the Contract Alias
+    (`production` -> v1)."""
     graph = stetiq.InMemoryGraphSource()
     client = stetiq.Client(_client.tracking_uri, graph_source=graph)
     client.create_knowledge_graph("support", ontology=SUPPORT_V1)
     client.bind_graph_source("support", GraphSourceScope(database="neo4j", label="Support"))
-    add_ada_and_ticket(
+    ada, _ = add_ada_and_ticket(
         graph,
         ada_labels=("Support", "Party", "Customer"),
         ticket_labels=("Support", "Ticket"),
@@ -28,8 +29,12 @@ def observed_support(_client: stetiq.Client) -> dict[str, Any]:
     )
     with client.start_run("support", ontology_version=1) as run:
         pass
-    for day in (2, 3, 4):
+    for day in (2, 3):
         graph.add_node(["Support", "Ticket"], {"opened_at": date(2026, 1, day)})
+    escalated = graph.add_node(
+        ["Support", "Ticket"], {"opened_at": date(2026, 1, 4), "channel": "email"}
+    )
+    graph.add_relationship(ada, "ESCALATED", escalated)
     graph.add_node(["Support", "Refund"], {})
     outcome = client.observe("support", thresholds=DriftThresholds(max_count_increase=0.5))
     assert outcome.drift is not None

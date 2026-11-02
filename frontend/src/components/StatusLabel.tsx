@@ -1,22 +1,24 @@
-import { CircleCheck, CircleX, LoaderCircle, TriangleAlert } from 'lucide-react'
+import { STATUS_TONES, type StatusTone } from './status-tones'
 
-/** How a status reads at a glance; each tone has one icon and colour app-wide. */
-export type StatusTone = 'success' | 'failure' | 'error' | 'running'
-
-const TONES = {
-  success: { Icon: CircleCheck, className: 'text-success' },
-  failure: { Icon: CircleX, className: 'text-destructive' },
-  error: { Icon: TriangleAlert, className: 'text-destructive' },
-  running: { Icon: LoaderCircle, className: 'text-primary' },
-} as const
+export type { StatusTone } from './status-tones'
 
 /** A status as its tone's icon and its name, e.g. a run's "Finished" or a check's "Passed". */
 export function StatusLabel({ tone, label }: { tone: StatusTone; label: string }) {
-  const { Icon, className } = TONES[tone]
+  const { Icon, className } = STATUS_TONES[tone]
   return (
     <span className="inline-flex items-center gap-1.5">
       <Icon aria-hidden className={`size-4 ${className}`} />
       {label}
+    </span>
+  )
+}
+
+/** A status as its tone's icon alone, named `label` for screen readers and on hover. */
+export function StatusIcon({ tone, label }: { tone: StatusTone; label: string }) {
+  const { Icon, className } = STATUS_TONES[tone]
+  return (
+    <span role="img" aria-label={label} title={label} className="inline-flex shrink-0">
+      <Icon aria-hidden className={`size-4 ${className}`} />
     </span>
   )
 }

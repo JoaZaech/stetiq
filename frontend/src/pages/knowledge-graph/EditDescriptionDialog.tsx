@@ -24,7 +24,7 @@ interface EditDescriptionDialogProps {
   disabled: boolean
 }
 
-/** The Edit action of the Knowledge Graph header: a markdown editor with a preview. */
+/** The Edit action of the Knowledge Graph header and Overview: a markdown editor with a preview. */
 export function EditDescriptionDialog({ name, description, disabled }: EditDescriptionDialogProps) {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState('')
@@ -57,7 +57,7 @@ export function EditDescriptionDialog({ name, description, disabled }: EditDescr
           <DialogHeader>
             <DialogTitle>Edit description</DialogTitle>
             <DialogDescription>
-              What {name} is for, in markdown. Everyone who can read it sees this in its header.
+              What {name} is for, in markdown. Everyone who can read it sees this on its Overview.
             </DialogDescription>
           </DialogHeader>
           <Tabs defaultValue="write">

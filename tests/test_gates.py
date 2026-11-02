@@ -414,8 +414,8 @@ def test_a_run_whose_type_counts_drop_more_than_allowed_fails_naming_the_types(
 
     assert not result.passed
     reasons = result.failed[0].reasons
-    assert "node type Customer: 10 -> 8 (-20.0%)" in reasons
-    assert "relationship type OPENED: 10 -> 8 (-20.0%)" in reasons
+    assert "Class Customer: 10 -> 8 (-20.0%)" in reasons
+    assert "Relation OPENED: 10 -> 8 (-20.0%)" in reasons
 
 
 def test_counts_within_the_allowed_drop_pass(client, bound_kg, graph_source):
@@ -435,7 +435,7 @@ def test_a_type_that_disappears_counts_as_a_full_drop(client, bound_kg, graph_so
 
     result = client.evaluate_gates(bound_kg, COUNT_DROP, run=run.id)
 
-    assert "node type Ticket: 2 -> 0 (-100.0%)" in result.failed[0].reasons
+    assert "Class Ticket: 2 -> 0 (-100.0%)" in result.failed[0].reasons
 
 
 def test_the_first_observation_has_no_baseline_so_nothing_can_have_dropped(

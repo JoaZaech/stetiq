@@ -36,7 +36,7 @@ interface PlannedProps {
  * disabled stand-in (`children`, a `group` named `label`), then a "Planned" badge that
  * explains it in a tooltip and links to its section of the vision.
  *
- *   <Planned label="Connector" section="connector" tooltip="…">Connector: not connected</Planned>
+ *   <Planned label="Pending Migration" section="pending-migration-and-adoption" tooltip="…">Pending Migration</Planned>
  */
 export function Planned({ label, section, tooltip, children, className }: PlannedProps) {
   return (
@@ -44,18 +44,28 @@ export function Planned({ label, section, tooltip, children, className }: Planne
       <span role="group" aria-label={label} aria-disabled="true" className="text-muted-foreground">
         {children}
       </span>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Link
-            to={visionUrl(section)}
-            aria-label={`Planned: ${label}`}
-            className={cn(badgeVariants({ variant: 'outline' }), 'border-dashed text-muted-foreground')}
-          >
-            Planned
-          </Link>
-        </TooltipTrigger>
-        <TooltipContent>{tooltip} Not built yet: open the vision to read more.</TooltipContent>
-      </Tooltip>
+      <PlannedBadge label={label} section={section} tooltip={tooltip} />
     </span>
+  )
+}
+
+/**
+ * The "Planned" badge alone, for a control that works but leads only to planned things:
+ * the Consumer tile's Connect, which opens a picker of example Connectors.
+ */
+export function PlannedBadge({ label, section, tooltip }: Omit<PlannedProps, 'children' | 'className'>) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Link
+          to={visionUrl(section)}
+          aria-label={`Planned: ${label}`}
+          className={cn(badgeVariants({ variant: 'outline' }), 'border-dashed text-muted-foreground')}
+        >
+          Planned
+        </Link>
+      </TooltipTrigger>
+      <TooltipContent>{tooltip} Not built yet: open the vision to read more.</TooltipContent>
+    </Tooltip>
   )
 }

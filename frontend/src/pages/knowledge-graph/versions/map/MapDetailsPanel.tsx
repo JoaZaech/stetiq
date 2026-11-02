@@ -8,6 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { conceptKindLabel } from '@/lib/concept-kind'
 import { MapSidePanel, type MapPanelNav } from './MapSidePanel'
 import type { DetailProperty, MapDetails } from './ontology-map-focus'
 
@@ -28,7 +29,7 @@ export function MapDetailsPanel({
   return (
     <MapSidePanel
       label="Details"
-      kind={details.kind === 'class' ? 'Class' : 'Relation'}
+      kind={conceptKindLabel(details.kind === 'class' ? 'class' : 'relation')}
       title={
         <>
           {details.kind === 'class' ? details.label : details.relation}

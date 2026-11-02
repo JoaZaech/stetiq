@@ -1,40 +1,43 @@
-import { useId, useMemo, type ReactNode } from 'react'
-import { CircleCheck, TriangleAlert } from 'lucide-react'
+import { useId, useMemo, useState, type ReactNode } from 'react'
+import {
+  Ban,
+  ChevronDown,
+  ChevronRight,
+  CircleCheck,
+  CircleMinus,
+  CirclePlus,
+  TrendingDown,
+  TrendingUp,
+} from 'lucide-react'
 import { Link } from 'react-router'
 import {
   type DriftEvent,
+  type DriftFinding,
   type DriftThresholds,
-  formatScope,
   type Observation,
   useDriftEvents,
   useObservations,
 } from '@/api/observations'
 import { knowledgeGraphSection, kgUrl } from '@/app/knowledge-graph-sections'
-import { CopyButton } from '@/components/CopyButton'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Planned } from '@/components/Planned'
-import { Badge } from '@/components/ui/badge'
+import { StatusLabel } from '@/components/StatusLabel'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { conceptKindLabel } from '@/lib/concept-kind'
 import { formatDateTime } from '@/lib/format'
 import { KnowledgeGraphSectionPage } from '../KnowledgeGraphSectionPage'
 import { useKnowledgeGraphName } from '../params'
+import { shortRunId } from '../runs/runs'
 
 const SECTION = knowledgeGraphSection('observations')
 
 /**
- * `/kg/:name/observations`: when the Graph Source was inspected, newest first, each
- * with the Drift it found against the Contract Alias. Read-only: an Observation needs
- * graph credentials, which never leave the SDK process (`stetiq observe`).
+ * `/kg/:name/observations`: a timeline of when the Graph Source was inspected, newest
+ * first, one row each; only a row with Drift expands, to what it found against the
+ * Contract Alias. Read-only: an Observation needs graph credentials, which never leave
+ * the SDK process (`stetiq observe`).
  */
 export function ObservationsPage() {
   return (
@@ -76,19 +79,22 @@ function ObservationList() {
           <AlertDescription>No Drift. The Knowledge Graph matches the Ontology Version of its Contract Alias.</AlertDescription>
         </Alert>
       )}
-      {newestFirst.map((observation) => (
-        <ObservationCard
-          key={observation.id}
-          name={name}
-          observation={observation}
-          drift={driftByObservation.get(observation.id)}
-        />
-      ))}
+      <ol aria-label="Observations" className="divide-y rounded-lg border">
+        {newestFirst.map((observation) => (
+          <ObservationRow
+            key={observation.id}
+            name={name}
+            observation={observation}
+            drift={driftByObservation.get(observation.id)}
+          />
+        ))}
+      </ol>
     </div>
   )
 }
 
-function ObservationCard({
+/** `✓ No Drift · Oct 30, 2026, 14:05 · from run 1201b6ce`; a row with Drift expands to it. */
+function ObservationRow({
   name,
   observation,
   drift,
@@ -98,52 +104,56 @@ function ObservationCard({
   drift: DriftEvent | undefined
 }) {
   const id = useId()
+  const [open, setOpen] = useState(false)
+  const Chevron = open ? ChevronDown : ChevronRight
   return (
-    <article aria-labelledby={id} className="space-y-4 rounded-lg border p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 id={id} className="text-sm font-semibold">
-          Observation{' '}
-          <time dateTime={observation.observed_at}>{formatDateTime(observation.observed_at)}</time>
-        </h3>
+    <li className="px-3 py-2">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
         {drift ? (
-          <Badge variant="destructive">
-            <TriangleAlert aria-hidden />
-            Drift
-          </Badge>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="-ml-1 size-7"
+            aria-label="Drift details"
+            aria-expanded={open}
+            aria-controls={id}
+            onClick={() => setOpen(!open)}
+          >
+            <Chevron aria-hidden className="size-4" />
+          </Button>
         ) : (
-          <Badge variant="outline">No Drift</Badge>
+          <span aria-hidden className="-ml-1 size-7" />
+        )}
+        <StatusLabel tone={drift ? 'warning' : 'success'} label={drift ? 'Drift' : 'No Drift'} />
+        <time dateTime={observation.observed_at} className="text-muted-foreground">
+          {formatDateTime(observation.observed_at)}
+        </time>
+        {observation.run_id ? (
+          <span className="text-muted-foreground">
+            from run{' '}
+            <Link
+              to={kgUrl(name, 'runs', observation.run_id)}
+              className="font-mono text-xs text-primary underline-offset-4 hover:underline"
+            >
+              {shortRunId(observation.run_id)}
+            </Link>
+          </span>
+        ) : (
+          <span className="text-muted-foreground">on demand</span>
         )}
       </div>
-      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2 text-sm">
-        <Fact label="Graph Source scope">{formatScope(observation.scope)}</Fact>
-        <Fact label="Construction Run">
-          {observation.run_id ? (
-            <span className="flex items-center gap-1">
-              <Link
-                to={kgUrl(name, 'runs', observation.run_id)}
-                className="truncate font-mono text-xs text-primary underline-offset-4 hover:underline"
-              >
-                {observation.run_id}
-              </Link>
-              <CopyButton value={observation.run_id} label="Copy run id" />
-            </span>
-          ) : (
-            <span className="text-muted-foreground">None (on demand)</span>
-          )}
-        </Fact>
-      </dl>
-      {drift && <DriftDetails name={name} drift={drift} />}
-    </article>
+      {drift && (
+        <div id={id} hidden={!open} className="pt-3 pb-1 pl-10">
+          <DriftDetails name={name} drift={drift} />
+        </div>
+      )}
+    </li>
   )
 }
 
 function DriftDetails({ name, drift }: { name: string; drift: DriftEvent }) {
-  const id = useId()
   return (
-    <section aria-labelledby={id} className="space-y-3 border-t pt-4">
-      <h4 id={id} className="text-sm font-semibold">
-        Drift
-      </h4>
+    <section aria-label="Drift" className="space-y-3">
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2 text-sm">
         <Fact label="Contract Alias">{drift.contract_alias}</Fact>
         <Fact label="Ontology Version">
@@ -176,30 +186,40 @@ function DriftDetails({ name, drift }: { name: string; drift: DriftEvent }) {
           </Planned>
         )}
       </div>
-      <Table aria-label="Drift findings">
-        <TableHeader>
-          <TableRow>
-            <TableHead>Kind</TableHead>
-            <TableHead>Concept</TableHead>
-            <TableHead>Detail</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {drift.findings.map((finding) => (
-            <TableRow
-              key={`${finding.kind}/${finding.subject_kind}/${finding.subject}/${finding.value ?? ''}`}
-            >
-              <TableCell>{humanize(finding.kind)}</TableCell>
-              <TableCell>
-                <span className="font-mono text-xs">{finding.subject}</span>{' '}
-                <span className="text-muted-foreground">{humanize(finding.subject_kind)}</span>
-              </TableCell>
-              <TableCell className="text-muted-foreground">{finding.detail || '—'}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <ul aria-label="Drift findings" className="space-y-1.5 text-sm">
+        {drift.findings.map((finding) => (
+          <Finding
+            key={`${finding.kind}/${finding.subject_kind}/${finding.subject}/${finding.value ?? ''}`}
+            finding={finding}
+          />
+        ))}
+      </ul>
     </section>
+  )
+}
+
+/** Each Drift finding kind's icon, and what it means when the finding has no detail of its own. */
+const FINDING_KIND = {
+  undeclared: { Icon: CirclePlus, label: 'observed but not declared' },
+  vanished: { Icon: CircleMinus, label: 'no longer observed' },
+  undeclared_value: { Icon: Ban, label: 'value outside the Vocabulary' },
+  count_drop: { Icon: TrendingDown, label: 'count dropped' },
+  count_increase: { Icon: TrendingUp, label: 'count rose' },
+} as const satisfies Record<DriftFinding['kind'], { Icon: unknown; label: string }>
+
+/** `⊕ Refund Class — observed but not declared`, `↗ Ticket Class — count rose from 1 to 4 (+300%)` */
+function Finding({ finding }: { finding: DriftFinding }) {
+  const { Icon, label } = FINDING_KIND[finding.kind]
+  return (
+    <li className="flex items-start gap-2">
+      <Icon aria-hidden className="mt-0.5 size-4 shrink-0 text-warning" />
+      <span className="min-w-0">
+        {finding.detail && <span className="sr-only">{label}: </span>}
+        <span className="font-mono text-xs">{finding.subject}</span>{' '}
+        <span className="text-muted-foreground">{conceptKindLabel(finding.subject_kind)}</span>
+        <span className="text-muted-foreground"> — {finding.detail || label}</span>
+      </span>
+    </li>
   )
 }
 
@@ -227,7 +247,7 @@ function formatThresholds(thresholds: DriftThresholds): string {
     .join(' · ')
 }
 
-/** `count_increase` → `count increase` */
+/** `max_count_drop` → `max count drop` */
 function humanize(identifier: string): string {
   return identifier.replaceAll('_', ' ')
 }

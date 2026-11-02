@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest'
+import type { GatePreview } from '@/api/gate-previews'
+import type { GateResult } from '@/api/gate-results'
 import type { ConstructionRun } from '@/api/runs'
-import { filterRuns, formatDuration, parseRunFilters, runKeys, runOutcome } from './runs'
+import {
+  conformanceTone,
+  filterRuns,
+  formatDuration,
+  paramChips,
+  parseRunFilters,
+  runGate,
+  runKeys,
+  runOutcome,
+} from './runs'
 
 const NOW = Date.parse('2026-10-30T12:00:00Z')
 
@@ -78,5 +89,78 @@ describe('runKeys', () => {
       run({ params: { extractor: 'rules' }, metrics: { precision: 0.9 } }),
     ]
     expect(runKeys(runs)).toEqual({ params: ['extractor', 'temperature'], metrics: ['precision', 'recall'] })
+  })
+})
+
+describe('paramChips', () => {
+  it('shows the first three params by key and hides the rest', () => {
+    const params = { temperature: '0.2', extractor: 'llm', model: 'm1', batch: '8', seed: '1' }
+    expect(paramChips(params)).toEqual({
+      shown: [
+        ['batch', '8'],
+        ['extractor', 'llm'],
+        ['model', 'm1'],
+      ],
+      hidden: [
+        ['seed', '1'],
+        ['temperature', '0.2'],
+      ],
+    })
+  })
+
+  it('shows every param when there are three or fewer', () => {
+    expect(paramChips({ extractor: 'rules' })).toEqual({ shown: [['extractor', 'rules']], hidden: [] })
+    expect(paramChips({})).toEqual({ shown: [], hidden: [] })
+  })
+})
+
+describe('conformanceTone', () => {
+  it('colours a score by how close it is to 100 %', () => {
+    expect(conformanceTone(1)).toBe('success')
+    expect(conformanceTone(0.95)).toBe('success')
+    expect(conformanceTone(0.8889)).toBe('warning')
+    expect(conformanceTone(0.8)).toBe('warning')
+    expect(conformanceTone(0.5455)).toBe('failure')
+  })
+})
+
+describe('runGate', () => {
+  const result = (subjectId: string, passed: boolean, evaluatedAt: string, kind: GateResult['subject_kind'] = 'construction_run'): GateResult => ({
+    knowledge_graph: 'support',
+    subject_kind: kind,
+    subject_id: subjectId,
+    ontology_version: 1,
+    passed,
+    outcomes: [],
+    evaluated_at: evaluatedAt,
+  })
+  const preview = (subjectId: string, passed: boolean): GatePreview => ({
+    knowledge_graph: 'support',
+    subject_kind: 'construction_run',
+    subject_id: subjectId,
+    ontology_version: 1,
+    passed,
+    outcomes: [],
+    source: { subject_kind: 'construction_run', subject_id: 'base', evaluated_at: '2026-10-30T10:00:00Z' },
+  })
+
+  it('shows the latest recorded Gate result, which wins over a preview', () => {
+    const results = [result('r', true, '2026-10-30T10:00:00Z'), result('r', false, '2026-10-30T11:00:00Z')]
+    expect(runGate('r', results, [preview('r', true)])).toEqual({ kind: 'recorded', passed: false })
+  })
+
+  it('shows the Gate Preview of a run without a recorded Gate result', () => {
+    const results = [result('other', true, '2026-10-30T10:00:00Z'), result('r', true, '2026-10-30T10:00:00Z', 'ontology_version')]
+    expect(runGate('r', results, [preview('other', false), preview('r', false)])).toEqual({
+      kind: 'preview',
+      passed: false,
+    })
+  })
+
+  it('shows none without either', () => {
+    expect(runGate('r', [], [])).toEqual({ kind: 'none' })
+    expect(runGate('r', [result('other', true, '2026-10-30T10:00:00Z')], [preview('other', true)])).toEqual({
+      kind: 'none',
+    })
   })
 })

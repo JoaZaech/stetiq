@@ -2,7 +2,6 @@ import { useId, type ReactNode } from 'react'
 import { Construction } from 'lucide-react'
 import type { KnowledgeGraphSection } from '@/app/knowledge-graph-sections'
 import { KnowledgeGraphHeader } from './KnowledgeGraphHeader'
-import { PipelineStrip } from './PipelineStrip'
 import { useKnowledgeGraphName } from './params'
 
 interface KnowledgeGraphSectionPageProps {
@@ -14,9 +13,10 @@ interface KnowledgeGraphSectionPageProps {
 }
 
 /**
- * The frame of a Knowledge Graph section's landing page: the Knowledge Graph header, the
- * pipeline strip, then the section title (an `h2`) and its content. `router.tsx` wraps each section's
- * page in it, so a section page renders only its own content.
+ * The frame of a Knowledge Graph section's landing page: the one-line Knowledge Graph
+ * header, then the section title (an `h2`) and its content. `router.tsx` wraps each
+ * section's page in it, so a section page renders only its own content. The Overview has
+ * its own frame.
  */
 export function KnowledgeGraphSectionPage({ section, actions, children }: KnowledgeGraphSectionPageProps) {
   const name = useKnowledgeGraphName()
@@ -24,9 +24,6 @@ export function KnowledgeGraphSectionPage({ section, actions, children }: Knowle
   return (
     <>
       <KnowledgeGraphHeader name={name} />
-      <div className="-mt-3 mb-6">
-        <PipelineStrip name={name} />
-      </div>
       <section aria-labelledby={id} className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 id={id} className="text-base font-semibold">

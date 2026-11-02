@@ -18,7 +18,7 @@ Run checks and tests as `docs/agents/running-checks.md` describes.
 
 ## Architecture
 
-Before adding an SDK operation, REST route, CLI command or test fixture, read `docs/architecture.md`. A brief for a subagent cites the one section it needs (e.g. *Frontend › Map*), not the whole file.
+Before adding an SDK operation, REST route, CLI command, test fixture or web UI page or component, read `docs/architecture.md`. A brief for a subagent cites the one section it needs (e.g. *Frontend › Map*), not the whole file.
 
 ## User guide
 

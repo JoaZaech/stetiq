@@ -124,6 +124,26 @@ The Ontology tab's Table view and its links to the Map. See [`versions/table/REA
 
 Comparing two Ontology Versions, as a Map or a Table. See [`versions/comparison/README.md`](../frontend/src/pages/knowledge-graph/versions/comparison/README.md).
 
+### Style
+
+Rules for new UI, drawn from what the app already does. The tokens are in `src/index.css`; the base is shadcn/ui (`radix-nova` style, `neutral` base colour).
+
+- **Neutral, one accent.** Surfaces, text and borders are neutral greys; `primary` (blue) is the one accent. Colour appears only where it means something, and each colour has one meaning:
+
+  | Token | Means |
+  |---|---|
+  | `primary` | interactive, selected or matched, running, and a chart's one series |
+  | `success` | pass, success |
+  | `warning` | needs attention but is not a failure (e.g. Drift) |
+  | `destructive` | failure, error |
+  | `diff-additive`, `diff-deprecating`, `diff-breaking` | Ontology Diff severity, and nothing else |
+
+- **Tokens only.** No raw Tailwind palette colours (`text-emerald-600`) and no hex or `oklch()` in components: use a token, as a class (`text-success`) or as `var(--success)` in SVG and chart props. A new colour is a new token in `index.css` with both a `:root` and a `.dark` value. Every token must read well in both themes; the theme is the viewer's choice of system, light or dark (`src/theme/`).
+- **One place per status channel.** A status with its name goes through `StatusLabel` and a tone map such as `RUN_STATUSES` (each tone has one icon and colour, so status never relies on colour alone). Other marks of status (a chart point, a verdict bar) use the same status tokens. Diff severity is drawn only through `SEVERITY` and `severityStroke` in `severity-style.ts`.
+- **Type.** System font stack. The page title is `text-xl font-semibold` and comes from `PageHeader`; body text is `text-sm`; secondary text and metadata are `text-xs text-muted-foreground`. Ontology identifiers (class, relation and attribute names) are monospace.
+- **Charts.** A one-series chart draws in `primary`; pass and fail points use `success` and `destructive`. There is no multi-series palette yet: `--chart-1..5` are unused shadcn defaults, to be chosen when the first multi-series chart needs them.
+- **Parts.** Every page starts with `PageHeader`. Icons are lucide only. Reach for `components/ui/` (add a shadcn component if missing) before writing a new primitive. Page widths are not yet consistent, so there is no rule for them.
+
 ### Build and release
 
 A release must run `npm run build` in `frontend/` before `uv build`: the wheel only ships what is in `src/stetiq/_frontend` (gitignored), and `tests/test_packaging.py` fails under `CI` when it is missing.
