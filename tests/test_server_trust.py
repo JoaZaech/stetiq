@@ -477,3 +477,35 @@ def test_ending_an_ended_run_is_not_active_before_its_proposals_are_judged(serve
 
     assert response.status_code == 409
     assert response.json()["error"]["type"] == "RunNotActiveError"
+
+
+# --- The Run Context's last attempt is the server's own record ---------------------------
+
+
+def test_a_client_cannot_supply_or_alter_the_last_attempt(server, admin, support):
+    _, http = server
+    admin.set_evolution_mode(support, "strict")
+    editor = _headers(server, "mallory", {"support": "edit"})
+    reader = _headers(server, "rita", {"support": "read"})
+    run = admin.start_run("support", ontology_version=1)
+    body = _end_body(admin, "support", ["Ticket"], ["Agent"])
+    # Fields the server owns, sent anyway: it ignores every one of them.
+    body |= {"status": "finished", "candidate_version": 2, "candidate": {"node_types": []}}
+    assert http.post(f"{API}/runs/{run.id}/end", json=body, headers=editor).status_code == 200
+    path = f"{API}/knowledge-graphs/support/ontology-versions/1/latest-ended-run"
+
+    # Nothing writes it: the route only reads, and a read token is enough.
+    for method in ("POST", "PUT", "PATCH", "DELETE"):
+        assert http.request(method, path, headers=editor, json={}).status_code == 405
+    response = http.get(path, headers=reader)
+
+    assert response.status_code == 200, response.text
+    ended = codec.ended_run_from_json(response.json())
+    assert ended.run.id == run.id
+    assert ended.run.status == "failed"  # strict mode's verdict, not the client's
+    assert ended.run.candidate_version is None
+    assert ended.candidate is not None  # computed from the stored ending Observation
+    assert {n.label for n in ended.candidate.node_types} >= {"Ticket", "Agent"}
+    attempt = admin.run_context(support, version=1).last_attempt
+    assert attempt is not None and attempt.run.id == run.id
+    assert "Agent" in {c.concept for c in attempt.added.changes}

@@ -99,6 +99,16 @@ def test_run_context_returns_the_run_context_as_stetiq_context_prints_it(client,
     )
 
 
+def test_run_context_carries_the_last_attempt(client, support):
+    client.bind_graph_source(support, stetiq.GraphSourceScope(database="neo4j"))
+    with client.start_run(support, ontology_version=2) as run:
+        pass
+
+    _, context = _call(client, "run_context", knowledge_graph=support, version=2)
+
+    assert context["last_attempt"]["id"] == run.id
+
+
 def test_ontology_diff_returns_the_classed_changes_in_their_rest_form(client, support):
     is_error, diff = _call(client, "ontology_diff", knowledge_graph=support, base=1, target=2)
 

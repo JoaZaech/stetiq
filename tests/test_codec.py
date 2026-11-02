@@ -30,6 +30,7 @@ from stetiq.tracking.entities import (
     ConstructionRun,
     ConsumerGateResult,
     DriftEvent,
+    EndedRun,
     EvaluationResult,
     GatePreview,
     GatePreviewSource,
@@ -156,6 +157,34 @@ GATE_PREVIEW_SOURCE = GatePreviewSource(
     subject_kind="ontology_version", subject_id="2", evaluated_at=LATER
 )
 
+RUN = ConstructionRun(
+    id="run-1",
+    knowledge_graph="support",
+    ontology_version=1,
+    status="finished",
+    started_at=AT,
+    ended_at=LATER,
+    params={"model": "gpt"},
+    metrics={"nodes": 3.0},
+    observation_id="obs-1",
+    conformance=Conformance(
+        score=0.5,
+        mismatches=(
+            Mismatch("Ticket", "node_type", MismatchKind.ABSENT, "not observed"),
+            Mismatch(
+                "Ticket.status",
+                "property",
+                MismatchKind.VALUE_OUTSIDE_VOCABULARY,
+                "2 times",
+                "on_hold",
+                2,
+            ),
+        ),
+    ),
+    candidate_version=2,
+    ignored_definitions=("Shift",),
+)
+
 SAMPLES: dict[type, Any] = {
     KnowledgeGraph: KNOWLEDGE_GRAPH,
     KnowledgeGraphSummary: KnowledgeGraphSummary(
@@ -173,33 +202,8 @@ SAMPLES: dict[type, Any] = {
         created_at=AT,
         ontology=ONTOLOGY,
     ),
-    ConstructionRun: ConstructionRun(
-        id="run-1",
-        knowledge_graph="support",
-        ontology_version=1,
-        status="finished",
-        started_at=AT,
-        ended_at=LATER,
-        params={"model": "gpt"},
-        metrics={"nodes": 3.0},
-        observation_id="obs-1",
-        conformance=Conformance(
-            score=0.5,
-            mismatches=(
-                Mismatch("Ticket", "node_type", MismatchKind.ABSENT, "not observed"),
-                Mismatch(
-                    "Ticket.status",
-                    "property",
-                    MismatchKind.VALUE_OUTSIDE_VOCABULARY,
-                    "2 times",
-                    "on_hold",
-                    2,
-                ),
-            ),
-        ),
-        candidate_version=2,
-        ignored_definitions=("Shift",),
-    ),
+    ConstructionRun: RUN,
+    EndedRun: EndedRun(run=RUN, candidate=ONTOLOGY),
     Observation: OBSERVATION,
     Alias: Alias(knowledge_graph="support", name="staging", version=2, updated_at=AT),
     Promotion: Promotion(

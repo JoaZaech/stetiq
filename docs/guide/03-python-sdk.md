@@ -363,6 +363,8 @@ context.run_evaluation_results   # its run-level results, metrics only
 context.question_executions      # per Competency Question id: .status and .rows on that run
 context.verdicts.gate_result     # the latest recorded Gate result about that run (or version), or None
 context.verdicts.consumer_gate_results  # per gated Consumer id: its latest recorded verdict, or None
+context.last_attempt             # the latest ended run that consumed the version, or None
+context.last_attempt.added       # the Ontology Diff from that version to what the run added
 data = context.to_dict()         # the JSON shape below
 ```
 
@@ -404,7 +406,18 @@ The run context is built from what the tracking service already holds, so it nee
       "...": "..."
     },
     {"consumer": "maintenance-assistant", "status": "not_evaluated"}
-  ]
+  ],
+  "last_attempt": {
+    "id": "7e2a9b10...",
+    "status": "failed",
+    "ontology_version": 3,
+    "candidate_version": null,
+    "added": {"classification": "additive", "changes": [{"concept": "Shift", "concept_kind": "node_type", "kind": "added", "classification": "additive", "detail": "..."}]},
+    "evaluation_results": [{"evaluator": "conformance", "metrics": {"score": 0.9}, "details": [], "...": "..."}],
+    "competency_questions": [{"id": "parts-suppliers", "status": "failed", "rows": 0}],
+    "gate_result": {"status": "not_evaluated"},
+    "consumer_gate_results": [{"consumer": "reliability-dashboard", "status": "not_evaluated"}]
+  }
 }
 ```
 
@@ -416,6 +429,7 @@ The run context is built from what the tracking service already holds, so it nee
 - `gate_result` is the latest [Gate](#aliases-promotion-and-gates) result recorded about `run`, or, without one, about the Ontology Version, in the form the REST API returns it plus a `status` of `passed` or `failed`. Each outcome carries the Gate definition as it was recorded and `passed`. Its `reasons` are those stetiq writes: a `metric` or `conformance` Gate keeps only its first reason (the observed value against its limit), because the rest list Evaluator details or Conformance mismatches, which can quote graph values.
 - `consumer_gate_results` has one entry per Consumer that declares a [Consumer Gate](#consumer-gates), in Use Case order: its latest Consumer Gate result recorded about `run`, with a `status` of `passed` or `failed` and the findings (the failing Task, Competency Question and row change against the baseline, or the missing input). Consumers without Consumer Gates are absent.
 - When nothing has been recorded, `gate_result` or a Consumer's entry is `{"status": "not_evaluated"}`. It never means passed. The run context only reads what CI recorded with `evaluate_gates` and `evaluate_consumer_gates`; it never evaluates or previews a Gate, and reading it records nothing.
+- `last_attempt` is the latest **ended** Construction Run that consumed this Ontology Version, so the next attempt learns from the last one even when its Candidate was never promoted (an evolving run stands for its Candidate, so it is not `run`). Ended means `finished`, or `failed` because [strict Evolution Mode](./02-concepts.md#evolution-mode-and-candidates) rejected a new Concept; a run that failed without ending (an exception in your pipeline) is skipped. It is null when no run has ended against the version. It carries the run's `id` and `status`, the `ontology_version` it consumed and its `candidate_version` (null without one), and `added`: the [Ontology Diff](#knowledge-graphs-and-ontology-versions) from the version it consumed to its Candidate, each change classed `cosmetic`, `additive`, `deprecating` or `breaking`. For a run strict mode failed, `added` is what its Candidate would have been, computed from its ending Observation and never registered; for a run that added nothing it is empty. Its `evaluation_results` are its run-level results (metrics only), `competency_questions` its executed questions as `id`, `status` and `rows`, and `gate_result` and `consumer_gate_results` the verdicts recorded about it, read as above. A failed run's `gate_result` never falls back to a version's.
 
 An upstream pipeline that may extend the Ontology should do so only where a Competency Question needs it. Declare that question in the Use Case before the run; an evolving run's additions are then judged by `unjustified_additions` (see [Evaluators and their metrics](./06-stetiq-yaml.md#evaluators-and-their-metrics)).
 

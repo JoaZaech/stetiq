@@ -39,7 +39,7 @@ Each tool returns JSON, in the same form as the CLI and the REST API, so what th
 | Tool | Arguments | What it returns |
 | --- | --- | --- |
 | `list_knowledge_graphs` | none | Every Knowledge Graph you can read, with a summary of its state, as `stetiq kg list` shows them. In remote mode, only those your API Token can read. |
-| `run_context` | `knowledge_graph`, optional `version` | The [run context](./03-python-sdk.md#the-run-context), exactly as [`stetiq context`](./04-cli.md#the-run-context) prints it: the Ontology Version to extract against (the Contract Alias's, or `version`), the Use Case, how that version scores, and how runs against it were judged. Never instance data. |
+| `run_context` | `knowledge_graph`, optional `version` | The [run context](./03-python-sdk.md#the-run-context), exactly as [`stetiq context`](./04-cli.md#the-run-context) prints it: the Ontology Version to extract against (the Contract Alias's, or `version`), the Use Case, how that version scores, how runs against it were judged, and `last_attempt`: what the last run that ended against it added and how that was judged, even when it was never promoted. Never instance data. |
 | `ontology_diff` | `knowledge_graph`, `base`, `target` | The Ontology Diff from Ontology Version `base` to `target`, each change classed cosmetic, additive, deprecating or breaking, as the REST API's `GET /api/v1/knowledge-graphs/{name}/ontology-diff` returns it. |
 | `consumer_impact` | `knowledge_graph`, `base`, `target` | Which Consumers, Tasks and Competency Questions of the latest Use Case Version that Ontology Diff hits, as `GET /api/v1/knowledge-graphs/{name}/consumer-impact` returns it. |
 

@@ -46,7 +46,7 @@ from stetiq.impact import UseCaseImpact, consumer_impact
 from stetiq.ontology import Ontology, parse_yaml
 from stetiq.ontology.diff import OntologyDiff, diff_ontologies
 from stetiq.ontology.yaml_format import to_yaml
-from stetiq.run_context import RecordedVerdicts, RunContext, without_quoted_reasons
+from stetiq.run_context import LastAttempt, RecordedVerdicts, RunContext, without_quoted_reasons
 from stetiq.tracking import (
     Alias,
     ConstructionRun,
@@ -456,6 +456,36 @@ class Client:
                 ontology_version=ontology_version.number,
                 use_case_version=use_case_version,
             ),
+            last_attempt=self._last_attempt(knowledge_graph, ontology_version, use_case_version),
+        )
+
+    def _last_attempt(
+        self,
+        knowledge_graph: str,
+        consumed: OntologyVersion,
+        use_case_version: UseCaseVersion | None,
+    ) -> LastAttempt | None:
+        """The latest ended run that consumed `consumed`, with the Ontology Diff to what
+        it added, its run-level results (metrics only) and its recorded verdicts."""
+        ended = self._service.latest_ended_run(knowledge_graph, consumed.number)
+        if ended is None:
+            return None
+        run = ended.run
+        results = self._service.get_evaluation_results(knowledge_graph, "construction_run", run.id)
+        return LastAttempt(
+            run=run,
+            added=diff_ontologies(consumed.ontology, ended.candidate or consumed.ontology),
+            evaluation_results=_without_details(results),
+            question_executions=executed_questions(results),
+            verdicts=self._recorded_verdicts(
+                knowledge_graph,
+                run=run.id,
+                # A strict-failed run stands for no version: no fallback Gate result.
+                ontology_version=None
+                if run.status != "finished"
+                else run.candidate_version or run.ontology_version,
+                use_case_version=use_case_version,
+            ),
         )
 
     def _recorded_verdicts(
@@ -463,13 +493,14 @@ class Client:
         knowledge_graph: str,
         *,
         run: str | None,
-        ontology_version: int,
+        ontology_version: int | None,
         use_case_version: UseCaseVersion | None,
     ) -> RecordedVerdicts:
         """The verdicts CI recorded about Construction Run `run` (None: no run), read
         and never evaluated (ADR 0007): the latest Gate result about the run, else about
-        Ontology Version `ontology_version`, and for each Consumer of `use_case_version`
-        declaring a Consumer Gate its latest Consumer Gate result about the run."""
+        Ontology Version `ontology_version` (None: no fallback), and for each Consumer of
+        `use_case_version` declaring a Consumer Gate its latest Consumer Gate result about
+        the run."""
         gate_results = self.list_gate_results(knowledge_graph)  # oldest first
 
         def latest_about(kind: str, subject: str | None) -> GateResult | None:
@@ -486,8 +517,10 @@ class Client:
             for result in self.list_consumer_gate_results(knowledge_graph):  # oldest first
                 if result.run_id == run:
                     latest[result.consumer] = result
-        gate_result = latest_about("construction_run", run) or latest_about(
-            "ontology_version", str(ontology_version)
+        gate_result = latest_about("construction_run", run) or (
+            None
+            if ontology_version is None
+            else latest_about("ontology_version", str(ontology_version))
         )
         return RecordedVerdicts(
             gate_result=None if gate_result is None else without_quoted_reasons(gate_result),

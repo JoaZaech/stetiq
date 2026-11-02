@@ -315,6 +315,11 @@ def create_app(
         run = tracking.latest_finished_run(name, number)
         return None if run is None else codec.run_to_json(run)
 
+    @api.get("/knowledge-graphs/{name}/ontology-versions/{number}/latest-ended-run")
+    def latest_ended_run(name: str, number: int) -> dict[str, Any] | None:
+        ended = tracking.latest_ended_run(name, number)
+        return None if ended is None else codec.ended_run_to_json(ended)
+
     @api.get("/runs/{run_id}")
     def get_run(run_id: str) -> dict[str, Any]:
         return codec.run_to_json(tracking.get_run(run_id))

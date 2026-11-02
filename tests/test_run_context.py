@@ -301,6 +301,7 @@ def test_a_read_token_is_enough_for_the_context(tmp_path):
     assert definitions.details  # a reader sees what the version Evaluators found
     assert context.verdicts.gate_result is not None
     assert context.verdicts.consumer_gate_results["review"] is not None
+    assert context.last_attempt is not None and context.last_attempt.run.id == run.id
 
 
 def test_the_context_names_what_each_version_evaluator_found(client, plant, graph_source):
@@ -475,3 +476,122 @@ def test_a_recorded_gate_outcome_keeps_its_verdict_but_never_quotes_details(
     assert outcome["passed"] is False
     assert outcome["reasons"] == ["quotes_the_graph.quoted = 1 > max 0"]
     assert "Press 7" not in json.dumps(gate_result)
+
+
+# --- The last attempt -----------------------------------------------------------------
+
+
+def test_an_evolving_run_is_the_last_attempt_at_the_version_it_consumed(
+    client, plant, graph_source
+):
+    finish_a_run(client, graph_source)
+    graph_source.add_node(["Shift"])  # the next run adds a Concept: Candidate v2
+    with client.start_run("plant") as evolving:
+        pass
+
+    context = client.run_context("plant")  # production: version 1
+    data = context.to_dict()["last_attempt"]
+
+    assert context.run is not None and context.run.id != evolving.id  # `run` stands for v1
+    assert data["id"] == evolving.id
+    assert data["status"] == "finished"
+    assert data["ontology_version"] == 1
+    assert data["candidate_version"] == 2
+    assert data["added"]["classification"] == "additive"
+    assert [(c["concept"], c["kind"]) for c in data["added"]["changes"]] == [("Shift", "added")]
+
+
+def test_a_strict_failed_run_is_the_last_attempt_with_what_it_would_have_added(
+    client, plant, graph_source
+):
+    client.set_evolution_mode("plant", "strict")
+    finish_a_run(client, graph_source)
+    graph_source.add_node(["Shift"])  # strict mode fails a run that adds a Concept
+    with client.start_run("plant") as rejected:
+        pass
+    versions = len(client.list_ontology_versions("plant"))
+
+    context = client.run_context("plant")
+    data = context.to_dict()["last_attempt"]
+
+    assert data["id"] == rejected.id
+    assert data["status"] == "failed"
+    assert data["candidate_version"] is None
+    assert data["added"]["classification"] == "additive"
+    assert [(c["concept"], c["kind"]) for c in data["added"]["changes"]] == [("Shift", "added")]
+    assert context.run is not None and context.run.id != rejected.id  # `run` is unchanged
+    assert len(client.list_ontology_versions("plant")) == versions  # nothing registered
+
+
+def test_a_crashed_run_is_skipped_for_the_last_ended_one(client, plant, graph_source):
+    ended = finish_a_run(client, graph_source)
+    with pytest.raises(RuntimeError), client.start_run("plant"):
+        raise RuntimeError("the pipeline crashed")
+
+    data = client.run_context("plant").to_dict()["last_attempt"]
+
+    assert data["id"] == ended.id
+    assert data["status"] == "finished"
+    assert data["added"] == {"classification": None, "changes": []}
+
+
+def test_the_last_attempt_is_null_on_a_fresh_knowledge_graph(client, plant):
+    assert client.run_context("plant").to_dict()["last_attempt"] is None
+
+
+def test_the_last_attempt_carries_its_run_level_results_and_executed_questions(
+    client, plant, graph_source
+):
+    finish_a_run(client, graph_source)
+    graph_source.add_node(["Shift"])
+    with client.start_run("plant") as evolving:
+        pass
+
+    data = client.run_context("plant").to_dict()["last_attempt"]
+
+    assert data["id"] == evolving.id
+    assert {r["evaluator"] for r in data["evaluation_results"]} >= {
+        "conformance",
+        "competency_question_execution",
+    }
+    assert all(r["details"] == [] for r in data["evaluation_results"])
+    assert {q["id"]: (q["status"], q["rows"]) for q in data["competency_questions"]} == {
+        "orders-per-machine": ("passed", 2),
+        "machine-names": ("failed", 0),
+    }
+
+
+def test_the_last_attempts_verdicts_are_recorded_or_not_evaluated(client, plant, graph_source):
+    finish_a_run(client, graph_source)
+    graph_source.add_node(["Shift"])
+    with client.start_run("plant") as evolving:
+        pass
+
+    before = client.run_context("plant").to_dict()["last_attempt"]
+    client.evaluate_gates("plant", NO_BREAKING, run=evolving.id)
+    client.evaluate_consumer_gates("plant", run=evolving.id)
+    after = client.run_context("plant").to_dict()["last_attempt"]
+
+    assert before["gate_result"] == NOT_EVALUATED
+    assert before["consumer_gate_results"] == [{"consumer": "review", **NOT_EVALUATED}]
+    assert after["gate_result"]["status"] == "passed"
+    assert after["gate_result"]["subject_id"] == evolving.id
+    [verdict] = after["consumer_gate_results"]
+    assert verdict["consumer"] == "review"
+    assert verdict["run_id"] == evolving.id
+    assert verdict["status"] == "passed"
+
+
+def test_a_strict_failed_attempt_never_borrows_its_versions_gate_result(
+    client, plant, graph_source
+):
+    client.set_evolution_mode("plant", "strict")
+    client.evaluate_gates("plant", NO_BREAKING, version=1)
+    graph_source.add_node(["Shift"])
+    with client.start_run("plant"):
+        pass
+
+    data = client.run_context("plant").to_dict()
+
+    assert data["gate_result"]["status"] == "passed"  # about version 1
+    assert data["last_attempt"]["gate_result"] == NOT_EVALUATED

@@ -169,6 +169,7 @@ def test_cli_prints_the_run_context_as_json(cli_env):
     assert data["run"] is None
     assert data["gate_result"] == {"status": "not_evaluated"}
     assert data["consumer_gate_results"] == []
+    assert data["last_attempt"] is None
 
 
 def test_cli_context_takes_a_version_and_the_knowledge_graph_from_the_repo_config(

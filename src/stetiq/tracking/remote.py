@@ -21,6 +21,7 @@ from stetiq.tracking.entities import (
     ConstructionRun,
     ConsumerGateResult,
     DriftEvent,
+    EndedRun,
     EvaluationResult,
     EvolutionMode,
     GatePreview,
@@ -160,6 +161,11 @@ class RemoteTrackingService:
         path = f"{self._kg_path(knowledge_graph)}/ontology-versions/{version}/latest-finished-run"
         data = self._call("GET", path)
         return None if data is None else codec.run_from_json(data)
+
+    def latest_ended_run(self, knowledge_graph: str, version: int) -> EndedRun | None:
+        path = f"{self._kg_path(knowledge_graph)}/ontology-versions/{version}/latest-ended-run"
+        data = self._call("GET", path)
+        return None if data is None else codec.ended_run_from_json(data)
 
     def log_params(self, run_id: str, params: dict[str, str]) -> None:
         self._call("POST", self._run_path(run_id) + "/params", {"params": params})
