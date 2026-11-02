@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react'
-import { ArrowRight, ChevronRight } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
+import { ArrowRight, Check, ChevronRight, Copy } from 'lucide-react'
 import { Link } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { useAliases, useContractAlias } from '@/api/aliases'
@@ -10,10 +10,10 @@ import { useOntologyVersions } from '@/api/ontology-versions'
 import { useRuns } from '@/api/runs'
 import { useUseCaseVersions } from '@/api/use-cases'
 import { kgUrl } from '@/app/knowledge-graph-sections'
-import { CopyButton } from '@/components/CopyButton'
 import { STATUS_TONES, type StatusTone } from '@/components/status-tones'
 import { StatusLabel } from '@/components/StatusLabel'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { formatPercent } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { ratioTone, type Ratio } from '../evaluation/evaluation-kpis'
@@ -40,9 +40,9 @@ import {
 /**
  * Where a Knowledge Graph sits (docs/vision.md, "The two-gate pipeline") and the
  * Overview's KPIs in one row: upstream pipeline → Gate → Knowledge Graph → Consumer Gate
- * → Consumers. Each stage shows its status (`pipeline-status.ts`), its numbers, one fact,
- * and, when it isn't green, the next step: a page to open or a command to run
- * (`pipeline-next.ts`). Each stage loads its own data, so one that fails doesn't hide the
+ * → Consumers. Each stage shows its status (`pipeline-status.ts`, its fact on hover), its
+ * numbers, and, when it isn't green, one line with the next step: a page to open or a
+ * command to copy (`pipeline-next.ts`). Each stage loads its own data, so one that fails doesn't hide the
  * others. Five equal columns on a wide screen, two, then one, on narrower ones.
  */
 export function PipelineStrip({ name }: { name: string }) {
@@ -134,9 +134,7 @@ function Stage({
         <StatusLabel tone="error" label="Not loaded" />
       ) : (
         <>
-          <span className="font-medium">
-            <StatusLabel tone={state.tone} label={state.status} />
-          </span>
+          <StageStatus status={state} />
           {metrics.length > 0 && (
             <dl className="flex flex-wrap gap-x-4 gap-y-1">
               {metrics.map((m) => (
@@ -155,7 +153,6 @@ function Stage({
               ))}
             </dl>
           )}
-          {state.fact && <p className="truncate text-xs text-muted-foreground" title={state.fact}>{state.fact}</p>}
           {next && (
             <div className="mt-auto pt-1">
               <Next next={next} />
@@ -167,7 +164,30 @@ function Stage({
   )
 }
 
-/** A link with an arrow, or a command with a copy button. */
+/**
+ * A stage's status. Its fact (when the latest run ended, the Contract Alias and when it was
+ * observed) shows on hover or focus, not as a line of its own: the cards below repeat it.
+ */
+function StageStatus({ status }: { status: StepStatus }) {
+  const label = (
+    <span className="font-medium">
+      <StatusLabel tone={status.tone} label={status.status} />
+    </span>
+  )
+  if (!status.fact) return label
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span tabIndex={0} aria-description={status.fact} className="w-fit rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          {label}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{status.fact}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+/** A link with an arrow, or a one-line action that copies a command, shown on hover. */
 function Next({ next }: { next: NextStep }): ReactNode {
   if (next.kind === 'link') {
     return (
@@ -177,16 +197,35 @@ function Next({ next }: { next: NextStep }): ReactNode {
       </Link>
     )
   }
+  return <CopyCommand label={next.label} command={next.command} />
+}
+
+/** `⧉ Evaluate its Gates`: copies the command; the command itself is in the tooltip. */
+function CopyCommand({ label, command }: { label: string; command: string }) {
+  const [copied, setCopied] = useState(false)
+  async function copy() {
+    await navigator.clipboard.writeText(command)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+  const Icon = copied ? Check : Copy
   return (
-    <div className="space-y-1">
-      <p className="text-xs text-muted-foreground">{next.label}:</p>
-      <div className="flex min-w-0 items-center gap-1 rounded-md bg-muted py-0.5 pr-0.5 pl-2">
-        <code className="truncate font-mono text-xs" title={next.command}>
-          {next.command}
-        </code>
-        <CopyButton value={next.command} label={`Copy “${next.command}”`} />
-      </div>
-    </div>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={`${label}: copy “${command}”`}
+          onClick={() => void copy()}
+          className="inline-flex max-w-full items-center gap-1 rounded-sm text-left text-xs text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <Icon aria-hidden className="size-3 shrink-0" />
+          <span className="truncate">{copied ? 'Copied' : label}</span>
+        </button>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-none">
+        <code className="font-mono whitespace-nowrap">{command}</code>
+      </TooltipContent>
+    </Tooltip>
   )
 }
 
