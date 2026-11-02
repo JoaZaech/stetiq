@@ -997,9 +997,7 @@ class LocalTrackingService:
             self._store.add_observation(obs)
             findings = mark_new(
                 drift.findings,
-                self._previous_findings(
-                    knowledge_graph, history, contract.ontology, thresholds, baseline
-                ),
+                self._previous_findings(knowledge_graph, history, contract, thresholds, baseline),
             )
             if not findings:
                 return ObservationOutcome(observation=obs)
@@ -1021,16 +1019,21 @@ class LocalTrackingService:
         self,
         knowledge_graph: str,
         history: list[Observation],
-        contract: Ontology,
+        contract: OntologyVersion,
         thresholds: DriftThresholds,
         baseline: Observation | None,
     ) -> tuple[DriftFinding, ...]:
         """The previous Observation's Drift findings: its event's, or, when it raised none
         (a run-end Observation is never checked), recomputed against today's contract,
-        thresholds and Baseline Observation."""
+        thresholds and Baseline Observation. None at all when the previous Observation was
+        judged against another Ontology Version than `contract` (e.g. before a Promotion),
+        so that every finding is new: recomputing would pass off a gap the new version
+        introduced as one the graph already had."""
         if not history:
             return ()
         previous = history[-1]
+        if self._judged_against(previous) not in (None, contract.number):
+            return ()
         event = next(
             (
                 e
@@ -1043,12 +1046,21 @@ class LocalTrackingService:
             return event.findings
         before = history[-2] if len(history) > 1 else None
         return assess_drift(
-            contract,
+            contract.ontology,
             previous.schema,
             None if before is None else before.schema,
             thresholds,
             baseline=None if baseline is None else baseline.schema,
         ).findings
+
+    def _judged_against(self, observation: Observation) -> int | None:
+        """The Contract Ontology Version an Observation was judged against: its own for an
+        on-demand one, its run's for a run-end one; None when unknown (an on-demand
+        Observation stored before Observations recorded it)."""
+        if observation.ontology_version is not None or observation.run_id is None:
+            return observation.ontology_version
+        run = self._store.get_run(observation.run_id)
+        return None if run is None else run.ontology_version
 
     def _baseline_observation(
         self, knowledge_graph: str, history: list[Observation]

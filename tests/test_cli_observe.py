@@ -173,3 +173,25 @@ def test_drift_list_counts_each_events_new_findings(cli_env):
     header, *rows = listed.output.strip().splitlines()
     new = header.split().index("NEW")
     assert [row.split()[new] for row in rows] == ["1", "0"]
+
+
+def test_observe_exits_non_zero_on_a_gap_a_promotion_introduced(cli_env, support_ontology):
+    """The previous Observation found no Drift against the old version; the attribute the
+    new one requires is missing, and that is new."""
+    _, client = cli_env
+    runner = CliRunner()
+    assert runner.invoke(app, ["observe", "support"]).exit_code == 0
+    priority = (
+        "        type: DATE\n      - name: priority\n        type: STRING\n        required: true\n"
+    )
+    v2 = client.register_ontology(
+        "support", support_ontology.replace("        type: DATE\n", priority)
+    )
+    client.set_alias("support", client.get_contract_alias("support"), v2.number)
+
+    after = runner.invoke(app, ["observe", "support"])
+
+    assert after.exit_code == DRIFT_EXIT_CODE, after.output
+    assert "1 new" in after.output
+    [line] = [line for line in after.output.splitlines() if "Ticket.priority" in line]
+    assert line.split()[:2] == ["new", "vanished"]

@@ -2,8 +2,9 @@
 Source.
 
 Each finding of an on-demand Observation is *new* or *persisting*, by comparison with the
-previous Observation's findings (recomputed when that Observation raised no event). A
-rate finding persists only while its rate has not worsened since the previous Observation.
+previous Observation's findings (recomputed when that Observation raised no event; none
+at all when it was judged against another Ontology Version). A rate finding persists only
+while its rate has not worsened since the previous Observation.
 """
 
 from datetime import date
@@ -172,3 +173,37 @@ def test_a_patterns_out_and_in_degree_findings_are_different_findings(client, gr
         [("coverage_drop", "out", True)],
         [("coverage_drop", "out", False), ("coverage_drop", "in", True)],
     ]
+
+
+PRIORITY = "      - name: priority\n        type: STRING\n        required: true\n"
+
+
+def promote_a_required_priority(client, kg, support_ontology):
+    """A new Ontology Version requiring `Ticket.priority`, which the graph lacks, promoted
+    to the Contract Alias."""
+    v2 = client.register_ontology(
+        kg, support_ontology.replace("        type: DATE\n", "        type: DATE\n" + PRIORITY)
+    )
+    client.set_alias(kg, client.get_contract_alias(kg), v2.number)
+
+
+@pytest.mark.parametrize("previous", ["on demand", "run end"])
+def test_after_a_promotion_every_finding_is_new(
+    client, support_kg, graph_source, support_ontology, previous
+):
+    """The previous Observation, judged against the old version, raised no event; its
+    findings are not recomputed against the new contract, so the gap the Promotion
+    introduced is new."""
+    seed(graph_source, "first")
+    seed(graph_source, "second")
+    if previous == "on demand":
+        assert observe_in(client, support_kg, FIRST).drift is None
+    else:
+        client.bind_graph_source(support_kg, FIRST)
+        with client.start_run(support_kg):
+            pass
+
+    promote_a_required_priority(client, support_kg, support_ontology)
+    second = observe_in(client, support_kg, SECOND)
+
+    assert marks(second) == [("vanished", "Ticket.priority", True)]
