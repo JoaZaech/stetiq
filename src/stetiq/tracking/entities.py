@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Literal
 
 from stetiq.conformance import Conformance
-from stetiq.drift import DriftFinding, DriftThresholds
+from stetiq.drift import DriftFinding, DriftThresholds, NotComparable
 from stetiq.errors import InvalidAliasNameError
 from stetiq.evaluation.framework import Detail, MetricValue, ParameterValue, SubjectKind
 from stetiq.gates import Gate, GateOutcome, Verdict
@@ -111,7 +111,11 @@ class EndedRun:
 @dataclass(frozen=True)
 class Observation:
     """A Graph Source's Observed Schema at one point in time: structure and aggregate
-    statistics only, never instance data. `run_id` is None for on-demand Observations."""
+    statistics only, never instance data. `run_id` is None for on-demand Observations.
+
+    An on-demand Observation also records its Baseline Observation (its own id when it is
+    the first since the contract's Ontology Version became the contract) and the Drift
+    checks that were `not_comparable`; a run-end Observation is checked for neither."""
 
     id: str
     knowledge_graph: str
@@ -119,6 +123,8 @@ class Observation:
     observed_at: datetime
     schema: ObservedSchema
     run_id: str | None = None
+    baseline_observation_id: str | None = None
+    not_comparable: tuple[NotComparable, ...] = ()
 
 
 @dataclass(frozen=True)

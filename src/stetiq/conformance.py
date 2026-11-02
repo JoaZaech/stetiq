@@ -51,6 +51,10 @@ class Mismatch:
     # For a value mismatch: the observed value and how many nodes or relationships hold it.
     value: str | None = None
     count: int | None = None
+    # The Violation Rate: the share of owner nodes or relationships failing this check, for
+    # `required_missing` and `value_outside_vocabulary`. None when unknown (a truncated
+    # value list) or for a kind without one.
+    rate: float | None = None
 
 
 @dataclass(frozen=True)
@@ -110,6 +114,7 @@ class Conformance:
                     m["detail"],
                     m.get("value"),
                     m.get("count"),
+                    m.get("rate"),
                 )
                 for m in d["mismatches"]
             ),
@@ -126,6 +131,8 @@ def _mismatch_to_dict(m: Mismatch) -> dict[str, Any]:
     if m.value is not None:  # only value mismatches carry these
         d["value"] = m.value
         d["count"] = m.count
+    if m.rate is not None:
+        d["rate"] = m.rate
     return d
 
 
@@ -221,7 +228,7 @@ def _check_concepts(
             present = checks.presence(subject, "property", dp is not None, op is not None)
             if present and dp is not None and op is not None:
                 checks.record(subject, "property", _property_mismatches(subject, label, dp, op))
-                _check_values(checks, subject, ontology, dp, op)
+                _check_values(checks, subject, ontology, dp, op, o.count if o else 0)
 
 
 # The properties declared for a Concept (own, and for node types inherited ones too).
@@ -262,6 +269,7 @@ def _property_mismatches(
                 "property",
                 MismatchKind.REQUIRED_MISSING,
                 f"required, but filled on {observed.fill_rate:.0%} of {owner}",
+                rate=1.0 - observed.fill_rate,
             )
         )
     conforming_types = {declared.type} | {
@@ -285,16 +293,19 @@ def _check_values(
     ontology: Ontology,
     declared: Property,
     observed: ObservedProperty,
+    owner_count: int,
 ) -> None:
     """A Vocabulary-bound Attribute whose values were observed is one item. Each observed
-    value outside the Vocabulary fails it and is reported with its count; a deprecated
-    value is reported but conforms. Only listed values are checked: a truncated list (more
-    distinct values than the cap) conforms when none of its values is outside the
-    Vocabulary, and the Observed Schema's `truncated` flag says the list is incomplete."""
+    value outside the Vocabulary fails it and is reported with its count and its share of
+    the `owner_count` owners (the Violation Rate); a deprecated value is reported but
+    conforms. Only listed values are checked: a truncated list (more distinct values than
+    the cap) conforms when none of its values is outside the Vocabulary, and the Observed
+    Schema's `truncated` flag says the list is incomplete, so its shares are unknown."""
     vocabulary = ontology.vocabulary(declared.vocabulary) if declared.vocabulary else None
     if vocabulary is None or observed.values is None:
         return
     values = {v.label: v for v in vocabulary.values}
+    known_shares = not observed.values.truncated and owner_count > 0
     outside = False
     for c in observed.values.counts:
         value = values.get(c.value)
@@ -309,6 +320,7 @@ def _check_values(
                     f"{c.value!r} observed {times}, not a value of {vocabulary.label}",
                     c.value,
                     c.count,
+                    c.count / owner_count if known_shares else None,
                 )
             )
         elif is_deprecated(value):

@@ -744,7 +744,16 @@ def _repo_config(path: Path | None) -> dict:
 
 def _echo_findings(findings) -> None:
     for f in findings:
-        typer.echo(f"  {f.kind:<15} {f.subject_kind:<18} {f.subject}  {f.detail}".rstrip())
+        typer.echo(f"  {f.kind:<18} {f.subject_kind:<18} {f.subject}  {f.detail}".rstrip())
+
+
+def _echo_not_comparable(entries) -> None:
+    """One summary line: the checks themselves are listed in the web UI."""
+    if entries:
+        checks = "check" if len(entries) == 1 else "checks"
+        typer.echo(
+            f"Not comparable: {len(entries)} {checks} (listed with the Observation in the web UI)"
+        )
 
 
 @app.command("observe")
@@ -757,9 +766,10 @@ def observe(
 ) -> None:
     """Observe the Knowledge Graph's Graph Source now and check it for Drift.
 
-    Compares the Observed Schema with the Contract Alias's Ontology Version and the
-    previous Observation (thresholds from the `drift:` section of the repo config).
-    Exits 3 on Drift, 1 on errors. Schedule it with your own cron, Airflow or CI."""
+    Compares the Observed Schema with the Contract Alias's Ontology Version, its counts
+    with the previous Observation and its Violation Rates with the Baseline Observation
+    (thresholds from the `drift:` section of the repo config). Exits 3 on Drift, 1 on
+    errors. Schedule it with your own cron, Airflow or CI."""
     from stetiq.drift import thresholds_from_config
 
     try:
@@ -777,6 +787,7 @@ def observe(
     typer.echo(f"Observation {obs.id} of {kg} at {obs.observed_at.isoformat()}")
     if outcome.drift is None:
         typer.echo("No Drift")
+        _echo_not_comparable(obs.not_comparable)
         return
     d = outcome.drift
     typer.echo(
@@ -784,6 +795,7 @@ def observe(
         f"(Ontology Version {d.ontology_version})"
     )
     _echo_findings(d.findings)
+    _echo_not_comparable(obs.not_comparable)
     raise typer.Exit(code=DRIFT_EXIT_CODE)
 
 

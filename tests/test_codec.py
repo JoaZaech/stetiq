@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 
 from stetiq.conformance import Conformance, Mismatch, MismatchKind
-from stetiq.drift import DriftFinding, DriftKind, DriftThresholds
+from stetiq.drift import DriftFinding, DriftKind, DriftThresholds, NotComparable
 from stetiq.evaluation.framework import Detail, Evaluation
 from stetiq.gates import ConformanceGate, GateOutcome
 from stetiq.graph_source import (
@@ -134,6 +134,17 @@ OBSERVATION = Observation(
     observed_at=AT,
     schema=SCHEMA,
     run_id="run-1",
+    baseline_observation_id="obs-0",
+    not_comparable=(
+        NotComparable(
+            DriftKind.VIOLATION_INCREASE,
+            "Customer.name",
+            "property",
+            "no Violation Rate in the Baseline Observation",
+            MismatchKind.REQUIRED_MISSING,
+        ),
+        NotComparable(DriftKind.UNDECLARED_VALUE, "Ticket.status", "property", "truncated"),
+    ),
 )
 DRIFT_EVENT = DriftEvent(
     id="drift-1",
@@ -147,10 +158,27 @@ DRIFT_EVENT = DriftEvent(
         DriftFinding(DriftKind.COUNT_DROP, "Customer", "node_type", "fell", 10, 3),
         DriftFinding(DriftKind.UNDECLARED, "Invoice", "node_type"),
         DriftFinding(
-            DriftKind.UNDECLARED_VALUE, "Ticket.status", "property", "2 times", value="on_hold"
+            DriftKind.UNDECLARED_VALUE,
+            "Ticket.status",
+            "property",
+            "2 times",
+            value="on_hold",
+            count=2,
+            share=0.25,
+        ),
+        DriftFinding(
+            DriftKind.VIOLATION_INCREASE,
+            "Customer.name",
+            "property",
+            "rose",
+            violation=MismatchKind.REQUIRED_MISSING,
+            baseline_rate=0.005,
+            observed_rate=0.03,
         ),
     ),
-    thresholds=DriftThresholds(max_count_drop=0.5, max_count_increase=2.0),
+    thresholds=DriftThresholds(
+        max_count_drop=0.5, max_count_increase=2.0, max_violation_increase=0.02
+    ),
 )
 
 GATE_PREVIEW_SOURCE = GatePreviewSource(
@@ -178,6 +206,7 @@ RUN = ConstructionRun(
                 "2 times",
                 "on_hold",
                 2,
+                0.25,
             ),
         ),
     ),

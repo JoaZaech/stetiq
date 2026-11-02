@@ -125,7 +125,9 @@ def test_reads_observations_and_drift_events_as_earlier_releases_stored_them(db)
         ),
         relationship_types=(),
     )
-    assert event.thresholds == DriftThresholds(max_count_drop=0.5)
+    assert (observation.baseline_observation_id, observation.not_comparable) == (None, ())
+    # Judged before the Violation Rate check existed, so it was off.
+    assert event.thresholds == DriftThresholds(max_count_drop=0.5, max_violation_increase=None)
     assert event.findings == (DriftFinding(DriftKind.UNDECLARED, "Invoice", "node_type"),)
 
 

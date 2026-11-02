@@ -83,3 +83,53 @@ def test_observe_exits_one_on_a_malformed_config(cli_env, tmp_path):
 
     assert result.exit_code == 1
     assert "max_count_drop" in result.output
+
+
+def _unname_customers(graph, client, unnamed):
+    """Rebind `support` to a graph where `unnamed` of `unnamed + 1` Customers lack a name."""
+    ada = graph.add_node(["Customer"], {"name": "Ada"}, database="later")
+    for _ in range(unnamed):
+        graph.add_node(["Customer"], {}, database="later")
+    graph.add_relationship(
+        ada, "OPENED", graph.add_node(["Ticket"], {"opened_at": date(2026, 1, 1)}, database="later")
+    )
+    client.bind_graph_source("support", GraphSourceScope(database="later"))
+
+
+def test_observe_reports_a_violation_rate_risen_since_the_baseline(cli_env):
+    graph, client = cli_env
+    runner = CliRunner()
+    runner.invoke(app, ["observe", "support"])
+    _unname_customers(graph, client, unnamed=1)
+
+    result = runner.invoke(app, ["observe", "support"])
+
+    assert result.exit_code == DRIFT_EXIT_CODE, result.output
+    assert "violation_increase" in result.output
+    assert "required_missing rate rose from 0.0% to 50.0%" in result.output
+
+
+def test_observe_turns_the_violation_rate_check_off_with_a_null_threshold(cli_env, tmp_path):
+    graph, client = cli_env
+    (tmp_path / "stetiq.yaml").write_text("drift:\n  max_violation_increase: null\n")
+    runner = CliRunner()
+    runner.invoke(app, ["observe", "support"])
+    _unname_customers(graph, client, unnamed=1)
+
+    result = runner.invoke(app, ["observe", "support"])
+
+    assert result.exit_code == 0, result.output
+
+
+def test_observe_prints_one_line_for_the_checks_that_were_not_comparable(cli_env):
+    graph, client = cli_env
+    graph.add_node(["Customer"], {}, database="before")  # Customers, none named
+    client.bind_graph_source("support", GraphSourceScope(database="before"))
+    runner = CliRunner()
+    runner.invoke(app, ["observe", "support"])
+    _unname_customers(graph, client, unnamed=1)
+
+    result = runner.invoke(app, ["observe", "support"])
+
+    lines = [line for line in result.output.splitlines() if "not comparable" in line.lower()]
+    assert lines == ["Not comparable: 1 check (listed with the Observation in the web UI)"]

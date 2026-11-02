@@ -24,7 +24,7 @@ from typing import Any
 
 from stetiq import use_case as use_case_format
 from stetiq.conformance import Conformance
-from stetiq.drift import DriftFinding, DriftThresholds
+from stetiq.drift import DriftFinding, DriftThresholds, NotComparable
 from stetiq.evaluation.framework import Detail, Evaluation
 from stetiq.gates import GateOutcome, outcome_from_dict, outcome_to_dict
 from stetiq.graph_source import GraphSourceScope, ObservedSchema
@@ -284,6 +284,8 @@ def observation_to_json(obs: Observation) -> dict[str, Any]:
         "observed_at": obs.observed_at.isoformat(),
         "scope": graph_source_scope_to_json(obs.scope),
         "schema": observed_schema_to_json(obs.schema),
+        "baseline_observation_id": obs.baseline_observation_id,
+        "not_comparable": not_comparable_to_json(obs.not_comparable),
     }
 
 
@@ -295,7 +297,17 @@ def observation_from_json(d: dict[str, Any]) -> Observation:
         observed_at=datetime.fromisoformat(d["observed_at"]),
         scope=graph_source_scope_from_json(d["scope"]),
         schema=observed_schema_from_json(d["schema"]),
+        baseline_observation_id=d.get("baseline_observation_id"),
+        not_comparable=not_comparable_from_json(d.get("not_comparable") or ()),
     )
+
+
+def not_comparable_to_json(entries: Iterable[NotComparable]) -> list[dict[str, Any]]:
+    return [e.to_dict() for e in entries]
+
+
+def not_comparable_from_json(data: Iterable[dict[str, Any]]) -> tuple[NotComparable, ...]:
+    return tuple(NotComparable.from_dict(e) for e in data)
 
 
 # --- Use Cases ---------------------------------------------------------------------------
@@ -381,8 +393,10 @@ def requested_drift_thresholds_from_json(d: dict[str, Any] | None) -> DriftThres
 
 def recorded_drift_thresholds_from_json(d: dict[str, Any] | None) -> DriftThresholds:
     """The thresholds a Drift event was judged with. None means none were recorded, so
-    every check was off."""
-    return DriftThresholds.from_dict(d or {})
+    every check was off; so was each check whose key an older event lacks (events record
+    the value in effect, so `max_violation_increase` is missing only from events written
+    before that check existed)."""
+    return DriftThresholds.from_dict({"max_violation_increase": None, **(d or {})})
 
 
 def drift_findings_to_json(findings: Iterable[DriftFinding]) -> list[dict[str, Any]]:
