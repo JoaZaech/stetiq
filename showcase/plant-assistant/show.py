@@ -12,6 +12,13 @@ story and its running order.
 
 Act 0, Monday morning: prompt v1 builds v1, the Gates pass, `production` is promoted
 to v1 and the run is deployed.
+
+Act 2, with stetiq: prompt v2 with Line 2's EAM export passes every Gate but fails the
+maintenance assistant's and the reliability dashboard's Consumer Gates, so it stays the
+Candidate, unpromoted and undeployed.
+
+Act 3, the fix: `WorkOrder.kind` bound to the `WorkOrderKind` Vocabulary passes the Gates
+and the Consumer Gates; `production` moves to it and the run is deployed.
 """
 
 from __future__ import annotations
@@ -25,6 +32,8 @@ from pathlib import Path
 SHOWCASE_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SHOWCASE_DIR))
 
+from dataclasses import replace  # noqa: E402
+
 import neo4j  # noqa: E402
 from plant_assistant.deploy import deploy  # noqa: E402
 from plant_assistant.evaluators import Documented, ReportCoverage  # noqa: E402
@@ -37,7 +46,7 @@ from plant_assistant.pipeline import (  # noqa: E402
 )
 
 import stetiq  # noqa: E402
-from stetiq import GraphSourceScope  # noqa: E402
+from stetiq import CompetencyQuestion, GraphSourceScope  # noqa: E402
 from stetiq.graph_source import Neo4jGraphSource  # noqa: E402
 
 KG = "plant-maintenance"
@@ -54,6 +63,16 @@ Built by the plant-assistant showcase's pipeline into Neo4j; the Consumers and t
 Competency Questions are in `use-case.yaml`."""
 
 ROUND_LABEL: dict[Round, str] = {"v1": "v1", "v2": "prompt v2", "fix": "fix"}
+
+# Before prompt v2, the assistant's root-cause Task also needs to know which suppliers'
+# components keep failing: the reason prompt v2 may add Supplier (unjustified-additions).
+PARTS_SUPPLIERS = CompetencyQuestion(
+    id="parts-suppliers",
+    question="Which suppliers' components keep failing?",
+    query="MATCH (c:Component)-[:SUPPLIED_BY]->(s:Supplier) "
+    "RETURN c.name AS component, s.name AS supplier",
+)
+PARTS_SUPPLIERS_TASK = "explain-root-causes"
 
 
 @dataclass(frozen=True)
@@ -77,6 +96,10 @@ class ActState:
     gates: stetiq.GateResult
     promoted: bool
     deployed: bool
+    # The Consumer Gate verdicts the act's CI asked for (none in Act 0, the baseline).
+    consumer_gates: tuple[stetiq.ConsumerGateResult, ...] = ()
+    # The run whose Extraction the production graph holds after the act.
+    production_run: str | None = None
 
 
 @dataclass
@@ -86,6 +109,8 @@ class ShowState:
     acts: dict[int, ActState] = field(default_factory=dict)
     # Every run's Extraction, by run id: what a deploy replays into production.
     extractions: dict[str, Extraction] = field(default_factory=dict)
+    # The run the production graph holds now (None: nothing deployed yet).
+    production_run: str | None = None
 
     @property
     def lines(self) -> list[str]:
@@ -103,7 +128,7 @@ class Show:
         self.state = ShowState()
 
     def say(self, *lines: str) -> None:
-        if not self.quiet:
+        if lines and not self.quiet:
             print(*lines, sep="\n", flush=True)
 
     def declare(self) -> None:
@@ -139,10 +164,20 @@ class Show:
         if promoted:
             self.client.set_alias(KG, "production", gates.ontology_version)
             deploy(self.graphs.production, self.state.extractions[run.id])
+            self.state.production_run = run.id
         parts = [ROUND_LABEL["v1"], f"Gate {_mark(gates.passed)}"]
         if promoted:
             parts += [f"promoted: production -> v{gates.ontology_version}", "deployed"]
-        act = ActState(0, "v1", "   ".join(parts), run, gates, promoted, promoted)
+        act = ActState(
+            0,
+            "v1",
+            "   ".join(parts),
+            run,
+            gates,
+            promoted,
+            promoted,
+            production_run=self.state.production_run,
+        )
         self.state.acts[0] = act
         self.say("Act 0, Monday morning", act.line)
         for o in gates.outcomes:
@@ -150,9 +185,142 @@ class Show:
                 self.say(f"    Gate {o.gate.name} failed: {'; '.join(o.reasons[:3])}")
         return act
 
+    def declare_parts_suppliers(self) -> stetiq.UseCaseVersion:
+        """Before prompt v2: the assistant's root-cause Task now also asks which
+        suppliers' components keep failing."""
+        current = self.client.get_use_case_version(KG).use_case
+        consumers = tuple(
+            replace(
+                c,
+                tasks=tuple(
+                    replace(t, competency_questions=(*t.competency_questions, PARTS_SUPPLIERS.id))
+                    if t.id == PARTS_SUPPLIERS_TASK
+                    else t
+                    for t in c.tasks
+                ),
+            )
+            for c in current.consumers
+        )
+        return self.client.register_use_case(
+            KG,
+            replace(
+                current,
+                competency_questions=(*current.competency_questions, PARTS_SUPPLIERS),
+                consumers=consumers,
+            ),
+        )
+
+    def gate(self, act_number: int, round_: Round, run: stetiq.ConstructionRun) -> ActState:
+        """The pipeline's CI with stetiq: the Gates and every Consumer Gate on the run;
+        `production` is promoted, and the run deployed, only when all of them pass."""
+        if run.candidate_version is not None:
+            # The custom Ontology Version Evaluator (`documented`) on the new Candidate;
+            # the built-ins ran when stetiq proposed it.
+            self.client.evaluate(KG, run.candidate_version)
+        gates = self.client.evaluate_gates(KG, CONFIG, run=run.id)
+        consumer_gates = tuple(
+            sorted(self.client.evaluate_consumer_gates(KG, run=run.id), key=lambda c: c.consumer)
+        )
+        promoted = gates.passed and all(c.passed for c in consumer_gates)
+        if promoted:
+            self.client.set_alias(KG, "production", gates.ontology_version)
+            deploy(self.graphs.production, self.state.extractions[run.id])
+            self.state.production_run = run.id
+        act = ActState(
+            act_number,
+            round_,
+            _line(round_, gates, consumer_gates, promoted),
+            run,
+            gates,
+            promoted,
+            promoted,
+            consumer_gates=consumer_gates,
+            production_run=self.state.production_run,
+        )
+        self.state.acts[act_number] = act
+        return act
+
+    def act_2(self) -> ActState:
+        """With stetiq: the same pull request (prompt v2 and Line 2's EAM export) runs
+        again, and its CI asks stetiq. Every Gate passes; the Consumer Gates fail, so
+        the Candidate stays unpromoted and the production graph is not touched."""
+        self.declare_parts_suppliers()
+        act = self.gate(2, "v2", self.construct("v2"))
+        self.say("Act 2, with stetiq", act.line)
+        self.say(*_detail_lines(act))
+        return act
+
+    def act_3(self) -> ActState:
+        """The fix: v1 plus what prompt v2 added, with `WorkOrder.kind` bound to the
+        `WorkOrderKind` Vocabulary, registered as the next Ontology Version. Prompt v2
+        runs on it; the Gates and the Consumer Gates pass, `production` moves to it and
+        the run is deployed."""
+        fix = self.client.register_ontology(KG, ONTOLOGY / "fix.yaml")
+        act = self.gate(3, "fix", self.construct("fix", ontology_version=fix.number))
+        self.say("Act 3, the fix", act.line)
+        self.say(*_detail_lines(act))
+        return act
+
 
 def _mark(passed: bool) -> str:
     return "✅" if passed else "❌"
+
+
+def _line(
+    round_: Round,
+    gates: stetiq.GateResult,
+    consumer_gates: tuple[stetiq.ConsumerGateResult, ...],
+    promoted: bool,
+) -> str:
+    """One PR-style line: the Gate, the Consumer Gate (each failing Consumer with the
+    symptom its verdict names: question, row counts, change), and what happened."""
+    parts = [ROUND_LABEL[round_], f"Gate {_mark(gates.passed)}"]
+    if consumer_gates:
+        passed = all(c.passed for c in consumer_gates)
+        consumer = f"Consumer Gate {_mark(passed)}"
+        if not passed:
+            failing = [
+                f"{c.consumer} ❌ "
+                + ", ".join(
+                    f"{f.competency_question} {f.before} → {f.after}, {_percent(f.change)}"
+                    if f.change is not None
+                    else f"{f.competency_question} {f.missing}"
+                    for o in c.outcomes
+                    for f in o.findings
+                )
+                for c in consumer_gates
+                if not c.passed
+            ]
+            consumer += f" ({'; '.join(failing)})"
+        parts.append(consumer)
+    if promoted:
+        parts += [f"promoted: production -> v{gates.ontology_version}", "deployed"]
+    elif consumer_gates:
+        parts.append(f"not promoted (Candidate stays at v{gates.ontology_version})")
+    return "   ".join(parts)
+
+
+def _percent(change: float) -> str:
+    sign = "\N{MINUS SIGN}" if change < 0 else "+"
+    return f"{sign}{abs(change) * 100:.0f}%"
+
+
+def _detail_lines(act: ActState) -> list[str]:
+    """Under the line: failed Gates, the Ontology Diff Gate's reasons, and every
+    Consumer Gate's reasons."""
+    lines = []
+    for o in act.gates.outcomes:
+        if not o.passed:
+            lines.append(f"    Gate {o.gate.name} failed: {'; '.join(o.reasons[:3])}")
+        elif o.gate.check == "ontology_diff" and o.reasons:
+            lines.append(f"    Gate {o.gate.name}: {'; '.join(o.reasons)}")
+    for c in act.consumer_gates:
+        for o in c.outcomes:
+            lines.append(
+                f"    {c.consumer} {o.gate.name} {_mark(o.passed)}"
+                + (f": {'; '.join(o.reasons)}" if o.reasons else "")
+            )
+    return lines
 
 
 def run_show(
@@ -171,6 +339,8 @@ def run_show(
     show = Show(client, graphs, extraction=extraction, quiet=quiet)
     show.declare()
     show.act_0()
+    show.act_2()
+    show.act_3()
     return show.state
 
 

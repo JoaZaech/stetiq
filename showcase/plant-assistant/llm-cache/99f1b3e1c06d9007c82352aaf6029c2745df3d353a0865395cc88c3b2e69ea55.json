@@ -1,7 +1,7 @@
 {
- "prompt_version": "v1",
+ "prompt_version": "v2",
  "model": "claude-opus-5-5",
- "recorded_at": "2026-11-01",
+ "recorded_at": "2026-11-02",
  "report": "WO-2038.eml",
  "response": {
   "nodes": [
@@ -9,7 +9,11 @@
     "label": "WorkOrder",
     "key": "WO-2038",
     "properties": {
-     "id": "WO-2038"
+     "id": "WO-2038",
+     "kind": "breakdown",
+     "opened_at": "2026-04-02",
+     "downtime_minutes": 15,
+     "title": "Lathe-02 chuck pressure fault"
     }
    },
    {
@@ -41,10 +45,17 @@
     }
    },
    {
+    "label": "Supplier",
+    "key": "Festo",
+    "properties": {
+     "name": "Festo"
+    }
+   },
+   {
     "label": "Fault",
     "key": "WO-2038",
     "properties": {
-     "description": "a sticking pneumatic valve on the chuck supply"
+     "description": "A sticking pneumatic valve on the chuck supply"
     }
    },
    {
@@ -91,6 +102,13 @@
     "type": "CAUSED_BY",
     "end_label": "Fault",
     "end_key": "WO-2038"
+   },
+   {
+    "start_label": "Component",
+    "start_key": "pneumatic valve",
+    "type": "SUPPLIED_BY",
+    "end_label": "Supplier",
+    "end_key": "Festo"
    },
    {
     "start_label": "WorkOrder",

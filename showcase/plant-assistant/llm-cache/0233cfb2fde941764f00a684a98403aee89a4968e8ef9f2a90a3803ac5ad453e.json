@@ -1,7 +1,7 @@
 {
  "prompt_version": "v1",
  "model": "claude-opus-5-5",
- "recorded_at": "2026-11-01",
+ "recorded_at": "2026-11-02",
  "report": "WO-2035.txt",
  "response": {
   "nodes": [
@@ -9,9 +9,7 @@
     "label": "WorkOrder",
     "key": "WO-2035",
     "properties": {
-     "id": "WO-2035",
-     "downtime_minutes": 18,
-     "kind": "breakdown"
+     "id": "WO-2035"
     }
    },
    {
@@ -53,7 +51,7 @@
     "label": "Fault",
     "key": "WO-2035",
     "properties": {
-     "description": "Loose tensioner after the previous belt change, causing belt slip under full pallets"
+     "description": "Loose tensioner after the previous belt change"
     }
    },
    {
@@ -79,6 +77,13 @@
     "type": "ASSIGNED_TO",
     "end_label": "Technician",
     "end_key": "Aisha Rahman"
+   },
+   {
+    "start_label": "Machine",
+    "start_key": "Conveyor-07",
+    "type": "FEEDS",
+    "end_label": "Machine",
+    "end_key": "Packer-05"
    },
    {
     "start_label": "WorkOrder",
@@ -114,13 +119,6 @@
     "type": "ASSIGNED_TO",
     "end_label": "Technician",
     "end_key": "Aisha Rahman"
-   },
-   {
-    "start_label": "Machine",
-    "start_key": "Conveyor-07",
-    "type": "FEEDS",
-    "end_label": "Machine",
-    "end_key": "Packer-05"
    }
   ],
   "definitions": []
