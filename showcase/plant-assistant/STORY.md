@@ -1,9 +1,8 @@
 # The plant assistant: a GraphRAG Consumer that stetiq keeps honest
 
-> **Status: design.** This is the story and running order the showcase is built to. Nothing
-> in `showcase/plant-assistant/` beyond this file exists yet. The numbers come from the
-> plant-kg recording and data (`examples/plant-kg/`); the test that the build adds pins
-> them, and this page is corrected if any differ.
+> The story and running order of the show. The numbers and lines below are what
+> `tests/test_showcase_plant_assistant.py` pins; [README.md](README.md) tells how to run
+> it on stage.
 
 A separate project that *uses* stetiq, the way a customer would: an upstream pipeline builds
 a factory's maintenance Knowledge Graph in Neo4j, and a GraphRAG assistant answers the shift
@@ -39,7 +38,7 @@ The two breakdowns just stop being breakdowns.
 
 ## Act 0 — Monday morning (v1)
 
-`show.py` starts the stack, runs prompt v1 on `ontology/v1.yaml`, promotes it and deploys it.
+With the stack up (`docker compose up`), `show.py` runs prompt v1 on `ontology/v1.yaml`, promotes it and deploys it.
 
 - Terminal: `v1   Gate ✅   promoted: production -> v1   deployed`
 - Assistant banner: **on Ontology v1**
@@ -47,7 +46,8 @@ The two breakdowns just stop being breakdowns.
   → CNC-04 (WO-2031): worn spindle bearing. Lathe-02 (WO-2038): sticking chuck valve.
   The Cypher shown filters `kind = 'breakdown'` and finds both.
 - Ask: **"Which suppliers' components keep failing?"**
-  → "The graph doesn't record suppliers." Honest: v1 has no `Supplier`.
+  → "The graph does not record suppliers, so I can't say whose components keep failing."
+  Honest: v1 has no `Supplier`.
 
 *Say:* this is a normal GraphRAG app. Its prompt is the Ontology. Hold that thought.
 
@@ -103,7 +103,8 @@ report.
 - The Ontology Diff still classes the binding as breaking; the `no-breaking-changes` Gate
   accepts it on evidence: "binding WorkOrder.kind -> WorkOrderKind accepted: all observed
   values are in the Vocabulary".
-- Within 5 s the banner flips by itself: **on Ontology v3 · accepted**.
+- The banner flips by itself on the guard's next poll (within 5 s; `show.py` asks it to
+  poll at once): **on Ontology v3 · accepted**.
 - Ask both questions: Line 2's two breakdowns are back, *and* the suppliers answer works.
   The Ontology in Claude's prompt now lists the Vocabulary's values.
 - Ask an audience question. Anything about the plant.
@@ -115,7 +116,13 @@ version is safe for them.
 ## Epilogue (optional)
 
 Someone edits `graph-production` by hand: adds `SparePart` nodes and deletes the done
-follow-ups. The next Observation records Drift against `production` in `stetiq ui`.
+follow-ups. The next Observation records Drift against `production` in `stetiq ui`
+(`show.py --epilogue`):
+
+- Terminal: `hand edit: +3 SparePart, −6 done FollowUp   Drift ⚠ against production -> v3 (3 structural, 3 statistical)`
+- Structural: `SparePart`, `SparePart.name` and `SparePart.stock` are undeclared by v3.
+- Statistical (beyond `stetiq.yaml`'s `max_count_drop: 0.25`): `FollowUp` 12 → 6,
+  `HAS_FOLLOW_UP` 12 → 6, `ASSIGNED_TO` 20 → 14.
 
 ## If something goes wrong on stage
 
