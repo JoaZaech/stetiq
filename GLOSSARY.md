@@ -151,7 +151,7 @@ Capturing a Graph Source's current Observed Schema, either at the end of a Const
 _Avoid_: Scan, crawl, sync
 
 **Baseline Observation**:
-The first Observation, at the end of a Construction Run or on demand, since the Contract Alias's current Ontology Version became the contract, by a Promotion or by switching the Contract Alias; Drift compares Violation Rates and Coverage with it, and an Observation with none before it is its own.
+The first Observation, at the end of a Construction Run or on demand, since the Contract Alias's current Ontology Version became the contract, by a Promotion or by switching the Contract Alias; Drift compares Violation Rates, Coverage and fill rates with it, and an Observation with none before it is its own.
 _Avoid_: Reference observation, snapshot, pinned baseline
 
 **Evolution Mode**:

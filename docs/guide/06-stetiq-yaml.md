@@ -27,7 +27,7 @@ The file must be a YAML mapping. An empty file is an empty config. Each section 
 | --- | --- | --- |
 | [`knowledge_graph`](#knowledge_graph) | `stetiq run`, `stetiq observe`, `stetiq gate` | The Knowledge Graph to use when the command doesn't name one. |
 | [`entry_point`](#entry_point) | `stetiq run` | The Construction Entry Point: the command a Construction Run starts. |
-| [`drift`](#drift) | `stetiq observe` | Thresholds for statistical Drift: counts, Violation Rates and Coverage. |
+| [`drift`](#drift) | `stetiq observe` | Thresholds for statistical Drift: counts, Violation Rates, Coverage and fill rates. |
 | [`gates`](#gates) | `stetiq gate` | The Gates to evaluate for an Ontology Version or a Construction Run. |
 
 ## knowledge_graph
@@ -107,7 +107,7 @@ Every key is optional. Each threshold must be a non-negative number or `null`, a
 
 A check that lacks its input never raises Drift: a Violation Rate whose Attribute the Baseline Observation didn't observe, a wrong-type rate when either Observed Schema doesn't count values per type (one stored by an older stetiq, or pushed by a Graph Source that doesn't), a Coverage the Baseline Observation can't give (it observed no nodes of that class, or it was taken by a Graph Source adapter that doesn't report Coverage), a fill rate whose node or relationship type it didn't observe, a type, pattern or owner below `min_count`, the share of a value outside the Vocabulary when the attribute had more distinct values than stetiq reads, or a cardinality rate when the Graph Source adapter did not count the nodes outside the bounds. `stetiq observe` prints one `Not comparable: N checks` line for them, and the web UI lists them with the Observation.
 
-Any other key in `drift:` is an error. `stetiq observe` exits 3 when it finds new Drift: a finding the previous Observation didn't have, or a Violation Rate that rose again since it. A finding that persists from the previous Observation is still recorded and printed, but exits 0, unless you pass `--fail-on-persisting` (see [Observations and Drift](./04-cli.md#observations-and-drift)). It exits 1 on an error. If you run it without `--config` and there is no `./stetiq.yaml`, it uses an empty config. A `--config` file that doesn't exist is an error.
+Any other key in `drift:` is an error. `stetiq observe` exits 3 when at least one finding is new: one the previous Observation didn't have, or one on a Violation Rate, Coverage or fill rate that has moved further from its value in the Baseline Observation since. A finding that persists from the previous Observation is still recorded and printed, but exits 0, unless you pass `--fail-on-persisting` (see [Observations and Drift](./04-cli.md#observations-and-drift)). It exits 1 on an error. If you run it without `--config` and there is no `./stetiq.yaml`, it uses an empty config. A `--config` file that doesn't exist is an error.
 
 ## gates
 
