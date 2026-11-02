@@ -128,8 +128,9 @@ def service_for_uri(tracking_uri: str, *, token: str | None = None) -> TrackingS
     )
 
 
-def _metrics_only(results: Sequence[EvaluationResult]) -> tuple[EvaluationResult, ...]:
-    """Results without their details, which can quote observed values (the run context)."""
+def _without_details(results: Sequence[EvaluationResult]) -> tuple[EvaluationResult, ...]:
+    """Results without their details, which can quote observed values: the one place the
+    run context drops them, so neither `RunContext` nor its JSON carries any."""
     return tuple(dataclasses.replace(r, details=()) for r in results)
 
 
@@ -432,11 +433,11 @@ class Client:
             knowledge_graph=knowledge_graph,
             ontology_version=ontology_version,
             use_case_version=use_case_version,
-            evaluation_results=_metrics_only(
+            evaluation_results=_without_details(
                 self.get_evaluation_results(knowledge_graph, ontology_version.number)
             ),
             run=run,
-            run_evaluation_results=_metrics_only(run_results),
+            run_evaluation_results=_without_details(run_results),
             question_executions=executed_questions(run_results),
         )
 

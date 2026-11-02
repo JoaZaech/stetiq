@@ -221,7 +221,9 @@ def test_the_context_carries_metrics_only_never_values_from_the_graph(client, gr
         "conformance",
         "quotes_the_graph",
     }
-    assert {"details", "value", "count"}.isdisjoint(keys(data))
+    results = data["evaluation_results"] + data["run"]["evaluation_results"]
+    assert all(r["details"] == [] for r in results)
+    assert {"value", "count"}.isdisjoint(keys(data))
     assert "Press 7" not in json.dumps(data)
 
 
