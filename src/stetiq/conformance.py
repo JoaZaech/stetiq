@@ -172,7 +172,7 @@ def assess_conformance(declared: Ontology, observed: ObservedSchema) -> Conforma
         "node_type",
         declared.node_types,
         observed.node_types,
-        _properties_of(declared),
+        properties_of(declared),
         declared,
     )
     _check_concepts(
@@ -256,7 +256,7 @@ def _own_properties(concept: NodeType | RelationshipType) -> tuple[Property, ...
     return concept.properties
 
 
-def _properties_of(declared: Ontology) -> PropertiesOf:
+def properties_of(declared: Ontology) -> PropertiesOf:
     """A node type's own properties plus those inherited from its ancestors (the
     nearest declaration of a name wins)."""
     nodes = {n.label: n for n in declared.node_types}
@@ -461,7 +461,7 @@ def candidate_ontology(declared: Ontology, observed: ObservedSchema) -> Ontology
     Observed values outside a bound Vocabulary are added to it as new Values, which is
     additive too."""
     node_types, new_nodes, new_node_props = _extend(
-        declared.node_types, observed.node_types, NodeType, _properties_of(declared)
+        declared.node_types, observed.node_types, NodeType, properties_of(declared)
     )
     relationship_types, new_rels, new_rel_props = _extend(
         declared.relationship_types,
@@ -552,14 +552,14 @@ def _extend_vocabularies(declared: Ontology, observed: ObservedSchema) -> tuple[
     added: those beyond a truncated list's cap are unknown."""
     new: dict[str, set[str]] = {}
     owners = (
-        (declared.node_types, observed.node_type, _properties_of(declared)),
+        (declared.node_types, observed.node_type, properties_of(declared)),
         (declared.relationship_types, observed.relationship_type, _own_properties),
     )
-    for concepts, observed_owner, properties_of in owners:
+    for concepts, observed_owner, declared_properties in owners:
         for concept in concepts:
             o = observed_owner(concept.label)
             observed_props = {p.name: p for p in (o.properties if o else ())}
-            for p in properties_of(concept):
+            for p in declared_properties(concept):
                 op = observed_props.get(p.name)
                 if p.vocabulary and op is not None and op.values is not None:
                     new.setdefault(p.vocabulary, set()).update(c.value for c in op.values.counts)

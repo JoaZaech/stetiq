@@ -30,17 +30,18 @@ Thresholds come from the `drift:` section of the repo config (`stetiq.yaml`), se
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from enum import StrEnum
+from functools import partial
 from typing import Any
 
 from stetiq.conformance import (
     Conformance,
     MismatchKind,
     MismatchSubjectKind,
-    _properties_of,
     assess_conformance,
+    properties_of,
 )
 from stetiq.errors import InvalidDriftConfigError
 from stetiq.graph_source import ObservedSchema
@@ -331,42 +332,39 @@ def assess_drift(
         count_findings, count_gaps = _statistical(observed, previous, thresholds)
         findings.extend(count_findings)
         not_comparable.extend(count_gaps)
-    min_count = 0 if thresholds is None else thresholds.min_count
-    limit = None if thresholds is None else thresholds.max_violation_increase
-    if baseline is not None and limit is not None:
-        rate_findings, rate_gaps = _violation_increases(
-            contract,
-            conformance,
-            assess_conformance(contract, baseline),
-            observed,
-            baseline,
-            limit,
-            min_count,
+    if baseline is not None and thresholds is not None:
+        ratio_checks: tuple[tuple[float | None, _RatioCheck], ...] = (
+            (
+                thresholds.max_violation_increase,
+                partial(_violation_increases, contract, conformance),
+            ),
+            (thresholds.max_coverage_drop, partial(_coverage_drops, contract)),
+            (thresholds.max_fill_rate_drop, partial(_fill_rate_drops, contract)),
         )
-        findings.extend(rate_findings)
-        not_comparable.extend(rate_gaps)
-    coverage_limit = None if thresholds is None else thresholds.max_coverage_drop
-    if baseline is not None and coverage_limit is not None:
-        coverage_findings, coverage_gaps = _coverage_drops(
-            contract, observed, baseline, coverage_limit, min_count
-        )
-        findings.extend(coverage_findings)
-        not_comparable.extend(coverage_gaps)
-    fill_limit = None if thresholds is None else thresholds.max_fill_rate_drop
-    if baseline is not None and fill_limit is not None:
-        fill_findings, fill_gaps = _fill_rate_drops(
-            contract, observed, baseline, fill_limit, min_count
-        )
-        findings.extend(fill_findings)
-        not_comparable.extend(fill_gaps)
+        for limit, check in ratio_checks:
+            if limit is not None:
+                ratio_findings, ratio_gaps = check(observed, baseline, limit, thresholds.min_count)
+                findings.extend(ratio_findings)
+                not_comparable.extend(ratio_gaps)
     # One entry per check: a truncated list yields one mismatch per listed outside value.
     return DriftAssessment(tuple(findings), tuple(dict.fromkeys(not_comparable)))
+
+
+# A ratio check bound to its contract: (observed, baseline, limit, min_count) -> findings, gaps.
+_RatioCheck = Callable[
+    [ObservedSchema, ObservedSchema, float, int], tuple[list[DriftFinding], list[NotComparable]]
+]
+
+
+def _exceeds(change: float, limit: float) -> bool:
+    """Whether `change` is beyond `limit`. Rounded, so that a change of exactly the
+    threshold is not Drift despite float error."""
+    return round(change, 9) > limit
 
 
 def _violation_increases(
     contract: Ontology,
     conformance: Conformance,
-    at_baseline: Conformance,
     observed: ObservedSchema,
     baseline: ObservedSchema,
     limit: float,
@@ -377,6 +375,7 @@ def _violation_increases(
     then), whose rate is unknown on either side, or whose owner (a pattern's: the endpoint
     nodes of the failing degree) is below `min_count` on either side, is not comparable."""
     patterns = {str(p): p for p in contract.patterns}  # a rated pattern is a declared one
+    at_baseline = assess_conformance(contract, baseline)
     # A pattern's out- and in-degree are separate checks on the same subject.
     before = {
         (m.kind, m.subject, m.direction): m.rate for m in at_baseline.mismatches if m.kind in _RATED
@@ -425,8 +424,7 @@ def _violation_increases(
         if small is not None:
             gaps.append(small)
             continue
-        # Rounded, so that a rise of exactly the threshold is not Drift despite float error.
-        if round(m.rate - then, 9) > limit:
+        if _exceeds(m.rate - then, limit):
             findings.append(
                 DriftFinding(
                     kind=DriftKind.VIOLATION_INCREASE,
@@ -481,8 +479,7 @@ def _coverage_drops(
             if small is not None:
                 gaps.append(small)
                 continue
-            # Rounded, so that a drop of exactly the threshold is not Drift despite float error.
-            if round(then - now, 9) > limit:
+            if _exceeds(then - now, limit):
                 findings.append(
                     DriftFinding(
                         kind=DriftKind.COVERAGE_DROP,
@@ -532,7 +529,7 @@ def _fill_rate_drops(
     not observed on an observed owner has fill rate 0; an owner not observed now is
     `vanished` Drift, and one the baseline did not observe, or below `min_count` on either
     side, is not comparable."""
-    properties_of = _properties_of(contract)
+    declared_properties = properties_of(contract)
     owners: tuple[tuple[Any, Any], ...] = (
         (contract.node_types, ObservedSchema.node_type),
         (contract.relationship_types, ObservedSchema.relationship_type),
@@ -544,7 +541,7 @@ def _fill_rate_drops(
             now, then = find(observed, concept.label), find(baseline, concept.label)
             if now is None:
                 continue
-            for prop in sorted(properties_of(concept), key=lambda p: p.name):
+            for prop in sorted(declared_properties(concept), key=lambda p: p.name):
                 if prop.required:
                     continue
                 subject = f"{concept.label}.{prop.name}"
@@ -565,8 +562,7 @@ def _fill_rate_drops(
                     gaps.append(small)
                     continue
                 before, after = _fill_rate(then, prop.name), _fill_rate(now, prop.name)
-                # Rounded, so that a drop of exactly the threshold is not Drift.
-                if round(before - after, 9) > limit:
+                if _exceeds(before - after, limit):
                     findings.append(
                         DriftFinding(
                             kind=DriftKind.FILL_RATE_DROP,
@@ -770,5 +766,4 @@ def _is_new(f: DriftFinding, before: DriftFinding | None) -> bool:
     if f.observed_rate is None or f.baseline_rate is None or before.observed_rate is None:
         return False
     direction = 1 if f.observed_rate >= f.baseline_rate else -1
-    # Rounded, so that float error is not a worsening.
-    return round((f.observed_rate - before.observed_rate) * direction, 9) > 0
+    return _exceeds((f.observed_rate - before.observed_rate) * direction, 0)
