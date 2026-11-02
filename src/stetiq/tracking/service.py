@@ -71,6 +71,7 @@ from stetiq.tracking.entities import (
     DEFAULT_CONTRACT_ALIAS,
     DEFAULT_EVOLUTION_MODE,
     Alias,
+    AlignmentPoint,
     ConstructionRun,
     ConsumerGateResult,
     DriftEvent,
@@ -261,6 +262,12 @@ class TrackingService(Protocol):
         ...
 
     def list_drift_events(self, knowledge_graph: str) -> list[DriftEvent]: ...
+
+    def alignment_trend(self, knowledge_graph: str) -> list[AlignmentPoint]:
+        """The Conformance scores of the Knowledge Graph's Construction Runs and on-demand
+        Observations, oldest first. Observations stored before scores existed, and runs
+        that ended without an Observation, have no point."""
+        ...
 
     def set_alias(self, knowledge_graph: str, name: str, version: int, actor: str) -> Alias: ...
 
@@ -962,6 +969,8 @@ class LocalTrackingService:
             self.get_knowledge_graph(knowledge_graph)
             history = self._store.list_observations(knowledge_graph)
             previous = history[-1] if history else None
+            contract_alias = self.get_contract_alias(knowledge_graph)
+            contract = self.get_contract_version(knowledge_graph)
             obs = Observation(
                 id=uuid.uuid4().hex,
                 knowledge_graph=knowledge_graph,
@@ -969,10 +978,10 @@ class LocalTrackingService:
                 observed_at=_now(),
                 schema=schema,
                 run_id=None,
+                conformance=assess_conformance(contract.ontology, schema),
+                ontology_version=contract.number,
             )
             self._store.add_observation(obs)
-            contract_alias = self.get_contract_alias(knowledge_graph)
-            contract = self.get_contract_version(knowledge_graph)
             findings = assess_drift(
                 contract.ontology, schema, None if previous is None else previous.schema, thresholds
             )
@@ -995,6 +1004,37 @@ class LocalTrackingService:
     def list_drift_events(self, knowledge_graph: str) -> list[DriftEvent]:
         self.get_knowledge_graph(knowledge_graph)
         return self._store.list_drift_events(knowledge_graph)
+
+    def alignment_trend(self, knowledge_graph: str) -> list[AlignmentPoint]:
+        with self._store.transaction():
+            self.get_knowledge_graph(knowledge_graph)
+            runs = {r.id: r for r in self._store.list_runs(knowledge_graph)}
+            observations = self._store.list_observations(knowledge_graph)
+        # A run's Conformance is its run-end Observation's, so walking the Observations
+        # (stored oldest first) gives every point in time order.
+        trend: list[AlignmentPoint] = []
+        for obs in observations:
+            run = None if obs.run_id is None else runs.get(obs.run_id)
+            if run is not None and run.conformance is not None:
+                trend.append(
+                    AlignmentPoint(
+                        at=obs.observed_at,
+                        score=run.conformance.score,
+                        ontology_version=run.candidate_version or run.ontology_version,
+                        observation_id=obs.id,
+                        run_id=run.id,
+                    )
+                )
+            elif obs.conformance is not None and obs.ontology_version is not None:
+                trend.append(
+                    AlignmentPoint(
+                        at=obs.observed_at,
+                        score=obs.conformance.score,
+                        ontology_version=obs.ontology_version,
+                        observation_id=obs.id,
+                    )
+                )
+        return trend
 
     # --- Aliases and Promotion ------------------------------------------------------
 

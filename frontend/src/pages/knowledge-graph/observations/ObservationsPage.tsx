@@ -1,9 +1,16 @@
-import { useMemo } from 'react'
+import { lazy, Suspense, useMemo } from 'react'
 import { Link } from 'react-router'
-import { type DriftEvent, type Observation, useDriftEvents, useObservations } from '@/api/observations'
+import {
+  type DriftEvent,
+  type Observation,
+  useAlignmentTrend,
+  useDriftEvents,
+  useObservations,
+} from '@/api/observations'
 import { knowledgeGraphSection, kgUrl } from '@/app/knowledge-graph-sections'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { FilterMenu } from '@/components/FilterMenu'
+import { InfoTip } from '@/components/InfoTip'
 import { KpiTiles } from '@/components/KpiTiles'
 import { ListCount, ListToolbar } from '@/components/ListToolbar'
 import { StatusLabel } from '@/components/StatusLabel'
@@ -11,7 +18,9 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useSearchParam } from '@/hooks/use-search-param'
-import { formatDateTime } from '@/lib/format'
+import { formatDateTime, formatPercent } from '@/lib/format'
+import { helpUrl } from '@/pages/help/guide-index'
+import type { MetricSeries } from '@/lib/metric-charts'
 import { useSheetParam } from '@/lib/sheet-param'
 import { evaluationKpis } from '../evaluation/evaluation-kpis'
 import { findingsFromDrift } from '../evaluation/findings'
@@ -20,6 +29,7 @@ import { KnowledgeGraphSectionPage } from '../KnowledgeGraphSectionPage'
 import { useKnowledgeGraphName } from '../params'
 import { shortRunId } from '../runs/runs'
 import { focusSheetItself } from '../use-case/sheet-focus'
+import { alignmentSeries } from './alignment-trend'
 import {
   filterObservationRows,
   formatThresholds,
@@ -31,9 +41,21 @@ import {
 const SECTION = knowledgeGraphSection('observations')
 const SHEET_KINDS = ['observation'] as const
 
+// Recharts is large: load the chart only on this page.
+const MetricChart = lazy(() => import('@/components/MetricChartGrid').then((m) => ({ default: m.MetricChart })))
+
+const GUIDE = `${helpUrl('using-the-web-ui')}#observations`
+
+const TREND_X_AXIS = {
+  label: 'Observed',
+  format: (x: number) => formatDateTime(new Date(x).toISOString()),
+  scale: 'time',
+} as const
+
 /**
- * `/kg/:name/observations`: when the Graph Source was inspected, newest first, as a
- * table; a row opens a sheet with its Drift (`?sheet=observation:<id>`). Read-only: an
+ * `/kg/:name/observations`: the alignment trend (run and on-demand Conformance scores
+ * over time), then when the Graph Source was inspected, newest first, as a table; a row
+ * opens a sheet with its Conformance and Drift (`?sheet=observation:<id>`). Read-only: an
  * Observation needs graph credentials, which never leave the SDK process (`stetiq observe`).
  */
 export function ObservationsPage() {
@@ -48,19 +70,21 @@ function ObservationList() {
   const name = useKnowledgeGraphName()
   const observations = useObservations(name)
   const driftEvents = useDriftEvents(name)
+  const trend = useAlignmentTrend(name)
   const [query, setQuery] = useSearchParam()
   const [status, setStatus] = useSearchParam('status')
   const { sheet, openSheet, closeSheet } = useSheetParam(SHEET_KINDS)
   const rows = useMemo(
-    () => observationRows(observations.data ?? [], driftEvents.data ?? []),
-    [observations.data, driftEvents.data],
+    () => observationRows(observations.data ?? [], driftEvents.data ?? [], trend.data ?? []),
+    [observations.data, driftEvents.data, trend.data],
   )
+  const series = useMemo(() => alignmentSeries(trend.data ?? []), [trend.data])
   const shown = useMemo(() => filterObservationRows(rows, query, status), [rows, query, status])
 
-  if (observations.isError || driftEvents.isError) {
-    return <ErrorAlert error={observations.error ?? driftEvents.error} />
+  if (observations.isError || driftEvents.isError || trend.isError) {
+    return <ErrorAlert error={observations.error ?? driftEvents.error ?? trend.error} />
   }
-  if (observations.isPending || driftEvents.isPending) return <Skeleton className="h-32 w-full" />
+  if (observations.isPending || driftEvents.isPending || trend.isPending) return <Skeleton className="h-32 w-full" />
   if (rows.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -72,6 +96,7 @@ function ObservationList() {
   const open = sheet && rows.find((r) => r.observation.id === sheet.id)
   return (
     <div className="space-y-3">
+      <AlignmentTrend series={series} onOpen={(id) => openSheet({ kind: 'observation', id })} />
       <ListToolbar search={query} onSearch={setQuery} searchLabel="Search Observations">
         <FilterMenu label="Status" value={status} options={statusCounts} onChange={setStatus} />
       </ListToolbar>
@@ -82,13 +107,14 @@ function ObservationList() {
             <TableHead>Status</TableHead>
             <TableHead>Source</TableHead>
             <TableHead>Ontology Version</TableHead>
+            <TableHead className="text-right">Conformance</TableHead>
             <TableHead className="text-right">Findings</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {shown.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={5} className="text-muted-foreground">
+              <TableCell colSpan={6} className="text-muted-foreground">
                 No Observation matches these filters.
               </TableCell>
             </TableRow>
@@ -110,8 +136,38 @@ function ObservationList() {
   )
 }
 
+/**
+ * The alignment trend: one Conformance line, run points filled and on-demand ones hollow.
+ * A point opens its Observation's sheet. No threshold, so no bound is drawn.
+ */
+function AlignmentTrend({ series, onOpen }: { series: MetricSeries; onOpen: (observationId: string) => void }) {
+  return (
+    <section aria-labelledby="alignment-trend" className="space-y-2">
+      <h3 id="alignment-trend" className="flex items-center gap-1.5 text-sm font-medium">
+        Alignment trend
+        <InfoTip label="the alignment trend" to={GUIDE}>
+          The Conformance score of each Construction Run and on-demand Observation, over time. It has no threshold
+          and raises no Drift.
+        </InfoTip>
+      </h3>
+      {series.points.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No Conformance scores yet.</p>
+      ) : (
+        <Suspense fallback={<Skeleton className="h-52 w-full" />}>
+          <MetricChart
+            series={series}
+            xAxis={TREND_X_AXIS}
+            onPointClick={(point) => point.id !== undefined && onOpen(point.id)}
+          />
+        </Suspense>
+      )}
+    </section>
+  )
+}
+
 function ObservationTableRow({ name, row, onOpen }: { name: string; row: ObservationRow; onOpen: () => void }) {
-  const { observation, drift } = row
+  const { observation, drift, alignment } = row
+  const version = alignment?.ontology_version ?? drift?.ontology_version
   return (
     <TableRow className="cursor-pointer" onClick={onOpen}>
       <TableCell>
@@ -132,7 +188,10 @@ function ObservationTableRow({ name, row, onOpen }: { name: string; row: Observa
       <TableCell>
         <Source name={name} observation={observation} />
       </TableCell>
-      <TableCell>{drift ? <VersionLink name={name} number={drift.ontology_version} /> : <Dash />}</TableCell>
+      <TableCell>{version !== undefined ? <VersionLink name={name} number={version} /> : <Dash />}</TableCell>
+      <TableCell className="text-right tabular-nums">
+        {alignment ? formatPercent(alignment.score) : <span className="text-muted-foreground">no score</span>}
+      </TableCell>
       <TableCell className="text-right tabular-nums">{drift ? row.findings : <Dash />}</TableCell>
     </TableRow>
   )
@@ -166,7 +225,10 @@ function VersionLink({ name, number }: { name: string; number: number }) {
 
 const Dash = () => <span className="text-muted-foreground">—</span>
 
-/** One Observation: its metadata line, the four evaluation tiles (only Drift applies) and its findings. */
+/**
+ * One Observation: its metadata line, the four evaluation tiles (Conformance, from its run
+ * for a run-end one, and Drift apply) and its findings.
+ */
 function ObservationSheet({ name, row, onClose }: { name: string; row: ObservationRow | undefined; onClose: () => void }) {
   return (
     <Sheet open={row !== undefined} onOpenChange={(open) => !open && onClose()}>
@@ -193,7 +255,7 @@ function ObservationSheetContent({ name, row }: { name: string; row: Observation
         </p>
       </SheetHeader>
       <div className="space-y-6 px-4 pb-6">
-        <KpiTiles tiles={evaluationKpis({ drift: row.findings })} />
+        <KpiTiles tiles={evaluationKpis({ conformance: row.alignment?.score, drift: row.findings })} />
         <FindingsTable rows={drift ? findingsFromDrift(drift.findings) : []} empty="No Drift." />
       </div>
     </>

@@ -125,6 +125,7 @@ def test_reads_observations_and_drift_events_as_earlier_releases_stored_them(db)
         ),
         relationship_types=(),
     )
+    assert (observation.conformance, observation.ontology_version) == (None, None)  # no score
     assert event.thresholds == DriftThresholds(max_count_drop=0.5)
     assert event.findings == (DriftFinding(DriftKind.UNDECLARED, "Invoice", "node_type"),)
 

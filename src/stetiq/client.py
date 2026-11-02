@@ -66,7 +66,12 @@ from stetiq.tracking import (
     TrackingService,
     UseCaseVersion,
 )
-from stetiq.tracking.entities import DriftEvent, EvolutionMode, ObservationOutcome
+from stetiq.tracking.entities import (
+    AlignmentPoint,
+    DriftEvent,
+    EvolutionMode,
+    ObservationOutcome,
+)
 from stetiq.tracking.service import (
     RUN_CONTEXT_DETAIL_EVALUATORS,
     check_not_built_in,
@@ -903,6 +908,13 @@ class Client:
     def list_drift_events(self, knowledge_graph: str) -> list[DriftEvent]:
         """The Knowledge Graph's Drift events, oldest first."""
         return self._service.list_drift_events(knowledge_graph)
+
+    def alignment_trend(self, knowledge_graph: str) -> list[AlignmentPoint]:
+        """The alignment trend: the Conformance scores of the Knowledge Graph's
+        Construction Runs and on-demand Observations, oldest first. Each on-demand score
+        is judged against the Contract Alias's Ontology Version at the time of its
+        Observation. The trend has no threshold and raises no Drift."""
+        return self._service.alignment_trend(knowledge_graph)
 
 
 def _observe(

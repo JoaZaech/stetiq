@@ -246,6 +246,16 @@ if outcome.drift is not None:
 
 The Observation is compared with the Contract Alias's Ontology Version (structural Drift: `undeclared`, `vanished`, and `undeclared_value` for each value of a Vocabulary-bound attribute outside its Vocabulary, named in `finding.value`) and with the previous Observation (statistical Drift, only for count changes beyond the thresholds, as fractions: `0.2` is 20 %). Drift raises a Drift event; it never creates an Ontology Version. `client.list_observations("support")` and `client.list_drift_events("support")` list them, oldest first. `stetiq observe` does the same from the command line.
 
+Each on-demand Observation also stores its Conformance to the Contract Alias's Ontology Version at that moment: `outcome.observation.conformance` (its `score` and `mismatches`, as a run's) and `outcome.observation.ontology_version`, the version it was judged against. Observations taken before stetiq scored them have `None` in both. The alignment trend puts these scores and the Construction Runs' Conformance scores on one line, oldest first:
+
+```python
+for point in client.alignment_trend("support"):
+    source = "run" if point.run_id else "on demand"
+    print(point.at, source, f"v{point.ontology_version}", point.score)
+```
+
+A run's point is its run-end Observation's (`point.observation_id`), judged against the version the run was judged against; an on-demand point is judged against the Contract Alias's version. The trend has no threshold and raises no Drift. Over REST it is `GET /api/v1/knowledge-graphs/<name>/alignment-trend`.
+
 ## Use Cases and Competency Questions
 
 A Use Case states what the Knowledge Graph is for: the **Consumers** that use it, the **Tasks** each one performs with it, and the Competency Questions those Tasks need answered. Register it from a YAML file (or text, a dict of the same shape, a `UseCase`, or a list of `CompetencyQuestion`s); each registration with new content is a new Use Case Version.

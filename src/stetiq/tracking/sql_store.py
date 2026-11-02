@@ -203,6 +203,17 @@ run_conformance = Table(
     Column("conformance_json", Text, nullable=False),
 )
 
+# An on-demand Observation's Conformance to the Contract Alias's Ontology Version at the
+# time. Observations stored before scores existed have no row.
+observation_conformance = Table(
+    "observation_conformance",
+    metadata,
+    Column("observation_id", Text, ForeignKey("observations.id"), primary_key=True),
+    Column("ontology_version", Integer, nullable=False),
+    Column("score", Float, nullable=False),
+    Column("conformance_json", Text, nullable=False),
+)
+
 # The Candidate Ontology Version a run gave rise to.
 run_candidates = Table(
     "run_candidates",
@@ -692,6 +703,17 @@ class SqlStore:
                     ),
                 )
             )
+            if observation.conformance is not None and observation.ontology_version is not None:
+                conn.execute(
+                    insert(observation_conformance).values(
+                        observation_id=observation.id,
+                        ontology_version=observation.ontology_version,
+                        score=observation.conformance.score,
+                        conformance_json=json.dumps(
+                            codec.conformance_to_json(observation.conformance), sort_keys=True
+                        ),
+                    )
+                )
 
     def _observations(self, *where) -> list[Observation]:
         query = (
@@ -701,6 +723,18 @@ class SqlStore:
         )
         with self._connection() as conn:
             rows = conn.execute(query).mappings().all()
+            ids = [r["id"] for r in rows]
+            scored: dict[str, tuple[int, Conformance]] = {}
+            if ids:
+                for c in conn.execute(
+                    select(observation_conformance).where(
+                        observation_conformance.c.observation_id.in_(ids)
+                    )
+                ):
+                    scored[c.observation_id] = (
+                        c.ontology_version,
+                        codec.conformance_from_json(json.loads(c.conformance_json)),
+                    )
         return [
             Observation(
                 id=r["id"],
@@ -709,6 +743,8 @@ class SqlStore:
                 observed_at=datetime.fromisoformat(r["observed_at"]),
                 schema=codec.observed_schema_from_json(json.loads(r["schema_json"])),
                 run_id=r["run_id"],
+                conformance=scored[r["id"]][1] if r["id"] in scored else None,
+                ontology_version=scored[r["id"]][0] if r["id"] in scored else None,
             )
             for r in rows
         ]

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { DriftEvent, Observation } from '@/api/observations'
+import type { AlignmentPoint, DriftEvent, Observation } from '@/api/observations'
 import { filterObservationRows, formatThresholds, observationRows } from './observation-rows'
 
 const observation = (id: string, run_id: string | null = null): Observation => ({
@@ -8,6 +8,8 @@ const observation = (id: string, run_id: string | null = null): Observation => (
   run_id,
   observed_at: '2026-11-02T10:00:00Z',
   scope: { database: 'neo4j', label: null, namespace: null },
+  conformance: null,
+  ontology_version: null,
 })
 
 const drift: DriftEvent = {
@@ -38,6 +40,24 @@ describe('observationRows', () => {
     expect(filterObservationRows(rows, '', 'No Drift').map((r) => r.observation.id)).toEqual(['o1'])
     expect(filterObservationRows(rows, 'run-abc', '').map((r) => r.observation.id)).toEqual(['o1'])
     expect(filterObservationRows(rows, 'production v3', '').map((r) => r.observation.id)).toEqual(['o2'])
+  })
+})
+
+describe('observationRows with the alignment trend', () => {
+  const scored: AlignmentPoint = {
+    at: '2026-11-02T10:00:00Z',
+    score: 0.5,
+    ontology_version: 3,
+    observation_id: 'o2',
+    run_id: null,
+  }
+
+  it('gives a scored Observation its point, and an older one none', () => {
+    const rows = observationRows([observation('o1'), observation('o2')], [], [scored])
+    expect(rows.map((r) => [r.observation.id, r.alignment?.score])).toEqual([
+      ['o2', 0.5],
+      ['o1', undefined],
+    ])
   })
 })
 
