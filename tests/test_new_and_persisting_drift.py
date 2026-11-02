@@ -207,3 +207,45 @@ def test_after_a_promotion_every_finding_is_new(
     second = observe_in(client, support_kg, SECOND)
 
     assert marks(second) == [("vanished", "Ticket.priority", True)]
+
+
+def seed_tickets(graph_source, database, dated, undated=0):
+    ada = graph_source.add_node(["Customer"], {"name": "Ada"}, database=database)
+    for props in [{"opened_at": date(2026, 1, 1)}] * dated + [{}] * undated:
+        graph_source.add_relationship(
+            ada, "OPENED", graph_source.add_node(["Ticket"], props, database=database)
+        )
+
+
+def test_a_fallen_fill_rate_persists_until_it_falls_again(client, support_kg, graph_source):
+    for database, dated, undated in (
+        ("first", 10, 0),
+        ("second", 8, 2),
+        ("third", 8, 2),
+        ("fourth", 6, 4),
+    ):
+        seed_tickets(graph_source, database, dated, undated)
+    fill = DriftThresholds(max_fill_rate_drop=0.1)
+
+    outcomes = [
+        observe_in(client, support_kg, s, thresholds=fill) for s in (FIRST, SECOND, THIRD, FOURTH)
+    ]
+
+    assert [marks(o) for o in outcomes[1:]] == [
+        [("fill_rate_drop", "Ticket.opened_at", True)],
+        [("fill_rate_drop", "Ticket.opened_at", False)],
+        [("fill_rate_drop", "Ticket.opened_at", True)],
+    ]
+
+
+def test_a_pattern_count_change_is_always_new(client, support_kg, graph_source):
+    for database, tickets in (("first", 2), ("second", 4), ("third", 8)):
+        seed_tickets(graph_source, database, tickets)
+    rise = DriftThresholds(max_count_increase=0.5)
+
+    outcomes = [observe_in(client, support_kg, s, thresholds=rise) for s in (FIRST, SECOND, THIRD)]
+
+    assert [
+        [(f.kind, f.new) for f in o.drift.findings if f.subject_kind == "pattern"]
+        for o in outcomes[1:]
+    ] == [[("count_increase", True)], [("count_increase", True)]]
