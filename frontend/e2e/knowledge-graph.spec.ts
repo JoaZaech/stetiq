@@ -22,7 +22,8 @@ test('a Knowledge Graph opens on its Overview; every other section has the one-l
 
   for (const section of SECTIONS.slice(1)) {
     await sidebar.getByRole('link', { name: section }).click()
-    await expect(page.getByRole('heading', { level: 2 })).toHaveText(section)
+    // The section title is the page's first h2; the Overview's cards have their own.
+    await expect(page.getByRole('heading', { level: 2 }).first()).toHaveText(section)
     const header = page.getByRole('region', { name: 'Knowledge Graph' })
     await expect(header.getByRole('heading', { level: 1 })).toHaveText('support')
     await expect(header.getByText('production → v1')).toHaveAccessibleDescription('Contract Alias')

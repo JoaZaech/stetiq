@@ -3,70 +3,82 @@ import { expect, test } from './fixtures'
 test.describe('with Drift', () => {
   test.use({ seed: 'observed_support' })
 
-  test('Observations are a timeline of rows, newest first, each with its status, time and run', async ({
+  test('Observations are a table, newest first, each with its status, time, source and findings', async ({
     page,
     stetiq,
   }) => {
     await page.goto('/ui/kg/support/observations')
     await expect(page.getByRole('heading', { level: 2 })).toHaveText('Observations')
 
-    const rows = page.getByRole('list', { name: 'Observations' }).getByRole('listitem')
-    await expect(rows).toHaveCount(2)
-    const [onDemand, fromRun] = [rows.nth(0), rows.nth(1)]
-    await expect(onDemand).toHaveText(/^Drift\s*\S.*on demand/)
+    const rows = page.getByRole('table', { name: 'Observations' }).getByRole('row')
+    await expect(rows).toHaveCount(3)
+    const [onDemand, fromRun] = [rows.nth(1), rows.nth(2)]
+    await expect(onDemand.getByRole('cell')).toHaveText([/\d/, 'Drift', 'on demand', 'v1', '4'])
     await expect(onDemand.locator('time')).toHaveAttribute('datetime', /^\d{4}-\d{2}-\d{2}T/)
     const runId = stetiq.seeded.run_id as string
-    await expect(fromRun).toHaveText(new RegExp(`^No Drift.*from run ${runId.slice(0, 8)}$`))
-    await expect(fromRun.getByRole('link', { name: runId.slice(0, 8) })).toHaveAttribute(
+    await expect(fromRun.getByRole('cell')).toHaveText([/\d/, 'No Drift', `run ${runId.slice(0, 8)}`, '—', '—'])
+    await expect(fromRun.getByRole('link', { name: `Run ${runId.slice(0, 8)}` })).toHaveAttribute(
       'href',
       `/ui/kg/support/runs/${runId}`,
     )
+    await expect(page.getByText('2 Observations')).toBeVisible()
   })
 
-  test('only a Drift row expands, to its Contract Alias, version, thresholds and findings', async ({ page }) => {
+  test('the search and the Status filter narrow the table, and stay in the URL', async ({ page }) => {
     await page.goto('/ui/kg/support/observations')
-    const rows = page.getByRole('list', { name: 'Observations' }).getByRole('listitem')
-    const [onDemand, fromRun] = [rows.nth(0), rows.nth(1)]
+    const rows = page.getByRole('table', { name: 'Observations' }).getByRole('row')
 
-    await expect(fromRun.getByRole('button')).toHaveCount(0)
-    await expect(fromRun.getByRole('region', { name: 'Drift' })).toHaveCount(0)
+    await page.getByRole('button', { name: 'Status: All' }).click()
+    await page.getByRole('menuitemradio', { name: /^No Drift/ }).click()
+    await expect(rows).toHaveCount(2)
+    await expect(page).toHaveURL(/status=No\+Drift/)
+    await expect(page.getByText('1 of 2 Observations')).toBeVisible()
 
-    const toggle = onDemand.getByRole('button', { name: 'Drift details' })
-    const drift = onDemand.getByRole('region', { name: 'Drift' })
-    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
-    await expect(drift).toBeHidden()
-    await toggle.click()
-    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    await page.goto('/ui/kg/support/observations?q=production')
+    await expect(rows).toHaveCount(2)
+    await expect(rows.nth(1)).toContainText('Drift')
+  })
 
-    await expect(drift).toContainText(/Contract Alias\s*production/)
-    await expect(drift).toContainText(/Ontology Version\s*v1/)
-    await expect(drift.getByRole('link', { name: 'v1' })).toHaveAttribute('href', '/ui/kg/support/versions/1')
-    await expect(drift).toContainText(/Thresholds\s*max count drop off · max count increase 50%/)
+  test('a row opens a sheet with the four evaluation tiles and the findings table', async ({ page }) => {
+    await page.goto('/ui/kg/support/observations')
+    await page.getByRole('table', { name: 'Observations' }).getByRole('row').nth(1).click()
+
+    const sheet = page.getByRole('dialog')
+    await expect(page).toHaveURL(/sheet=observation%3A/)
+    await expect(sheet.getByLabel('Contract Alias')).toHaveText('production')
+    await expect(sheet.getByRole('link', { name: 'v1' })).toHaveAttribute('href', '/ui/kg/support/versions/1')
+    await expect(sheet.getByLabel('Thresholds')).toHaveText('max drop off · max rise 50%')
+
+    const tiles = sheet.getByRole('list', { name: 'Key figures' }).getByRole('listitem')
+    await expect(tiles).toHaveText([/^Conformance—$/, /^CQ coverage—$/, /^Gates—$/, /^Drift4findings$/])
 
     // Concept kinds in the glossary's words: Class, Relation, Attribute.
-    await expect(drift.getByRole('list', { name: 'Drift findings' }).getByRole('listitem')).toHaveText([
-      /^Refund Class — observed but not declared$/,
-      /^Ticket\.channel Attribute — observed but not declared$/,
-      /^ESCALATED Relation — observed but not declared$/,
-      /^count rose: Ticket Class — count rose from 1 to 4 \(\+300%\)$/,
+    const findings = sheet.getByRole('table', { name: 'Findings' }).getByRole('row')
+    await expect(findings).toHaveText([
+      'ConceptKindFindingChange',
+      /^TicketClassCount rose1 → 4 \(\+300%\)$/,
+      /^ESCALATEDRelationObserved but not declared$/,
+      /^RefundClassObserved but not declared$/,
+      /^Ticket\.channelAttributeObserved but not declared$/,
     ])
-    await expect(drift).not.toContainText(/node type|relationship type|property/)
+    await expect(sheet).not.toContainText(/node type|relationship type|property/)
+    await expect(sheet).not.toContainText(/Pending Migration|Adopt into a Candidate|Planned/)
 
-    await toggle.click()
-    await expect(drift).toBeHidden()
-    await expect(page.getByText('The Knowledge Graph matches the Ontology Version of its Contract Alias')).toHaveCount(0)
+    await page.keyboard.press('Escape')
+    await expect(sheet).toBeHidden()
+    await expect(page).not.toHaveURL(/sheet=/)
   })
 })
 
 test.describe('without Drift', () => {
   test.use({ seed: 'support_lineage' })
 
-  test('no Drift shows the empty state', async ({ page }) => {
+  test('an Observation without Drift reads No Drift, with no alert above the table', async ({ page }) => {
     await page.goto('/ui/kg/support/observations')
-    const rows = page.getByRole('list', { name: 'Observations' }).getByRole('listitem')
-    await expect(rows).toHaveCount(1)
-    await expect(rows.first()).toHaveText(/^No Drift/)
-    await expect(page.getByText('No Drift. The Knowledge Graph matches the Ontology Version of its Contract Alias.')).toBeVisible()
+    const rows = page.getByRole('table', { name: 'Observations' }).getByRole('row')
+    await expect(rows).toHaveCount(2)
+    await expect(rows.nth(1).getByRole('cell').nth(1)).toHaveText('No Drift')
+    await expect(page.getByRole('alert')).toHaveCount(0)
   })
 })
 

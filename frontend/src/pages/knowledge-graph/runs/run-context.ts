@@ -5,3 +5,6 @@ import type { ConstructionRun } from '@/api/runs'
 export function useConstructionRunTab(): ConstructionRun {
   return useOutletContext<ConstructionRun>()
 }
+
+/** The Evaluation tab's search param that opens its findings filtered to one finding. */
+export const FINDING_PARAM = 'finding'

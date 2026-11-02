@@ -1,43 +1,24 @@
-import { useCallback } from 'react'
+import { useCallback, useId, useMemo, type ReactNode } from 'react'
+import { Link, useSearchParams } from 'react-router'
 import type { EvaluationResult } from '@/api/ontology-versions'
 import { useRunEvaluations } from '@/api/runs'
 import { useUseCaseVersions } from '@/api/use-cases'
+import { kgUrl } from '@/app/knowledge-graph-sections'
 import { ErrorAlert } from '@/components/ErrorAlert'
+import { InfoTip } from '@/components/InfoTip'
 import { StatusLabel, type StatusTone } from '@/components/StatusLabel'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSheetParam } from '@/lib/sheet-param'
+import { helpUrl } from '@/pages/help/guide-index'
+import { FindingsTable } from '../evaluation/FindingsTable'
+import { findingsFromMismatches } from '../evaluation/findings'
 import { EvaluatorResults } from '../versions/EvaluatorResults'
-import { Panel } from '../versions/OverviewTab'
 import { CompetencyQuestionSheet } from '../use-case/CompetencyQuestionSheet'
 import { SheetSection } from '../use-case/sheet-section'
-import { useConstructionRunTab } from './run-context'
+import { FINDING_PARAM, useConstructionRunTab } from './run-context'
+import { CQ_EXECUTION_EVALUATOR, type ExecutedQuestion, executedQuestions } from './runs'
 
-/** `evaluation.run.CQ_EXECUTION_EVALUATOR`: executes the Use Case's Competency Questions. */
-const CQ_EXECUTION_EVALUATOR = 'competency_question_execution'
-
-/**
- * One executed Competency Question, from a Detail of the execution Evaluator. Only
- * these fields are read: the verdict, which check judged it and an exception type.
- * Rows are never stored (ADR 0001), and the UI shows nothing else from the Detail.
- */
-interface ExecutedQuestion {
-  id: string
-  status: 'passed' | 'failed' | 'error'
-  check: 'non_empty' | 'expected_answer'
-  error: string | null
-}
-
-function executedQuestions(result: EvaluationResult): ExecutedQuestion[] {
-  return result.details.map((detail) => {
-    const data = detail.data ?? {}
-    return {
-      id: detail.item,
-      status: data.status as ExecutedQuestion['status'],
-      check: data.check as ExecutedQuestion['check'],
-      error: typeof data.error === 'string' ? data.error : null,
-    }
-  })
-}
+const GUIDE = `${helpUrl('using-the-web-ui')}#construction-runs`
 
 const STATUS: Record<ExecutedQuestion['status'], { label: string; tone: StatusTone }> = {
   passed: { label: 'Passed', tone: 'success' },
@@ -50,26 +31,83 @@ const CHECK = { non_empty: 'non-empty result', expected_answer: 'expected answer
 const SHEET_KINDS = ['question'] as const
 
 /**
- * The run page's Evaluations tab: one card per run Evaluator with every metric behind
- * "Show all metrics", then each executed Competency Question.
+ * The run page's Evaluation tab, laid out as every evaluation is: the Conformance
+ * findings in the shared findings table (opened filtered by `?finding=`), the Evaluator
+ * cards with every metric folded away, then each executed Competency Question.
  */
-export function RunEvaluationsTab() {
+export function RunEvaluationTab() {
+  const run = useConstructionRunTab()
+  const [params] = useSearchParams()
+  const finding = params.get(FINDING_PARAM) ?? ''
+  const rows = useMemo(() => findingsFromMismatches(run.conformance?.mismatches ?? []), [run.conformance])
+  return (
+    <div className="space-y-8">
+      <Section
+        title="Findings"
+        tip="Conformance mismatches: what the run observed against what its Declared Ontology declares. A deprecated value is reported but conforms."
+      >
+        {run.conformance === null ? (
+          <p className="text-sm text-muted-foreground">No Conformance: the run ended without an Observation.</p>
+        ) : (
+          <>
+            {run.candidate_version !== null && (
+              <p className="text-xs text-muted-foreground" role="note" aria-label="Judged against">
+                Judged against Candidate{' '}
+                <Link
+                  to={kgUrl(run.knowledge_graph, 'versions', run.candidate_version)}
+                  className="text-primary underline-offset-4 hover:underline"
+                >
+                  v{run.candidate_version}
+                </Link>
+              </p>
+            )}
+            <FindingsTable key={finding} rows={rows} initialFinding={finding} empty="No mismatches." />
+          </>
+        )}
+      </Section>
+      <RunEvaluatorResults />
+    </div>
+  )
+}
+
+/** A titled part of the tab, its explanation in an ⓘ beside the title. */
+function Section({ title, tip, children }: { title: string; tip?: string; children: ReactNode }) {
+  const id = useId()
+  return (
+    <section aria-labelledby={id} className="min-w-0 space-y-3">
+      <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+        <span id={id}>{title}</span>
+        {tip && (
+          <InfoTip label={title} to={GUIDE}>
+            {tip}
+          </InfoTip>
+        )}
+      </h2>
+      {children}
+    </section>
+  )
+}
+
+function RunEvaluatorResults() {
   const run = useConstructionRunTab()
   const results = useRunEvaluations(run.knowledge_graph, run.id)
   if (results.isPending) return <Skeleton className="h-32 w-full" />
   if (results.isError) return <ErrorAlert error={results.error} />
   const execution = results.data.find((r) => r.evaluator === CQ_EXECUTION_EVALUATOR)
   return (
-    <div className="space-y-8">
-      <Panel title="Evaluator results">
+    <>
+      <Section title="Evaluator results">
         <EvaluatorResults results={results.data} empty="No Evaluator results for this run." />
-      </Panel>
+      </Section>
       {execution && (
-        <Panel title="Competency Questions">
+        <Section
+          title="Competency Questions"
+          tip="Each Competency Question with a query, executed read-only against the graph. Only the verdict is kept, never the rows."
+        >
           <ExecutedQuestions knowledgeGraph={run.knowledge_graph} result={execution} />
-        </Panel>
+        </Section>
       )}
-    </div>
+    </>
   )
 }
 
@@ -91,11 +129,9 @@ function ExecutedQuestions({ knowledgeGraph, result }: { knowledgeGraph: string;
   const selected = sheet && questions.find((q) => q.id === sheet.id)
   return (
     <div className="space-y-2">
-      <p className="text-sm text-muted-foreground">
-        Each Competency Question with a query, executed read-only against the graph
-        {result.use_case_version !== null && ` (Use Case Version ${result.use_case_version})`}. Only
-        the verdict is kept, never the rows.
-      </p>
+      {result.use_case_version !== null && (
+        <p className="text-xs text-muted-foreground">Use Case Version {result.use_case_version}</p>
+      )}
       {questions.length === 0 ? (
         <p className="text-sm text-muted-foreground">No Competency Question has a query.</p>
       ) : (

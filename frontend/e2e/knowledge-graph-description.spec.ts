@@ -12,6 +12,10 @@ test('an editor edits the description in a markdown editor and sees it rendered'
   await signIn(page, token(stetiq.seeded, 'ada'))
   await page.goto('/ui/kg/support')
   const about = page.getByRole('region', { name: 'About' })
+  // The Overview shows the first sentence; the rest is behind More.
+  await expect(about).toContainText('Answers support questions.')
+  await expect(about.getByRole('listitem')).toHaveCount(0)
+  await about.getByRole('button', { name: 'More' }).click()
   await expect(about.getByRole('listitem')).toHaveText(['triage', 'escalation'])
 
   await about.getByRole('button', { name: 'Edit description' }).click()
@@ -71,6 +75,7 @@ test('a reader sees the rendered description but Edit is disabled for lack of ed
   await page.goto('/ui/kg/support')
   const about = page.getByRole('region', { name: 'About' })
 
+  await about.getByRole('button', { name: 'More' }).click()
   await expect(about.getByRole('listitem')).toHaveText(['triage', 'escalation'])
   for (const scope of [about, page.getByRole('region', { name: 'Knowledge Graph' })]) {
     if (scope !== about) await page.goto('/ui/kg/support/versions')

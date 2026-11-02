@@ -13,9 +13,8 @@ export const GUIDE = guidePages(
 )
 
 /**
- * The vision (`docs/vision.md`), bundled the same way: the web UI's "Planned" placeholders
- * link to it, at `/help/vision`. It is listed apart from the guide, which describes only
- * what is built.
+ * The vision (`docs/vision.md`), bundled the same way, at `/help/vision`. It is listed
+ * apart from the guide, which describes only what is built.
  */
 export const [VISION] = guidePages(
   import.meta.glob<string>('../../../../docs/vision.md', {

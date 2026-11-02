@@ -70,7 +70,39 @@ test.describe('a Knowledge Graph with a finished run, an Observation and no Cons
     await expect(page).toHaveURL('/ui/kg/support/versions/3')
   })
 
-  test('shows the description, the Evolution Mode and Edit description below the chain', async ({ page }) => {
+  test('shows five KPI tiles, each linking to where its value comes from', async ({ page }) => {
+    await page.goto('/ui/kg/support/overview')
+
+    const tiles = page.getByRole('list', { name: 'Key figures' })
+    await expect(tiles.getByRole('listitem')).toHaveCount(5)
+    await expect(tiles.getByRole('link', { name: /^CQ coverage: / })).toHaveAttribute('href', '/ui/kg/support/use-case')
+    await expect(tiles.getByRole('link', { name: /^Conformance: / })).toBeVisible()
+    // v3 was never gated, and the latest Observation found no Drift.
+    await expect(tiles.getByRole('link', { name: 'Gates: —' })).toHaveAttribute('href', '/ui/kg/support/versions/3')
+    await expect(tiles.getByRole('link', { name: 'Drift: 0' })).toHaveAttribute('href', '/ui/kg/support/observations')
+    await expect(tiles.getByRole('link', { name: 'Consumers: —' })).toBeVisible()
+  })
+
+  test('shows the recent runs, Observations, the current version and Promotions as cards', async ({ page }) => {
+    await page.goto('/ui/kg/support/overview')
+
+    const runs = page.getByRole('region', { name: 'Recent runs' })
+    await expect(runs.getByRole('list', { name: 'Recent runs' }).getByRole('listitem')).toHaveCount(1)
+    await expect(runs.getByRole('link', { name: 'All runs' })).toHaveAttribute('href', '/ui/kg/support/runs')
+
+    const observations = page.getByRole('region', { name: 'Latest Observations' })
+    await expect(observations.getByRole('listitem').first()).toContainText('No Drift')
+
+    // The Contract Alias points to v1; v3 is the newest.
+    const version = page.getByRole('region', { name: 'Current Ontology Version' })
+    await expect(version.getByRole('link', { name: 'v1', exact: true })).toBeVisible()
+    await expect(version).toContainText('production')
+    await expect(version.getByRole('link', { name: 'Newest v3' })).toHaveAttribute('href', '/ui/kg/support/versions/3')
+
+    await expect(page.getByRole('region', { name: 'Recent Promotions' }).getByRole('link', { name: 'All Promotions' })).toBeVisible()
+  })
+
+  test('shows the first sentence of the description, the Evolution Mode and Edit description above the chain', async ({ page }) => {
     await page.goto('/ui/kg/support/overview')
 
     const about = page.getByRole('region', { name: 'About' })

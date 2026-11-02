@@ -22,7 +22,7 @@ test.describe('with a Use Case that declares Consumers', () => {
   test('a tile shows the kind icon, name, description and readiness, and no id, contact or edit control', async ({
     page,
   }) => {
-    await page.goto('/ui/kg/support/use-case')
+    await page.goto('/ui/kg/support/use-case?tab=consumers')
 
     await expect(consumers(page).getByRole('article')).toHaveCount(2)
     const bot = tile(page, 'Triage bot')
@@ -32,7 +32,7 @@ test.describe('with a Use Case that declares Consumers', () => {
     for (const hidden of ['triage-bot', 'Ada Lovelace', 'Consumer Gate', 'Connector', 'Greet the customer']) {
       await expect(bot).not.toContainText(hidden)
     }
-    await expect(bot.getByRole('button')).toHaveText(['Triage bot', 'Connect'])
+    await expect(bot.getByRole('button')).toHaveText(['Triage bot'])
 
     const dashboard = tile(page, 'Workload dashboard')
     await expect(dashboard.getByRole('img', { name: 'Consumer' })).toBeVisible()
@@ -43,7 +43,7 @@ test.describe('with a Use Case that declares Consumers', () => {
   test('a tile opens the Consumer sheet: kind, id, contact, description, Tasks and Consumer Gate', async ({
     page,
   }) => {
-    await page.goto('/ui/kg/support/use-case')
+    await page.goto('/ui/kg/support/use-case?tab=consumers')
 
     const sheet = await openConsumer(page, 'Triage bot')
     await expect(page).toHaveURL(/[?&]sheet=consumer%3Atriage-bot$/)
@@ -78,7 +78,7 @@ test.describe('with a Use Case that declares Consumers', () => {
   test('a question in the Consumer sheet replaces its content, and Back returns to the Consumer', async ({
     page,
   }) => {
-    await page.goto('/ui/kg/support/use-case')
+    await page.goto('/ui/kg/support/use-case?tab=consumers')
 
     const sheet = await openConsumer(page, 'Triage bot')
     await sheet.getByRole('button', { name: /Greet the customer by name/ }).click()
@@ -101,7 +101,7 @@ test.describe('with a Use Case that declares Consumers', () => {
   })
 
   test('the browser’s Back, and Back on a linked question, return to the Consumer sheet', async ({ page }) => {
-    await page.goto('/ui/kg/support/use-case')
+    await page.goto('/ui/kg/support/use-case?tab=consumers')
     const sheet = await openConsumer(page, 'Triage bot')
     await sheet.getByRole('button', { name: /Route a new ticket to an agent/ }).click()
     await sheet.getByRole('button', { name: /^What are our agents called\?/ }).click()
@@ -122,7 +122,7 @@ test.describe('with a Use Case without Consumers', () => {
   test.use({ seed: 'support_use_case_versions' })
 
   test('the Use Case page says no Consumers are declared', async ({ page }) => {
-    await page.goto('/ui/kg/support/use-case')
+    await page.goto('/ui/kg/support/use-case?tab=consumers')
 
     await expect(consumers(page)).toContainText('No Consumers are declared in this Use Case Version.')
   })

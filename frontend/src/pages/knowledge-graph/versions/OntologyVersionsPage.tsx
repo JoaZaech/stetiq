@@ -7,9 +7,11 @@ import { CompareToolbar } from '@/components/CompareToolbar'
 import { DataTable } from '@/components/DataTable'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { ColumnPicker } from '@/components/ColumnPicker'
+import { ListCount, ListToolbar } from '@/components/ListToolbar'
 import { ViewModeToggle } from '@/components/ViewModeToggle'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useSearchParam } from '@/hooks/use-search-param'
 import { createDataTableColumnHelper, useDataTable } from '@/lib/data-table'
 import { formatDateTime, formatMetric } from '@/lib/format'
 import { metricSeries } from '@/lib/metric-charts'
@@ -18,6 +20,7 @@ import { KnowledgeGraphSectionPage } from '../KnowledgeGraphSectionPage'
 import { useKnowledgeGraphName } from '../params'
 import { AliasChips, CandidateBadge } from './AliasChips'
 import { aliasesByVersion } from './lineage'
+import { versionMatches } from './version-kpis'
 import { type VersionMetrics, useVersionMetrics } from './version-metrics'
 
 const SECTION = knowledgeGraphSection('versions')
@@ -113,22 +116,18 @@ export function OntologyVersionsPage() {
   const [mode, setMode] = useViewMode()
   const [shownColumns, setShownColumn] = useShownColumns()
 
-  const actions = (
-    <>
-      {mode === 'table' && (
-        <ColumnPicker
-          groups={[
-            {
-              label: 'Evaluator metrics',
-              columns: metrics.names.map((m) => ({ id: metricColumnId(m), label: m })),
-            },
-          ]}
-          visible={shownColumns}
-          onToggle={setShownColumn}
-        />
-      )}
-      <ViewModeToggle mode={mode} onChange={setMode} />
-    </>
+  const actions = <ViewModeToggle mode={mode} onChange={setMode} />
+  const columnPicker = (
+    <ColumnPicker
+      groups={[
+        {
+          label: 'Evaluator metrics',
+          columns: metrics.names.map((m) => ({ id: metricColumnId(m), label: m })),
+        },
+      ]}
+      visible={shownColumns}
+      onToggle={setShownColumn}
+    />
   )
 
   let content: ReactNode
@@ -149,6 +148,7 @@ export function OntologyVersionsPage() {
         contractAlias={contractAlias.data}
         metrics={metrics}
         shownColumns={shownColumns}
+        columnPicker={columnPicker}
       />
     )
   }
@@ -166,6 +166,7 @@ function VersionTable({
   contractAlias,
   metrics,
   shownColumns,
+  columnPicker,
 }: {
   name: string
   versions: ListedOntologyVersion[]
@@ -173,7 +174,9 @@ function VersionTable({
   contractAlias: string | undefined
   metrics: VersionMetrics
   shownColumns: ReadonlySet<string>
+  columnPicker: ReactNode
 }) {
+  const [query, setQuery] = useSearchParam()
   // Rows stay referentially stable between renders, as `useDataTable` needs.
   const data = useMemo(() => {
     const aliased = aliasesByVersion(aliases)
@@ -190,6 +193,7 @@ function VersionTable({
       }),
     )
   }, [name, versions, aliases, contractAlias, metrics])
+  const shown = useMemo(() => data.filter((row) => versionMatches(row, query)), [data, query])
   // Every metric has a column, in name order; only the chosen ones are visible.
   const allColumns = useMemo(
     () => column.columns([...columns, ...metrics.names.map(metricColumn)]),
@@ -200,7 +204,7 @@ function VersionTable({
     [metrics, shownColumns],
   )
   const table = useDataTable({
-    data,
+    data: shown,
     columns: allColumns,
     getRowId: (row) => String(row.number),
     state: { columnVisibility },
@@ -211,14 +215,17 @@ function VersionTable({
   const compare = () => navigate(kgCompareUrl(name, 'versions', [...selected].sort((a, b) => a - b)))
   return (
     <div className="space-y-3">
-      <CompareToolbar
-        selected={selected.length}
-        needs="two"
-        noun="versions"
-        readyHint="Ontology Diff from the older to the newer version"
-        onCompare={compare}
-      />
-      <DataTable table={table} label="Ontology Versions" empty="No Ontology Versions yet." />
+      <ListToolbar search={query} onSearch={setQuery} searchLabel="Search versions" actions={columnPicker}>
+        <CompareToolbar
+          selected={selected.length}
+          needs="two"
+          noun="versions"
+          readyHint="Ontology Diff from the older to the newer version"
+          onCompare={compare}
+        />
+      </ListToolbar>
+      <DataTable table={table} label="Ontology Versions" empty="No version matches this search." />
+      <ListCount shown={shown.length} total={data.length} noun="versions" />
     </div>
   )
 }

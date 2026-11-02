@@ -4,7 +4,6 @@ import { consumerGateResultsQuery, latestConsumerGateResult } from '@/api/consum
 import type { Consumer, UseCaseVersion } from '@/api/use-cases'
 import { StatusLabel, type StatusTone } from '@/components/StatusLabel'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ConnectorPicker } from './ConnectorPicker'
 import { consumerGateLine } from './consumer-gate'
 import { CONSUMER_KIND_ICONS, consumerKindIcon } from './consumer-kind'
 import { useLatestAnswerability, type LatestAnswerability } from './latest-answerability'
@@ -20,7 +19,7 @@ interface ConsumerTilesProps {
 /**
  * A Use Case Version's Consumers as compact tiles: each one's kind icon, name, one line of
  * description, how many of its Tasks the latest Ontology Version is ready for, and its
- * Consumer Gate's latest verdict when it declares one, and Connect (Planned). A tile opens
+ * Consumer Gate's latest verdict when it declares one. A tile opens
  * the Consumer's sheet.
  */
 export function ConsumerTiles({ knowledgeGraph, version, onOpen }: ConsumerTilesProps) {
@@ -104,9 +103,6 @@ function ConsumerTile({ consumer, onOpen, readiness, gate }: ConsumerTileProps) 
         <div className="space-y-0.5 pt-1 text-xs">
           {readiness}
           {gate}
-        </div>
-        <div className="relative z-10 pt-2">
-          <ConnectorPicker consumer={consumer} />
         </div>
       </div>
     </article>

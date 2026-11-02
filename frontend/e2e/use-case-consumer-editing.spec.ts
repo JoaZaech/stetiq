@@ -21,14 +21,14 @@ const expandTask = async (sheet: Locator, description: string) => {
   await sheet.getByRole('button', { name: new RegExp(description) }).click()
   return tasksIn(sheet).filter({ hasText: description })
 }
-const questionItems = (page: Page, version: number) =>
-  page
-    .getByRole('region', { name: `Use Case Version ${version}` })
-    .getByRole('list', { name: 'Competency Questions' })
-    .getByRole('listitem')
+/** Shows the Questions tab and returns the question catalog's rows, without its header row. */
+const questionRows = async (page: Page) => {
+  await page.getByRole('tab', { name: 'Questions' }).click()
+  return page.getByRole('table', { name: 'Competency Questions' }).getByRole('row').filter({ has: page.getByRole('cell') })
+}
 
 test('an editor adds a Consumer, which creates a new Use Case Version', async ({ page }) => {
-  await page.goto('/ui/kg/support/use-case')
+  await page.goto('/ui/kg/support/use-case?tab=consumers')
 
   await page.getByRole('button', { name: 'Add Consumer' }).click()
   const dialog = page.getByRole('dialog', { name: 'Add Consumer' })
@@ -62,7 +62,7 @@ test('a Consumer id another Consumer, Task or question has is refused, and nothi
   page.on('request', (r) => {
     if (r.method() !== 'GET') writes.push(r.url())
   })
-  await page.goto('/ui/kg/support/use-case')
+  await page.goto('/ui/kg/support/use-case?tab=consumers')
 
   await page.getByRole('button', { name: 'Add Consumer' }).click()
   const dialog = page.getByRole('dialog', { name: 'Add Consumer' })
@@ -80,7 +80,7 @@ test('a Consumer id another Consumer, Task or question has is refused, and nothi
 })
 
 test('an editor edits a Consumer from its sheet, whose id is read-only, keeping its Tasks', async ({ page }) => {
-  await page.goto('/ui/kg/support/use-case')
+  await page.goto('/ui/kg/support/use-case?tab=consumers')
 
   const sheet = await openConsumer(page, 'Triage bot')
   await sheet.getByRole('button', { name: 'Edit', exact: true }).click()
@@ -105,7 +105,7 @@ test('an editor edits a Consumer from its sheet, whose id is read-only, keeping 
 test('removing a Consumer from its sheet names its Tasks, and keeps the Competency Questions', async ({
   page,
 }) => {
-  await page.goto('/ui/kg/support/use-case')
+  await page.goto('/ui/kg/support/use-case?tab=consumers')
 
   const sheet = await openConsumer(page, 'Triage bot')
   await sheet.getByRole('button', { name: 'Remove', exact: true }).click()
@@ -126,11 +126,11 @@ test('removing a Consumer from its sheet names its Tasks, and keeps the Competen
   await expect(page.getByRole('status')).toHaveText('Saved as Use Case Version 3.')
   await expect(consumers(page).getByRole('article')).toHaveCount(1)
   await expect(tile(page, 'Workload dashboard')).toBeVisible()
-  await expect(questionItems(page, 3)).toHaveCount(2)
+  await expect(await questionRows(page)).toHaveCount(2)
 })
 
 test('an editor adds a Task to a Consumer from its sheet, picking the questions it needs', async ({ page }) => {
-  await page.goto('/ui/kg/support/use-case')
+  await page.goto('/ui/kg/support/use-case?tab=consumers')
 
   const sheet = await openConsumer(page, 'Workload dashboard')
   await sheet.getByRole('button', { name: 'Add Task' }).click()
@@ -153,7 +153,7 @@ test('an editor adds a Task to a Consumer from its sheet, picking the questions 
 })
 
 test('a Task id already in the Use Case is refused', async ({ page }) => {
-  await page.goto('/ui/kg/support/use-case')
+  await page.goto('/ui/kg/support/use-case?tab=consumers')
 
   const sheet = await openConsumer(page, 'Workload dashboard')
   await sheet.getByRole('button', { name: 'Add Task' }).click()
@@ -167,7 +167,7 @@ test('a Task id already in the Use Case is refused', async ({ page }) => {
 })
 
 test('an editor edits a Task from the sheet, whose id is read-only, and unassigns a question', async ({ page }) => {
-  await page.goto('/ui/kg/support/use-case')
+  await page.goto('/ui/kg/support/use-case?tab=consumers')
 
   const sheet = await openConsumer(page, 'Triage bot')
   await sheet.getByRole('button', { name: 'Edit Task route-ticket' }).click()
@@ -189,7 +189,7 @@ test('an editor edits a Task from the sheet, whose id is read-only, and unassign
 })
 
 test('an editor removes a Task from the sheet after confirming', async ({ page }) => {
-  await page.goto('/ui/kg/support/use-case')
+  await page.goto('/ui/kg/support/use-case?tab=consumers')
 
   const sheet = await openConsumer(page, 'Triage bot')
   await sheet.getByRole('button', { name: 'Remove Task greet-customer' }).click()
@@ -218,14 +218,15 @@ test('removing a question a Task needs says which Tasks lose it', async ({ page 
   await confirm.getByRole('button', { name: 'Remove' }).click()
 
   await expect(page.getByRole('status')).toHaveText('Saved as Use Case Version 3.')
-  await expect(questionItems(page, 3)).toHaveCount(1)
+  await expect(await questionRows(page)).toHaveCount(1)
+  await page.getByRole('tab', { name: 'Consumers' }).click()
   const sheet = await openConsumer(page, 'Triage bot')
   const greet = await expandTask(sheet, 'Greet the customer by name')
   await expect(greet).toContainText('Needs no Competency Question')
 })
 
 test('removing a question no Task needs says nothing about Tasks', async ({ page }) => {
-  await page.goto('/ui/kg/support/use-case')
+  await page.goto('/ui/kg/support/use-case?tab=consumers')
   // agent-names is needed by route-ticket only; take it off first.
   const sheet = await openConsumer(page, 'Triage bot')
   await sheet.getByRole('button', { name: 'Remove Task route-ticket' }).click()
@@ -234,6 +235,7 @@ test('removing a question no Task needs says nothing about Tasks', async ({ page
   await page.keyboard.press('Escape')
   await expect(page.getByRole('status')).toHaveText('Saved as Use Case Version 3.')
 
+  await page.getByRole('tab', { name: 'Questions' }).click()
   await page.getByRole('button', { name: /^What are our agents called\?/ }).click()
   await page.getByRole('dialog', { name: 'What are our agents called?' }).getByRole('button', { name: 'Remove' }).click()
   const confirm = page.getByRole('alertdialog', { name: 'Remove agent-names?' })
@@ -241,7 +243,7 @@ test('removing a question no Task needs says nothing about Tasks', async ({ page
 })
 
 test('removing a question from inside a Consumer sheet returns to the Consumer', async ({ page }) => {
-  await page.goto('/ui/kg/support/use-case')
+  await page.goto('/ui/kg/support/use-case?tab=consumers')
 
   const sheet = await openConsumer(page, 'Triage bot')
   await expandTask(sheet, 'Route a new ticket to an agent')
@@ -261,7 +263,7 @@ test.describe('with Consumer Gates declared in use-case.yaml', () => {
   test.use({ seed: 'plant_consumer_gates' })
 
   test('editing a Consumer keeps its Consumer Gates and its verdict', async ({ page }) => {
-    await page.goto('/ui/kg/plant/use-case')
+    await page.goto('/ui/kg/plant/use-case?tab=consumers')
 
     const sheet = await openConsumer(page, 'Reliability dashboard')
     await sheet.getByRole('button', { name: 'Edit', exact: true }).click()
@@ -283,7 +285,7 @@ test.describe('signed in with a read-only API Token', () => {
 
   test('every Consumer and Task edit control is disabled', async ({ page, stetiq }) => {
     await signIn(page, (stetiq.seeded.grace as { value: string }).value)
-    await page.goto('/ui/kg/support/use-case')
+    await page.goto('/ui/kg/support/use-case?tab=consumers')
     await expect(page.getByRole('button', { name: 'Add Consumer' })).toBeDisabled()
     await page.getByRole('button', { name: 'Add Consumer' }).hover({ force: true })
     await expect(page.getByRole('tooltip')).toHaveText('Needs edit access')

@@ -10,11 +10,14 @@ import type MetricChartGridComponent from '@/components/MetricChartGrid'
 import { CompareToolbar } from '@/components/CompareToolbar'
 import { DataTable } from '@/components/DataTable'
 import { ErrorAlert } from '@/components/ErrorAlert'
+import { ListCount, ListToolbar } from '@/components/ListToolbar'
 import { RUN_STATUSES } from '@/components/run-status'
 import { ViewModeToggle } from '@/components/ViewModeToggle'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { useSearchParam } from '@/hooks/use-search-param'
 import { formatDateTime } from '@/lib/format'
+import { matchesSearch } from '@/lib/search'
 import {
   metricColumnId,
   paramColumnId,
@@ -35,8 +38,10 @@ import {
   RUN_STATUS_FILTERS,
   RUN_TIME_RANGES,
   runKeys,
+  runSearchFields,
   type RunStatusFilter,
   type RunTimeRange,
+  splitParamKeys,
 } from './runs'
 
 const SECTION = knowledgeGraphSection('runs')
@@ -120,6 +125,13 @@ function FilteredRuns({ runs, mode }: { runs: ConstructionRun[]; mode: ViewMode 
   return <RunTable runs={runs} filtered={filtered} now={now} filterControls={filterControls} />
 }
 
+/** The run table's search (`?q=`), over the runs the filters leave. */
+function useSearchedRuns(runs: ConstructionRun[]) {
+  const [search, setSearch] = useSearchParam()
+  const searched = useMemo(() => runs.filter((run) => matchesSearch(search, runSearchFields(run))), [runs, search])
+  return { search, setSearch, searched }
+}
+
 function RunTable({
   runs,
   filtered,
@@ -133,12 +145,14 @@ function RunTable({
 }) {
   const name = useKnowledgeGraphName()
   const [shownColumns, setShownColumn] = useShownColumns()
+  const { search, setSearch, searched } = useSearchedRuns(filtered)
   // Every key over all runs, so a filter never drops a column.
   const keys = useMemo(() => runKeys(runs), [runs])
+  const optionalParams = useMemo(() => splitParamKeys(keys.params).optional, [keys.params])
   const gateResults = useQuery(gateResultsQuery(name))
   const gatePreviews = useGatePreviews(name)
   const table = useRunTable({
-    runs: filtered,
+    runs: searched,
     ...keys,
     visible: shownColumns,
     now,
@@ -155,27 +169,35 @@ function RunTable({
 
   return (
     <div className="space-y-3">
-      <CompareToolbar
-        selected={selected.length}
-        needs="many"
-        noun="runs"
-        readyHint="The selected runs side by side"
-        onCompare={compare}
+      <ListToolbar
+        search={search}
+        onSearch={setSearch}
+        searchLabel="Search runs"
+        actions={
+          <>
+            <CompareToolbar
+              selected={selected.length}
+              needs="many"
+              noun="runs"
+              readyHint="The selected runs side by side"
+              onCompare={compare}
+            />
+            <ColumnPicker
+              groups={[
+                { label: 'Params', columns: optionalParams.map((k) => ({ id: paramColumnId(k), label: k })) },
+                { label: 'Metrics', columns: keys.metrics.map((k) => ({ id: metricColumnId(k), label: k })) },
+              ]}
+              visible={shownColumns}
+              onToggle={setShownColumn}
+            />
+          </>
+        }
       >
         {filterControls}
-        <div className="ml-auto">
-          <ColumnPicker
-            groups={[
-              { label: 'Params', columns: keys.params.map((k) => ({ id: paramColumnId(k), label: k })) },
-              { label: 'Metrics', columns: keys.metrics.map((k) => ({ id: metricColumnId(k), label: k })) },
-            ]}
-            visible={shownColumns}
-            onToggle={setShownColumn}
-          />
-        </div>
-      </CompareToolbar>
+      </ListToolbar>
       {failed && <ErrorAlert error={failed.error} />}
       <DataTable table={table} label="Construction Runs" empty="No Construction Run matches these filters." />
+      <ListCount shown={searched.length} total={runs.length} noun="runs" />
     </div>
   )
 }

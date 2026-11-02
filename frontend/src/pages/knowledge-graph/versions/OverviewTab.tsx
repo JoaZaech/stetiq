@@ -1,22 +1,27 @@
 import { useId, type ReactNode } from 'react'
 import { Link } from 'react-router'
+import { latestGateResult, useGateResults } from '@/api/gate-results'
 import { useVersionEvaluations } from '@/api/ontology-versions'
 import { useRuns } from '@/api/runs'
+import { useUseCaseVersions } from '@/api/use-cases'
 import { kgUrl } from '@/app/knowledge-graph-sections'
 import { CopyButton } from '@/components/CopyButton'
 import { Disclosure } from '@/components/Disclosure'
-import { Planned } from '@/components/Planned'
+import { KpiTiles } from '@/components/KpiTiles'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatDateTime } from '@/lib/format'
+import { evaluationKpis } from '../evaluation/evaluation-kpis'
 import { useKnowledgeGraphName } from '../params'
+import { answerabilityOf } from '../use-case/answerability'
 import { EvaluatorResults } from './EvaluatorResults'
 import { LatestGateResult } from './LatestGateResult'
 import { useOntologyVersionTab } from './version-context'
+import { versionEvaluationInputs } from './version-kpis'
 
 /**
- * The version page's Overview tab: its latest Gate result first (with the planned Gate
- * on Consumer impact), then one card per Evaluator with every metric behind a toggle,
+ * The version page's Overview tab: the four evaluation tiles every evaluation shares,
+ * its latest Gate result, one card per Evaluator with every metric behind a toggle,
  * then its Details, folded.
  */
 export function OverviewTab() {
@@ -24,16 +29,9 @@ export function OverviewTab() {
   const version = useOntologyVersionTab()
   return (
     <div className="space-y-8">
+      <VersionKpis name={name} number={version.number} />
       <Panel title="Gate result">
         <LatestGateResult name={name} number={version.number} />
-        <Planned
-          label="Gate on Consumer impact"
-          section="consumer-impact-and-gates-over-it"
-          tooltip="A Gate that fails when a change in this version would affect a Consumer's Tasks."
-          className="text-sm"
-        >
-          Gate on Consumer impact
-        </Planned>
       </Panel>
       <Panel title="Evaluator results">
         <VersionEvaluatorResults name={name} number={version.number} />
@@ -59,6 +57,30 @@ export function OverviewTab() {
         </dl>
       </Disclosure>
     </div>
+  )
+}
+
+/**
+ * The version's four evaluation tiles, at the top of its Overview tab rather than above
+ * the tabs, so the Ontology and Changes tabs keep their height for the Map: Conformance of the run that gave rise to this version, its structural answerability
+ * against the latest Use Case Version, and its Gates passed; Drift does not apply.
+ */
+function VersionKpis({ name, number }: { name: string; number: number }) {
+  const runs = useRuns(name)
+  const evaluations = useVersionEvaluations(name, number)
+  const useCases = useUseCaseVersions(name)
+  const gates = useGateResults(name)
+  const latestUseCase = useCases.data?.at(-1)?.number
+  const answerability =
+    evaluations.data && latestUseCase !== undefined ? answerabilityOf(evaluations.data, latestUseCase) : undefined
+  const gate = gates.data && latestGateResult(gates.data, 'ontology_version', String(number))
+  const inputs = versionEvaluationInputs(number, runs.data, answerability, gate)
+  const versions = kgUrl(name, 'versions', number)
+  return (
+    <KpiTiles
+      tiles={evaluationKpis(inputs, { coverage: kgUrl(name, 'use-case'), gates: versions })}
+      label="Evaluation"
+    />
   )
 }
 

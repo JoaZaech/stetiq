@@ -3,7 +3,7 @@ import { expect, test } from './fixtures'
 test.describe('with three Use Case Versions', () => {
   test.use({ seed: 'support_use_case_versions' })
 
-  test('the Use Case page lists the latest Use Case Version’s Competency Questions with their status', async ({
+  test('the Use Case page shows the latest Use Case Version on one line, then its question catalog', async ({
     page,
   }) => {
     await page.goto('/ui/kg/support/use-case')
@@ -11,19 +11,51 @@ test.describe('with three Use Case Versions', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('support')
     await expect(page.getByRole('heading', { level: 2, name: 'Use Case' })).toBeVisible()
     const latest = page.getByRole('region', { name: 'Use Case Version 3' })
-    await expect(latest.getByText('Support agents triage and answer tickets')).toBeVisible()
+    await expect(latest).toContainText('Support agents triage and answer tickets')
+    await expect(page.getByRole('tablist', { name: 'Use Case' }).getByRole('tab')).toHaveText([
+      'Questions',
+      'Consumers',
+      'Versions',
+    ])
+    await expect(page.getByRole('tab', { name: 'Questions' })).toHaveAttribute('aria-selected', 'true')
 
-    await expect(latest.getByText('Ontology Version v3 answers 2 of 2 Competency Questions.')).toBeVisible()
-    const questions = latest.getByRole('list', { name: 'Competency Questions' }).getByRole('listitem')
-    await expect(questions).toHaveText([
-      /What is each customer called\?\s*Not used by any Task\s*Answerable/,
-      /When was each ticket opened\?\s*Not used by any Task\s*Answerable/,
+    const tiles = page.getByRole('list', { name: 'Competency Questions' }).getByRole('listitem')
+    await expect(tiles.filter({ hasText: 'CQ coverage' })).toContainText('2/2')
+    await expect(tiles.filter({ hasText: 'Not used by any Task' })).toContainText('2')
+
+    const catalog = page.getByRole('table', { name: 'Competency Questions' })
+    await expect(catalog.getByRole('row').filter({ has: page.getByRole('cell') })).toHaveText([
+      /What is each customer called\?\s*No Task\s*Answerable/,
+      /When was each ticket opened\?\s*No Task\s*Answerable/,
     ])
     // Ids, Cypher and expected answers stay in the sheet.
-    await expect(latest).not.toContainText('ticket-dates')
-    await expect(latest).not.toContainText('MATCH')
-    await expect(latest).not.toContainText('opened_at')
+    await expect(catalog).not.toContainText('ticket-dates')
+    await expect(catalog).not.toContainText('MATCH')
+    await expect(catalog).not.toContainText('opened_at')
     await expect(page.getByRole('region', { name: 'Structural answerability' })).toHaveCount(0)
+  })
+
+  test('the catalog searches, filters by status, sorts, and keeps all of it in the URL', async ({ page }) => {
+    await page.goto('/ui/kg/support/use-case')
+    const rows = page
+      .getByRole('table', { name: 'Competency Questions' })
+      .getByRole('row')
+      .filter({ has: page.getByRole('cell') })
+
+    await page.getByRole('searchbox', { name: 'Search questions' }).fill('ticket')
+    await expect(rows).toHaveText([/When was each ticket opened\?/])
+    await expect(page).toHaveURL(/\?q=ticket$/)
+    await expect(page.getByText('1 of 2 questions')).toBeVisible()
+
+    await page.getByRole('searchbox', { name: 'Search questions' }).fill('')
+    await page.getByRole('radiogroup', { name: 'Status' }).getByRole('radio', { name: /Unanswerable/ }).click()
+    await expect(rows).toHaveText(['No question matches these filters.'])
+    await page.getByRole('radiogroup', { name: 'Status' }).getByRole('radio', { name: /All/ }).click()
+
+    await page.getByRole('button', { name: 'Question', exact: true }).click()
+    await expect(rows).toHaveText([/When was each ticket opened\?/, /What is each customer called\?/])
+    await page.reload()
+    await expect(rows.first()).toHaveText(/When was each ticket opened\?/)
   })
 
   test('clicking a question opens its sheet, which the URL keeps and Back closes', async ({ page }) => {
@@ -55,8 +87,8 @@ test.describe('with three Use Case Versions', () => {
     await expect(page).toHaveURL(/\/ui\/kg\/support\/use-case$/)
   })
 
-  test('the Use Case Versions list compares two versions question by question', async ({ page }) => {
-    await page.goto('/ui/kg/support/use-case')
+  test('the Versions tab compares two Use Case Versions question by question', async ({ page }) => {
+    await page.goto('/ui/kg/support/use-case?tab=versions')
 
     const versions = page.getByRole('table', { name: 'Use Case Versions' })
     const rows = versions.getByRole('row')

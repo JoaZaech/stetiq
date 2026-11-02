@@ -7,13 +7,21 @@ test.use({ seed: 'support_lineage' })
 const latestVersion = (page: Page) =>
   page.getByRole('region', { name: /^Use Case Version \d+$/ })
 
-const questionItems = (page: Page, version: number) =>
-  page
-    .getByRole('region', { name: `Use Case Version ${version}` })
-    .getByRole('list', { name: 'Competency Questions' })
-    .getByRole('listitem')
+/** The question catalog's rows, without its header row. */
+const questionRows = (page: Page) =>
+  page.getByRole('table', { name: 'Competency Questions' }).getByRole('row').filter({ has: page.getByRole('cell') })
 
-/** Opens a question's sheet from its row in the Competency Questions list. */
+/** The KPI tile `label` above the catalog. */
+const tile = (page: Page, label: string) =>
+  page.getByRole('list', { name: 'Competency Questions' }).getByRole('listitem').filter({ hasText: label })
+
+/** Shows the Versions tab, whose table lists every Use Case Version. */
+const versionsTable = async (page: Page) => {
+  await page.getByRole('tab', { name: 'Versions' }).click()
+  return page.getByRole('table', { name: 'Use Case Versions' })
+}
+
+/** Opens a question's sheet from its row in the question catalog. */
 const openQuestion = async (page: Page, question: string) => {
   await page.getByRole('button', { name: new RegExp(`^${question.replace(/[?.]/g, '\\$&')}`) }).click()
   const sheet = page.getByRole('dialog', { name: question })
@@ -37,7 +45,7 @@ test('an editor adds a Competency Question, which creates a new Use Case Version
   await dialog.getByRole('button', { name: 'Save' }).click()
 
   await expect(dialog).toBeHidden()
-  await expect(questionItems(page, 2)).toHaveText([/What are our customers called\?/, /When was each ticket opened\?/])
+  await expect(questionRows(page)).toHaveText([/What are our customers called\?/, /When was each ticket opened\?/])
   await expect(page.getByRole('status')).toHaveText(/Saved as Use Case Version 2/)
 
   const sheet = await openQuestion(page, 'When was each ticket opened?')
@@ -46,7 +54,7 @@ test('an editor adds a Competency Question, which creates a new Use Case Version
   )
   await page.keyboard.press('Escape')
   await page.reload()
-  await expect(page.getByRole('table', { name: 'Use Case Versions' }).getByRole('row')).toHaveCount(3)
+  await expect((await versionsTable(page)).getByRole('row')).toHaveCount(3)
 })
 
 test('after saving, the list shows the new version’s answerability', async ({ page }) => {
@@ -65,9 +73,9 @@ test('after saving, the list shows the new version’s answerability', async ({ 
   await dialog.getByRole('button', { name: 'Save' }).click()
 
   // The latest Ontology Version is v3 (the Candidate), which has Customer.name but no Refund.
-  const latest = page.getByRole('region', { name: 'Use Case Version 2' })
-  await expect(latest).toContainText('Ontology Version v3 answers 1 of 2 Competency Questions.')
-  await expect(questionItems(page, 2)).toHaveText([
+  await expect(page.getByRole('region', { name: 'Use Case Version 2' })).toBeVisible()
+  await expect(tile(page, 'CQ coverage')).toHaveText(/1\/2.*on Ontology Version v3/)
+  await expect(questionRows(page)).toHaveText([
     /What are our customers called\?.*Answerable/,
     /Which tickets were refunded\?.*Unanswerable/,
   ])
@@ -79,7 +87,7 @@ test('after saving, the list shows the new version’s answerability', async ({ 
 
   await page.keyboard.press('Escape')
   await page.reload()
-  await expect(latest).toContainText('answers 1 of 2 Competency Questions.')
+  await expect(tile(page, 'CQ coverage')).toContainText('1/2')
 })
 
 test.describe('with answerability of every kind', () => {
@@ -91,7 +99,7 @@ test.describe('with answerability of every kind', () => {
   test('an unmapped question reads as Can’t check, which explains itself', async ({ page }) => {
     await page.goto('/ui/kg/support/use-case')
 
-    const satisfaction = questionItems(page, 2).filter({ hasText: 'How satisfied is each customer?' })
+    const satisfaction = questionRows(page).filter({ hasText: 'How satisfied is each customer?' })
     await expect(satisfaction).toContainText("Can't check")
     await satisfaction.getByText("Can't check").hover()
     await expect(page.getByRole('tooltip')).toHaveText("No Concept mapping or query, so stetiq can't tell")
@@ -136,7 +144,7 @@ test.describe('with three Use Case Versions', () => {
     await expect(edited).toBeVisible()
     await page.keyboard.press('Escape')
     await expect(edited).toBeHidden()
-    await expect(questionItems(page, 4)).toHaveText([/What is every customer called\?/, /When was each ticket opened\?/])
+    await expect(questionRows(page)).toHaveText([/What is every customer called\?/, /When was each ticket opened\?/])
   })
 
   test('an editor removes a question from its sheet after confirming, creating a new Use Case Version', async ({
@@ -156,7 +164,7 @@ test.describe('with three Use Case Versions', () => {
     await expect(confirm).toBeHidden()
     await expect(sheet).toBeHidden()
     await expect(page).toHaveURL(/\/ui\/kg\/support\/use-case$/)
-    await expect(questionItems(page, 4)).toHaveText([/What is each customer called\?/])
+    await expect(questionRows(page)).toHaveText([/What is each customer called\?/])
     await expect(page.getByRole('status')).toHaveText(/Saved as Use Case Version 4/)
   })
 
@@ -173,7 +181,7 @@ test.describe('with three Use Case Versions', () => {
     await expect(page.getByRole('status')).toHaveText(
       'Nothing changed: Use Case Version 3 already has this content, so no new version was created.',
     )
-    await expect(page.getByRole('table', { name: 'Use Case Versions' }).getByRole('row')).toHaveCount(4)
+    await expect((await versionsTable(page)).getByRole('row')).toHaveCount(4)
   })
 })
 
@@ -228,7 +236,7 @@ test.describe('signed in with an API Token', () => {
     expect(refused.status()).toBe(403)
     await sheet.getByRole('button', { name: 'Close' }).click()
     await page.reload()
-    await expect(page.getByRole('table', { name: 'Use Case Versions' }).getByRole('row')).toHaveCount(2)
+    await expect((await versionsTable(page)).getByRole('row')).toHaveCount(2)
   })
 })
 
@@ -260,5 +268,5 @@ test('invalid input is shown on its field and nothing is saved', async ({ page }
   expect(writes).toEqual([])
   await dialog.getByRole('button', { name: 'Cancel' }).click()
   await expect(page.getByRole('region', { name: 'Use Case Version 1' })).toBeVisible()
-  await expect(page.getByRole('table', { name: 'Use Case Versions' }).getByRole('row')).toHaveCount(2)
+  await expect((await versionsTable(page)).getByRole('row')).toHaveCount(2)
 })

@@ -1,16 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import type { GatePreview } from '@/api/gate-previews'
 import type { GateResult } from '@/api/gate-results'
+import type { DriftEvent } from '@/api/observations'
+import type { EvaluationResult } from '@/api/ontology-versions'
 import type { ConstructionRun } from '@/api/runs'
 import {
   conformanceTone,
+  CQ_EXECUTION_EVALUATOR,
   filterRuns,
   formatDuration,
-  paramChips,
   parseRunFilters,
+  runEvaluationInputs,
+  runFailure,
   runGate,
   runKeys,
   runOutcome,
+  runSearchFields,
+  sourceList,
+  splitParamKeys,
 } from './runs'
 
 const NOW = Date.parse('2026-10-30T12:00:00Z')
@@ -92,25 +99,91 @@ describe('runKeys', () => {
   })
 })
 
-describe('paramChips', () => {
-  it('shows the first three params by key and hides the rest', () => {
-    const params = { temperature: '0.2', extractor: 'llm', model: 'm1', batch: '8', seed: '1' }
-    expect(paramChips(params)).toEqual({
-      shown: [
-        ['batch', '8'],
-        ['extractor', 'llm'],
-        ['model', 'm1'],
-      ],
-      hidden: [
-        ['seed', '1'],
-        ['temperature', '0.2'],
-      ],
+describe('splitParamKeys', () => {
+  it('shows extractor, model and sources as columns, in that order, and leaves the rest to Columns', () => {
+    expect(splitParamKeys(['batch', 'extractor', 'sources', 'temperature'])).toEqual({
+      shown: ['extractor', 'sources'],
+      optional: ['batch', 'temperature'],
+    })
+    expect(splitParamKeys([])).toEqual({ shown: [], optional: [] })
+  })
+})
+
+describe('sourceList', () => {
+  it('splits a sources param on commas, dropping blanks', () => {
+    expect(sourceList('machines.csv, material_flow.json,  reports/,')).toEqual([
+      'machines.csv',
+      'material_flow.json',
+      'reports/',
+    ])
+  })
+})
+
+describe('runSearchFields', () => {
+  it('searches the id, param values and versions', () => {
+    expect(runSearchFields(run({ id: 'abc', params: { model: 'opus' }, candidate_version: 2 }))).toEqual([
+      'abc',
+      'opus',
+      'v1',
+      'v2',
+    ])
+  })
+})
+
+describe('runFailure', () => {
+  it('says why a run failed in one line, and which findings show it', () => {
+    expect(runFailure(run({ status: 'finished' }))).toBeNull()
+    expect(runFailure(run({ status: 'failed', observation_id: null }))).toEqual({
+      text: 'Failed before the Graph Source was observed.',
+      finding: null,
+    })
+    const mismatch = (subject: string, subject_kind: 'node_type' | 'pattern') =>
+      ({ subject, subject_kind, kind: 'undeclared', detail: '' }) as const
+    expect(
+      runFailure(
+        run({
+          status: 'failed',
+          conformance: { score: 0.9, mismatches: [mismatch('Sensor', 'node_type'), mismatch('(A)-[R]->(B)', 'pattern')] },
+        }),
+      ),
+    ).toEqual({ text: 'Failed: 1 Concept observed but not declared (strict mode).', finding: 'Observed but not declared' })
+  })
+})
+
+describe('runEvaluationInputs', () => {
+  const execution: EvaluationResult = {
+    evaluator: CQ_EXECUTION_EVALUATOR,
+    details: [
+      { item: 'a', message: '', data: { status: 'passed', check: 'non_empty' } },
+      { item: 'b', message: '', data: { status: 'error', check: 'non_empty', error: 'ValueError' } },
+    ],
+  } as unknown as EvaluationResult
+  const gate = {
+    subject_kind: 'construction_run',
+    subject_id: 'r',
+    passed: false,
+    outcomes: [{ passed: true }, { passed: false }, { passed: true }],
+    evaluated_at: '2026-10-30T11:02:00Z',
+  } as unknown as GateResult
+  const drift = { observation_id: 'o', findings: [{}, {}] } as unknown as DriftEvent
+
+  it('reads the run’s Conformance, executed questions, Gate result and Drift', () => {
+    expect(runEvaluationInputs(run({ conformance: { score: 0.8, mismatches: [] } }), [execution], [gate], [drift])).toEqual({
+      conformance: 0.8,
+      coverage: { count: 1, total: 2 },
+      gates: { count: 2, total: 3 },
+      drift: 2,
     })
   })
 
-  it('shows every param when there are three or fewer', () => {
-    expect(paramChips({ extractor: 'rules' })).toEqual({ shown: [['extractor', 'rules']], hidden: [] })
-    expect(paramChips({})).toEqual({ shown: [], hidden: [] })
+  it('has no Drift without an Observation, and 0 when the Observation found none', () => {
+    expect(runEvaluationInputs(run({ observation_id: null }), [], [], [drift])).toMatchObject({
+      conformance: null,
+      coverage: null,
+      gates: null,
+      drift: null,
+    })
+    expect(runEvaluationInputs(run({ observation_id: 'other' }), [], [], [drift]).drift).toBe(0)
   })
 })
 

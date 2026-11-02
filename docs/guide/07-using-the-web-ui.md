@@ -54,7 +54,28 @@ A Knowledge Graph opens on its [Overview](#overview). Every other section starts
 
 ### Overview
 
-The Overview shows where the Knowledge Graph sits as a chain of five steps: upstream pipeline → Gate → Knowledge Graph → Consumer Gate → Consumers. Each step shows a status with its icon and one fact, and its name links to its page. A grey dashed status means stetiq has nothing to judge yet, never a pass.
+The Overview is the Knowledge Graph's dashboard. From the top:
+
+- **About**: the first sentence of the description, with the rest behind **More**, the Evolution Mode (*strict* or *evolving*) and **Edit description**.
+- **The pipeline chain** (below).
+- **Five KPI tiles**, each linking to where its value comes from:
+
+  | Tile | Shows |
+  | --- | --- |
+  | **CQ coverage** | Competency Questions the latest Ontology Version answers, e.g. `2/9` |
+  | **Conformance** | The latest assessed Construction Run's score |
+  | **Gates** | Gates the newest Ontology Version passed, e.g. `3/9` |
+  | **Drift** | Findings of the latest Observation |
+  | **Consumers** | Consumers the latest Ontology Version is ready for |
+
+  A tile that has nothing to show yet reads `—`.
+- **Four cards**, each with a link to its whole list:
+  - **Recent runs**: the last five runs.
+  - **Latest Observations**: the last five, with any Drift.
+  - **Current Ontology Version**: the version the Contract Alias points to, its Aliases, and how many Classes, Relations, Attributes and patterns it has.
+  - **Recent Promotions**: the last five, with their Gate results.
+
+The pipeline chain shows where the Knowledge Graph sits as five steps: upstream pipeline → Gate → Knowledge Graph → Consumer Gate → Consumers. Each step shows a status with its icon and one fact, and its name links to its page. A grey dashed status means stetiq has nothing to judge yet, never a pass.
 
 | Step | Shows | Status | Links to |
 | --- | --- | --- | --- |
@@ -66,12 +87,11 @@ The Overview shows where the Knowledge Graph sits as a chain of five steps: upst
 
 The Consumers and the Consumer Gate are those of the latest Use Case Version. The Consumer Gate is checked by `stetiq consumer gate` in your pipeline's CI.
 
-Below the chain, **About** shows the Knowledge Graph's description (written in markdown), its Evolution Mode (*strict* or *evolving*) and **Edit description**.
-
 ### Ontology Versions
 
 The section lists every Ontology Version, newest first, with its origin, when it was created and the Aliases pointing to it. The Contract Alias's chip is highlighted with a star, and an Ontology Version no Alias has pointed to yet is marked **Candidate**.
 
+- **Search versions** filters by number (`v3`), origin or Alias.
 - **Columns** adds a column per Evaluator metric.
 - **Table** / **Chart** switches to one chart per Evaluator metric across versions, with a search box to find a metric.
 
@@ -79,7 +99,7 @@ The section lists every Ontology Version, newest first, with its origin, when it
 
 **An Ontology Version's page.** Click a version number to open it. It shows the version's Aliases and three tabs:
 
-- **Overview**: first its latest **Gate result**, as a status with *n of m Gates failed* or *All m Gates passed* and when it was evaluated. Each failed Gate is listed with its reasons; the passed ones fold under ***k* passed**. A version no Gate was evaluated on shows *Not gated*. Then its **Evaluator results**, one card per Evaluator: a readable title (e.g. *Concepts with a Definition*) over the Evaluator's own name, one or two headline metrics, ratios as percentages and counts as *a / b* where there is a total, and an ⓘ that explains it. Your own Evaluators get a card under their name with their first metric. **Show all metrics** opens the full table (Evaluator, metric, value and the Use Case Version it was judged against): the names there are the ones Gates use. **Details**, folded at the bottom, holds its number, origin, content hash (with a copy button), when it was created and, for a version produced by a Construction Run, a link to that run.
+- **Overview**: first four tiles, the same on every evaluated page: **Conformance** (of the Construction Run that produced the version), **CQ coverage** (Competency Questions it can answer, of the latest Use Case Version), **Gates** (passed of evaluated) and **Drift**, which shows *—* because Drift belongs to Observations. Then its latest **Gate result**, as a status with *n of m Gates failed* or *All m Gates passed* and when it was evaluated. Each failed Gate is listed with its reasons; the passed ones fold under ***k* passed**. A version no Gate was evaluated on shows *Not gated*. Then its **Evaluator results**, one card per Evaluator: a readable title (e.g. *Concepts with a Definition*) over the Evaluator's own name, one or two headline metrics, ratios as percentages and counts as *a / b* where there is a total, and an ⓘ that explains it. Your own Evaluators get a card under their name with their first metric. **Show all metrics** opens the full table (Evaluator, metric, value and the Use Case Version it was judged against): the names there are the ones Gates use. **Details**, folded at the bottom, holds its number, origin, content hash (with a copy button), when it was created and, for a version produced by a Construction Run, a link to that run.
 - **Ontology**: the version's Concepts, on a Map or in a Table. See [The Ontology tab](#the-ontology-tab).
 - **Changes**: the Ontology Diff from the previous version. v1 has nothing to compare with. See [The Changes tab](#the-changes-tab).
 
@@ -122,13 +142,14 @@ The Promotion is recorded with you as the actor and shows up under [Promotions](
 
 ### Construction Runs
 
-The section lists every Construction Run, newest first. Each run shows its short id with up to three of its params as chips (`extractor: llm`), sorted by name; the rest count as *+n*, and pointing at that shows them. Then come its status, start time, duration, Declared Ontology, Conformance, its Gate verdict and the Candidate it produced, if any.
+The section lists every Construction Run, newest first, in a table: its short id, then a column for each of the params `extractor`, `model` and `sources` that any run logged (**Sources** shows a count, *5 sources*; point at it to list them), then its status, start time, duration, Declared Ontology, Conformance, its Gate verdict and the Candidate it produced, if any. A line under the table counts the runs shown.
 
 - **Conformance** is a percentage, coloured by how close it is to 100 %: green from 95 %, amber from 80 %, red below.
 - **Gate** shows the run's latest recorded Gate result as **Passed** (green check) or **Failed** (red cross). A run CI never gated shows **Preview** (grey dashed circle) when it has a Gate Preview, whatever the preview judges: pointing at it says whether it passes or fails against current Gates, and that it is not recorded. Only a Gate result CI records counts. A Knowledge Graph that was never gated shows *—*.
 
-- **Status** filters by All, Running, Finished or Failed, and **Started** by All time or the last 24 hours, 7 days or 30 days.
-- **Columns** adds a column per param or metric the runs logged.
+- **Search runs** matches a run's id, its param values and its versions (*v2*).
+- **Status** filters by All, Running, Finished or Failed, and **Started** by All time or the last 24 hours, 7 days or 30 days. The search and filters are part of the URL.
+- **Columns** adds a column per other param, or per metric, the runs logged.
 - **Table** / **Chart** switches to charts over the runs' start times: one per run metric, one for Conformance, and one per Evaluator result metric (each Evaluator `parameters` configuration charted on its own, e.g. `review (min_confidence=0.5)/score`). **Search metric charts** narrows them by name, and the filters apply to the charts too. A chart for a KPI a Gate covers draws each of the Gate's bounds as a dashed line (labelled, e.g. *min 0.8*, and listed under **Bounds**) and marks each run's point *pass* (a circle) or *fail* (a diamond), judged as on the compare page: a recorded Gate result about the run wins over its Gate Preview, and a note under the title says where the verdicts came from (*Verdicts: 1 recorded, 3 preview*). The bound lines are those of the current Gates, the ones the Gate Previews use, so a run's *recorded* verdict can come from an older bound than the line shows: a point can pass below the line, or fail above it. Charts of the run metrics your pipeline logs are never judged, even one named like a gated KPI. Click a point to open the KPI drill-down for that run (see below).
 
 If there are no runs yet, the page shows how to start one from the Python SDK.
@@ -137,29 +158,44 @@ If there are no runs yet, the page shows how to start one from the Python SDK.
 
 If the Knowledge Graph has been gated, each KPI a Gate covers (Conformance, or the Evaluator result metric a `metric` Gate names, with its `parameters`) shows *pass* or *fail* next to each run's value, and its row says what share of the compared runs pass, with a pass/fail bar. A run with no value for a gated KPI shows *no result* rather than *fail*, though its overall verdict still counts it as failed. Each verdict is marked *recorded*, when it comes from a Gate result CI recorded about that run, or *preview*: judged against current Gates, the Gates of the latest Gate result about a run, re-evaluated on the spot and never recorded (a Gate Preview). A note at the top names that Gate result. A recorded Gate result always wins over a preview. The **Gates** section lists every Gate, including Ontology Diff and count drop Gates, with each run's pass or fail, and **All Gates passed** per run. The metrics your pipeline logs are never gated. A Knowledge Graph that was never gated shows every value without a verdict: write Gates in [`stetiq.yaml`](./06-stetiq-yaml.md) and run `stetiq gate` to turn verdicts on.
 
-**The KPI drill-down.** Click a KPI cell on the compare page, or a point on a run chart, to open a side sheet about that run's KPI: its value (or *no result*), its verdict marked *recorded* or *preview* with each covering Gate's pass or fail and reasons, and, for an Evaluator result metric, the Evaluator's detail items about that metric. A KPI no Gate covers says so. A link at the bottom opens the run page tab the KPI comes from: **Evaluations**, **Conformance**, or the **Overview** for a run metric.
+**The KPI drill-down.** Click a KPI cell on the compare page, or a point on a run chart, to open a side sheet about that run's KPI: its value (or *no result*), its verdict marked *recorded* or *preview* with each covering Gate's pass or fail and reasons, and, for an Evaluator result metric, the Evaluator's detail items about that metric. A KPI no Gate covers says so. A link at the bottom opens the run page tab the KPI comes from: **Evaluation**, or the **Overview** for a run metric.
 
-**A Construction Run's page.** Click a run id to open it. The title is the run's short id and its params as chips, as in the list; under it are its status, when it started and how long it took. If it failed, a banner says why as far as stetiq knows: it observed Concepts its Declared Ontology does not have while the Evolution Mode is *strict*, or it failed before its Graph Source was observed. Three tabs follow:
+**A Construction Run's page.** Click a run id to open it. The title is the run's short id; under it are its status, when it started and how long it took. If it failed, a one-line banner says why as far as stetiq knows: *Failed: 4 Concepts observed but not declared (strict mode).*, with **Show** to open those findings, or *Failed before the Graph Source was observed.* Then come four KPI tiles, the same on every evaluated page: **Conformance** (the run's score), **CQ coverage** (Competency Questions executed that passed, of all executed), **Gates** (Gates passed in the run's recorded Gate result) and **Drift** (findings of the Observation the run ended with). A tile that doesn't apply shows *—*. Two tabs follow:
 
 - **Overview**: its **Details**: the full run id (with a copy button), Declared Ontology, Candidate, start and end time and duration; the Observation it ended with (when, which Graph Source, and how many classes, relations and patterns it saw); and its params and metrics.
-- **Conformance**: the Conformance score, then the Concepts **Declared but not observed**, those **Observed but not declared**, and **Other mismatches**, each with its kind: *Undeclared value type*, *Required but not always set*, *Outside the declared cardinality* (a pattern whose observed out- or in-degree falls outside its declared bounds), *Value outside the Vocabulary* (a value of a Vocabulary-bound attribute that its Vocabulary does not have, with how many times it was observed) and *Deprecated value (conforms)* (a deprecated Vocabulary Value still in the graph, which is reported but does not lower the score). For a run that gave rise to a Candidate, a note under the score says it was **judged against** that Candidate, with a link to it: what the run added is the Candidate's Ontology Diff, so it isn't listed as observed but not declared. The Candidate's **Overview** judges those additions on its *Unjustified additions* card (`unjustified_additions`): how many of the Concepts it adds no Competency Question needs.
-- **Evaluations**: one card per run Evaluator, as on an Ontology Version's Overview (e.g. *Conformance* with its score as a percentage, *Questions executed* with *Passed 1 / 2*), and **Show all metrics** for the full table. When the Use Case's Competency Questions were executed against the graph, **Competency Questions** lists each one by its text with its result: **Passed**, **Failed** or **Error**. Click a question to open its side sheet, as on the Use Case page, with an **In this run** part: the result, which check judged it (*non-empty result* or *expected answer*) and any error type. The sheet shows the question as it was in the Use Case Version the run executed, and is part of the URL. Only the verdict is kept, never the rows the query returned.
+- **Evaluation**: **Findings**, the Conformance mismatches in one table (Concept, Kind, Finding, Change) that you can search and filter by **Finding** and **Kind**. A finding is *Declared but not observed*, *Observed but not declared*, *Undeclared value type*, *Required but not always set*, *Outside the cardinality* (a pattern whose observed out- or in-degree falls outside its declared bounds), *Value outside the Vocabulary* (with the value and how many times it was observed) or *Deprecated value* (reported, but it conforms and does not lower the score). For a run that gave rise to a Candidate, a line says it was **judged against** that Candidate, with a link to it: what the run added is the Candidate's Ontology Diff, so it isn't listed as observed but not declared; the Candidate's *Unjustified additions* card judges those additions. Then **Evaluator results**, one card per run Evaluator (e.g. *Questions executed* with *Passed 1 / 2*), with **Show all metrics** for the full table. When the Use Case's Competency Questions were executed against the graph, **Competency Questions** lists each with its result: **Passed**, **Failed** or **Error**. Click a question to open its side sheet, with an **In this run** part: the result, which check judged it (*non-empty result* or *expected answer*) and any error type. Only the verdict is kept, never the rows the query returned. Links to the old **Conformance** and **Evaluations** tabs open this tab.
 
 ### Use Case and Competency Questions
 
-The section shows the latest Use Case Version: its description and its **Competency Questions**, one row per question. A summary line above them says how many the latest Ontology Version answers, such as "Ontology Version v3 answers 2 of 4 Competency Questions." Each row shows the question and its status on that version:
+One line names the latest Use Case Version, when it was created and its description. Below it are three tabs, kept in the URL: **Questions**, **Consumers** and **Versions**.
+
+**Questions** is a catalog of the latest Use Case Version's **Competency Questions**. KPI tiles at the top show:
+
+- **CQ coverage**: how many the latest Ontology Version answers, such as 2/9.
+- **Unanswerable**
+- **Can't check**
+- **Not used by any Task**
+
+Under the tiles is a toolbar:
+
+- a search box, which matches the question text and its id
+- a **Status** filter, with a count per status
+- a **Task** filter: one Task, or *No Task* for the questions no Consumer's Task needs (in a Use Case without Consumers, that is every question)
+- **Add Competency Question** on the right
+
+The table has a **Question**, **Tasks** and **Status** column. Click a column header to sort by it; sorting by Status puts the worst first. Long catalogs show 50 rows per page. The search, the filters, the sort and the page are all kept in the URL. A question's status is its status on the latest Ontology Version:
 
 - **Answerable** (green check): the Ontology Version has every Concept the question needs.
 - **Unanswerable** (red cross): Concepts it needs are missing.
 - **Can't check** (grey dashed circle): the question has neither a Concept mapping nor a query, so stetiq can't tell. Point at it for that explanation.
 
-A question that no Consumer's Task needs is marked *Not used by any Task* (in a Use Case without Consumers, every question is). The status comes from the stored structural answerability result: until the latest Ontology Version has been judged against this Use Case Version, the summary line says so and the rows show no status, and a Knowledge Graph without an Ontology Version says that instead.
+The status comes from the stored structural answerability result. Until the latest Ontology Version has been judged against this Use Case Version, the tiles show "—" and the rows show no status.
 
 Click a question to open its **side sheet**, which shows the question and its status, then the **Missing Concepts** of an unanswerable question, **Needed by** (each Consumer · Task that needs it, or *Not used by any Task*) and **Author details**: its id, Cypher query, expected answer and Concept mapping. **Edit** and **Remove** sit in the sheet's header. The open sheet is part of the URL, so you can link to a question, a reload keeps it open, and the browser's Back closes it.
 
-Below the Competency Questions:
+The other two tabs:
 
-- **Consumers**: a tile per Consumer the Use Case declares, with an icon for its kind (an application, an agent, a dashboard and a team each have their own; any other kind gets a generic one), its name and the first line of its description. Each tile has one **readiness** line: "*n* of *m* Tasks ready", green when all are and red otherwise. A Task is ready when the latest Ontology Version answers every Competency Question it needs. Readiness is always shown for the latest Ontology Version: the page has no version selector. It reads **Not checked yet** (grey) until that Ontology Version has been judged against this Use Case Version, or when the Knowledge Graph has no Ontology Version, and **No Tasks** (grey) for a Consumer that declares none. A Consumer that declares a Consumer Gate also has a **Consumer Gate** line with its latest verdict: *Consumer Gate passed*, *Consumer Gate failed* or *Consumer Gate not evaluated yet*; a Consumer without one has no such line. Each tile ends with **Connect**, which opens a picker of example Connectors ([planned](#planned-features)) instead of the sheet. You can edit Consumers and Tasks here (see below) or declare them in the Use Case you register from the [Python SDK](./03-python-sdk.md#use-cases-and-competency-questions) or the [CLI](./04-cli.md#use-cases).
+- **Consumers**: a tile per Consumer the Use Case declares, with an icon for its kind (an application, an agent, a dashboard and a team each have their own; any other kind gets a generic one), its name and the first line of its description. Each tile has one **readiness** line: "*n* of *m* Tasks ready", green when all are and red otherwise. A Task is ready when the latest Ontology Version answers every Competency Question it needs. Readiness is always shown for the latest Ontology Version: the page has no version selector. It reads **Not checked yet** (grey) until that Ontology Version has been judged against this Use Case Version, or when the Knowledge Graph has no Ontology Version, and **No Tasks** (grey) for a Consumer that declares none. A Consumer that declares a Consumer Gate also has a **Consumer Gate** line with its latest verdict: *Consumer Gate passed*, *Consumer Gate failed* or *Consumer Gate not evaluated yet*; a Consumer without one has no such line. You can edit Consumers and Tasks here (see below) or declare them in the Use Case you register from the [Python SDK](./03-python-sdk.md#use-cases-and-competency-questions) or the [CLI](./04-cli.md#use-cases).
 
   Click a tile to open the Consumer's **side sheet**. It shows the Consumer's kind, name, id, contact and description, with **Edit** and **Remove** in its header, then:
 
@@ -168,7 +204,7 @@ Below the Competency Questions:
 
   Like a question's, the Consumer's sheet is part of the URL: you can link to it, a reload keeps it open, and the browser's Back steps back through the sheets you opened.
 
-- **Use Case Versions**: every Use Case Version with when it was created and how many Competency Questions it has.
+- **Versions**: every Use Case Version with when it was created and how many Competency Questions it has.
 
 **Editing Competency Questions** (needs edit access). **Add Competency Question** opens a form with an **Id**, a **Question**, and optionally a **Cypher query**, an **Expected answer** (any JSON value the query's rows must match) and a **Concept mapping** (one Concept reference per line, e.g. `Customer`, `Ticket.opened_at` or `(Customer)-[OPENED]->(Ticket)`). In a question's sheet, **Edit** opens the same form (the id is locked: to change it, remove the question and add a new one) and **Remove** removes it, closing the sheet. Removing a question that Tasks need names those Tasks first: they stay, without that question. A new question's id must differ from every other Competency Question, Consumer and Task id in the Use Case.
 
@@ -176,31 +212,21 @@ Below the Competency Questions:
 
 Every save registers a new Use Case Version, so earlier results stay tied to the version they were judged against. After saving, the page says which Use Case Version you got. If the content is the same as the latest or an earlier version, no new version is created and the page says which one already has it.
 
-**Comparing two Use Case Versions.** Tick two rows in **Use Case Versions** and click **Compare** to see what changed: the description, and the Competency Questions **Added**, **Changed** (field by field, before and after) and **Removed**. Competency Questions are matched by id.
+**Comparing two Use Case Versions.** Tick two rows on the **Versions** tab and click **Compare** to see what changed: the description, and the Competency Questions **Added**, **Changed** (field by field, before and after) and **Removed**. Competency Questions are matched by id.
 
 If no Use Case has been registered yet, add a Competency Question here or register one from the [Python SDK](./03-python-sdk.md).
 
 ### Observations
 
-The section is a timeline of every Observation of the Graph Source, newest first, one row each: **No Drift** or **Drift**, when it was taken, and *from run* with the short id of the Construction Run it ended (a link to the run), or *on demand* for an Observation taken between runs.
+The section is a table of every Observation of the Graph Source, newest first: when it was taken, **No Drift** or **Drift**, its source (*run* with the short id of the Construction Run it ended, or *on demand*), the Contract Alias's Ontology Version it was checked against, and how many findings it had. **Search Observations** matches a run id, a version (`v3`) or the Contract Alias; **Status** keeps only Drift or No Drift.
 
-Only a row with Drift expands: click its arrow to see what diverged from the Ontology Version of the Contract Alias. It shows the Contract Alias and its version, the Drift thresholds, **Pending Migration** as [planned](#planned-features), and, when it found undeclared or vanished Concepts, a disabled **Adopt into a Candidate** (Adoption, planned). Then each finding is an item: an icon for what happened, the Concept with its kind (**Class**, **Relation** or **Attribute**), and the detail, such as "count rose from 1 to 4 (+300%)" or "observed but not declared". An *undeclared value* finding is a value of a Vocabulary-bound Attribute that the Contract Alias's Vocabulary does not have: its Concept is the Attribute (`Owner.attribute`), and its detail names the value and how many times it was observed.
+Click a row to open it in a side panel. Its top line holds the Contract Alias, the version and the Drift thresholds (*max drop*, *max rise*). Then the four evaluation tiles, of which only **Drift** applies here, and the findings table: **Concept**, its **Kind** (**Class**, **Relation**, **Attribute** or **Pattern**), the **Finding** (e.g. *Observed but not declared*, *Count rose*) and the **Change**, such as `1 → 4 (+300%)`. Filter it by finding or kind, or search it. An *undeclared value* finding is a value of a Vocabulary-bound Attribute that the Contract Alias's Vocabulary does not have: its Concept is the Attribute (`Owner.attribute`), and its change names the value.
 
 This section is read-only: an Observation needs your graph database credentials, which never leave your own process. Take one with `stetiq observe` (see [CLI](./04-cli.md)) or by ending a Construction Run.
 
 ### Promotions
 
-The section is the Promotion audit, newest first: which Alias moved, from which version to which, who moved it, when, and the version's latest Gate result at that moment, as a status: ✓ *Passed*, ✗ *Failed* or a grey *Not gated*. Promote an Ontology Version from [its page](#ontology-versions) to add a row.
-
-## Planned features
-
-Some parts of stetiq's [vision](../vision.md) are shown in the web UI but not built yet. Each is muted or disabled and carries a **Planned** badge: point at the badge for what it will do, and click it to read about it in the vision.
-
-- **Evaluated on each Observation**, beside the Consumer Gate in each Consumer's sheet: today the pipeline's CI enforces it.
-- **Connect**, on each Consumer tile: it opens the Consumer's Connector picker, which shows example tools a Connector could link the Consumer through, grouped as **Enforce in CI**, **Get notified** and **In the Consumer's code**. Every tool's **Connect** is disabled and carries its own **Planned** badge.
-- **Pending Migration** and **Adoption**, on an Observation's Drift.
-- **Gate on Consumer impact**, under an Ontology Version's latest Gate result.
-- **Draft Tasks & questions with AI**, beside **Add Consumer** on the Use Case page.
+The section is the Promotion audit, newest first: which Alias moved, from which version to which, who moved it, when, and the version's latest Gate result at that moment, as a status: ✓ *Passed*, ✗ *Failed* or a grey *Not gated*. Promote an Ontology Version from [its page](#ontology-versions) to add a row. **Search Promotions** matches an Alias, a version or an actor; **Gate** keeps only one Gate result.
 
 ## Next steps
 
