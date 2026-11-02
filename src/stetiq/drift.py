@@ -190,11 +190,19 @@ class DriftAssessment:
 
 @dataclass(frozen=True)
 class DriftThresholds:
-    """Statistical Drift thresholds. The count ones are fractions of the previous count
-    (0.1 = 10%) and off by default; `max_violation_increase` is in absolute points of a
-    Violation Rate above the Baseline Observation's (0.01 = one percentage point) and
-    defaults to `DEFAULT_MAX_VIOLATION_INCREASE`; `max_coverage_drop` is in absolute points
-    of a declared pattern's Coverage below the Baseline Observation's and off by default.
+    """Statistical Drift thresholds:
+
+    - `max_count_drop`, `max_count_increase`: fractions of a type's or pattern's count in
+      the previous Observation (0.1 = 10%); off by default.
+    - `max_violation_increase`: absolute points of a Violation Rate above the Baseline
+      Observation's (0.01 = one percentage point); defaults to
+      `DEFAULT_MAX_VIOLATION_INCREASE`.
+    - `max_fill_rate_drop`: absolute points of a declared, not-required Attribute's fill
+      rate below the Baseline Observation's; off by default.
+    - `max_coverage_drop`: absolute points of a declared pattern's Coverage below the
+      Baseline Observation's; off by default.
+    - `min_count`: the floor below which a type, pattern or owner is not compared (the
+      check is not comparable); 0 by default.
 
     None disables that check. A change exactly at the threshold is not Drift."""
 
@@ -255,13 +263,16 @@ def thresholds_from_config(config: Mapping[str, Any]) -> DriftThresholds:
 
     ```yaml
     drift:
-      max_count_drop: 0.1      # a type's count falling by more than 10% is Drift
-      max_count_increase: 0.5  # optional
+      max_count_drop: 0.1           # a type's count falling by more than 10% is Drift
+      max_count_increase: 0.5       # optional
       max_violation_increase: 0.02  # default 0.01; null turns it off
-      max_coverage_drop: 0.05  # optional
+      max_fill_rate_drop: 0.05      # optional
+      max_coverage_drop: 0.05       # optional
+      min_count: 100                # default 0
     ```
-    A missing section or key takes its default: the count checks off, the Violation Rate
-    check at 0.01 (structural Drift always applies)."""
+    A missing section or key takes its default: the count, fill-rate and Coverage checks
+    off, the Violation Rate check at 0.01, no `min_count` floor (structural Drift always
+    applies)."""
     section = config.get("drift")
     if section is None:
         return DriftThresholds()
