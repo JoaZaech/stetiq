@@ -3,7 +3,8 @@
 `Client.run_context` composes it from existing service calls; `stetiq context` prints
 `RunContext.to_dict()` as JSON for upstream pipelines that don't use the Python SDK. It
 holds Ontology, Use Case, metrics and counts only, never instance data (ADR 0001):
-evaluation results come without their details, which can quote observed values.
+evaluation results come without their details, which can quote observed values
+(`Client.run_context` drops them; `to_dict` writes the results in their wire form).
 """
 
 from __future__ import annotations
@@ -57,12 +58,16 @@ class RunContext:
                 "use_case": use_case_format.to_dict(self.use_case_version.use_case),
             },
             "competency_questions": self._questions(),
-            "evaluation_results": [_metrics_only(r) for r in self.evaluation_results],
+            "evaluation_results": [
+                codec.evaluation_result_to_json(r) for r in self.evaluation_results
+            ],
             "run": None
             if self.run is None
             else {
                 "id": self.run.id,
-                "evaluation_results": [_metrics_only(r) for r in self.run_evaluation_results],
+                "evaluation_results": [
+                    codec.evaluation_result_to_json(r) for r in self.run_evaluation_results
+                ],
             },
         }
 
@@ -86,12 +91,3 @@ class RunContext:
                 }
             )
         return questions
-
-
-def _metrics_only(result: EvaluationResult) -> dict[str, Any]:
-    return {
-        "evaluator": result.evaluator,
-        "parameters": dict(result.parameters),
-        "metrics": dict(result.metrics),
-        "use_case_version": result.use_case_version,
-    }

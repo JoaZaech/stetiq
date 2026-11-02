@@ -381,15 +381,15 @@ The run context is built from what the tracking service already holds, so it nee
       "execution": {"status": "failed", "rows": 0}
     }
   ],
-  "evaluation_results": [{"evaluator": "structural_answerability", "parameters": {}, "metrics": {"answerable_ratio": 0.875}, "use_case_version": 2}],
-  "run": {"id": "5d0c1f2e...", "evaluation_results": [{"evaluator": "competency_question_execution", "parameters": {}, "metrics": {"pass_ratio": 0.8}, "use_case_version": 2}]}
+  "evaluation_results": [{"evaluator": "structural_answerability", "parameters": {}, "metrics": {"answerable_ratio": 0.875}, "details": [], "use_case_version": 2, "...": "..."}],
+  "run": {"id": "5d0c1f2e...", "evaluation_results": [{"evaluator": "competency_question_execution", "parameters": {}, "metrics": {"pass_ratio": 0.8}, "details": [], "use_case_version": 2, "...": "..."}]}
 }
 ```
 
 - `ontology_version.ontology` is the Ontology in its `stetiq.yaml` form, as a mapping: write it out as YAML and it registers as is.
 - `use_case_version` is null without a Use Case; `use_case` is the Use Case in its `use-case.yaml` form.
 - `competency_questions` lists every question of that Use Case Version with the Consumer and Task pairs it serves (empty when it serves none), and `execution`: its `status` (`passed`, `failed` or `error`) and `rows` on `run`, or null when it wasn't executed there (no `query`, or no run).
-- `evaluation_results` and `run.evaluation_results` are the latest Evaluator results, **metrics only**: `evaluator`, `parameters`, `metrics` and the `use_case_version` judged against (null when none). There is no `details` key.
+- `evaluation_results` and `run.evaluation_results` are the latest Evaluator results in the form the REST API returns them (`evaluator`, `parameters`, `metrics`, the `use_case_version` judged against or null, the subject and `created_at`), **metrics only**: `details` is always an empty list.
 - `run` is null when no finished Construction Run stands for that Ontology Version (a run stands for its Candidate, or else for the version it consumed).
 
 An upstream pipeline that may extend the Ontology should do so only where a Competency Question needs it. Declare that question in the Use Case before the run; an evolving run's additions are then judged by `unjustified_additions` (see [Evaluators and their metrics](./06-stetiq-yaml.md#evaluators-and-their-metrics)).
