@@ -376,6 +376,10 @@ def create_app(
     def list_drift_events(name: str) -> list[dict[str, Any]]:
         return [codec.drift_event_to_json(e) for e in tracking.list_drift_events(name)]
 
+    @api.get("/knowledge-graphs/{name}/alignment-trend")
+    def alignment_trend(name: str) -> list[dict[str, Any]]:
+        return [codec.alignment_point_to_json(p) for p in tracking.alignment_trend(name)]
+
     @api.get("/observations/{observation_id}")
     def get_observation(observation_id: str) -> dict[str, Any]:
         return codec.observation_to_json(tracking.get_observation(observation_id))

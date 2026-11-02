@@ -104,6 +104,8 @@ The graph can change between runs: someone edits it by hand, or another process 
 
 **Drift** is a divergence, found by an Observation, between the Graph Source's Observed Schema and the Contract Alias's Ontology Version: a Concept observed but not declared, one declared but no longer observed, or a value outside its attribute's Vocabulary (with how many nodes hold it and their share). Drift raises an alert. It never creates an Ontology Version or moves an Alias: deciding what the structure should be stays a Promotion.
 
+Every Observation also carries a Conformance score: an on-demand one is judged against the Contract Alias's Ontology Version at that moment, and one that ends a Construction Run has its run's. The [Observations page](./07-using-the-web-ui.md#observations) shows these scores over time as the **Alignment trend**, so you can see whether the graph is getting more or less aligned with its Ontology. The trend has no threshold and raises no Drift.
+
 stetiq also watches statistics:
 
 - **Counts** are compared with the previous Observation, and a change beyond your thresholds is Drift.
