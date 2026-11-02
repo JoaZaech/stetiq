@@ -6,7 +6,7 @@ to the codec that stops reading them fails here."""
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import create_engine, insert
+from sqlalchemy import create_engine, insert, inspect
 
 from stetiq.conformance import Conformance, Mismatch, MismatchKind
 from stetiq.drift import DriftFinding, DriftKind, DriftThresholds
@@ -132,6 +132,19 @@ def test_reads_observations_and_drift_events_as_earlier_releases_stored_them(db)
     assert event.findings == (DriftFinding(DriftKind.UNDECLARED, "Invoice", "node_type"),)
     # Stored before findings were marked; each one made `stetiq observe` exit 3, so new.
     assert event.findings[0].new is True
+    assert store.get_drift_event_for_observation("obs-1") == event
+    assert store.get_drift_event_for_observation("no-such-observation") is None
+
+
+def test_a_store_created_before_the_drift_event_index_gains_it_on_start(db):
+    _, engine = db
+    with engine.begin() as conn:
+        conn.exec_driver_sql("DROP INDEX ix_drift_events_observation")
+
+    SqlStore(str(engine.url))
+
+    indexes = {i["name"] for i in inspect(engine).get_indexes("drift_events")}
+    assert "ix_drift_events_observation" in indexes
 
 
 def test_reads_run_conformance_and_gate_results_as_earlier_releases_stored_them(db):

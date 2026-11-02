@@ -991,13 +991,13 @@ class LocalTrackingService:
                 run_id=None,
                 baseline_observation_id=obs_id if baseline is None else baseline.id,
                 not_comparable=drift.not_comparable,
-                conformance=assess_conformance(contract.ontology, schema),
+                conformance=drift.conformance,
                 ontology_version=contract.number,
             )
             self._store.add_observation(obs)
             findings = mark_new(
                 drift.findings,
-                self._previous_findings(knowledge_graph, history, contract, thresholds, baseline),
+                self._previous_findings(history, contract, thresholds, baseline),
             )
             if not findings:
                 return ObservationOutcome(observation=obs)
@@ -1017,7 +1017,6 @@ class LocalTrackingService:
 
     def _previous_findings(
         self,
-        knowledge_graph: str,
         history: list[Observation],
         contract: OntologyVersion,
         thresholds: DriftThresholds,
@@ -1034,14 +1033,7 @@ class LocalTrackingService:
         previous = history[-1]
         if self._judged_against(previous) not in (None, contract.number):
             return ()
-        event = next(
-            (
-                e
-                for e in self._store.list_drift_events(knowledge_graph)
-                if e.observation_id == previous.id
-            ),
-            None,
-        )
+        event = self._store.get_drift_event_for_observation(previous.id)
         if event is not None:
             return event.findings
         before = history[-2] if len(history) > 1 else None

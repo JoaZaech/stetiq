@@ -30,25 +30,23 @@ Thresholds come from the `drift:` section of the repo config (`stetiq.yaml`), se
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from enum import StrEnum
-from typing import Any, Literal
+from functools import partial
+from typing import Any
 
 from stetiq.conformance import (
     Conformance,
     MismatchKind,
     MismatchSubjectKind,
-    _properties_of,
     assess_conformance,
+    properties_of,
 )
 from stetiq.errors import InvalidDriftConfigError
 from stetiq.graph_source import ObservedSchema
 from stetiq.ontology import Ontology
-from stetiq.ontology.model import Pattern
-
-# Which endpoint nodes a Coverage is over: `out` the pattern's source, `in` its target.
-Direction = Literal["out", "in"]
+from stetiq.ontology.model import Direction, Pattern
 
 # `max_violation_increase` when `stetiq.yaml`, a request or the SDK leaves it out.
 DEFAULT_MAX_VIOLATION_INCREASE = 0.01
@@ -181,20 +179,30 @@ class NotComparable:
 
 @dataclass(frozen=True)
 class DriftAssessment:
-    """What `assess_drift` found: the findings (empty means no Drift) and the checks that
-    were not comparable."""
+    """What `assess_drift` found: the findings (empty means no Drift), the checks that
+    were not comparable, and the Conformance of the Observed Schema to the contract that
+    the structural findings and Violation Rates come from."""
 
+    conformance: Conformance
     findings: tuple[DriftFinding, ...] = ()
     not_comparable: tuple[NotComparable, ...] = ()
 
 
 @dataclass(frozen=True)
 class DriftThresholds:
-    """Statistical Drift thresholds. The count ones are fractions of the previous count
-    (0.1 = 10%) and off by default; `max_violation_increase` is in absolute points of a
-    Violation Rate above the Baseline Observation's (0.01 = one percentage point) and
-    defaults to `DEFAULT_MAX_VIOLATION_INCREASE`; `max_coverage_drop` is in absolute points
-    of a declared pattern's Coverage below the Baseline Observation's and off by default.
+    """Statistical Drift thresholds:
+
+    - `max_count_drop`, `max_count_increase`: fractions of a type's or pattern's count in
+      the previous Observation (0.1 = 10%); off by default.
+    - `max_violation_increase`: absolute points of a Violation Rate above the Baseline
+      Observation's (0.01 = one percentage point); defaults to
+      `DEFAULT_MAX_VIOLATION_INCREASE`.
+    - `max_fill_rate_drop`: absolute points of a declared, not-required Attribute's fill
+      rate below the Baseline Observation's; off by default.
+    - `max_coverage_drop`: absolute points of a declared pattern's Coverage below the
+      Baseline Observation's; off by default.
+    - `min_count`: the floor below which a type, pattern or owner is not compared (the
+      check is not comparable); 0 by default.
 
     None disables that check. A change exactly at the threshold is not Drift."""
 
@@ -255,13 +263,16 @@ def thresholds_from_config(config: Mapping[str, Any]) -> DriftThresholds:
 
     ```yaml
     drift:
-      max_count_drop: 0.1      # a type's count falling by more than 10% is Drift
-      max_count_increase: 0.5  # optional
+      max_count_drop: 0.1           # a type's count falling by more than 10% is Drift
+      max_count_increase: 0.5       # optional
       max_violation_increase: 0.02  # default 0.01; null turns it off
-      max_coverage_drop: 0.05  # optional
+      max_fill_rate_drop: 0.05      # optional
+      max_coverage_drop: 0.05       # optional
+      min_count: 100                # default 0
     ```
-    A missing section or key takes its default: the count checks off, the Violation Rate
-    check at 0.01 (structural Drift always applies)."""
+    A missing section or key takes its default: the count, fill-rate and Coverage checks
+    off, the Violation Rate check at 0.01, no `min_count` floor (structural Drift always
+    applies)."""
     section = config.get("drift")
     if section is None:
         return DriftThresholds()
@@ -334,40 +345,39 @@ def assess_drift(
         count_findings, count_gaps = _statistical(observed, previous, thresholds)
         findings.extend(count_findings)
         not_comparable.extend(count_gaps)
-    min_count = 0 if thresholds is None else thresholds.min_count
-    limit = None if thresholds is None else thresholds.max_violation_increase
-    if baseline is not None and limit is not None:
-        rate_findings, rate_gaps = _violation_increases(
-            conformance,
-            assess_conformance(contract, baseline),
-            observed,
-            baseline,
-            limit,
-            min_count,
+    if baseline is not None and thresholds is not None:
+        ratio_checks: tuple[tuple[float | None, _RatioCheck], ...] = (
+            (
+                thresholds.max_violation_increase,
+                partial(_violation_increases, contract, conformance),
+            ),
+            (thresholds.max_coverage_drop, partial(_coverage_drops, contract)),
+            (thresholds.max_fill_rate_drop, partial(_fill_rate_drops, contract)),
         )
-        findings.extend(rate_findings)
-        not_comparable.extend(rate_gaps)
-    coverage_limit = None if thresholds is None else thresholds.max_coverage_drop
-    if baseline is not None and coverage_limit is not None:
-        coverage_findings, coverage_gaps = _coverage_drops(
-            contract, observed, baseline, coverage_limit, min_count
-        )
-        findings.extend(coverage_findings)
-        not_comparable.extend(coverage_gaps)
-    fill_limit = None if thresholds is None else thresholds.max_fill_rate_drop
-    if baseline is not None and fill_limit is not None:
-        fill_findings, fill_gaps = _fill_rate_drops(
-            contract, observed, baseline, fill_limit, min_count
-        )
-        findings.extend(fill_findings)
-        not_comparable.extend(fill_gaps)
+        for limit, check in ratio_checks:
+            if limit is not None:
+                ratio_findings, ratio_gaps = check(observed, baseline, limit, thresholds.min_count)
+                findings.extend(ratio_findings)
+                not_comparable.extend(ratio_gaps)
     # One entry per check: a truncated list yields one mismatch per listed outside value.
-    return DriftAssessment(tuple(findings), tuple(dict.fromkeys(not_comparable)))
+    return DriftAssessment(conformance, tuple(findings), tuple(dict.fromkeys(not_comparable)))
+
+
+# A ratio check bound to its contract: (observed, baseline, limit, min_count) -> findings, gaps.
+_RatioCheck = Callable[
+    [ObservedSchema, ObservedSchema, float, int], tuple[list[DriftFinding], list[NotComparable]]
+]
+
+
+def _exceeds(change: float, limit: float) -> bool:
+    """Whether `change` is beyond `limit`. Rounded, so that a change of exactly the
+    threshold is not Drift despite float error."""
+    return round(change, 9) > limit
 
 
 def _violation_increases(
+    contract: Ontology,
     conformance: Conformance,
-    at_baseline: Conformance,
     observed: ObservedSchema,
     baseline: ObservedSchema,
     limit: float,
@@ -375,8 +385,10 @@ def _violation_increases(
 ) -> tuple[list[DriftFinding], list[NotComparable]]:
     """A finding per Violation Rate more than `limit` above its baseline value. A check
     the baseline passed had rate 0; one it could not run (its subject was not observed
-    then), whose rate is unknown on either side, or whose owner is below `min_count` on
-    either side, is not comparable."""
+    then), whose rate is unknown on either side, or whose owner (a pattern's: the endpoint
+    nodes of the failing degree) is below `min_count` on either side, is not comparable."""
+    patterns = {str(p): p for p in contract.patterns}  # a rated pattern is a declared one
+    at_baseline = assess_conformance(contract, baseline)
     # A pattern's out- and in-degree are separate checks on the same subject.
     before = {
         (m.kind, m.subject, m.direction): m.rate for m in at_baseline.mismatches if m.kind in _RATED
@@ -402,20 +414,30 @@ def _violation_increases(
                 )
             )
             continue
-        small = baseline_min_count_gap(
-            DriftKind.VIOLATION_INCREASE,
-            m.subject,
-            m.subject_kind,
-            min_count,
-            baseline,
-            observed,
-            m.kind,
-        )
+        if m.subject_kind == "pattern" and m.direction is not None:
+            small = _endpoint_min_count_gap(
+                DriftKind.VIOLATION_INCREASE,
+                patterns[m.subject],
+                m.direction,
+                min_count,
+                baseline,
+                observed,
+                m.kind,
+            )
+        else:
+            small = baseline_min_count_gap(
+                DriftKind.VIOLATION_INCREASE,
+                m.subject,
+                m.subject_kind,
+                min_count,
+                baseline,
+                observed,
+                m.kind,
+            )
         if small is not None:
             gaps.append(small)
             continue
-        # Rounded, so that a rise of exactly the threshold is not Drift despite float error.
-        if round(m.rate - then, 9) > limit:
+        if _exceeds(m.rate - then, limit):
             findings.append(
                 DriftFinding(
                     kind=DriftKind.VIOLATION_INCREASE,
@@ -448,11 +470,7 @@ def _coverage_drops(
     gaps: list[NotComparable] = []
     for declared in contract.patterns:
         subject = str(declared)
-        endpoints: tuple[tuple[Direction, str], ...] = (
-            ("out", declared.source),
-            ("in", declared.target),
-        )
-        for direction, endpoint in endpoints:
+        for direction, endpoint in declared.directions:
             if not _count(observed, endpoint):
                 continue
             now = _coverage(observed, declared, direction)
@@ -468,22 +486,13 @@ def _coverage_drops(
                     )
                 )
                 continue
-            small = baseline_min_count_gap(
-                DriftKind.COVERAGE_DROP, endpoint, "node_type", min_count, baseline, observed
+            small = _endpoint_min_count_gap(
+                DriftKind.COVERAGE_DROP, declared, direction, min_count, baseline, observed
             )
             if small is not None:
-                # The floor is on the endpoint nodes; the check is still the pattern's.
-                gaps.append(
-                    replace(
-                        small,
-                        subject=subject,
-                        subject_kind="pattern",
-                        reason=f"{direction}-degree endpoint {endpoint}: {small.reason}",
-                    )
-                )
+                gaps.append(small)
                 continue
-            # Rounded, so that a drop of exactly the threshold is not Drift despite float error.
-            if round(then - now, 9) > limit:
+            if _exceeds(then - now, limit):
                 findings.append(
                     DriftFinding(
                         kind=DriftKind.COVERAGE_DROP,
@@ -507,15 +516,14 @@ def _count(schema: ObservedSchema, label: str) -> int:
 def _coverage(schema: ObservedSchema, declared: Pattern, direction: Direction) -> float | None:
     """The share of the pattern's `direction` endpoint nodes with at least one such
     relationship: None when no such node was observed or the degree lacks `with_edges`."""
-    endpoint = declared.source if direction == "out" else declared.target
-    endpoints = _count(schema, endpoint)
+    endpoints = _count(schema, declared.endpoint(direction))
     if not endpoints:
         return None
     pattern = schema.pattern(declared.source, declared.relationship, declared.target)
     if pattern is None:
         return 0.0  # endpoint nodes, but no such relationship between them
-    degree = pattern.out_degree if direction == "out" else pattern.in_degree
-    return None if degree.with_edges is None else degree.with_edges / endpoints
+    with_edges = pattern.degree(direction).with_edges
+    return None if with_edges is None else with_edges / endpoints
 
 
 def _direction(direction: str | None) -> str:
@@ -534,7 +542,7 @@ def _fill_rate_drops(
     not observed on an observed owner has fill rate 0; an owner not observed now is
     `vanished` Drift, and one the baseline did not observe, or below `min_count` on either
     side, is not comparable."""
-    properties_of = _properties_of(contract)
+    declared_properties = properties_of(contract)
     owners: tuple[tuple[Any, Any], ...] = (
         (contract.node_types, ObservedSchema.node_type),
         (contract.relationship_types, ObservedSchema.relationship_type),
@@ -546,7 +554,7 @@ def _fill_rate_drops(
             now, then = find(observed, concept.label), find(baseline, concept.label)
             if now is None:
                 continue
-            for prop in sorted(properties_of(concept), key=lambda p: p.name):
+            for prop in sorted(declared_properties(concept), key=lambda p: p.name):
                 if prop.required:
                     continue
                 subject = f"{concept.label}.{prop.name}"
@@ -567,8 +575,7 @@ def _fill_rate_drops(
                     gaps.append(small)
                     continue
                 before, after = _fill_rate(then, prop.name), _fill_rate(now, prop.name)
-                # Rounded, so that a drop of exactly the threshold is not Drift.
-                if round(before - after, 9) > limit:
+                if _exceeds(before - after, limit):
                     findings.append(
                         DriftFinding(
                             kind=DriftKind.FILL_RATE_DROP,
@@ -703,12 +710,36 @@ def baseline_min_count_gap(
     return None
 
 
+def _endpoint_min_count_gap(
+    check: DriftKind,
+    declared: Pattern,
+    direction: Direction,
+    min_count: int,
+    baseline: ObservedSchema,
+    observed: ObservedSchema,
+    violation: MismatchKind | None = None,
+) -> NotComparable | None:
+    """`baseline_min_count_gap` for a pattern's degree, whose owners are the degree's
+    endpoint nodes (the source for `out`, the target for `in`), not its relationships."""
+    endpoint = declared.endpoint(direction)
+    small = baseline_min_count_gap(
+        check, endpoint, "node_type", min_count, baseline, observed, violation
+    )
+    if small is None:
+        return None
+    # The floor is on the endpoint nodes; the check is still the pattern's.
+    return replace(
+        small,
+        subject=str(declared),
+        subject_kind="pattern",
+        reason=f"{direction}-degree endpoint {endpoint}: {small.reason}",
+    )
+
+
 def owner_count(schema: ObservedSchema, subject_kind: MismatchSubjectKind, subject: str) -> int:
     """How many nodes or relationships a check's subject counts in `schema`, for
-    `min_count`: a type's or pattern's own count, an Attribute `Owner.name`'s owner's
-    count; 0 when not observed."""
-    if subject_kind == "pattern":
-        return _pattern_counts(schema).get(subject, 0)
+    `min_count`: a type's own count, an Attribute `Owner.name`'s owner's count; 0 when not
+    observed. A pattern's degree counts its endpoint nodes (`_endpoint_min_count_gap`)."""
     label = subject.partition(".")[0] if subject_kind == "property" else subject
     owner = schema.node_type(label) if subject_kind != "relationship_type" else None
     if owner is None and subject_kind != "node_type":
@@ -748,5 +779,4 @@ def _is_new(f: DriftFinding, before: DriftFinding | None) -> bool:
     if f.observed_rate is None or f.baseline_rate is None or before.observed_rate is None:
         return False
     direction = 1 if f.observed_rate >= f.baseline_rate else -1
-    # Rounded, so that float error is not a worsening.
-    return round((f.observed_rate - before.observed_rate) * direction, 9) > 0
+    return _exceeds((f.observed_rate - before.observed_rate) * direction, 0)

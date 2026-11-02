@@ -1,4 +1,5 @@
 import type { AlignmentPoint, DriftEvent, DriftThresholds, NotComparable, Observation } from '@/api/observations'
+import { formatPercent, formatPoints } from '@/lib/format'
 import { matchesSearch } from '@/lib/search'
 import { DRIFT_FINDING, MISMATCH_FINDING, subjectKindLabel } from '../evaluation/findings'
 import { alignmentByObservation } from './alignment-trend'
@@ -57,25 +58,20 @@ export function filterObservationRows(rows: readonly ObservationRow[], query: st
   )
 }
 
-const percent = new Intl.NumberFormat('en', { style: 'percent', maximumFractionDigits: 1 })
-
-const points = new Intl.NumberFormat('en', { maximumFractionDigits: 1 })
-
 /**
  * `max drop off · max rise 50% · max violation rise 1 pt`; an event from before Violation
  * Rates lacks the last one, which was off. `max coverage drop 5 pts`, the fill-rate drop and
  * min count follow only when set.
  */
 export function formatThresholds(thresholds: DriftThresholds): string {
-  const part = (label: string, value: number | null) => `${label} ${value === null ? 'off' : percent.format(value)}`
+  const part = (label: string, value: number | null) => `${label} ${value === null ? 'off' : formatPercent(value)}`
   const violation = thresholds.max_violation_increase ?? null
-  const inPoints = (value: number) => `${points.format(value * 100)} ${value === 0.01 ? 'pt' : 'pts'}`
   return [
     part('max drop', thresholds.max_count_drop),
     part('max rise', thresholds.max_count_increase),
-    `max violation rise ${violation === null ? 'off' : inPoints(violation)}`,
-    ...(thresholds.max_coverage_drop == null ? [] : [`max coverage drop ${inPoints(thresholds.max_coverage_drop)}`]),
-    ...(thresholds.max_fill_rate_drop != null ? [`max fill drop ${inPoints(thresholds.max_fill_rate_drop)}`] : []),
+    `max violation rise ${violation === null ? 'off' : formatPoints(violation)}`,
+    ...(thresholds.max_coverage_drop == null ? [] : [`max coverage drop ${formatPoints(thresholds.max_coverage_drop)}`]),
+    ...(thresholds.max_fill_rate_drop != null ? [`max fill drop ${formatPoints(thresholds.max_fill_rate_drop)}`] : []),
     ...(thresholds.min_count ? [`min count ${thresholds.min_count}`] : []),
   ].join(' · ')
 }

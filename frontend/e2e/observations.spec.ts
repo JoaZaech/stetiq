@@ -114,7 +114,7 @@ test.describe('with Violation Rates', () => {
       /^WorkOrder\.codeAttributeViolation Rate roseRequired but not always set: 0% → 50% \(\+50 pts\)New$/,
     ])
     await expect(sheet.getByRole('table', { name: 'Not comparable' }).getByRole('row')).toHaveText([
-      'SubjectKindCheckReason',
+      'ConceptKindCheckReason',
       /^WorkOrder\.statusAttributeValue outside the Vocabularyvalue list truncated/,
     ])
     await expect(sheet.locator('time')).toHaveCount(2) // the Observation's time and its baseline's

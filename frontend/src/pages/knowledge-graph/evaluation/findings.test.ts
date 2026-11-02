@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { DriftFinding } from '@/api/observations'
 import type { Mismatch } from '@/api/runs'
-import { countChange, facetCounts, filterFindings, findingsFromDrift, findingsFromMismatches } from './findings'
+import { countChange, facetCounts, filterFindings, findingsFromDrift, findingsFromMismatches, rateChange } from './findings'
 
 const mismatch = (m: Partial<Mismatch>): Mismatch => ({
   subject: 'Sensor',
@@ -146,11 +146,18 @@ describe('findingsFromDrift Coverage', () => {
       drift({ kind: 'undeclared', subject: 'B', new: true }),
       drift({ kind: 'count_drop', subject: 'C', new: true }),
     ])
-    expect(rows.map((r) => [r.subject, r.status])).toEqual([
-      ['C', 'New'],
-      ['B', 'New'],
-      ['A', 'Persisting'],
+    expect(rows.map((r) => [r.subject, r.new])).toEqual([
+      ['C', true],
+      ['B', true],
+      ['A', false],
     ])
+  })
+})
+
+describe('rateChange', () => {
+  it('names a change of exactly one point in the singular', () => {
+    expect(rateChange(0.02, 0.03)).toBe('2% → 3% (+1 pt)')
+    expect(rateChange(0.95, 0.85)).toBe('95% → 85% (−10 pts)')
   })
 })
 

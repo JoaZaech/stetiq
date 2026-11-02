@@ -121,6 +121,10 @@ class Store(Protocol):
         """Ordered oldest first."""
         ...
 
+    def get_drift_event_for_observation(self, observation_id: str) -> DriftEvent | None:
+        """The Drift event the Observation raised; None when it raised none."""
+        ...
+
     def set_alias(self, alias: Alias) -> None:
         """Create the Alias or move it (upsert on knowledge graph + name)."""
         ...

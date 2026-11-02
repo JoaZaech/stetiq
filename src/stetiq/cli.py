@@ -1175,3 +1175,19 @@ def observations_list(knowledge_graph: str, tracking_uri: TrackingUri = None) ->
             f"{o.id:<33} {o.observed_at.isoformat():<33} {len(o.schema.node_types):<6} "
             f"{len(o.schema.relationship_types):<6} {o.run_id or '-'}"
         )
+
+
+@observations_app.command("trend")
+def observations_trend(knowledge_graph: str, tracking_uri: TrackingUri = None) -> None:
+    """List the Knowledge Graph's alignment trend, oldest first: the Conformance score of
+    every Construction Run and on-demand Observation (RUN is - for on-demand ones)."""
+    try:
+        points = _client(tracking_uri).alignment_trend(knowledge_graph)
+    except StetiqError as e:
+        raise _fail(e) from None
+    typer.echo(f"{'AT':<33} {'SCORE':<6} {'VERSION':<8} {'RUN':<33} OBSERVATION")
+    for p in points:
+        typer.echo(
+            f"{p.at.isoformat():<33} {p.score:<6.3f} {p.ontology_version:<8} "
+            f"{p.run_id or '-':<33} {p.observation_id}"
+        )

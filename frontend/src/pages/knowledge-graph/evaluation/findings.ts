@@ -2,6 +2,7 @@ import type { DriftFinding } from '@/api/observations'
 import type { Mismatch, MismatchSubjectKind } from '@/api/runs'
 import type { StatusTone } from '@/components/status-tones'
 import { conceptKindLabel } from '@/lib/concept-kind'
+import { formatPercent, formatPoints } from '@/lib/format'
 import { matchesSearch } from '@/lib/search'
 
 /**
@@ -18,9 +19,17 @@ export interface FindingRow {
   /** The change or the detail, e.g. `12 → 6 (−50%)`; empty when the finding says it all. */
   change: string
   tone: StatusTone
-  /** A Drift finding only: whether the previous Observation had it too. */
-  status?: 'New' | 'Persisting'
+  /** A Drift finding only: false when the previous Observation had it too (see `DRIFT_FINDING_STATUS`). */
+  new?: boolean
 }
+
+/** A Drift finding's status, new or persisting, as its name and tone. */
+export const DRIFT_FINDING_STATUS: Record<'new' | 'persisting', { label: string; tone: StatusTone }> = {
+  new: { label: 'New', tone: 'warning' },
+  persisting: { label: 'Persisting', tone: 'neutral' },
+}
+
+export const driftFindingStatus = (isNew: boolean) => DRIFT_FINDING_STATUS[isNew ? 'new' : 'persisting']
 
 export const MISMATCH_FINDING: Record<Mismatch['kind'], string> = {
   absent: 'Declared but not observed',
@@ -71,38 +80,49 @@ export function findingsFromDrift(findings: readonly DriftFinding[]): FindingRow
       finding: DRIFT_FINDING[f.kind],
       change: driftChange(f),
       tone: 'warning',
-      status: f.new ? 'New' : 'Persisting',
+      new: f.new,
     })),
   )
-  return [...rows.filter((r) => r.status === 'New'), ...rows.filter((r) => r.status !== 'New')]
+  return [...rows.filter((r) => r.new), ...rows.filter((r) => !r.new)]
 }
 
+/** The Change column of a Drift finding, by kind; its detail when a field it needs is missing. */
 function driftChange(f: DriftFinding): string {
-  if (f.previous_count !== null && f.observed_count !== null) return countChange(f.previous_count, f.observed_count)
-  if (f.violation !== undefined && f.baseline_rate !== undefined && f.observed_rate !== undefined) {
-    const degree = f.direction === undefined ? '' : ` (${f.direction}-degree)`
-    return `${MISMATCH_FINDING[f.violation]}${degree}: ${rateChange(f.baseline_rate, f.observed_rate)}`
+  const rates = (show: (change: string) => string) =>
+    f.baseline_rate !== undefined && f.observed_rate !== undefined ? show(rateChange(f.baseline_rate, f.observed_rate)) : f.detail
+  switch (f.kind) {
+    case 'count_drop':
+    case 'count_increase':
+      return f.previous_count !== null && f.observed_count !== null
+        ? countChange(f.previous_count, f.observed_count)
+        : f.detail
+    case 'violation_increase': {
+      if (f.violation === undefined) return f.detail
+      const check = MISMATCH_FINDING[f.violation]
+      const degree = f.direction === undefined ? '' : ` (${f.direction}-degree)`
+      return rates((change) => `${check}${degree}: ${change}`)
+    }
+    case 'coverage_drop': {
+      if (f.direction === undefined) return f.detail
+      const degree = f.direction === 'out' ? 'Out' : 'In'
+      return rates((change) => `${degree}-degree: ${change}`)
+    }
+    case 'fill_rate_drop':
+      return rates((change) => change)
+    case 'undeclared_value': {
+      if (f.value === undefined) return f.detail
+      const change = valueChange(f.value, f.count)
+      return f.share === undefined ? change : `${change} (${formatPercent(f.share)})`
+    }
+    case 'undeclared':
+    case 'vanished':
+      return f.detail
   }
-  if (f.direction !== undefined && f.baseline_rate !== undefined && f.observed_rate !== undefined) {
-    return `${f.direction === 'out' ? 'Out' : 'In'}-degree: ${rateChange(f.baseline_rate, f.observed_rate)}`
-  }
-  if (f.kind === 'fill_rate_drop' && f.baseline_rate !== undefined && f.observed_rate !== undefined) {
-    return rateChange(f.baseline_rate, f.observed_rate)
-  }
-  if (f.value !== undefined) {
-    const change = valueChange(f.value, f.count)
-    return f.share === undefined ? change : `${change} (${percent.format(f.share)})`
-  }
-  return f.detail
 }
 
-const percent = new Intl.NumberFormat('en', { style: 'percent', maximumFractionDigits: 1 })
-const points = new Intl.NumberFormat('en', { maximumFractionDigits: 1, signDisplay: 'exceptZero' })
-
-/** `0.5% → 3% (+2.5 pts)`: a Violation Rate's change, in percentage points. */
+/** `0.5% → 3% (+2.5 pts)`: a ratio's change, in percentage points. */
 export function rateChange(baseline: number, observed: number): string {
-  const delta = points.format((observed - baseline) * 100).replace('-', '−')
-  return `${percent.format(baseline)} → ${percent.format(observed)} (${delta} pts)`
+  return `${formatPercent(baseline)} → ${formatPercent(observed)} (${formatPoints(observed - baseline, { signed: true })})`
 }
 
 const signedPercent = new Intl.NumberFormat('en', { style: 'percent', maximumFractionDigits: 0, signDisplay: 'exceptZero' })

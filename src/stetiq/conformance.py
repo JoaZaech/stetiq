@@ -22,7 +22,13 @@ from stetiq.graph_source import (
 )
 from stetiq.ontology import NodeType, Ontology, Pattern, Property, RelationshipType
 from stetiq.ontology.diff import WIDENING_TYPE_CHANGES, AddedConcept, added_concepts
-from stetiq.ontology.model import ConceptKind, Vocabulary, VocabularyValue, is_deprecated
+from stetiq.ontology.model import (
+    ConceptKind,
+    Direction,
+    Vocabulary,
+    VocabularyValue,
+    is_deprecated,
+)
 
 # What a mismatch is about. Concepts are node types, relationship types and properties
 # (identity `Owner.property`, as in the Ontology Diff); patterns are endpoint patterns
@@ -59,7 +65,7 @@ class Mismatch:
     # outside the bound) or for a kind without one.
     rate: float | None = None
     # For `cardinality_violation`: which degree breaks the bound, `out` or `in`.
-    direction: Literal["out", "in"] | None = None
+    direction: Direction | None = None
 
 
 @dataclass(frozen=True)
@@ -166,7 +172,7 @@ def assess_conformance(declared: Ontology, observed: ObservedSchema) -> Conforma
         "node_type",
         declared.node_types,
         observed.node_types,
-        _properties_of(declared),
+        properties_of(declared),
         declared,
     )
     _check_concepts(
@@ -250,7 +256,7 @@ def _own_properties(concept: NodeType | RelationshipType) -> tuple[Property, ...
     return concept.properties
 
 
-def _properties_of(declared: Ontology) -> PropertiesOf:
+def properties_of(declared: Ontology) -> PropertiesOf:
     """A node type's own properties plus those inherited from its ancestors (the
     nearest declaration of a name wins)."""
     nodes = {n.label: n for n in declared.node_types}
@@ -379,17 +385,12 @@ def _check_cardinality(checks: _Checks, declared: Pattern, observed: ObservedSch
     Violation Rate (see `_cardinality_rate`). A pattern that is not observed gives every
     node of its type degree 0; with no such nodes either, its bounds hold."""
     seen = observed.pattern(declared.source, declared.relationship, declared.target)
-    directions: tuple[tuple[Literal["out", "in"], str], ...] = (
-        ("out", declared.source),
-        ("in", declared.target),
-    )
-    for direction, node_type in directions:
-        low = getattr(declared, f"min_{direction}")
-        high = getattr(declared, f"max_{direction}")
+    for direction, node_type in declared.directions:
+        low, high = declared.bounds(direction)
         if low is None and high is None:
             continue
         if seen is not None:
-            degree = seen.out_degree if direction == "out" else seen.in_degree
+            degree = seen.degree(direction)
             observed_range: tuple[int, int] | None = (degree.min, degree.max)
         else:
             nodes = observed.node_type(node_type)
@@ -426,7 +427,7 @@ def _check_cardinality(checks: _Checks, declared: Pattern, observed: ObservedSch
 
 def _cardinality_rate(
     seen: ObservedPattern | None,
-    direction: Literal["out", "in"],
+    direction: Direction,
     low: int | None,
     high: int | None,
     endpoints: ObservedNodeType | None,
@@ -439,7 +440,7 @@ def _cardinality_rate(
         return None
     if seen is None:
         return 1.0
-    outside = (seen.out_degree if direction == "out" else seen.in_degree).outside_bounds
+    outside = seen.degree(direction).outside_bounds
     if outside is None or (outside.min, outside.max) != (low, high):
         return None
     return outside.count / endpoints.count
@@ -460,7 +461,7 @@ def candidate_ontology(declared: Ontology, observed: ObservedSchema) -> Ontology
     Observed values outside a bound Vocabulary are added to it as new Values, which is
     additive too."""
     node_types, new_nodes, new_node_props = _extend(
-        declared.node_types, observed.node_types, NodeType, _properties_of(declared)
+        declared.node_types, observed.node_types, NodeType, properties_of(declared)
     )
     relationship_types, new_rels, new_rel_props = _extend(
         declared.relationship_types,
@@ -551,14 +552,14 @@ def _extend_vocabularies(declared: Ontology, observed: ObservedSchema) -> tuple[
     added: those beyond a truncated list's cap are unknown."""
     new: dict[str, set[str]] = {}
     owners = (
-        (declared.node_types, observed.node_type, _properties_of(declared)),
+        (declared.node_types, observed.node_type, properties_of(declared)),
         (declared.relationship_types, observed.relationship_type, _own_properties),
     )
-    for concepts, observed_owner, properties_of in owners:
+    for concepts, observed_owner, declared_properties in owners:
         for concept in concepts:
             o = observed_owner(concept.label)
             observed_props = {p.name: p for p in (o.properties if o else ())}
-            for p in properties_of(concept):
+            for p in declared_properties(concept):
                 op = observed_props.get(p.name)
                 if p.vocabulary and op is not None and op.values is not None:
                     new.setdefault(p.vocabulary, set()).update(c.value for c in op.values.counts)

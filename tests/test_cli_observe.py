@@ -195,3 +195,20 @@ def test_observe_exits_non_zero_on_a_gap_a_promotion_introduced(cli_env, support
     assert "1 new" in after.output
     [line] = [line for line in after.output.splitlines() if "Ticket.priority" in line]
     assert line.split()[:2] == ["new", "vanished"]
+
+
+def test_observations_trend_lists_run_and_on_demand_conformance_scores_oldest_first(cli_env):
+    graph, client = cli_env
+    with client.start_run("support") as run:
+        pass
+    graph.add_node(["Customer"], {})  # one of two Customers lacks its required name
+    runner = CliRunner()
+    runner.invoke(app, ["observe", "support"])
+
+    result = runner.invoke(app, ["observations", "trend", "support"])
+
+    assert result.exit_code == 0, result.output
+    header, from_run, on_demand = result.output.strip().splitlines()
+    assert header.split() == ["AT", "SCORE", "VERSION", "RUN", "OBSERVATION"]
+    assert from_run.split()[1:4] == ["1.000", "1", run.id]
+    assert on_demand.split()[1:4] == ["0.833", "1", "-"]  # 5 of 6 items hold

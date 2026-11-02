@@ -13,6 +13,11 @@ from typing import Literal
 # attributes draw values from, whose Vocabulary Values the Diff identifies as `Vocabulary.value`.
 ConceptKind = Literal["node_type", "relationship_type", "property", "vocabulary"]
 
+# A Pattern's degree: `out` counts each source node's relationships, `in` each target
+# node's. Its endpoint nodes (`Pattern.endpoint`) are what its cardinality and Coverage
+# are over.
+Direction = Literal["out", "in"]
+
 
 @dataclass(frozen=True)
 class Property:
@@ -118,6 +123,21 @@ class Pattern:
             for direction, bounds in directions.items()
             if any(v is not None for v in bounds.values())
         }
+
+    @property
+    def directions(self) -> tuple[tuple[Direction, str], ...]:
+        """Each degree with its endpoint node type: `out` the source, `in` the target."""
+        return (("out", self.source), ("in", self.target))
+
+    def endpoint(self, direction: Direction) -> str:
+        """The node type whose nodes `direction`'s degree is counted over."""
+        return self.source if direction == "out" else self.target
+
+    def bounds(self, direction: Direction) -> tuple[int | None, int | None]:
+        """`direction`'s declared `(min, max)`; None leaves a side open."""
+        if direction == "out":
+            return self.min_out, self.max_out
+        return self.min_in, self.max_in
 
     def __str__(self) -> str:
         """`(Source)-[REL]->(Target)`, the syntax reports and Concept references use."""
