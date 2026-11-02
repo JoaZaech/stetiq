@@ -135,7 +135,7 @@ def service_for_uri(tracking_uri: str, *, token: str | None = None) -> TrackingS
 def _without_details(results: Sequence[EvaluationResult]) -> tuple[EvaluationResult, ...]:
     """Results without the details that can quote observed values: the one place the run
     context drops them, so neither `RunContext` nor its JSON carries any. Only the
-    built-ins in `RUN_CONTEXT_DETAIL_EVALUATORS` keep theirs (ADR 0010); custom
+    built-ins in `RUN_CONTEXT_DETAIL_EVALUATORS` keep theirs (ADR 0012); custom
     Evaluators cannot take those names."""
     return tuple(
         r if r.evaluator in RUN_CONTEXT_DETAIL_EVALUATORS else dataclasses.replace(r, details=())
@@ -147,7 +147,7 @@ def _without_observed_values(added: OntologyDiff) -> tuple[OntologyDiff, int]:
     """A strict-failed run's would-be Ontology Diff without the Vocabulary Values it
     would have added, and how many were withheld. That Candidate was never registered,
     so those values were observed in the graph and never became Ontology: the run context
-    withholds them for the reason it drops Conformance details (ADR 0010)."""
+    withholds them for the reason it drops Conformance details (ADR 0012)."""
     kept = tuple(
         c
         for c in added.changes
@@ -434,7 +434,7 @@ class Client:
         Ontology Version's evaluation results, and the latest finished Construction Run
         standing for it with its run-level results and each executed Competency
         Question's status and row count. Only Ontology, Use Case, metrics, counts and the
-        details of the built-ins that judge an Ontology Version (ADR 0010): run
+        details of the built-ins that judge an Ontology Version (ADR 0012): run
         Evaluators that read the Graph Source and custom Evaluators come without their
         details, which can quote observed values, so there is no instance data. Needs
         *read*."""

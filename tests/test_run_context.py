@@ -619,7 +619,7 @@ def test_a_strict_failed_attempt_withholds_the_vocabulary_values_it_saw(client, 
     assert run.status == "failed"
     attempt = data["last_attempt"]
     assert attempt["id"] == run.id
-    # Values observed in the graph that never became Ontology (ADR 0010)...
+    # Values observed in the graph that never became Ontology (ADR 0012)...
     assert "Press 9" not in json.dumps(data)
     assert attempt["withheld_vocabulary_values"] == 1
     # ...while the Concepts it would have added stay.

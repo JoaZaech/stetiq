@@ -105,7 +105,7 @@ from stetiq.use_case.consumer_gates import (
 # live with the user's process, never on the stetiq server).
 ObservationInput = tuple[GraphSourceScope, ObservedSchema]
 
-# The built-ins whose details the Run Context carries (ADR 0010): they judge an Ontology
+# The built-ins whose details the Run Context carries (ADR 0012): they judge an Ontology
 # Version from the Ontology and the Use Case alone, so their details name Concepts,
 # Vocabulary Values and Competency Question ids and cannot hold a graph value.
 RUN_CONTEXT_DETAIL_EVALUATORS = frozenset(

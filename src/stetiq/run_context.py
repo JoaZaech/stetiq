@@ -3,7 +3,7 @@
 `Client.run_context` composes it from existing service calls; `stetiq context` prints
 `RunContext.to_dict()` as JSON for upstream pipelines that don't use the Python SDK. It
 holds Ontology, Use Case, metrics and counts, never instance data (ADR 0001): only the
-built-ins that judge an Ontology Version keep their details (ADR 0010); every other
+built-ins that judge an Ontology Version keep their details (ADR 0012); every other
 result comes without them, since they can quote observed values (`Client.run_context`
 drops them; `to_dict` writes the results in their wire form).
 """
@@ -72,7 +72,7 @@ def without_quoted_reasons(result: GateResult) -> GateResult:
     """`result` with only the reasons stetiq writes itself. A `metric` or `conformance`
     Gate's first reason states the observed value against its limit; the rest list the
     Evaluator's details or Conformance mismatches, which can quote values observed in the
-    graph, so they are dropped (ADR 0001, ADR 0010). Other Gates' reasons name only
+    graph, so they are dropped (ADR 0001, ADR 0012). Other Gates' reasons name only
     Concepts and type counts."""
     return dataclasses.replace(
         result,
@@ -100,7 +100,7 @@ class LastAttempt:
     - `added`: the Ontology Diff from the version it consumed to its Candidate, or to the
       Candidate it would have produced (strict); empty when it added nothing. A
       strict-failed run's would-be Vocabulary Values are left out, since they are values
-      observed in the graph that never became Ontology (ADR 0010);
+      observed in the graph that never became Ontology (ADR 0012);
       `withheld_vocabulary_values` counts them.
     - `evaluation_results`: its run-level results (metrics only), `question_executions`
       each executed Competency Question's status and row count, and `verdicts` the
