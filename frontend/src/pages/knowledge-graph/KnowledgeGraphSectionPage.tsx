@@ -13,9 +13,10 @@ interface KnowledgeGraphSectionPageProps {
 }
 
 /**
- * The frame of a Knowledge Graph section's landing page: the Knowledge Graph header, then the
- * section title (an `h2`) and its content. `router.tsx` wraps each section's page in it, so a
- * section page renders only its own content.
+ * The frame of a Knowledge Graph section's landing page: the one-line Knowledge Graph
+ * header, then the section title (an `h2`) and its content. `router.tsx` wraps each
+ * section's page in it, so a section page renders only its own content. The Overview has
+ * its own frame.
  */
 export function KnowledgeGraphSectionPage({ section, actions, children }: KnowledgeGraphSectionPageProps) {
   const name = useKnowledgeGraphName()

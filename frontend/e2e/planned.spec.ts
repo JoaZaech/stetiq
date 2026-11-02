@@ -26,6 +26,36 @@ async function expectPlaceholder(scope: Locator | Page, name: string, section: s
 test.describe('with a Use Case that declares Consumers', () => {
   test.use({ seed: 'support_use_case_consumers' })
 
+  test('the Overview shows every step of the pipeline live, the Consumer Gate included', async ({ page }) => {
+    await page.goto('/ui/kg/support/overview')
+
+    const strip = page.getByRole('list', { name: 'Pipeline' })
+    await expect(strip.getByRole('link')).toHaveText([
+      'Upstream pipeline',
+      'Gate',
+      'Knowledge Graph',
+      'Consumer Gate',
+      'Consumers',
+    ])
+    await expect(strip.getByRole('link', { name: /^Planned/ })).toHaveCount(0)
+    await expect(strip.getByRole('group', { name: 'Consumer Gate' })).toHaveCount(0)
+  })
+
+  test('the Consumer Gate step is drawn like the other live steps, in light and dark themes', async ({
+    page,
+  }) => {
+    for (const colorScheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme })
+      await page.goto('/ui/kg/support/overview')
+      const strip = page.getByRole('list', { name: 'Pipeline' })
+      const style = (el: Element) => `${getComputedStyle(el).color} ${getComputedStyle(el.parentElement!).borderStyle}`
+      const gate = await strip.getByRole('link', { name: 'Gate', exact: true }).evaluate(style)
+      const consumerGate = await strip.getByRole('link', { name: 'Consumer Gate' }).evaluate(style)
+      expect(consumerGate, colorScheme).toBe(gate)
+      expect(consumerGate, colorScheme).not.toContain('dashed')
+    }
+  })
+
   test('the Consumer sheet shows evaluating its Consumer Gate on each Observation as planned', async ({
     page,
   }) => {
