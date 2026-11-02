@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import importlib
 import ipaddress
-import json
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Annotated
@@ -14,6 +13,7 @@ import yaml
 
 from stetiq.client import Client
 from stetiq.config import DEFAULT_CONFIG_PATH, load_config
+from stetiq.digest import readable_json
 from stetiq.entry_point import EntryPoint
 from stetiq.errors import EvaluatorError, GateConfigError, NoUseCaseError, StetiqError
 from stetiq.gates import Verdict, parse_gates
@@ -1011,7 +1011,7 @@ def context(
         data = _client(tracking_uri).run_context(kg, version=version).to_dict()
     except StetiqError as e:
         raise _fail(e) from None
-    typer.echo(json.dumps(data, indent=2, ensure_ascii=False))
+    typer.echo(readable_json(data))
 
 
 @app.command("mcp")

@@ -3,7 +3,7 @@
     cd examples/plant-kg
     uv run python demo.py              # replays three recorded Claude rounds, offline
     uv run python demo.py --epilogue   # ... then hand edits to the graph, and Drift
-    uv run python demo.py --until v2   # stop with round 2 red, for the flywheel step
+    uv run python demo.py --until v2   # stop with round 2 red, for the agent step
     uv run python demo.py --live       # calls Claude for real (needs the `claude` CLI)
     uv run stetiq ui                   # then browse the same verdicts
 
@@ -264,7 +264,7 @@ class Demo:
             self.say(
                 "",
                 "Round 2 is red. Ask a coding agent why, through the read-only MCP server",
-                "(README.md, 'The flywheel step'):",
+                "(README.md, 'The agent step: reading the Run Context'):",
                 f"  {'claude mcp add stetiq -- uv run stetiq mcp':<60}  # from this folder",
                 f"  {f'uv run stetiq context {KG}':<60}  # the same Run Context",
             )
@@ -375,7 +375,7 @@ def run_demo(
     quiet: bool = False,
 ) -> Demo:
     """Replay the rounds up to and including `until`; `until="v2"` stops with round 2's
-    Consumer Gate red, where the flywheel step's coding agent picks up (README.md)."""
+    Consumer Gate red, where the agent step's coding agent picks up (README.md)."""
     demo = Demo(
         tracking_uri=tracking_uri,
         graph_file=graph_file,
@@ -422,7 +422,7 @@ def main(argv: list[str] | None = None) -> int:
         default="fix",
         metavar="ROUND",
         help="stop after this round; --until v2 leaves round 2's Consumer Gate red for the "
-        "flywheel step (default: fix, all three)",
+        "agent step (default: fix, all three)",
     )
     parser.add_argument(
         "--model", default=DEFAULT_MODEL, help=f"model for Claude (default {DEFAULT_MODEL})"

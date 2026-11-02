@@ -9,7 +9,6 @@ stetiq's message. Needs the optional `mcp` dependency (`pip install 'stetiq[mcp]
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from typing import Any
 
@@ -18,6 +17,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import CallToolResult, TextContent, ToolAnnotations
 
 from stetiq.client import Client
+from stetiq.digest import readable_json
 from stetiq.errors import StetiqError
 from stetiq.tracking import codec, wire
 
@@ -49,9 +49,7 @@ def _json_result(call: Callable[[], Any]) -> CallToolResult:
         data = call()
     except StetiqError as e:
         raise ToolError(str(e)) from e
-    return CallToolResult(
-        content=[TextContent(type="text", text=json.dumps(data, indent=2, ensure_ascii=False))]
-    )
+    return CallToolResult(content=[TextContent(type="text", text=readable_json(data))])
 
 
 def create_server(client: Client) -> MCPServer:

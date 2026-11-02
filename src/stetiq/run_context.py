@@ -29,7 +29,10 @@ from stetiq.tracking.entities import (
     UseCaseVersion,
 )
 
-NOT_EVALUATED: dict[str, Any] = {"status": "not_evaluated"}
+
+def _not_evaluated() -> dict[str, Any]:
+    """A verdict nobody recorded, fresh each time so no output shares it."""
+    return {"status": "not_evaluated"}
 
 
 @dataclass(frozen=True)
@@ -50,11 +53,11 @@ class RecordedVerdicts:
         """`gate_result` and `consumer_gate_results`, each verdict with a `status` of
         `passed` or `failed`, or `{"status": "not_evaluated"}` when none was recorded."""
         return {
-            "gate_result": NOT_EVALUATED
+            "gate_result": _not_evaluated()
             if self.gate_result is None
             else _gate_result_to_dict(self.gate_result),
             "consumer_gate_results": [
-                {"consumer": consumer, **NOT_EVALUATED}
+                {"consumer": consumer, **_not_evaluated()}
                 if result is None
                 else {
                     "status": _status(result.passed),
@@ -74,6 +77,7 @@ def without_quoted_reasons(result: GateResult) -> GateResult:
     Evaluator's details or Conformance mismatches, which can quote values observed in the
     graph, so they are dropped (ADR 0001, ADR 0012). Other Gates' reasons name only
     Concepts and type counts."""
+    # `reasons[:1]` is safe: both checks always put their own value-vs-limit line first.
     return dataclasses.replace(
         result,
         outcomes=tuple(
