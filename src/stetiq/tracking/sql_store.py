@@ -144,6 +144,9 @@ observations = Table(
     Column("observed_at", Text, nullable=False),
     Column("scope_json", Text, nullable=False),
     Column("schema_json", Text, nullable=False),
+    # Added later (see `_ADDED_COLUMNS`): what an on-demand Observation's Drift compared with.
+    Column("baseline_observation_id", Text, nullable=True),
+    Column("not_comparable_json", Text, nullable=True),
 )
 
 # --- Aliases and Promotion ---------------------------------------------------------------
@@ -182,6 +185,8 @@ contract_aliases = Table(
     metadata,
     Column("knowledge_graph", Text, ForeignKey("knowledge_graphs.name"), primary_key=True),
     Column("alias", Text, nullable=False),
+    # When the Contract Alias was switched to `alias`; NULL in rows written before.
+    Column("switched_at", Text, nullable=True),
 )
 
 # --- Conformance, Evolution Mode, Candidates: new tables only, so stores
@@ -298,6 +303,9 @@ _ADDED_COLUMNS = [
     ("evaluation_results", "use_case_version", "INTEGER"),
     ("evaluation_results", "parameters_json", "TEXT NOT NULL DEFAULT '{}'"),
     ("knowledge_graphs", "description", "TEXT"),
+    ("observations", "baseline_observation_id", "TEXT"),
+    ("observations", "not_comparable_json", "TEXT"),
+    ("contract_aliases", "switched_at", "TEXT"),
 ]
 
 
@@ -690,6 +698,10 @@ class SqlStore:
                     schema_json=json.dumps(
                         codec.observed_schema_to_json(observation.schema), sort_keys=True
                     ),
+                    baseline_observation_id=observation.baseline_observation_id,
+                    not_comparable_json=json.dumps(
+                        codec.not_comparable_to_json(observation.not_comparable), sort_keys=True
+                    ),
                 )
             )
 
@@ -709,6 +721,10 @@ class SqlStore:
                 observed_at=datetime.fromisoformat(r["observed_at"]),
                 schema=codec.observed_schema_from_json(json.loads(r["schema_json"])),
                 run_id=r["run_id"],
+                baseline_observation_id=r["baseline_observation_id"],
+                not_comparable=codec.not_comparable_from_json(
+                    json.loads(r["not_comparable_json"] or "[]")
+                ),
             )
             for r in rows
         ]
@@ -840,7 +856,9 @@ class SqlStore:
             for r in rows
         ]
 
-    def set_contract_alias(self, knowledge_graph: str, alias: str) -> None:
+    def set_contract_alias(
+        self, knowledge_graph: str, alias: str, switched_at: datetime | None = None
+    ) -> None:
         with self._connection() as conn:
             conn.execute(
                 delete(contract_aliases).where(
@@ -848,7 +866,11 @@ class SqlStore:
                 )
             )
             conn.execute(
-                insert(contract_aliases).values(knowledge_graph=knowledge_graph, alias=alias)
+                insert(contract_aliases).values(
+                    knowledge_graph=knowledge_graph,
+                    alias=alias,
+                    switched_at=None if switched_at is None else switched_at.isoformat(),
+                )
             )
 
     def get_contract_alias(self, knowledge_graph: str) -> str | None:
@@ -857,6 +879,14 @@ class SqlStore:
         )
         with self._connection() as conn:
             return conn.execute(query).scalar()
+
+    def get_contract_alias_switched_at(self, knowledge_graph: str) -> datetime | None:
+        query = select(contract_aliases.c.switched_at).where(
+            contract_aliases.c.knowledge_graph == knowledge_graph
+        )
+        with self._connection() as conn:
+            switched_at = conn.execute(query).scalar()
+        return None if switched_at is None else datetime.fromisoformat(switched_at)
 
     def add_evaluation_result(self, result: EvaluationResult) -> None:
         with self._connection() as conn:

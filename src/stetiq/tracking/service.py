@@ -257,7 +257,9 @@ class TrackingService(Protocol):
         thresholds: DriftThresholds | None = None,
     ) -> ObservationOutcome:
         """Store an on-demand Observation (no run) and check it for Drift against the
-        Contract Alias's version and the previous Observation. Never creates a version."""
+        Contract Alias's version, the previous Observation (counts) and the Baseline
+        Observation (Violation Rates), recording that baseline and the checks that were
+        not comparable on the Observation. Never creates a version."""
         ...
 
     def list_drift_events(self, knowledge_graph: str) -> list[DriftEvent]: ...
@@ -962,20 +964,29 @@ class LocalTrackingService:
             self.get_knowledge_graph(knowledge_graph)
             history = self._store.list_observations(knowledge_graph)
             previous = history[-1] if history else None
+            baseline = self._baseline_observation(knowledge_graph, history)
+            contract_alias = self.get_contract_alias(knowledge_graph)
+            contract = self.get_contract_version(knowledge_graph)
+            drift = assess_drift(
+                contract.ontology,
+                schema,
+                None if previous is None else previous.schema,
+                thresholds,
+                baseline=None if baseline is None else baseline.schema,
+            )
+            obs_id = uuid.uuid4().hex
             obs = Observation(
-                id=uuid.uuid4().hex,
+                id=obs_id,
                 knowledge_graph=knowledge_graph,
                 scope=scope,
                 observed_at=_now(),
                 schema=schema,
                 run_id=None,
+                baseline_observation_id=obs_id if baseline is None else baseline.id,
+                not_comparable=drift.not_comparable,
             )
             self._store.add_observation(obs)
-            contract_alias = self.get_contract_alias(knowledge_graph)
-            contract = self.get_contract_version(knowledge_graph)
-            findings = assess_drift(
-                contract.ontology, schema, None if previous is None else previous.schema, thresholds
-            )
+            findings = drift.findings
             if not findings:
                 return ObservationOutcome(observation=obs)
             event = DriftEvent(
@@ -991,6 +1002,17 @@ class LocalTrackingService:
             )
             self._store.add_drift_event(event)
             return ObservationOutcome(observation=obs, drift=event)
+
+    def _baseline_observation(
+        self, knowledge_graph: str, history: list[Observation]
+    ) -> Observation | None:
+        """The first Observation (run-end ones included) since the Contract Alias's current
+        Ontology Version became the contract, by a Promotion of the Contract Alias or by
+        switching the Contract Alias; None when there is none yet."""
+        alias = self.get_alias(knowledge_graph, self._contract_alias(knowledge_graph))
+        switched_at = self._store.get_contract_alias_switched_at(knowledge_graph)
+        since = alias.updated_at if switched_at is None else max(alias.updated_at, switched_at)
+        return next((o for o in history if o.observed_at >= since), None)
 
     def list_drift_events(self, knowledge_graph: str) -> list[DriftEvent]:
         self.get_knowledge_graph(knowledge_graph)
@@ -1047,9 +1069,13 @@ class LocalTrackingService:
         return self._store.list_promotions(knowledge_graph)
 
     def set_contract_alias(self, knowledge_graph: str, alias: str) -> None:
+        """Designate the Contract Alias. Switching to another Alias records when, so Drift
+        takes a new Baseline Observation; designating the current one changes nothing."""
         with self._store.transaction():
             self.get_alias(knowledge_graph, alias)
-            self._store.set_contract_alias(knowledge_graph, alias)
+            if self._contract_alias(knowledge_graph) == alias:
+                return
+            self._store.set_contract_alias(knowledge_graph, alias, _now())
 
     def get_contract_alias(self, knowledge_graph: str) -> str:
         self.get_knowledge_graph(knowledge_graph)

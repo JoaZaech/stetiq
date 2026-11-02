@@ -58,6 +58,34 @@ describe('findingsFromDrift', () => {
     ])
     expect(rows.map((r) => r.change)).toEqual(['', '“x”'])
   })
+
+  it('shows an undeclared value with its count and its share of the owner, when known', () => {
+    const rows = findingsFromDrift([
+      drift({ kind: 'undeclared_value', previous_count: null, observed_count: null, value: 'x', count: 2, share: 0.25 }),
+      drift({ kind: 'undeclared_value', previous_count: null, observed_count: null, value: 'y', count: 3, subject: 'B' }),
+    ])
+    expect(rows.map((r) => r.change)).toEqual(['“y” × 3', '“x” × 2 (25%)'])
+  })
+
+  it('shows a risen Violation Rate as baseline → now, on its Attribute or pattern', () => {
+    const rows = findingsFromDrift([
+      drift({
+        kind: 'violation_increase',
+        subject: 'Customer.name',
+        subject_kind: 'property',
+        previous_count: null,
+        observed_count: null,
+        violation: 'required_missing',
+        baseline_rate: 0.005,
+        observed_rate: 0.03,
+      }),
+      drift({ kind: 'violation_increase', subject: '(A)-[R]->(B)', subject_kind: 'pattern', previous_count: null, observed_count: null }),
+    ])
+    expect(rows.map((r) => [r.kind, r.finding, r.change])).toEqual([
+      ['Pattern', 'Violation Rate rose', 'count dropped from 12 to 6 (-50%)'],
+      ['Attribute', 'Violation Rate rose', 'Required but not always set: 0.5% → 3% (+2.5 pts)'],
+    ])
+  })
 })
 
 describe('countChange', () => {

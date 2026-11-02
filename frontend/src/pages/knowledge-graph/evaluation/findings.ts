@@ -20,7 +20,7 @@ export interface FindingRow {
   tone: StatusTone
 }
 
-const MISMATCH_FINDING: Record<Mismatch['kind'], string> = {
+export const MISMATCH_FINDING: Record<Mismatch['kind'], string> = {
   absent: 'Declared but not observed',
   undeclared: 'Observed but not declared',
   type_mismatch: 'Undeclared value type',
@@ -30,15 +30,16 @@ const MISMATCH_FINDING: Record<Mismatch['kind'], string> = {
   deprecated_value: 'Deprecated value',
 }
 
-const DRIFT_FINDING: Record<DriftFinding['kind'], string> = {
+export const DRIFT_FINDING: Record<DriftFinding['kind'], string> = {
   undeclared: 'Observed but not declared',
   vanished: 'No longer observed',
   undeclared_value: 'Value outside the Vocabulary',
   count_drop: 'Count dropped',
   count_increase: 'Count rose',
+  violation_increase: 'Violation Rate rose',
 }
 
-const subjectKindLabel = (kind: MismatchSubjectKind) => (kind === 'pattern' ? 'Pattern' : conceptKindLabel(kind))
+export const subjectKindLabel = (kind: MismatchSubjectKind) => (kind === 'pattern' ? 'Pattern' : conceptKindLabel(kind))
 
 /** A run's Conformance mismatches as rows; a deprecated value conforms, so it is neutral. */
 export function findingsFromMismatches(mismatches: readonly Mismatch[]): FindingRow[] {
@@ -53,22 +54,41 @@ export function findingsFromMismatches(mismatches: readonly Mismatch[]): Finding
   )
 }
 
-/** An Observation's Drift findings as rows: a count change as `12 → 6 (−50%)`. */
+/**
+ * An Observation's Drift findings as rows: a count change as `12 → 6 (−50%)`, a risen
+ * Violation Rate as `Required but not always set: 0.5% → 3% (+2.5 pts)`.
+ */
 export function findingsFromDrift(findings: readonly DriftFinding[]): FindingRow[] {
   return sortRows(
     findings.map((f) => ({
       subject: f.subject,
       kind: subjectKindLabel(f.subject_kind),
       finding: DRIFT_FINDING[f.kind],
-      change:
-        f.previous_count !== null && f.observed_count !== null
-          ? countChange(f.previous_count, f.observed_count)
-          : f.value !== undefined
-            ? valueChange(f.value)
-            : f.detail,
+      change: driftChange(f),
       tone: 'warning',
     })),
   )
+}
+
+function driftChange(f: DriftFinding): string {
+  if (f.previous_count !== null && f.observed_count !== null) return countChange(f.previous_count, f.observed_count)
+  if (f.violation !== undefined && f.baseline_rate !== undefined && f.observed_rate !== undefined) {
+    return `${MISMATCH_FINDING[f.violation]}: ${rateChange(f.baseline_rate, f.observed_rate)}`
+  }
+  if (f.value !== undefined) {
+    const change = valueChange(f.value, f.count)
+    return f.share === undefined ? change : `${change} (${percent.format(f.share)})`
+  }
+  return f.detail
+}
+
+const percent = new Intl.NumberFormat('en', { style: 'percent', maximumFractionDigits: 1 })
+const points = new Intl.NumberFormat('en', { maximumFractionDigits: 1, signDisplay: 'exceptZero' })
+
+/** `0.5% → 3% (+2.5 pts)`: a Violation Rate's change, in percentage points. */
+export function rateChange(baseline: number, observed: number): string {
+  const delta = points.format((observed - baseline) * 100).replace('-', '−')
+  return `${percent.format(baseline)} → ${percent.format(observed)} (${delta} pts)`
 }
 
 const signedPercent = new Intl.NumberFormat('en', { style: 'percent', maximumFractionDigits: 0, signDisplay: 'exceptZero' })

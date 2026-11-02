@@ -1,5 +1,6 @@
 """Drift engine: pure function of (contract Ontology, Observed Schema, previous Observed
-Schema, thresholds) -> Drift findings. No I/O.
+Schema, thresholds, Baseline Observation's Observed Schema) -> Drift findings and the
+checks that were not comparable. No I/O.
 
 Drift is a divergence, found by an Observation, between a Graph Source's Observed Schema
 and the Contract Alias's Ontology Version. It has two parts:
@@ -11,7 +12,13 @@ and the Contract Alias's Ontology Version. It has two parts:
   what it means for a run's Conformance (inherited Attributes, etc.).
 - **statistical**: a node or relationship type's count changing, relative to the
   previous Observation, by more than the configured fraction (`count_drop`,
-  `count_increase`). Off unless a threshold is set.
+  `count_increase`), off unless a threshold is set; and a Violation Rate rising more than
+  `max_violation_increase` (absolute points) above its value in the Baseline Observation
+  (`violation_increase`), on by default. Counts compare with the previous Observation,
+  ratios with the baseline (ADR 0013).
+
+A check that lacks its input (a rate the baseline cannot give, a truncated value list)
+never raises a finding: it is reported as `NotComparable` instead.
 
 Thresholds come from the `drift:` section of the repo config (`stetiq.yaml`), see
 `thresholds_from_config`.
@@ -24,11 +31,19 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-from stetiq.conformance import MismatchKind, assess_conformance
+from stetiq.conformance import (
+    Conformance,
+    MismatchKind,
+    MismatchSubjectKind,
+    assess_conformance,
+)
 from stetiq.errors import InvalidDriftConfigError
 from stetiq.graph_source import ObservedSchema
 from stetiq.ontology import Ontology
 from stetiq.ontology.model import ConceptKind
+
+# `max_violation_increase` when `stetiq.yaml`, a request or the SDK leaves it out.
+DEFAULT_MAX_VIOLATION_INCREASE = 0.01
 
 
 class DriftKind(StrEnum):
@@ -37,19 +52,31 @@ class DriftKind(StrEnum):
     UNDECLARED_VALUE = "undeclared_value"  # a value outside the contract's Vocabulary
     COUNT_DROP = "count_drop"  # count fell beyond `max_count_drop` since the previous Observation
     COUNT_INCREASE = "count_increase"  # count rose beyond `max_count_increase`
+    # a Violation Rate rose beyond `max_violation_increase` above the Baseline Observation's
+    VIOLATION_INCREASE = "violation_increase"
 
 
 @dataclass(frozen=True)
 class DriftFinding:
-    """One divergence. `previous_count` / `observed_count` are set for statistical findings."""
+    """One divergence. `previous_count` / `observed_count` are set for count findings.
+
+    `undeclared_value` carries the value, how many owners hold it (`count`) and their share
+    of the owner (`share`, None when the value list was truncated). `violation_increase`
+    carries the Conformance check (`violation`) and its Violation Rate in the Baseline
+    Observation and now (`baseline_rate`, `observed_rate`)."""
 
     kind: DriftKind
-    subject: str  # a label, or `Owner.property`
-    subject_kind: ConceptKind
+    subject: str  # a label, `Owner.property`, or a pattern `(Source)-[REL]->(Target)`
+    subject_kind: MismatchSubjectKind
     detail: str = ""
     previous_count: int | None = None
     observed_count: int | None = None
     value: str | None = None  # set for `undeclared_value`: the value itself
+    count: int | None = None
+    share: float | None = None
+    violation: MismatchKind | None = None
+    baseline_rate: float | None = None
+    observed_rate: float | None = None
 
     @property
     def structural(self) -> bool:
@@ -64,12 +91,20 @@ class DriftFinding:
             "previous_count": self.previous_count,
             "observed_count": self.observed_count,
         }
-        if self.value is not None:
-            d["value"] = self.value
+        optional = {
+            "value": self.value,
+            "count": self.count,
+            "share": self.share,
+            "violation": None if self.violation is None else self.violation.value,
+            "baseline_rate": self.baseline_rate,
+            "observed_rate": self.observed_rate,
+        }
+        d.update({k: v for k, v in optional.items() if v is not None})
         return d
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> DriftFinding:
+        violation = d.get("violation")
         return cls(
             kind=DriftKind(d["kind"]),
             subject=d["subject"],
@@ -78,20 +113,73 @@ class DriftFinding:
             previous_count=d.get("previous_count"),
             observed_count=d.get("observed_count"),
             value=d.get("value"),
+            count=d.get("count"),
+            share=d.get("share"),
+            violation=None if violation is None else MismatchKind(violation),
+            baseline_rate=d.get("baseline_rate"),
+            observed_rate=d.get("observed_rate"),
         )
 
 
 @dataclass(frozen=True)
+class NotComparable:
+    """A Drift check that lacked its input, so it raised no finding: `check` is the finding
+    kind it would have raised, `violation` the Conformance check behind a Violation Rate,
+    and `reason` says what was missing."""
+
+    check: DriftKind
+    subject: str
+    subject_kind: MismatchSubjectKind
+    reason: str
+    violation: MismatchKind | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {
+            "check": self.check.value,
+            "subject": self.subject,
+            "subject_kind": self.subject_kind,
+            "reason": self.reason,
+        }
+        if self.violation is not None:
+            d["violation"] = self.violation.value
+        return d
+
+    @classmethod
+    def from_dict(cls, d: Mapping[str, Any]) -> NotComparable:
+        violation = d.get("violation")
+        return cls(
+            check=DriftKind(d["check"]),
+            subject=d["subject"],
+            subject_kind=d["subject_kind"],
+            reason=d["reason"],
+            violation=None if violation is None else MismatchKind(violation),
+        )
+
+
+@dataclass(frozen=True)
+class DriftAssessment:
+    """What `assess_drift` found: the findings (empty means no Drift) and the checks that
+    were not comparable."""
+
+    findings: tuple[DriftFinding, ...] = ()
+    not_comparable: tuple[NotComparable, ...] = ()
+
+
+@dataclass(frozen=True)
 class DriftThresholds:
-    """Statistical Drift thresholds, as fractions of the previous count (0.1 = 10%).
+    """Statistical Drift thresholds. The count ones are fractions of the previous count
+    (0.1 = 10%) and off by default; `max_violation_increase` is in absolute points of a
+    Violation Rate above the Baseline Observation's (0.01 = one percentage point) and
+    defaults to `DEFAULT_MAX_VIOLATION_INCREASE`.
 
     None disables that check. A change exactly at the threshold is not Drift."""
 
     max_count_drop: float | None = None
     max_count_increase: float | None = None
+    max_violation_increase: float | None = DEFAULT_MAX_VIOLATION_INCREASE
 
     def __post_init__(self) -> None:
-        for name in ("max_count_drop", "max_count_increase"):
+        for name in _THRESHOLD_KEYS:
             value = getattr(self, name)
             if value is None:
                 continue
@@ -101,20 +189,19 @@ class DriftThresholds:
                 )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "max_count_drop": self.max_count_drop,
-            "max_count_increase": self.max_count_increase,
-        }
+        return {name: getattr(self, name) for name in _THRESHOLD_KEYS}
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> DriftThresholds:
+        """A missing key takes its default; an explicit None (`null`) turns the check off."""
         return cls(
             max_count_drop=d.get("max_count_drop"),
             max_count_increase=d.get("max_count_increase"),
+            max_violation_increase=d.get("max_violation_increase", DEFAULT_MAX_VIOLATION_INCREASE),
         )
 
 
-_THRESHOLD_KEYS = {"max_count_drop", "max_count_increase"}
+_THRESHOLD_KEYS = ("max_count_drop", "max_count_increase", "max_violation_increase")
 
 
 def thresholds_from_config(config: Mapping[str, Any]) -> DriftThresholds:
@@ -124,14 +211,16 @@ def thresholds_from_config(config: Mapping[str, Any]) -> DriftThresholds:
     drift:
       max_count_drop: 0.1      # a type's count falling by more than 10% is Drift
       max_count_increase: 0.5  # optional
+      max_violation_increase: 0.02  # default 0.01; null turns it off
     ```
-    A missing section means no statistical thresholds (structural Drift still applies)."""
+    A missing section or key takes its default: the count checks off, the Violation Rate
+    check at 0.01 (structural Drift always applies)."""
     section = config.get("drift")
     if section is None:
         return DriftThresholds()
     if not isinstance(section, Mapping):
         raise InvalidDriftConfigError(f"drift: must be a mapping, got {section!r}")
-    unknown = sorted(set(section) - _THRESHOLD_KEYS)
+    unknown = sorted(set(section) - set(_THRESHOLD_KEYS))
     if unknown:
         raise InvalidDriftConfigError(
             f"drift: unknown key(s) {', '.join(map(str, unknown))} "
@@ -146,15 +235,23 @@ _STRUCTURAL = {
     MismatchKind.VALUE_OUTSIDE_VOCABULARY: DriftKind.UNDECLARED_VALUE,
 }
 
+# The Conformance checks whose Violation Rate Drift compares with the baseline.
+# `value_outside_vocabulary` has a rate too, but its Drift is `undeclared_value`.
+_RATED = (MismatchKind.REQUIRED_MISSING,)
+
 
 def assess_drift(
     contract: Ontology,
     observed: ObservedSchema,
     previous: ObservedSchema | None = None,
     thresholds: DriftThresholds | None = None,
-) -> tuple[DriftFinding, ...]:
-    """Every Drift finding, structural first (in Conformance order), then statistical
-    (node types, then relationship types, by label). Empty means no Drift."""
+    baseline: ObservedSchema | None = None,
+) -> DriftAssessment:
+    """Every Drift finding, structural first (in Conformance order), then statistical:
+    count changes since `previous` (node types, then relationship types, by label), then
+    Violation Rates risen since `baseline` (in Conformance order). No `thresholds` turns
+    every statistical check off; no `baseline` (this Observation is its own) leaves no
+    Violation Rate to compare."""
     conformance = assess_conformance(contract, observed)
     findings = [
         DriftFinding(
@@ -163,13 +260,88 @@ def assess_drift(
             subject_kind=m.subject_kind,
             detail=m.detail,
             value=m.value,
+            count=m.count,
+            share=m.rate,
         )
         for m in conformance.mismatches
         if m.kind in _STRUCTURAL and m.subject_kind != "pattern"  # patterns are not Concepts
     ]
+    not_comparable = [
+        NotComparable(
+            check=DriftKind.UNDECLARED_VALUE,
+            subject=m.subject,
+            subject_kind=m.subject_kind,
+            reason="value list truncated, so the values' share of the owner is unknown",
+        )
+        for m in conformance.mismatches
+        if m.kind == MismatchKind.VALUE_OUTSIDE_VOCABULARY and m.rate is None
+    ]
     if previous is not None and thresholds is not None:
         findings.extend(_statistical(observed, previous, thresholds))
-    return tuple(findings)
+    limit = None if thresholds is None else thresholds.max_violation_increase
+    if baseline is not None and limit is not None:
+        rate_findings, rate_gaps = _violation_increases(
+            conformance, assess_conformance(contract, baseline), baseline, limit
+        )
+        findings.extend(rate_findings)
+        not_comparable.extend(rate_gaps)
+    # One entry per check: a truncated list yields one mismatch per listed outside value.
+    return DriftAssessment(tuple(findings), tuple(dict.fromkeys(not_comparable)))
+
+
+def _violation_increases(
+    conformance: Conformance, at_baseline: Conformance, baseline: ObservedSchema, limit: float
+) -> tuple[list[DriftFinding], list[NotComparable]]:
+    """A finding per Violation Rate more than `limit` above its baseline value. A check
+    the baseline passed had rate 0; one it could not run (its subject was not observed
+    then), or whose rate is unknown on either side, is not comparable."""
+    before = {(m.kind, m.subject): m.rate for m in at_baseline.mismatches if m.kind in _RATED}
+    findings: list[DriftFinding] = []
+    gaps: list[NotComparable] = []
+    for m in conformance.mismatches:
+        if m.kind not in _RATED:
+            continue
+        if (m.kind, m.subject) in before:
+            then = before[(m.kind, m.subject)]
+        else:
+            then = 0.0 if _observed_in(baseline, m.subject_kind, m.subject) else None
+        if m.rate is None or then is None:
+            side = "this Observation" if m.rate is None else "the Baseline Observation"
+            gaps.append(
+                NotComparable(
+                    check=DriftKind.VIOLATION_INCREASE,
+                    subject=m.subject,
+                    subject_kind=m.subject_kind,
+                    reason=f"no Violation Rate in {side}",
+                    violation=m.kind,
+                )
+            )
+            continue
+        # Rounded, so that a rise of exactly the threshold is not Drift despite float error.
+        if round(m.rate - then, 9) > limit:
+            findings.append(
+                DriftFinding(
+                    kind=DriftKind.VIOLATION_INCREASE,
+                    subject=m.subject,
+                    subject_kind=m.subject_kind,
+                    detail=f"{m.kind} rate rose from {then:.1%} to {m.rate:.1%} "
+                    "since the Baseline Observation",
+                    violation=m.kind,
+                    baseline_rate=then,
+                    observed_rate=m.rate,
+                )
+            )
+    return findings, gaps
+
+
+def _observed_in(schema: ObservedSchema, subject_kind: MismatchSubjectKind, subject: str) -> bool:
+    """Whether `schema` observed the subject of a check: a pattern, or an Attribute
+    `Owner.name` on a node or relationship type."""
+    if subject_kind == "pattern":
+        return any(str(p.pattern) == subject for p in schema.patterns)
+    owner, _, name = subject.partition(".")
+    owners = (schema.node_type(owner), schema.relationship_type(owner))
+    return any(o is not None and any(p.name == name for p in o.properties) for o in owners)
 
 
 def _statistical(
