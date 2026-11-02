@@ -203,7 +203,7 @@ class Demo:
         self.declare_parts_suppliers()
         run = self.construct("v2")
         result = self.gate("v2", run, consumers=True, promote=False)
-        self.say(*eval_lines(self.priya, self.rounds["v1"].run, run))
+        self.say(*eval_lines(self.priya, self.rounds["v1"].run, result))
         if run.candidate_version is not None:
             diff = self.priya.diff_ontology_versions(KG, 1, run.candidate_version)
             self.say(
@@ -324,19 +324,33 @@ def _coverage(client: stetiq.Client, run: stetiq.ConstructionRun) -> float:
 
 
 def eval_lines(
-    client: stetiq.Client, before: stetiq.ConstructionRun, after: stetiq.ConstructionRun
+    client: stetiq.Client, before: stetiq.ConstructionRun, after: RoundResult
 ) -> list[str]:
-    """The evals the team watches, v1 -> prompt v2: report coverage and the rows each
-    executed Competency Question returns."""
-    rows_before, rows_after = _question_rows(client, before), _question_rows(client, after)
+    """The evals the team watches, v1 -> prompt v2: report coverage, and the row changes
+    of the executed Competency Questions outside any Task whose Consumer Gate failed.
+    Those Tasks' row changes are what the Consumer Gate flagged (above), not an eval
+    gain, so they are left out here and the line names those Tasks."""
+    failed_tasks = sorted(
+        {o.gate.task for c in after.consumer_gates for o in c.outcomes if not o.passed}
+    )
+    use_case = client.get_use_case_version(KG).use_case
+    flagged = {
+        q
+        for c in use_case.consumers
+        for t in c.tasks
+        if t.id in failed_tasks
+        for q in t.competency_questions
+    }
+    rows_before, rows_after = _question_rows(client, before), _question_rows(client, after.run)
     changes = [
         f"{q} {rows_before.get(q, 0)} → {rows_after[q]}"
         for q in rows_after
-        if rows_after[q] != rows_before.get(q, 0)
+        if q not in flagged and rows_after[q] != rows_before.get(q, 0)
     ]
+    outside = f" outside {', '.join(failed_tasks)}" if failed_tasks else ""
     return [
         f"            Evals v1 → prompt v2: report_coverage {_coverage(client, before):.2f} → "
-        f"{_coverage(client, after):.2f}; rows: {', '.join(changes) or 'unchanged'}"
+        f"{_coverage(client, after.run):.2f}; rows{outside}: {', '.join(changes) or 'unchanged'}"
     ]
 
 

@@ -92,6 +92,17 @@ def test_prompt_v2_passes_the_maintenance_assistant_with_parts_suppliers_not_com
     assert outcome.new_questions == ("parts-suppliers",)
 
 
+def test_prompt_v2s_evals_line_leaves_out_the_rows_the_consumer_gate_flagged(demo):
+    # downtime-by-kind gains a row only because `corrective` is a new kind: that is the
+    # drift the dashboard's Consumer Gate caught, not an eval gain.
+    demo_module = importlib.import_module("demo")
+    [line] = demo_module.eval_lines(demo.priya, demo.rounds["v1"].run, demo.rounds["v2"])
+    assert line.strip() == (
+        "Evals v1 → prompt v2: report_coverage 1.00 → 1.00; "
+        "rows outside triage-breakdowns: parts-suppliers 0 → 5"
+    )
+
+
 def test_prompt_v2_stays_unpromoted(demo):
     assert not demo.rounds["v2"].promoted
     production = [p.to_version for p in demo.priya.list_promotions(KG) if p.alias == "production"]
