@@ -116,6 +116,10 @@ _Avoid_: Job, pipeline run, build run, experiment
 The user-declared command stetiq can invoke to perform a Construction Run; stetiq starts it but never knows what it does inside.
 _Avoid_: Pipeline, job, ingestion
 
+**Run Context**:
+What stetiq gives the upstream pipeline, and the people and agents who build it, before a Construction Run: the Ontology Version to extract against as a suggestion, the Use Case it must serve, how that version scores, the latest Gate and Consumer Gate verdicts, and what the last Construction Run against it added and how that was judged; never instance data. It is how evaluations return to the pipeline.
+_Avoid_: Prompt context, feedback, flywheel, eval export
+
 ### Control
 
 **Alias**:

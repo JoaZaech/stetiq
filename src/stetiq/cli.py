@@ -1014,6 +1014,28 @@ def context(
     typer.echo(json.dumps(data, indent=2, ensure_ascii=False))
 
 
+@app.command("mcp")
+def mcp_server(tracking_uri: TrackingUri = None) -> None:
+    """Run a read-only MCP server over stdio for coding agents (Claude Code, Cursor): the
+    run context, the Knowledge Graphs, Ontology Diffs and Consumer impact. Uses the
+    tracking URI and $STETIQ_TOKEN like every command; a read token is enough. Needs
+    stetiq[mcp]."""
+    try:
+        from stetiq.mcp_server import create_server
+    except ImportError:
+        typer.echo(
+            "error: stetiq mcp needs the MCP Python SDK, the `mcp` extra: "
+            "`uv sync --extra mcp` in a clone of stetiq, or pip install 'stetiq[mcp]'",
+            err=True,
+        )
+        raise typer.Exit(code=1) from None
+    try:
+        client = _client(tracking_uri)
+    except StetiqError as e:
+        raise _fail(e) from None
+    create_server(client).run("stdio")
+
+
 # --- Construction Runs and Observations -------------------------------------------------
 
 runs_app = typer.Typer(no_args_is_help=True, help="Construction Runs and their evaluation.")

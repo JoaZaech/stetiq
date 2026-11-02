@@ -93,6 +93,19 @@ class ConstructionRun:
 
 
 @dataclass(frozen=True)
+class EndedRun:
+    """A Construction Run that ended, `finished` or `failed` by strict Evolution Mode
+    (`TrackingService.latest_ended_run`), with what it added to the version it consumed.
+
+    `candidate` is the Ontology of the Candidate it gave rise to, or for a strict-failed
+    run the Candidate it would have produced from its ending Observation (never
+    registered); None when it added nothing."""
+
+    run: ConstructionRun
+    candidate: Ontology | None = None
+
+
+@dataclass(frozen=True)
 class Observation:
     """A Graph Source's Observed Schema at one point in time: structure and aggregate
     statistics only, never instance data. `run_id` is None for on-demand Observations."""

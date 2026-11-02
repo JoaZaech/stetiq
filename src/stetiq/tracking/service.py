@@ -73,6 +73,7 @@ from stetiq.tracking.entities import (
     ConstructionRun,
     ConsumerGateResult,
     DriftEvent,
+    EndedRun,
     EvaluationResult,
     EvolutionMode,
     GatePreview,
@@ -104,17 +105,23 @@ from stetiq.use_case.consumer_gates import (
 # live with the user's process, never on the stetiq server).
 ObservationInput = tuple[GraphSourceScope, ObservedSchema]
 
-# Evaluator names stetiq computes itself; custom Evaluators cannot take them.
-RESERVED_EVALUATOR_NAMES = frozenset(
+# The built-ins whose details the Run Context carries (ADR 0010): they judge an Ontology
+# Version from the Ontology and the Use Case alone, so their details name Concepts,
+# Vocabulary Values and Competency Question ids and cannot hold a graph value.
+RUN_CONTEXT_DETAIL_EVALUATORS = frozenset(
     {e.name for e in BUILT_IN_EVALUATORS}
-    | {
-        ANSWERABILITY_EVALUATOR,
-        COVERAGE_EVALUATOR,
-        UNJUSTIFIED_ADDITIONS_EVALUATOR,
-        CQ_EXECUTION_EVALUATOR,
-    }
-    | {e.name for e in SERVER_RUN_EVALUATORS}
+    | {ANSWERABILITY_EVALUATOR, COVERAGE_EVALUATOR, UNJUSTIFIED_ADDITIONS_EVALUATOR}
 )
+
+# The built-ins whose details the Run Context drops: they read the Graph Source, so their
+# details can quote observed values.
+RUN_CONTEXT_WITHHELD_EVALUATORS = frozenset(
+    {CQ_EXECUTION_EVALUATOR} | {e.name for e in SERVER_RUN_EVALUATORS}
+)
+
+# Evaluator names stetiq computes itself; custom Evaluators cannot take them. A new
+# built-in goes in one of the two sets above.
+RESERVED_EVALUATOR_NAMES = RUN_CONTEXT_DETAIL_EVALUATORS | RUN_CONTEXT_WITHHELD_EVALUATORS
 
 
 def check_not_built_in(evaluator: str) -> None:
@@ -213,6 +220,12 @@ class TrackingService(Protocol):
     def latest_finished_run(self, knowledge_graph: str, version: int) -> ConstructionRun | None:
         """The latest finished run standing for Ontology Version `version` (its Candidate,
         else the version it consumed); None when no finished run does."""
+        ...
+
+    def latest_ended_run(self, knowledge_graph: str, version: int) -> EndedRun | None:
+        """The latest ended run that consumed Ontology Version `version`, with what it
+        added: `finished`, or `failed` with an ending Observation (strict Evolution Mode).
+        A run failed without one crashed and is skipped. None when no run ended."""
         ...
 
     def log_params(self, run_id: str, params: dict[str, str]) -> None: ...
@@ -765,6 +778,30 @@ class LocalTrackingService:
             self.get_ontology_version(knowledge_graph, version)
             runs = self._finished_runs_standing_for(knowledge_graph, version)
             return runs[-1] if runs else None
+
+    def latest_ended_run(self, knowledge_graph: str, version: int) -> EndedRun | None:
+        with self._store.transaction():
+            consumed = self.get_ontology_version(knowledge_graph, version)
+            ended = [
+                r
+                for r in self._store.list_runs(knowledge_graph)
+                if r.ontology_version == version
+                and (r.status == "finished" or (r.status == "failed" and r.observation_id))
+            ]
+            if not ended:
+                return None
+            run = ended[-1]
+            if run.candidate_version is not None:
+                candidate = self.get_ontology_version(
+                    knowledge_graph, run.candidate_version
+                ).ontology
+            elif run.status == "failed" and run.observation_id is not None:
+                # Strict Evolution Mode failed it: what `end_run` would have registered.
+                observed = self.get_observation(run.observation_id).schema
+                candidate = candidate_ontology(consumed.ontology, observed)
+            else:
+                candidate = None
+            return EndedRun(run=run, candidate=candidate)
 
     def _running(self, run_id: str) -> ConstructionRun:
         run = self.get_run(run_id)

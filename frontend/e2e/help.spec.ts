@@ -29,6 +29,17 @@ test('the table of contents lists Using the web UI, which opens its page', async
   await expect(page.getByRole('heading', { name: 'What needs edit access' })).toBeVisible()
 })
 
+test('the table of contents lists Agents and MCP last, which opens its page', async ({ page }) => {
+  await page.goto('/ui/help/getting-started')
+  const contents = page.getByRole('navigation', { name: 'Guide' })
+
+  await contents.getByRole('link', { name: 'Agents and MCP' }).click()
+
+  await expect(page).toHaveURL('/ui/help/agents-and-mcp')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Agents and MCP')
+  await expect(page.getByRole('heading', { name: 'The rules the agent is given' })).toBeVisible()
+})
+
 test('the sidebar Help entry opens Help and is highlighted there', async ({ page }) => {
   await page.goto('/ui/')
   const help = page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Help' })

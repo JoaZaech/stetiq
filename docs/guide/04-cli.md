@@ -57,6 +57,7 @@ Local mode needs no token. How to issue one is described in [Server & API Tokens
 | `stetiq gate`, `stetiq gate-results` | Evaluate the Gates in `stetiq.yaml`, and list past results. |
 | `stetiq consumer` | Evaluate the Consumer Gates the Use Case declares, and list past results. |
 | `stetiq context` | Print the run context the upstream pipeline extracts with, as JSON. |
+| `stetiq mcp` | A read-only MCP server for coding agents. |
 | `stetiq ui` | The web UI over a local tracking database. |
 | `stetiq server` | The stetiq server. |
 | `stetiq token` | Issue, list and revoke API Tokens (on the server's database). |
@@ -189,7 +190,16 @@ stetiq context
 stetiq context plant --version 4 --json > context.json
 ```
 
-`stetiq context` prints the [run context](./03-python-sdk.md#the-run-context) as JSON, for an upstream pipeline in any language: the Ontology Version to extract against (the Contract Alias's, or the one `--version` names), the latest Use Case Version with each Competency Question's Consumers and Tasks, that version's evaluation results, and the executed Competency Questions of the latest finished run standing for it. It holds metrics and counts only: no evaluation details and no instance data. The output is always JSON; `--json` is accepted and changes nothing. The Knowledge Graph defaults to `knowledge_graph` in `stetiq.yaml` (or `--config`). It needs only *read* permission, and exits 1 on an error such as an unknown Knowledge Graph or Ontology Version.
+`stetiq context` prints the [run context](./03-python-sdk.md#the-run-context) as JSON, for an upstream pipeline in any language: the Ontology Version to extract against (the Contract Alias's, or the one `--version` names), the latest Use Case Version with each Competency Question's Consumers and Tasks, that version's evaluation results, and the executed Competency Questions of the latest finished run standing for it. It also carries the verdicts CI recorded about that run with `stetiq gate` and `stetiq consumer gate`: `gate_result` and `consumer_gate_results` (one per Consumer that declares a Consumer Gate), each `{"status": "not_evaluated"}` when nothing was recorded, which never means passed. Reading the context evaluates no Gate and records nothing. `last_attempt` describes the latest run that ended against that version, finished or failed by strict Evolution Mode, even when its Candidate was never promoted: its id and status, the Ontology Diff to what it added (or would have added, without the Vocabulary Values a strict-failed run saw in the graph, which are only counted in `withheld_vocabulary_values`), its run-level metrics, its executed questions and its recorded verdicts; it is null when no run has ended against it. It holds no instance data. Results of the built-ins that judge an Ontology Version carry their details (which Concepts a question misses, which added Concepts no question needs, which Concepts lack a Definition), because those name only Concepts and Competency Question ids; run-level and custom Evaluator results carry metrics only, because their details can quote values from the graph. The output is always JSON; `--json` is accepted and changes nothing. The Knowledge Graph defaults to `knowledge_graph` in `stetiq.yaml` (or `--config`). It needs only *read* permission, and exits 1 on an error such as an unknown Knowledge Graph or Ontology Version.
+
+### MCP server for coding agents
+
+```bash
+stetiq mcp
+stetiq mcp --tracking-uri https://stetiq.example.com
+```
+
+`stetiq mcp` runs a read-only MCP server over stdio, for a coding agent such as Claude Code or Cursor to start: its tools serve the run context, the Knowledge Graphs, Ontology Diffs and Consumer impact, and none of them writes. It uses the tracking URI and `$STETIQ_TOKEN` like every command, and a *read* token is enough. It needs the `mcp` extra and exits 1 with an install hint without it. How to register it with an agent, and what each tool returns, is on the [Agents and MCP](./08-agents-and-mcp.md) page.
 
 ### Web UI, server and API Tokens
 
