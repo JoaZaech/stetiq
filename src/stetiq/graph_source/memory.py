@@ -190,7 +190,12 @@ def _observed_properties(
 
 def _degree(counts: Counter[int], endpoint_nodes: list[_Node]) -> Degree:
     degrees = [counts.get(n.id, 0) for n in endpoint_nodes]
-    return Degree(min=min(degrees), max=max(degrees), mean=sum(degrees) / len(degrees))
+    return Degree(
+        min=min(degrees),
+        max=max(degrees),
+        mean=sum(degrees) / len(degrees),
+        with_edges=sum(1 for d in degrees if d),
+    )
 
 
 def _type_name(value: Any) -> str:

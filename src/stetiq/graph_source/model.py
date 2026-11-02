@@ -125,18 +125,26 @@ class ObservedRelationshipType:
 
 @dataclass(frozen=True)
 class Degree:
-    """Distribution of per-node relationship counts (zero-degree nodes included)."""
+    """Distribution of per-node relationship counts (zero-degree nodes included).
+
+    `with_edges` is how many endpoint nodes have at least one such relationship; it
+    divided by the endpoint count is the pattern's Coverage. None when the adapter (or a
+    stored or pushed Observed Schema) predates it."""
 
     min: int
     max: int
     mean: float
+    with_edges: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {"min": self.min, "max": self.max, "mean": self.mean}
+        d: dict[str, Any] = {"min": self.min, "max": self.max, "mean": self.mean}
+        if self.with_edges is not None:
+            d["with_edges"] = self.with_edges
+        return d
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> Degree:
-        return cls(d["min"], d["max"], float(d["mean"]))
+        return cls(d["min"], d["max"], float(d["mean"]), d.get("with_edges"))
 
 
 @dataclass(frozen=True)

@@ -14,8 +14,10 @@ and the Contract Alias's Ontology Version. It has two parts:
   previous Observation, by more than the configured fraction (`count_drop`,
   `count_increase`), off unless a threshold is set; and a Violation Rate rising more than
   `max_violation_increase` (absolute points) above its value in the Baseline Observation
-  (`violation_increase`), on by default. Counts compare with the previous Observation,
-  ratios with the baseline (ADR 0013).
+  (`violation_increase`), on by default; and a declared pattern's Coverage falling more
+  than `max_coverage_drop` (absolute points) below its baseline value (`coverage_drop`),
+  off unless set. Counts compare with the previous Observation, ratios with the baseline
+  (ADR 0013).
 
 A check that lacks its input (a rate the baseline cannot give, a truncated value list)
 never raises a finding: it is reported as `NotComparable` instead.
@@ -29,7 +31,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from stetiq.conformance import (
     Conformance,
@@ -40,7 +42,10 @@ from stetiq.conformance import (
 from stetiq.errors import InvalidDriftConfigError
 from stetiq.graph_source import ObservedSchema
 from stetiq.ontology import Ontology
-from stetiq.ontology.model import ConceptKind
+from stetiq.ontology.model import ConceptKind, Pattern
+
+# Which endpoint nodes a Coverage is over: `out` the pattern's source, `in` its target.
+Direction = Literal["out", "in"]
 
 # `max_violation_increase` when `stetiq.yaml`, a request or the SDK leaves it out.
 DEFAULT_MAX_VIOLATION_INCREASE = 0.01
@@ -54,6 +59,8 @@ class DriftKind(StrEnum):
     COUNT_INCREASE = "count_increase"  # count rose beyond `max_count_increase`
     # a Violation Rate rose beyond `max_violation_increase` above the Baseline Observation's
     VIOLATION_INCREASE = "violation_increase"
+    # a declared pattern's Coverage fell beyond `max_coverage_drop` below the baseline's
+    COVERAGE_DROP = "coverage_drop"
 
 
 @dataclass(frozen=True)
@@ -63,7 +70,9 @@ class DriftFinding:
     `undeclared_value` carries the value, how many owners hold it (`count`) and their share
     of the owner (`share`, None when the value list was truncated). `violation_increase`
     carries the Conformance check (`violation`) and its Violation Rate in the Baseline
-    Observation and now (`baseline_rate`, `observed_rate`)."""
+    Observation and now (`baseline_rate`, `observed_rate`). `coverage_drop` carries the
+    degree (`direction`: `out` over the source nodes, `in` over the target nodes) and its
+    Coverage in the Baseline Observation and now (`baseline_rate`, `observed_rate`)."""
 
     kind: DriftKind
     subject: str  # a label, `Owner.property`, or a pattern `(Source)-[REL]->(Target)`
@@ -77,6 +86,7 @@ class DriftFinding:
     violation: MismatchKind | None = None
     baseline_rate: float | None = None
     observed_rate: float | None = None
+    direction: Direction | None = None
 
     @property
     def structural(self) -> bool:
@@ -98,6 +108,7 @@ class DriftFinding:
             "violation": None if self.violation is None else self.violation.value,
             "baseline_rate": self.baseline_rate,
             "observed_rate": self.observed_rate,
+            "direction": self.direction,
         }
         d.update({k: v for k, v in optional.items() if v is not None})
         return d
@@ -118,6 +129,7 @@ class DriftFinding:
             violation=None if violation is None else MismatchKind(violation),
             baseline_rate=d.get("baseline_rate"),
             observed_rate=d.get("observed_rate"),
+            direction=d.get("direction"),
         )
 
 
@@ -170,13 +182,15 @@ class DriftThresholds:
     """Statistical Drift thresholds. The count ones are fractions of the previous count
     (0.1 = 10%) and off by default; `max_violation_increase` is in absolute points of a
     Violation Rate above the Baseline Observation's (0.01 = one percentage point) and
-    defaults to `DEFAULT_MAX_VIOLATION_INCREASE`.
+    defaults to `DEFAULT_MAX_VIOLATION_INCREASE`; `max_coverage_drop` is in absolute points
+    of a declared pattern's Coverage below the Baseline Observation's and off by default.
 
     None disables that check. A change exactly at the threshold is not Drift."""
 
     max_count_drop: float | None = None
     max_count_increase: float | None = None
     max_violation_increase: float | None = DEFAULT_MAX_VIOLATION_INCREASE
+    max_coverage_drop: float | None = None
 
     def __post_init__(self) -> None:
         for name in _THRESHOLD_KEYS:
@@ -198,10 +212,16 @@ class DriftThresholds:
             max_count_drop=d.get("max_count_drop"),
             max_count_increase=d.get("max_count_increase"),
             max_violation_increase=d.get("max_violation_increase", DEFAULT_MAX_VIOLATION_INCREASE),
+            max_coverage_drop=d.get("max_coverage_drop"),
         )
 
 
-_THRESHOLD_KEYS = ("max_count_drop", "max_count_increase", "max_violation_increase")
+_THRESHOLD_KEYS = (
+    "max_count_drop",
+    "max_count_increase",
+    "max_violation_increase",
+    "max_coverage_drop",
+)
 
 
 def thresholds_from_config(config: Mapping[str, Any]) -> DriftThresholds:
@@ -212,6 +232,7 @@ def thresholds_from_config(config: Mapping[str, Any]) -> DriftThresholds:
       max_count_drop: 0.1      # a type's count falling by more than 10% is Drift
       max_count_increase: 0.5  # optional
       max_violation_increase: 0.02  # default 0.01; null turns it off
+      max_coverage_drop: 0.05  # optional
     ```
     A missing section or key takes its default: the count checks off, the Violation Rate
     check at 0.01 (structural Drift always applies)."""
@@ -249,9 +270,10 @@ def assess_drift(
 ) -> DriftAssessment:
     """Every Drift finding, structural first (in Conformance order), then statistical:
     count changes since `previous` (node types, then relationship types, by label), then
-    Violation Rates risen since `baseline` (in Conformance order). No `thresholds` turns
+    Violation Rates risen since `baseline` (in Conformance order), then declared patterns'
+    Coverage fallen since `baseline` (in contract order, out-degree before in-degree). No `thresholds` turns
     every statistical check off; no `baseline` (this Observation is its own) leaves no
-    Violation Rate to compare."""
+    Violation Rate or Coverage to compare."""
     conformance = assess_conformance(contract, observed)
     findings = [
         DriftFinding(
@@ -285,6 +307,13 @@ def assess_drift(
         )
         findings.extend(rate_findings)
         not_comparable.extend(rate_gaps)
+    coverage_limit = None if thresholds is None else thresholds.max_coverage_drop
+    if baseline is not None and coverage_limit is not None:
+        coverage_findings, coverage_gaps = _coverage_drops(
+            contract, observed, baseline, coverage_limit
+        )
+        findings.extend(coverage_findings)
+        not_comparable.extend(coverage_gaps)
     # One entry per check: a truncated list yields one mismatch per listed outside value.
     return DriftAssessment(tuple(findings), tuple(dict.fromkeys(not_comparable)))
 
@@ -332,6 +361,68 @@ def _violation_increases(
                 )
             )
     return findings, gaps
+
+
+def _coverage_drops(
+    contract: Ontology, observed: ObservedSchema, baseline: ObservedSchema, limit: float
+) -> tuple[list[DriftFinding], list[NotComparable]]:
+    """A finding per declared pattern and degree whose Coverage is more than `limit` below
+    its baseline value. A degree whose endpoint type is not observed now has nothing to
+    cover and is skipped; one whose Coverage is unknown on either side is not comparable."""
+    findings: list[DriftFinding] = []
+    gaps: list[NotComparable] = []
+    for declared in contract.patterns:
+        subject = str(declared)
+        for direction, endpoint in (("out", declared.source), ("in", declared.target)):
+            if not _count(observed, endpoint):
+                continue
+            now = _coverage(observed, declared, direction)
+            then = _coverage(baseline, declared, direction)
+            if now is None or then is None:
+                side = "this Observation" if now is None else "the Baseline Observation"
+                gaps.append(
+                    NotComparable(
+                        check=DriftKind.COVERAGE_DROP,
+                        subject=subject,
+                        subject_kind="pattern",
+                        reason=f"no {direction}-degree Coverage in {side}",
+                    )
+                )
+                continue
+            # Rounded, so that a drop of exactly the threshold is not Drift despite float error.
+            if round(then - now, 9) > limit:
+                findings.append(
+                    DriftFinding(
+                        kind=DriftKind.COVERAGE_DROP,
+                        subject=subject,
+                        subject_kind="pattern",
+                        detail=f"{direction}-degree Coverage fell from {then:.1%} to {now:.1%} "
+                        "since the Baseline Observation",
+                        baseline_rate=then,
+                        observed_rate=now,
+                        direction=direction,
+                    )
+                )
+    return findings, gaps
+
+
+def _count(schema: ObservedSchema, label: str) -> int:
+    node_type = schema.node_type(label)
+    return 0 if node_type is None else node_type.count
+
+
+def _coverage(schema: ObservedSchema, declared: Pattern, direction: Direction) -> float | None:
+    """The share of the pattern's `direction` endpoint nodes with at least one such
+    relationship: None when no such node was observed or the degree lacks `with_edges`."""
+    endpoint = declared.source if direction == "out" else declared.target
+    endpoints = _count(schema, endpoint)
+    if not endpoints:
+        return None
+    pattern = schema.pattern(declared.source, declared.relationship, declared.target)
+    if pattern is None:
+        return 0.0  # endpoint nodes, but no such relationship between them
+    degree = pattern.out_degree if direction == "out" else pattern.in_degree
+    return None if degree.with_edges is None else degree.with_edges / endpoints
 
 
 def _observed_in(schema: ObservedSchema, subject_kind: MismatchSubjectKind, subject: str) -> bool:

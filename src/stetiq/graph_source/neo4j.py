@@ -299,6 +299,7 @@ def _degree(stats: Mapping[str, Any], endpoint_count: int) -> Degree:
         min=0 if has_zero_degree_nodes else stats["min"],
         max=stats["max"],
         mean=stats["total"] / endpoint_count,
+        with_edges=stats["nodes"],
     )
 
 

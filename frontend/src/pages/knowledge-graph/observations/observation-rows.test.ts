@@ -57,6 +57,12 @@ describe('formatThresholds', () => {
       'max drop 10% · max rise off · max violation rise off',
     )
   })
+
+  it('adds the Coverage threshold only when it is set', () => {
+    expect(formatThresholds({ ...drift.thresholds, max_coverage_drop: 0.05 })).toBe(
+      'max drop off · max rise 50% · max violation rise 1 pt · max coverage drop 5 pts',
+    )
+  })
 })
 
 describe('notComparableRows', () => {
@@ -80,6 +86,26 @@ describe('notComparableRows', () => {
         reason: 'no Violation Rate in the Baseline Observation',
       },
       { subject: 'WorkOrder.status', kind: 'Attribute', check: 'Value outside the Vocabulary', reason: 'value list truncated' },
+    ])
+  })
+
+  it('names a Coverage check', () => {
+    expect(
+      notComparableRows([
+        {
+          check: 'coverage_drop',
+          subject: '(WorkOrder)-[ASSIGNED_TO]->(Machine)',
+          subject_kind: 'pattern',
+          reason: 'no out-degree Coverage in the Baseline Observation',
+        },
+      ]),
+    ).toEqual([
+      {
+        subject: '(WorkOrder)-[ASSIGNED_TO]->(Machine)',
+        kind: 'Pattern',
+        check: 'Coverage dropped',
+        reason: 'no out-degree Coverage in the Baseline Observation',
+      },
     ])
   })
 })

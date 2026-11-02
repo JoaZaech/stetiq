@@ -27,7 +27,7 @@ The file must be a YAML mapping. An empty file is an empty config. Each section 
 | --- | --- | --- |
 | [`knowledge_graph`](#knowledge_graph) | `stetiq run`, `stetiq observe`, `stetiq gate` | The Knowledge Graph to use when the command doesn't name one. |
 | [`entry_point`](#entry_point) | `stetiq run` | The Construction Entry Point: the command a Construction Run starts. |
-| [`drift`](#drift) | `stetiq observe` | Thresholds for statistical Drift: counts and Violation Rates. |
+| [`drift`](#drift) | `stetiq observe` | Thresholds for statistical Drift: counts, Violation Rates and Coverage. |
 | [`gates`](#gates) | `stetiq gate` | The Gates to evaluate for an Ontology Version or a Construction Run. |
 
 ## knowledge_graph
@@ -89,6 +89,7 @@ drift:
   max_count_drop: 0.1           # a node or relationship type losing more than 10% is Drift
   max_count_increase: 0.5       # a type growing by more than 50% is Drift
   max_violation_increase: 0.02  # a Violation Rate 2 points above its baseline is Drift
+  max_coverage_drop: 0.05       # a declared pattern's Coverage 5 points below its baseline is Drift
 ```
 
 | Key | Compared with | Drift when | Default |
@@ -96,10 +97,11 @@ drift:
 | `max_count_drop` | the previous Observation | A node or relationship type's count falls by more than this fraction of its previous count (`0.1` is 10%). | off |
 | `max_count_increase` | the previous Observation | A node or relationship type's count rises by more than this fraction of its previous count. | off |
 | `max_violation_increase` | the [Baseline Observation](./02-concepts.md#observation-and-drift) | A Violation Rate rises more than this many absolute points above its value in the Baseline Observation (`0.01` is one percentage point, e.g. 0.5% to more than 1.5%). The finding is `violation_increase`, with both rates. Today it covers required attributes that aren't always set. | `0.01` |
+| `max_coverage_drop` | the Baseline Observation | A declared pattern's Coverage falls more than this many absolute points below its value in the Baseline Observation. Coverage is the share of the pattern's source nodes with at least one such relation (out-degree), or of its target nodes (in-degree), e.g. the share of WorkOrders on a Machine: 95% in the baseline and 85% now is Drift at `0.05`. The finding is `coverage_drop`, once per degree, with both values. Patterns the contract doesn't declare are never checked. | off |
 
 Every key is optional, and each must be a non-negative number or `null`. A missing key takes its default, and `null` turns that check off (`max_violation_increase: null`). A change exactly at the threshold isn't Drift. Structural Drift (Concepts that are observed but not declared by the Contract Alias's Ontology Version, or declared but no longer observed, and values outside a bound attribute's Vocabulary) is always checked.
 
-A check that lacks its input never raises Drift: a Violation Rate whose Attribute the Baseline Observation didn't observe, or the share of a value outside the Vocabulary when the attribute had more distinct values than stetiq reads. `stetiq observe` prints one `Not comparable: N checks` line for them, and the web UI lists them with the Observation.
+A check that lacks its input never raises Drift: a Violation Rate whose Attribute the Baseline Observation didn't observe, a Coverage the Baseline Observation can't give (it observed no nodes of that class, or it was taken by a Graph Source adapter that doesn't report Coverage), or the share of a value outside the Vocabulary when the attribute had more distinct values than stetiq reads. `stetiq observe` prints one `Not comparable: N checks` line for them, and the web UI lists them with the Observation.
 
 Any other key in `drift:` is an error. `stetiq observe` exits 3 on Drift and 1 on an error. If you run it without `--config` and there is no `./stetiq.yaml`, it uses an empty config. A `--config` file that doesn't exist is an error.
 

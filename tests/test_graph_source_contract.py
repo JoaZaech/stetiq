@@ -149,8 +149,20 @@ def test_observes_patterns_with_counts_and_cardinalities(graph):
         ("Ticket", "ABOUT", "Customer", 1),
     ]
     opened = schema.pattern("Customer", "OPENED", "Ticket")
-    assert opened.out_degree == Degree(min=0, max=2, mean=1.0)
-    assert opened.in_degree == Degree(min=0, max=2, mean=1.0)
+    assert opened.out_degree == Degree(min=0, max=2, mean=1.0, with_edges=2)
+    assert opened.in_degree == Degree(min=0, max=2, mean=1.0, with_edges=2)
+
+
+def test_a_degree_counts_the_endpoint_nodes_with_at_least_one_edge(graph):
+    orders = [graph.add_node(["KG", "WorkOrder"]) for _ in range(4)]
+    machine = graph.add_node(["KG", "Machine"])
+    graph.add_node(["KG", "Machine"])  # serves no WorkOrder
+    for order in orders[:3]:
+        graph.add_relationship(order, "ON", machine)
+
+    on = graph.source.observe(SCOPE).pattern("WorkOrder", "ON", "Machine")
+
+    assert (on.out_degree.with_edges, on.in_degree.with_edges) == (3, 1)
 
 
 def test_a_namespace_scope_selects_nodes_by_namespace_property_and_hides_it(graph):

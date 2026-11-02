@@ -66,6 +66,10 @@ _Avoid_: Compliance, validity
 The share of a Conformance check's owner nodes or relationships that fail it, e.g. the share of Customers without their required `name`; Conformance reports it beside each failing check, and Drift compares it with the Baseline Observation's.
 _Avoid_: Error rate, violation level, failure percentage
 
+**Coverage**:
+The share of a declared pattern's source nodes that have at least one such relation (out-degree), or of its target nodes (in-degree), e.g. the share of WorkOrders on a Machine; Drift compares it with the Baseline Observation's.
+_Avoid_: Mean degree, connectivity, link rate
+
 **Knowledge Graph**:
 A named, long-lived lineage of Ontology Versions, e.g. "customer-support-kg".
 _Avoid_: Project, experiment, graph (unqualified)
@@ -147,7 +151,7 @@ Capturing a Graph Source's current Observed Schema, either at the end of a Const
 _Avoid_: Scan, crawl, sync
 
 **Baseline Observation**:
-The first Observation, at the end of a Construction Run or on demand, since the Contract Alias's current Ontology Version became the contract, by a Promotion or by switching the Contract Alias; Drift compares Violation Rates with it, and an Observation with none before it is its own.
+The first Observation, at the end of a Construction Run or on demand, since the Contract Alias's current Ontology Version became the contract, by a Promotion or by switching the Contract Alias; Drift compares Violation Rates and Coverage with it, and an Observation with none before it is its own.
 _Avoid_: Reference observation, snapshot, pinned baseline
 
 **Evolution Mode**:
@@ -175,7 +179,7 @@ Evaluating a Knowledge Graph's most recently used Gates against a Construction R
 _Avoid_: Dry run, simulated gate, gate check
 
 **Drift**:
-A divergence, found by an Observation, between a Graph Source's Observed Schema and the Contract Alias's Ontology Version, or a statistic that moved too far: a count since the previous Observation, or a Violation Rate since the Baseline Observation; it raises an alert unless it is a Pending Migration, and never creates a new Ontology Version by itself. A check that lacks its input is *not comparable* and raises nothing.
+A divergence, found by an Observation, between a Graph Source's Observed Schema and the Contract Alias's Ontology Version, or a statistic that moved too far: a count since the previous Observation, or a Violation Rate or Coverage since the Baseline Observation; it raises an alert unless it is a Pending Migration, and never creates a new Ontology Version by itself. A check that lacks its input is *not comparable* and raises nothing.
 _Avoid_: Schema change, deviation
 
 **Pending Migration**:
