@@ -2,15 +2,12 @@ import { useId, useState, type ReactNode } from 'react'
 import { ArrowRight } from 'lucide-react'
 import { Link } from 'react-router'
 import { useAliases, useContractAlias, usePromotions } from '@/api/aliases'
-import { useGateResults } from '@/api/gate-results'
 import { useEvolutionMode, useKnowledgeGraph } from '@/api/knowledge-graph'
 import { useDriftEvents, useObservations } from '@/api/observations'
 import { useOntologyVersions } from '@/api/ontology-versions'
 import { useRuns } from '@/api/runs'
-import { useUseCaseVersions } from '@/api/use-cases'
 import { kgUrl } from '@/app/knowledge-graph-sections'
 import { Disclosure } from '@/components/Disclosure'
-import { KpiTiles, type KpiTile } from '@/components/KpiTiles'
 import { Markdown } from '@/components/Markdown'
 import { PageHeader } from '@/components/PageHeader'
 import { RunStatusLabel } from '@/components/RunStatusLabel'
@@ -19,19 +16,12 @@ import { StatusLabel } from '@/components/StatusLabel'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatPercent, formatRelativeTime } from '@/lib/format'
-import { conformanceKpi, driftKpi, ratioKpi } from '../evaluation/evaluation-kpis'
 import { EditDescription } from '../KnowledgeGraphHeader'
 import { useKnowledgeGraphName } from '../params'
 import { conformanceTone, shortRunId } from '../runs/runs'
-import { useLatestAnswerability } from '../use-case/latest-answerability'
 import {
   aliasesOf,
-  consumersRatio,
-  coverageRatio,
   descriptionSummary,
-  gatesRatio,
-  latestConformance,
-  latestDriftFindings,
   ontologySize,
   recentObservations,
   recentPromotions,
@@ -41,8 +31,8 @@ import { PipelineStrip } from './PipelineStrip'
 
 /**
  * `/kg/:name/overview`, where a Knowledge Graph opens: a dashboard of everything in one
- * place. A one-line About, the pipeline strip as a status chain, five KPI tiles, then the
- * recent runs, Observations, the current Ontology Version and the Promotions, each linking
+ * place. A one-line About, the pipeline with each stage's status, numbers and next step,
+ * then the recent runs, Observations, the current Ontology Version and the Promotions, each linking
  * to its page. Every part loads its own data, so one that fails doesn't hide the others.
  */
 export function OverviewPage() {
@@ -53,7 +43,6 @@ export function OverviewPage() {
       <div className="space-y-6">
         <About name={name} />
         <PipelineStrip name={name} />
-        <OverviewKpis name={name} />
         <div className="grid gap-4 lg:grid-cols-2">
           <RecentRunsCard name={name} />
           <RecentObservationsCard name={name} />
@@ -114,60 +103,6 @@ function EvolutionModeValue({ name }: { name: string }) {
 interface QueryLike {
   isPending: boolean
   isError: boolean
-}
-
-/** A tile while its data loads (`…`) or when it failed to (`Not loaded`), else `build()`. */
-function tile(label: string, to: string, queries: QueryLike[], build: () => KpiTile): KpiTile {
-  if (queries.some((q) => q.isError)) return { label, value: 'Not loaded', tone: 'error', to }
-  if (queries.some((q) => q.isPending)) return { label, value: '…', to }
-  return build()
-}
-
-/** CQ coverage, Conformance, Gates, Drift and Consumers, each linking to where it comes from. */
-function OverviewKpis({ name }: { name: string }) {
-  const runs = useRuns(name)
-  const versions = useOntologyVersions(name)
-  const gateResults = useGateResults(name)
-  const observations = useObservations(name)
-  const driftEvents = useDriftEvents(name)
-  const useCases = useUseCaseVersions(name)
-  const latestUseCase = useCases.data?.at(-1)
-  const answerability = useLatestAnswerability(name, latestUseCase?.number ?? 0)
-  const judged = answerability.state === 'judged' ? answerability.answerability : undefined
-  const answerabilityQuery = {
-    isPending: answerability.state === 'pending',
-    isError: answerability.state === 'error',
-  }
-  const newest = versions.data?.at(-1)?.number
-  const useCaseUrl = kgUrl(name, 'use-case')
-
-  const tiles = [
-    tile('CQ coverage', useCaseUrl, [useCases, answerabilityQuery], () =>
-      ratioKpi('CQ coverage', coverageRatio(judged), 'Competency Questions answerable', useCaseUrl),
-    ),
-    tile('Conformance', kgUrl(name, 'runs'), [runs], () => {
-      const latest = latestConformance(runs.data!)
-      return {
-        ...conformanceKpi(latest?.score ?? null, latest ? kgUrl(name, 'runs', latest.runId) : kgUrl(name, 'runs')),
-        hint: latest ? `run ${shortRunId(latest.runId)}` : undefined,
-      }
-    }),
-    tile('Gates', kgUrl(name, 'versions'), [versions, gateResults], () =>
-      ratioKpi(
-        'Gates',
-        gatesRatio(newest, gateResults.data!),
-        `Gates passed by v${newest}`,
-        newest === undefined ? kgUrl(name, 'versions') : kgUrl(name, 'versions', newest),
-      ),
-    ),
-    tile('Drift', kgUrl(name, 'observations'), [observations, driftEvents], () =>
-      driftKpi(latestDriftFindings(observations.data!, driftEvents.data!), kgUrl(name, 'observations')),
-    ),
-    tile('Consumers', useCaseUrl, [useCases, answerabilityQuery], () =>
-      ratioKpi('Consumers', consumersRatio(latestUseCase?.use_case.consumers ?? [], judged), 'ready', useCaseUrl),
-    ),
-  ]
-  return <KpiTiles tiles={tiles} className="sm:grid-cols-3 lg:grid-cols-5" />
 }
 
 /** A dashboard card: a title, a link to the whole list, and its rows. */
