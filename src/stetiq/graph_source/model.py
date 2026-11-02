@@ -105,6 +105,10 @@ class ObservedProperty:
     fill_rate: float  # count / owning type's count
     # Only for a Vocabulary-bound Attribute that Observation was asked to read; else None.
     values: ObservedValues | None = None
+    # How many values of each type in `types` the property holds, as (type, count) sorted
+    # by type. None when the Graph Source did not count them (an older or third-party
+    # Observed Schema): the type-mismatch Violation Rate is then unknown.
+    type_counts: tuple[tuple[str, int], ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -181,6 +185,7 @@ class ObservedSchema:
             return [
                 {"name": p.name, "types": list(p.types), "count": p.count, "fill_rate": p.fill_rate}
                 | ({} if p.values is None else {"values": p.values.to_dict()})
+                | ({} if p.type_counts is None else {"type_counts": dict(p.type_counts)})
                 for p in ps
             ]
 
@@ -216,6 +221,9 @@ class ObservedSchema:
                     p["count"],
                     float(p["fill_rate"]),
                     None if p.get("values") is None else ObservedValues.from_dict(p["values"]),
+                    None
+                    if p.get("type_counts") is None
+                    else tuple(sorted((t, int(n)) for t, n in p["type_counts"].items())),
                 )
                 for p in ps
             )

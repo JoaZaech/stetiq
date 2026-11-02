@@ -237,7 +237,7 @@ _STRUCTURAL = {
 
 # The Conformance checks whose Violation Rate Drift compares with the baseline.
 # `value_outside_vocabulary` has a rate too, but its Drift is `undeclared_value`.
-_RATED = (MismatchKind.REQUIRED_MISSING,)
+_RATED = (MismatchKind.REQUIRED_MISSING, MismatchKind.TYPE_MISMATCH)
 
 
 def assess_drift(

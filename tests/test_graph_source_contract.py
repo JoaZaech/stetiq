@@ -110,11 +110,32 @@ def test_observes_node_properties_with_types_and_fill_rates(graph):
     customer = graph.source.observe(SCOPE).node_type("Customer")
 
     assert customer.properties == (
-        ObservedProperty("active", ("BOOLEAN",), 1, 0.25),
-        ObservedProperty("age", ("FLOAT", "INTEGER"), 2, 0.5),
-        ObservedProperty("name", ("STRING",), 3, 0.75),
-        ObservedProperty("tags", ("LIST",), 1, 0.25),
+        ObservedProperty("active", ("BOOLEAN",), 1, 0.25, type_counts=(("BOOLEAN", 1),)),
+        ObservedProperty(
+            "age", ("FLOAT", "INTEGER"), 2, 0.5, type_counts=(("FLOAT", 1), ("INTEGER", 1))
+        ),
+        ObservedProperty("name", ("STRING",), 3, 0.75, type_counts=(("STRING", 3),)),
+        ObservedProperty("tags", ("LIST",), 1, 0.25, type_counts=(("LIST", 1),)),
     )
+
+
+def test_counts_how_many_values_of_each_type_a_property_holds(graph):
+    for opened_at in ["2026-01-01", 20260102, 20260103, 4.5]:
+        graph.add_node(["KG", "Ticket"], {"opened_at": opened_at})
+    graph.add_node(["KG", "Ticket"], {"tags": ["a"]})
+    graph.add_node(["KG", "Ticket"], {"tags": [1, 2]})  # another element type: still a LIST
+    ada = graph.add_node(["KG", "Customer"])
+    ticket = graph.add_node(["KG", "Ticket"])
+    graph.add_relationship(ada, "OPENED", ticket, {"via": "email"})
+    graph.add_relationship(ada, "OPENED", ticket, {"via": 3})
+
+    schema = graph.source.observe(SCOPE)
+
+    opened_at, tags = schema.node_type("Ticket").properties
+    assert opened_at.type_counts == (("FLOAT", 1), ("INTEGER", 2), ("STRING", 1))
+    assert tags.type_counts == (("LIST", 2),)
+    [via] = schema.relationship_type("OPENED").properties
+    assert via.type_counts == (("INTEGER", 1), ("STRING", 1))
 
 
 def test_observes_relationship_types_with_counts_and_property_fill_rates(graph):
@@ -129,7 +150,9 @@ def test_observes_relationship_types_with_counts_and_property_fill_rates(graph):
     opened = graph.source.observe(SCOPE).relationship_type("OPENED")
 
     assert opened.count == 2
-    assert opened.properties == (ObservedProperty("via", ("STRING",), 1, 0.5),)
+    assert opened.properties == (
+        ObservedProperty("via", ("STRING",), 1, 0.5, type_counts=(("STRING", 1),)),
+    )
 
 
 def test_observes_patterns_with_counts_and_cardinalities(graph):

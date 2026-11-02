@@ -52,8 +52,9 @@ class Mismatch:
     value: str | None = None
     count: int | None = None
     # The Violation Rate: the share of owner nodes or relationships failing this check, for
-    # `required_missing` and `value_outside_vocabulary`. None when unknown (a truncated
-    # value list) or for a kind without one.
+    # `required_missing`, `value_outside_vocabulary` and `type_mismatch`. None when unknown
+    # (a truncated value list, an Observed Schema without counts per type) or for a kind
+    # without one.
     rate: float | None = None
 
 
@@ -227,8 +228,11 @@ def _check_concepts(
             dp, op = declared_props.get(name), observed_props.get(name)
             present = checks.presence(subject, "property", dp is not None, op is not None)
             if present and dp is not None and op is not None:
-                checks.record(subject, "property", _property_mismatches(subject, label, dp, op))
-                _check_values(checks, subject, ontology, dp, op, o.count if o else 0)
+                owner_count = o.count if o else 0
+                checks.record(
+                    subject, "property", _property_mismatches(subject, label, dp, op, owner_count)
+                )
+                _check_values(checks, subject, ontology, dp, op, owner_count)
 
 
 # The properties declared for a Concept (own, and for node types inherited ones too).
@@ -259,7 +263,7 @@ def _properties_of(declared: Ontology) -> PropertiesOf:
 
 
 def _property_mismatches(
-    subject: str, owner: str, declared: Property, observed: ObservedProperty
+    subject: str, owner: str, declared: Property, observed: ObservedProperty, owner_count: int
 ) -> list[Mismatch]:
     found = []
     if declared.required and observed.fill_rate < 1.0:
@@ -282,9 +286,22 @@ def _property_mismatches(
                 "property",
                 MismatchKind.TYPE_MISMATCH,
                 f"declared {declared.type}, observed {', '.join(observed.types)}",
+                rate=_type_mismatch_rate(observed, conforming_types, owner_count),
             )
         )
     return found
+
+
+def _type_mismatch_rate(
+    observed: ObservedProperty, conforming_types: set[str], owner_count: int
+) -> float | None:
+    """The share of the `owner_count` owners holding a value of a non-conforming type (each
+    owner holds at most one value). None when the Observed Schema did not count values per
+    type (an older or third-party one)."""
+    if observed.type_counts is None or owner_count <= 0:
+        return None
+    failing = sum(n for t, n in observed.type_counts if t not in conforming_types)
+    return failing / owner_count
 
 
 def _check_values(

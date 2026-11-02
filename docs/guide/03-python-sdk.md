@@ -37,7 +37,7 @@ Other arguments:
 
 ## What runs where
 
-Your graph database credentials and your own code never leave your process. The SDK reads the Graph Source itself and sends only aggregates to the tracking service: the Observed Schema (labels, counts, fill rates, cardinalities, and the capped values of Vocabulary-bound attributes) and Evaluator results, never an individual node or relationship. In remote mode the server never connects to your graph database.
+Your graph database credentials and your own code never leave your process. The SDK reads the Graph Source itself and sends only aggregates to the tracking service: the Observed Schema (labels, counts, fill rates, how many values of each type, cardinalities, and the capped values of Vocabulary-bound attributes) and Evaluator results, never an individual node or relationship. In remote mode the server never connects to your graph database.
 
 ```mermaid
 flowchart LR

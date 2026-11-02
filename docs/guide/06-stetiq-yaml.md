@@ -95,11 +95,11 @@ drift:
 | --- | --- | --- | --- |
 | `max_count_drop` | the previous Observation | A node or relationship type's count falls by more than this fraction of its previous count (`0.1` is 10%). | off |
 | `max_count_increase` | the previous Observation | A node or relationship type's count rises by more than this fraction of its previous count. | off |
-| `max_violation_increase` | the [Baseline Observation](./02-concepts.md#observation-and-drift) | A Violation Rate rises more than this many absolute points above its value in the Baseline Observation (`0.01` is one percentage point, e.g. 0.5% to more than 1.5%). The finding is `violation_increase`, with both rates. Today it covers required attributes that aren't always set. | `0.01` |
+| `max_violation_increase` | the [Baseline Observation](./02-concepts.md#observation-and-drift) | A Violation Rate rises more than this many absolute points above its value in the Baseline Observation (`0.01` is one percentage point, e.g. 0.5% to more than 1.5%). The finding is `violation_increase`, with both rates. Today it covers required attributes that aren't always set and attributes holding values of the wrong type (e.g. 2% of `opened_at` values are strings, not dates). | `0.01` |
 
 Every key is optional, and each must be a non-negative number or `null`. A missing key takes its default, and `null` turns that check off (`max_violation_increase: null`). A change exactly at the threshold isn't Drift. Structural Drift (Concepts that are observed but not declared by the Contract Alias's Ontology Version, or declared but no longer observed, and values outside a bound attribute's Vocabulary) is always checked.
 
-A check that lacks its input never raises Drift: a Violation Rate whose Attribute the Baseline Observation didn't observe, or the share of a value outside the Vocabulary when the attribute had more distinct values than stetiq reads. `stetiq observe` prints one `Not comparable: N checks` line for them, and the web UI lists them with the Observation.
+A check that lacks its input never raises Drift: a Violation Rate whose Attribute the Baseline Observation didn't observe, a wrong-type rate when either Observed Schema doesn't count values per type (one stored by an older stetiq, or pushed by a Graph Source that doesn't), or the share of a value outside the Vocabulary when the attribute had more distinct values than stetiq reads. `stetiq observe` prints one `Not comparable: N checks` line for them, and the web UI lists them with the Observation.
 
 Any other key in `drift:` is an error. `stetiq observe` exits 3 on Drift and 1 on an error. If you run it without `--config` and there is no `./stetiq.yaml`, it uses an empty config. A `--config` file that doesn't exist is an error.
 
