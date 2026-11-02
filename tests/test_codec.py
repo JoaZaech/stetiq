@@ -186,9 +186,24 @@ DRIFT_EVENT = DriftEvent(
             baseline_rate=0.005,
             observed_rate=0.03,
         ),
+        DriftFinding(
+            DriftKind.FILL_RATE_DROP,
+            "Ticket.opened_at",
+            "property",
+            "fell",
+            baseline_rate=1.0,
+            observed_rate=0.8,
+        ),
+        DriftFinding(
+            DriftKind.COUNT_DROP, "(Customer)-[OPENED]->(Ticket)", "pattern", "fell", 10, 5
+        ),
     ),
     thresholds=DriftThresholds(
-        max_count_drop=0.5, max_count_increase=2.0, max_violation_increase=0.02
+        max_count_drop=0.5,
+        max_count_increase=2.0,
+        max_violation_increase=0.02,
+        max_fill_rate_drop=0.1,
+        min_count=100,
     ),
 )
 

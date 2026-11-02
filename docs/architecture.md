@@ -88,7 +88,7 @@ An Ontology Diff `Change` states what it concerns as fields: `owner`, `owner_kin
 | `knowledge_graph:` | CLI | the default Knowledge Graph for `run`, `observe`, `gate` and `consumer gate` |
 | `entry_point: {command}` | `EntryPoint.from_config` | `stetiq run` (a string is `shlex.split` and run with no shell; a list is used as-is) |
 | `gates:` | `gates.parse_gates` | `stetiq gate` |
-| `drift: {max_count_drop, max_count_increase, max_violation_increase, max_coverage_drop}` | `drift.thresholds_from_config` (a missing key takes its default, `null` turns the check off) | `stetiq observe` |
+| `drift: {max_count_drop, max_count_increase, max_violation_increase, max_coverage_drop, max_fill_rate_drop, min_count}` | `drift.thresholds_from_config` (a missing key takes its default, `null` turns a threshold off; `min_count` defaults to 0) | `stetiq observe` |
 
 A new section gets its own parser module. Don't grow `config.py`.
 

@@ -68,6 +68,10 @@ export interface DriftThresholds {
   max_violation_increase?: number | null
   /** Absolute points of a declared pattern's Coverage below the baseline's; off when absent. */
   max_coverage_drop?: number | null
+  /** Absolute points of an optional Attribute's fill rate below the baseline's; off when absent. */
+  max_fill_rate_drop?: number | null
+  /** A type, pattern or owner below this count is not compared; 0 when absent. */
+  min_count?: number
 }
 
 /** drift.DriftKind */
@@ -79,6 +83,7 @@ export type DriftKind =
   | 'count_increase'
   | 'violation_increase'
   | 'coverage_drop'
+  | 'fill_rate_drop'
 
 /** drift.DriftFinding */
 export interface DriftFinding {
@@ -93,7 +98,10 @@ export interface DriftFinding {
   /** `undeclared_value` only: how many owners hold the value, and their share (absent when unknown). */
   count?: number
   share?: number
-  /** `violation_increase` only: the Conformance check, and its Violation Rate in the baseline and now. */
+  /**
+   * `violation_increase`: the Conformance check, and its Violation Rate in the baseline and
+   * now. `fill_rate_drop`: the Attribute's fill rate in the baseline and now.
+   */
   violation?: Mismatch['kind']
   baseline_rate?: number
   observed_rate?: number

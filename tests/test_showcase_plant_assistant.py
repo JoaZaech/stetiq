@@ -708,11 +708,13 @@ def test_the_epilogue_records_drift_against_production(epilogue, client):
         ("count_drop", "FollowUp", 12, 6),
         ("count_drop", "HAS_FOLLOW_UP", 12, 6),
         ("count_drop", "ASSIGNED_TO", 20, 14),
+        ("count_drop", "(FollowUp)-[ASSIGNED_TO]->(Technician)", 12, 6),
+        ("count_drop", "(WorkOrder)-[HAS_FOLLOW_UP]->(FollowUp)", 12, 6),
     }
     assert drift.id in {e.id for e in client.list_drift_events(KG)}
     assert epilogue.line == (
         "hand edit: +3 SparePart, −6 done FollowUp   Drift ⚠ against production -> v3 "  # noqa: RUF001 - the minus sign the show writes
-        "(3 structural, 3 statistical)"
+        "(3 structural, 5 statistical)"
     )
 
 
