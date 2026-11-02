@@ -8,6 +8,7 @@ the Baseline Observation on the Pattern subject.
 
 import pytest
 
+from stetiq.drift import DriftThresholds
 from stetiq.graph_source import GraphSourceScope, InMemoryGraphSource
 
 BEFORE, AFTER = GraphSourceScope(database="neo4j"), GraphSourceScope(database="later")
@@ -175,3 +176,26 @@ def test_without_declared_bounds_the_adapter_is_not_asked_to_count(client_factor
     outcome = client.observe("maintenance")
 
     assert outcome.drift is None
+
+
+def test_min_count_floors_a_pattern_s_rate_by_its_endpoint_nodes_not_its_relationships(
+    client, graph_source
+):
+    """Every one of 20 WorkOrders loses its Asset: the Pattern has no relationships left,
+    but its source class still has 20 nodes, which reaches a `min_count` of 10."""
+    client.create_knowledge_graph("maintenance", ontology=maintenance_ontology("{out: {min: 1}}"))
+    seed_work_orders(graph_source, total=20, doubled=0)
+    for _ in range(20):
+        graph_source.add_node(["WorkOrder"], {}, database="later")
+    graph_source.add_node(["Asset"], {}, database="later")
+    thresholds = DriftThresholds(min_count=10)
+
+    client.bind_graph_source("maintenance", BEFORE)
+    client.observe("maintenance", thresholds=thresholds)
+    client.bind_graph_source("maintenance", AFTER)
+    outcome = client.observe("maintenance", thresholds=thresholds)
+
+    assert rate_findings(outcome) == [
+        ("cardinality_violation", PERFORMED_ON, "pattern", "out", 0.0, 1.0)
+    ]
+    assert [e.check for e in outcome.observation.not_comparable] == []

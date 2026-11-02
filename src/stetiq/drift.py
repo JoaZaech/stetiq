@@ -338,6 +338,7 @@ def assess_drift(
     limit = None if thresholds is None else thresholds.max_violation_increase
     if baseline is not None and limit is not None:
         rate_findings, rate_gaps = _violation_increases(
+            contract,
             conformance,
             assess_conformance(contract, baseline),
             observed,
@@ -366,6 +367,7 @@ def assess_drift(
 
 
 def _violation_increases(
+    contract: Ontology,
     conformance: Conformance,
     at_baseline: Conformance,
     observed: ObservedSchema,
@@ -375,8 +377,9 @@ def _violation_increases(
 ) -> tuple[list[DriftFinding], list[NotComparable]]:
     """A finding per Violation Rate more than `limit` above its baseline value. A check
     the baseline passed had rate 0; one it could not run (its subject was not observed
-    then), whose rate is unknown on either side, or whose owner is below `min_count` on
-    either side, is not comparable."""
+    then), whose rate is unknown on either side, or whose owner (a pattern's: the endpoint
+    nodes of the failing degree) is below `min_count` on either side, is not comparable."""
+    patterns = {str(p): p for p in contract.patterns}  # a rated pattern is a declared one
     # A pattern's out- and in-degree are separate checks on the same subject.
     before = {
         (m.kind, m.subject, m.direction): m.rate for m in at_baseline.mismatches if m.kind in _RATED
@@ -402,15 +405,26 @@ def _violation_increases(
                 )
             )
             continue
-        small = baseline_min_count_gap(
-            DriftKind.VIOLATION_INCREASE,
-            m.subject,
-            m.subject_kind,
-            min_count,
-            baseline,
-            observed,
-            m.kind,
-        )
+        if m.subject_kind == "pattern" and m.direction is not None:
+            small = _endpoint_min_count_gap(
+                DriftKind.VIOLATION_INCREASE,
+                patterns[m.subject],
+                m.direction,
+                min_count,
+                baseline,
+                observed,
+                m.kind,
+            )
+        else:
+            small = baseline_min_count_gap(
+                DriftKind.VIOLATION_INCREASE,
+                m.subject,
+                m.subject_kind,
+                min_count,
+                baseline,
+                observed,
+                m.kind,
+            )
         if small is not None:
             gaps.append(small)
             continue
@@ -468,19 +482,11 @@ def _coverage_drops(
                     )
                 )
                 continue
-            small = baseline_min_count_gap(
-                DriftKind.COVERAGE_DROP, endpoint, "node_type", min_count, baseline, observed
+            small = _endpoint_min_count_gap(
+                DriftKind.COVERAGE_DROP, declared, direction, min_count, baseline, observed
             )
             if small is not None:
-                # The floor is on the endpoint nodes; the check is still the pattern's.
-                gaps.append(
-                    replace(
-                        small,
-                        subject=subject,
-                        subject_kind="pattern",
-                        reason=f"{direction}-degree endpoint {endpoint}: {small.reason}",
-                    )
-                )
+                gaps.append(small)
                 continue
             # Rounded, so that a drop of exactly the threshold is not Drift despite float error.
             if round(then - now, 9) > limit:
@@ -703,12 +709,36 @@ def baseline_min_count_gap(
     return None
 
 
+def _endpoint_min_count_gap(
+    check: DriftKind,
+    declared: Pattern,
+    direction: Direction,
+    min_count: int,
+    baseline: ObservedSchema,
+    observed: ObservedSchema,
+    violation: MismatchKind | None = None,
+) -> NotComparable | None:
+    """`baseline_min_count_gap` for a pattern's degree, whose owners are the degree's
+    endpoint nodes (the source for `out`, the target for `in`), not its relationships."""
+    endpoint = declared.source if direction == "out" else declared.target
+    small = baseline_min_count_gap(
+        check, endpoint, "node_type", min_count, baseline, observed, violation
+    )
+    if small is None:
+        return None
+    # The floor is on the endpoint nodes; the check is still the pattern's.
+    return replace(
+        small,
+        subject=str(declared),
+        subject_kind="pattern",
+        reason=f"{direction}-degree endpoint {endpoint}: {small.reason}",
+    )
+
+
 def owner_count(schema: ObservedSchema, subject_kind: MismatchSubjectKind, subject: str) -> int:
     """How many nodes or relationships a check's subject counts in `schema`, for
-    `min_count`: a type's or pattern's own count, an Attribute `Owner.name`'s owner's
-    count; 0 when not observed."""
-    if subject_kind == "pattern":
-        return _pattern_counts(schema).get(subject, 0)
+    `min_count`: a type's own count, an Attribute `Owner.name`'s owner's count; 0 when not
+    observed. A pattern's degree counts its endpoint nodes (`_endpoint_min_count_gap`)."""
     label = subject.partition(".")[0] if subject_kind == "property" else subject
     owner = schema.node_type(label) if subject_kind != "relationship_type" else None
     if owner is None and subject_kind != "node_type":
