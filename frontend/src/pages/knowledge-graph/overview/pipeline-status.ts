@@ -20,6 +20,8 @@ export interface StepStatus {
   tone: StatusTone
   status: string
   fact?: string
+  /** The count behind the status, e.g. Consumer Gates passed of declared. */
+  ratio?: { count: number; total: number }
 }
 
 /** Upstream pipeline: the latest Construction Run's status, and how long ago it ended (or started). */
@@ -90,9 +92,10 @@ export function consumerGateStatus(
   if (lines.length === 0) return { tone: 'neutral', status: 'None declared' }
   const passed = lines.filter((l) => l.tone === 'success').length
   const fact = `${passed} of ${lines.length} passed`
-  if (lines.some((l) => l.tone === 'failure')) return { tone: 'failure', status: 'Failed', fact }
-  if (passed === lines.length) return { tone: 'success', status: 'Passed', fact }
-  return { tone: 'neutral', status: 'Not evaluated yet', fact }
+  const ratio = { count: passed, total: lines.length }
+  if (lines.some((l) => l.tone === 'failure')) return { tone: 'failure', status: 'Failed', fact, ratio }
+  if (passed === lines.length) return { tone: 'success', status: 'Passed', fact, ratio }
+  return { tone: 'neutral', status: 'Not evaluated yet', fact, ratio }
 }
 
 /**
@@ -111,7 +114,8 @@ export function consumersStatus(
   if (checked.length === 0) return { tone: 'neutral', status: 'Not checked yet' }
   const ready = checked.filter((r) => r.ready === r.tasks).length
   const fact = `${ready} of ${checked.length} ready`
+  const ratio = { count: ready, total: checked.length }
   return ready === checked.length
-    ? { tone: 'success', status: 'Ready', fact }
-    : { tone: 'failure', status: 'Not ready', fact }
+    ? { tone: 'success', status: 'Ready', fact, ratio }
+    : { tone: 'failure', status: 'Not ready', fact, ratio }
 }

@@ -9,6 +9,11 @@ function step(page: Page, name: string) {
     .filter({ has: page.getByRole('link', { name, exact: true }) })
 }
 
+/** A stage's status, which carries its fact as its description. */
+function status(page: Page, name: string) {
+  return step(page, name).locator('[aria-description]')
+}
+
 const STEPS = ['Upstream pipeline', 'Gate', 'Knowledge Graph', 'Consumer Gate', 'Consumers']
 
 /** The status icon of each tone (`components/status-tones.ts`), by its Lucide class. */
@@ -39,20 +44,27 @@ test.describe('a Knowledge Graph with a finished run, an Observation and no Cons
     await expect(sidebar.getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page')
   })
 
-  test('shows each step with its status and one fact, linking to its page', async ({ page }) => {
+  test('shows each stage with its status, numbers and next step, linking to its page', async ({ page }) => {
     await page.goto('/ui/kg/support/overview')
 
     const chain = page.getByRole('list', { name: 'Pipeline' })
     await expect(chain.getByRole('listitem')).toHaveCount(5)
-    await expect(step(page, 'Upstream pipeline')).toHaveText(/^Upstream pipelineFinished(just now|\d+ \w+ ago)$/)
+    await expect(step(page, 'Upstream pipeline')).toHaveText(/FinishedConformance\d/)
+    // A stage's fact is on its status, on hover, not a line of its own.
+    await expect(status(page, 'Upstream pipeline')).toHaveAccessibleDescription(/^(just now|\d+ \w+ ago)$/)
     await expectIcon(page, 'Upstream pipeline', 'success')
-    await expect(step(page, 'Gate')).toHaveText('GateNot gatedv3')
-    await expect(step(page, 'Knowledge Graph')).toHaveText(
-      /^Knowledge GraphNo Driftproduction → v1 · observed (just now|\d+ \w+ ago)$/,
+    // v3 was never gated: the stage offers the command that gates it.
+    await expect(step(page, 'Gate')).toHaveText(/Not gatedGates passed—Evaluate its Gates$/)
+    await expect(
+      step(page, 'Gate').getByRole('button', { name: 'Evaluate its Gates: copy “stetiq gate support --version 3”' }),
+    ).toBeVisible()
+    await expect(step(page, 'Knowledge Graph')).toHaveText(/No DriftDrift findings0$/)
+    await expect(status(page, 'Knowledge Graph')).toHaveAccessibleDescription(
+      /^production → v1 · observed (just now|\d+ \w+ ago)$/,
     )
     await expectIcon(page, 'Knowledge Graph', 'success')
-    await expect(step(page, 'Consumer Gate')).toHaveText('Consumer GateNone declared')
-    await expect(step(page, 'Consumers')).toHaveText('ConsumersNo Consumers')
+    await expect(step(page, 'Consumer Gate')).toHaveText(/None declaredConsumer Gates passed—Declare one on a Consumer/)
+    await expect(step(page, 'Consumers')).toHaveText(/No Consumersready—/)
 
     const links = Object.fromEntries(
       await Promise.all(
@@ -63,24 +75,11 @@ test.describe('a Knowledge Graph with a finished run, an Observation and no Cons
       'Upstream pipeline': '/ui/kg/support/runs',
       Gate: '/ui/kg/support/versions/3',
       'Knowledge Graph': '/ui/kg/support/observations',
-      'Consumer Gate': '/ui/kg/support/use-case',
+      'Consumer Gate': '/ui/kg/support/use-case?tab=consumers',
       Consumers: '/ui/kg/support/use-case',
     })
     await chain.getByRole('link', { name: 'Gate', exact: true }).click()
     await expect(page).toHaveURL('/ui/kg/support/versions/3')
-  })
-
-  test('shows five KPI tiles, each linking to where its value comes from', async ({ page }) => {
-    await page.goto('/ui/kg/support/overview')
-
-    const tiles = page.getByRole('list', { name: 'Key figures' })
-    await expect(tiles.getByRole('listitem')).toHaveCount(5)
-    await expect(tiles.getByRole('link', { name: /^CQ coverage: / })).toHaveAttribute('href', '/ui/kg/support/use-case')
-    await expect(tiles.getByRole('link', { name: /^Conformance: / })).toBeVisible()
-    // v3 was never gated, and the latest Observation found no Drift.
-    await expect(tiles.getByRole('link', { name: 'Gates: —' })).toHaveAttribute('href', '/ui/kg/support/versions/3')
-    await expect(tiles.getByRole('link', { name: 'Drift: 0' })).toHaveAttribute('href', '/ui/kg/support/observations')
-    await expect(tiles.getByRole('link', { name: 'Consumers: —' })).toBeVisible()
   })
 
   test('shows the recent runs, Observations, the current version and Promotions as cards', async ({ page }) => {
@@ -121,11 +120,14 @@ test.describe('a Knowledge Graph with nothing yet', () => {
   test('shows every step that has no data as neutral', async ({ page }) => {
     await page.goto('/ui/kg/alpha')
 
-    await expect(step(page, 'Upstream pipeline')).toHaveText('Upstream pipelineNo runs')
-    await expect(step(page, 'Gate')).toHaveText('GateNot gatedv1')
-    await expect(step(page, 'Knowledge Graph')).toHaveText('Knowledge GraphNot observedproduction → v1')
-    await expect(step(page, 'Consumer Gate')).toHaveText('Consumer GateNone declared')
-    await expect(step(page, 'Consumers')).toHaveText('ConsumersNo Consumers')
+    await expect(step(page, 'Upstream pipeline').getByRole('button', { name: 'Track a run: copy “stetiq run”' })).toBeVisible()
+    await expect(status(page, 'Gate')).toHaveAccessibleDescription('v1')
+    await expect(status(page, 'Knowledge Graph')).toHaveAccessibleDescription('production → v1')
+    await expect(
+      step(page, 'Knowledge Graph').getByRole('button', { name: 'Take an Observation: copy “stetiq observe alpha”' }),
+    ).toBeVisible()
+    await expect(step(page, 'Consumer Gate')).toHaveText(/None declared/)
+    await expect(step(page, 'Consumers')).toHaveText(/No Consumers/)
     for (const name of STEPS) await expectIcon(page, name, 'neutral')
   })
 })
@@ -136,8 +138,11 @@ test.describe('a failed run', () => {
   test('fails the upstream pipeline', async ({ page }) => {
     await page.goto('/ui/kg/billing/overview')
 
-    await expect(step(page, 'Upstream pipeline')).toHaveText(/^Upstream pipelineFailed(just now|\d+ \w+ ago)$/)
+    await expect(step(page, 'Upstream pipeline')).toHaveText(/Failed/)
     await expectIcon(page, 'Upstream pipeline', 'failure')
+    // The next step opens the failed run's findings.
+    await step(page, 'Upstream pipeline').getByRole('link', { name: /^Why run \w+ failed$/ }).click()
+    await expect(page).toHaveURL(/\/ui\/kg\/billing\/runs\/[\w-]+\/evaluation$/)
   })
 })
 
@@ -147,7 +152,12 @@ test.describe('a gated newest version', () => {
   test("shows the newest version's Gate result", async ({ page }) => {
     await page.goto('/ui/kg/support/overview')
 
-    await expect(step(page, 'Gate')).toHaveText('GateFailedv3 · 1 of 3 Gates failed')
+    await expect(step(page, 'Gate')).toHaveText(/FailedGates passed2\/3See the failed Gates$/)
+    await expect(status(page, 'Gate')).toHaveAccessibleDescription('v3 · 1 of 3 Gates failed')
+    await expect(step(page, 'Gate').getByRole('link', { name: 'See the failed Gates' })).toHaveAttribute(
+      'href',
+      '/ui/kg/support/versions/3',
+    )
     await expectIcon(page, 'Gate', 'failure')
   })
 })
@@ -158,10 +168,12 @@ test.describe('Drift', () => {
   test('warns on the Knowledge Graph step when the latest Observation found Drift', async ({ page }) => {
     await page.goto('/ui/kg/support/overview')
 
-    await expect(step(page, 'Knowledge Graph')).toHaveText(
-      /^Knowledge GraphDriftproduction → v1 · observed (just now|\d+ \w+ ago)$/,
-    )
+    await expect(step(page, 'Knowledge Graph')).toHaveText(/DriftDrift findings4Review 4 Drift findings$/)
+    await expect(status(page, 'Knowledge Graph')).toHaveAccessibleDescription(/^production → v1 · observed /)
     await expectIcon(page, 'Knowledge Graph', 'warning')
+    // The next step opens the latest Observation's findings.
+    await step(page, 'Knowledge Graph').getByRole('link', { name: 'Review 4 Drift findings' }).click()
+    await expect(page.getByRole('dialog')).toBeVisible()
   })
 })
 
@@ -171,7 +183,7 @@ test.describe('Consumer Gates', () => {
   test('fail when any Consumer Gate failed, counting every Consumer that declares one', async ({ page }) => {
     await page.goto('/ui/kg/plant/overview')
 
-    await expect(step(page, 'Consumer Gate')).toHaveText('Consumer GateFailed1 of 3 passed')
+    await expect(step(page, 'Consumer Gate')).toHaveText(/FailedConsumer Gates passed1\/3See the failing Consumers/)
     await expectIcon(page, 'Consumer Gate', 'failure')
   })
 })
@@ -182,9 +194,9 @@ test.describe('Consumers', () => {
   test('are ready when the latest Ontology Version is ready for every Task of each', async ({ page }) => {
     await page.goto('/ui/kg/support/overview')
 
-    await expect(step(page, 'Consumers')).toHaveText('ConsumersReady2 of 2 ready')
+    await expect(step(page, 'Consumers')).toHaveText(/Readyready2\/2/)
     await expectIcon(page, 'Consumers', 'success')
-    await expect(step(page, 'Consumer Gate')).toHaveText('Consumer GateNone declared')
+    await expect(step(page, 'Consumer Gate')).toHaveText(/None declared/)
   })
 })
 

@@ -3,11 +3,9 @@ import type { Promotion } from '@/api/aliases'
 import type { GateResult } from '@/api/gate-results'
 import type { Observation } from '@/api/observations'
 import type { ConstructionRun } from '@/api/runs'
-import type { Consumer } from '@/api/use-cases'
 import type { Answerability } from '../use-case/answerability'
 import {
   aliasesOf,
-  consumersRatio,
   coverageRatio,
   descriptionSummary,
   gatesRatio,
@@ -73,15 +71,6 @@ describe('coverage, Gates and Consumers', () => {
     expect(gatesRatio(undefined, [result])).toBeNull()
   })
 
-  it('counts Consumers ready for all their Tasks, among those that have Tasks', () => {
-    const consumers = [
-      { id: 'a', name: 'A', tasks: [{ id: 't1', name: 'T1', competency_questions: ['q1'] }] },
-      { id: 'b', name: 'B', tasks: [{ id: 't2', name: 'T2', competency_questions: ['q1', 'q2'] }] },
-      { id: 'c', name: 'C', tasks: [] },
-    ] as unknown as Consumer[]
-    expect(consumersRatio(consumers, answerability)).toEqual({ count: 1, total: 2 })
-    expect(consumersRatio([], answerability)).toBeNull()
-  })
 })
 
 describe('Observations', () => {

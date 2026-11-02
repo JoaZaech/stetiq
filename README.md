@@ -1,6 +1,6 @@
 # stetiq
 
-stetiq versions, evaluates and governs the Ontology of a Knowledge Graph. **To use it, read the [user guide](docs/guide/)**, starting with [Getting started](docs/guide/01-getting-started.md). The web UI shows the same guide under **Help**.
+stetiq versions the Ontology of a Knowledge Graph as a contract between the pipeline that builds the graph and the Consumers that use it, and checks every change against both sides before it's promoted. **To use it, read the [user guide](docs/guide/)**, starting with [Getting started](docs/guide/01-getting-started.md). The web UI shows the same guide under **Help**.
 
 Try it without installing anything: run the demo, then open <http://localhost:5000/ui> ([more](docs/guide/01-getting-started.md#try-it-with-docker)).
 

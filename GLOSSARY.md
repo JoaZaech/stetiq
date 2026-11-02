@@ -1,6 +1,6 @@
 # stetiq
 
-A DevOps platform for knowledge graph structure: it versions, evaluates and governs the ontology of a knowledge graph, the way MLflow does for models. It is the evaluation point between the upstream pipeline that produces a knowledge graph and the downstream Consumers that use it: upstream pipeline → stetiq → knowledge graph → Consumers. It evaluates what the upstream pipeline produces, gives those evaluations back to the pipeline, and manages the Ontology Versions; the pipeline itself remains the user's. Instance data stays in the graph database and is never stetiq's concern beyond reading it to observe structure.
+stetiq keeps the Ontology of a Knowledge Graph as a versioned contract between the upstream pipeline that produces the graph and the Consumers that use it. The pipeline's side is the Ontology Version it builds to. The Consumers' side is the Use Case, where each Consumer declares the Tasks it performs and the Competency Questions those Tasks need answered. stetiq versions both halves and checks every proposed change against each: Gates and Conformance for what the pipeline produces, Consumer impact and Consumer Gates for what each Consumer would lose. It answers one question: can this Ontology change ship without breaking either side? It succeeds when no change reaches a declared Consumer and breaks a Task it relies on unless someone saw and accepted that before Promotion, and when the pipeline can make any change no declared Consumer depends on with only its own Gates to pass. stetiq referees the contract and never writes it: Candidates come from the pipeline or a person, and AI only proposes. It protects what Consumers declare, nothing more, and it governs structure only. Instance data stays in the graph database, which stetiq reads only to observe structure. It borrows a model registry's ideas (versions, Aliases, Promotion), as MLflow does for models, but answers to both sides ([ADR 0010](docs/adr/0010-the-ontology-is-a-versioned-contract-between-the-pipeline-and-its-consumers.md)).
 
 ## Language
 
@@ -135,8 +135,8 @@ An Ontology Version no Alias has pointed to yet, typically created by an evolvin
 _Avoid_: Draft, proposal
 
 **Promotion**:
-Moving an Alias to an Ontology Version; it is not blocked by Gates, but the audit records whether the version's latest Gate result passed.
-_Avoid_: Release, deploy
+Moving an Alias to an Ontology Version; it is not blocked by Gates or by any approval, but the audit records whether the version's latest Gate result passed.
+_Avoid_: Release, deploy, approval
 
 **Observation**:
 Capturing a Graph Source's current Observed Schema, either at the end of a Construction Run or on demand between runs.

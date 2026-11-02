@@ -1,6 +1,6 @@
 # Vision: stetiq between the upstream pipeline and its Consumers
 
-stetiq is the evaluation point in upstream pipeline → stetiq → Knowledge Graph → Consumers. Today it judges the input side well: what the upstream pipeline produced, and whether its Ontology Versions are fit to promote. This page describes where stetiq goes next on the output side, towards the Consumers. It says what the MVP builds, what it only shows as "Planned", and what a later team would build. Words in **bold** are defined in [GLOSSARY.md](../GLOSSARY.md).
+stetiq keeps a Knowledge Graph's Ontology as a versioned contract with two sides: the upstream pipeline that builds to an **Ontology Version**, and the **Consumers** that declare in the **Use Case** what they depend on ([ADR 0010](adr/0010-the-ontology-is-a-versioned-contract-between-the-pipeline-and-its-consumers.md)). The pipeline's side is built: Gates, Conformance and Promotion. On the Consumers' side, Consumers and Tasks, Consumer impact and the Consumer Gate in CI are built. This page describes the rest of the Consumers' side. It says what the MVP builds, what it only shows as "Planned", and what a later team would build. Words in **bold** are defined in [GLOSSARY.md](../GLOSSARY.md).
 
 Nothing on this page beyond the "MVP builds" list is implemented. The integration contract for Consumers is written up separately in [the Consumer Connector spec](specs/consumer-connector.md); of it, only the Consumer Gate verdict is implemented.
 
