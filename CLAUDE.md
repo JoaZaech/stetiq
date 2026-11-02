@@ -23,3 +23,7 @@ Before adding an SDK operation, REST route, CLI command, test fixture or web UI 
 ## User guide
 
 `docs/guide/` is the user guide, rendered in the web UI at `/ui/help` (ADR 0004). A change to what users see or do (an SDK call, CLI command, REST route, `stetiq.yaml` key, or anything in the web UI) updates the guide page that describes it in the same branch. The guide describes what has shipped, in the words the UI uses; internal renames and refactors leave it alone.
+
+## UI personas
+
+Before designing or reviewing a web UI page, read `docs/personas.md`: who lands on each page and the first question they bring. To review a UI change as those users, run the `ui-persona-review` agent.
