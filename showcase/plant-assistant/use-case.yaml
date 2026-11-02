@@ -6,7 +6,11 @@
 # - the reliability dashboard triages breakdowns: who handled each one, and what
 #   breakdowns cost against preventive work. It filters work orders on kind, so it
 #   loses rows the moment kind holds anything but `breakdown` or `preventive`;
-# - the maintenance assistant (an agent) explains each work order's root cause.
+# - the maintenance assistant (an agent) explains each work order's root cause, and
+#   briefs the shift lead on breakdowns, which also filters work orders on kind.
+#
+# The show adds `parts-suppliers` to the assistant's root-cause Task before prompt v2
+# (show.py), the reason prompt v2 may add Supplier.
 #
 # Questions no Task needs (orders-per-machine, open-follow-ups, downstream-of-press,
 # line-for-order, repeat-faults) stay: they are still judged on every run and version.
@@ -51,6 +55,11 @@ competency_questions:
     question: Which faults keep coming back on the same machine?
     # No query and no Concept mapping yet: stetiq reports it as unmapped until a
     # question mapper (STETIQ_QUESTION_MAPPER) or a human maps it.
+  - id: breakdown-causes
+    question: What caused each breakdown?
+    query: >-
+      MATCH (w:WorkOrder)-[:CAUSED_BY]->(f:Fault) WHERE w.kind = 'breakdown'
+      RETURN w.id AS work_order, f.description AS fault
   - id: downtime-by-kind
     question: How much downtime did breakdowns cost compared with preventive work?
     query: >-
@@ -80,8 +89,15 @@ consumers:
       - id: explain-root-causes
         description: Explain the root cause of each work order
         competency_questions: [root-causes]
+      - id: brief-shift-lead
+        description: Brief the shift lead on breakdowns
+        competency_questions: [breakdown-causes]
     consumer_gates:
       - name: root-causes-hold
         check: row_count_drop
         task: explain-root-causes
+        max_drop: 0.10
+      - name: briefing-rows-hold
+        check: row_count_drop
+        task: brief-shift-lead
         max_drop: 0.10

@@ -1,7 +1,7 @@
 {
  "prompt_version": "v1",
  "model": "claude-opus-5-5",
- "recorded_at": "2026-11-01",
+ "recorded_at": "2026-11-02",
  "report": "WO-2037.txt",
  "response": {
   "nodes": [
@@ -51,7 +51,7 @@
     "label": "Fault",
     "key": "WO-2037",
     "properties": {
-     "description": "Failed heater band that let film stick to the sealing jaw"
+     "description": "Failed heater band (failed open) let film stick to the sealing jaw"
     }
    },
    {
