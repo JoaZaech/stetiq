@@ -184,3 +184,29 @@ def test_max_coverage_drop_comes_from_the_drift_section_and_is_off_when_missing(
     assert thresholds_from_config({"drift": {"max_coverage_drop": 0.05}}).max_coverage_drop == 0.05
     assert thresholds_from_config({}).max_coverage_drop is None
     assert DriftThresholds().max_coverage_drop is None
+
+
+def test_an_endpoint_class_below_min_count_is_not_comparable(plant, graph_source):
+    """`min_count` floors Coverage by its endpoint nodes: 20 WorkOrders reach a floor of
+    10, but one Machine does not, so only the out-degree is compared."""
+    seed_work_orders(graph_source, on_a_machine=20, without=0)  # 1 of 1 Machines used
+    seed_work_orders(graph_source, on_a_machine=1, without=19, database="later", machines=2)
+    thresholds = DriftThresholds(max_coverage_drop=0.05, min_count=10)
+
+    observe_in(plant, BEFORE, thresholds=thresholds)
+    outcome = observe_in(plant, AFTER, thresholds=thresholds)
+
+    assert coverage_findings(outcome) == [
+        ("(WorkOrder)-[ASSIGNED_TO]->(Machine)", "pattern", "out", 1.0, 0.05)
+    ]
+    assert [
+        (str(e.check), e.subject, e.subject_kind, e.reason)
+        for e in outcome.observation.not_comparable
+    ] == [
+        (
+            "coverage_drop",
+            "(WorkOrder)-[ASSIGNED_TO]->(Machine)",
+            "pattern",
+            "in-degree endpoint Machine: 1 in the Baseline Observation, below min_count (10)",
+        )
+    ]

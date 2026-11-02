@@ -31,7 +31,7 @@ Thresholds come from the `drift:` section of the repo config (`stetiq.yaml`), se
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any, Literal
 
@@ -345,7 +345,7 @@ def assess_drift(
     coverage_limit = None if thresholds is None else thresholds.max_coverage_drop
     if baseline is not None and coverage_limit is not None:
         coverage_findings, coverage_gaps = _coverage_drops(
-            contract, observed, baseline, coverage_limit
+            contract, observed, baseline, coverage_limit, min_count
         )
         findings.extend(coverage_findings)
         not_comparable.extend(coverage_gaps)
@@ -428,11 +428,17 @@ def _violation_increases(
 
 
 def _coverage_drops(
-    contract: Ontology, observed: ObservedSchema, baseline: ObservedSchema, limit: float
+    contract: Ontology,
+    observed: ObservedSchema,
+    baseline: ObservedSchema,
+    limit: float,
+    min_count: int,
 ) -> tuple[list[DriftFinding], list[NotComparable]]:
     """A finding per declared pattern and degree whose Coverage is more than `limit` below
     its baseline value. A degree whose endpoint type is not observed now has nothing to
-    cover and is skipped; one whose Coverage is unknown on either side is not comparable."""
+    cover and is skipped; one whose Coverage is unknown on either side, or whose endpoint
+    type (the nodes it is a share of) is below `min_count` on either side, is not
+    comparable."""
     findings: list[DriftFinding] = []
     gaps: list[NotComparable] = []
     for declared in contract.patterns:
@@ -454,6 +460,20 @@ def _coverage_drops(
                         subject=subject,
                         subject_kind="pattern",
                         reason=f"no {direction}-degree Coverage in {side}",
+                    )
+                )
+                continue
+            small = baseline_min_count_gap(
+                DriftKind.COVERAGE_DROP, endpoint, "node_type", min_count, baseline, observed
+            )
+            if small is not None:
+                # The floor is on the endpoint nodes; the check is still the pattern's.
+                gaps.append(
+                    replace(
+                        small,
+                        subject=subject,
+                        subject_kind="pattern",
+                        reason=f"{direction}-degree endpoint {endpoint}: {small.reason}",
                     )
                 )
                 continue
