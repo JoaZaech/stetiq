@@ -1,0 +1,4 @@
+order_number,equipment,order_type,created_on,responsible,downtime_min,short_text
+WO-2031,CNC-04,corrective,2026-01-14,Priya Natarajan,42,Spindle vibration on CNC-04
+WO-2036,CNC-04,preventive,2026-03-12,Diego Álvarez,37,Tool changer alignment on CNC-04
+WO-2038,Lathe-02,corrective,2026-04-02,Tomasz Nowak,15,Chuck pressure fault on Lathe-02

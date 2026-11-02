@@ -1,0 +1,171 @@
+{
+ "prompt_version": "v2",
+ "model": "claude-opus-5-5",
+ "recorded_at": "2026-11-01",
+ "report": "WO-2031.txt",
+ "response": {
+  "nodes": [
+   {
+    "label": "WorkOrder",
+    "key": "WO-2031",
+    "properties": {
+     "id": "WO-2031",
+     "opened_at": "2026-01-14",
+     "kind": "breakdown",
+     "downtime_minutes": 42
+    }
+   },
+   {
+    "label": "Machine",
+    "key": "CNC-04",
+    "properties": {
+     "name": "CNC-04"
+    }
+   },
+   {
+    "label": "Technician",
+    "key": "Priya Natarajan",
+    "properties": {
+     "name": "Priya Natarajan"
+    }
+   },
+   {
+    "label": "Technician",
+    "key": "Marcus Webb",
+    "properties": {
+     "name": "Marcus Webb"
+    }
+   },
+   {
+    "label": "Component",
+    "key": "spindle bearing",
+    "properties": {
+     "name": "spindle bearing"
+    }
+   },
+   {
+    "label": "Component",
+    "key": "coolant pump",
+    "properties": {
+     "name": "coolant pump"
+    }
+   },
+   {
+    "label": "Fault",
+    "key": "WO-2031",
+    "properties": {
+     "description": "Worn spindle bearing that had passed its service interval"
+    }
+   },
+   {
+    "label": "Supplier",
+    "key": "SKF",
+    "properties": {
+     "name": "SKF"
+    }
+   },
+   {
+    "label": "FollowUp",
+    "key": "WO-2031#1",
+    "properties": {
+     "description": "Add vibration monitoring to CNC-04",
+     "status": "open"
+    }
+   },
+   {
+    "label": "FollowUp",
+    "key": "WO-2031#2",
+    "properties": {
+     "description": "Replace the spindle bearing",
+     "status": "done"
+    }
+   }
+  ],
+  "relationships": [
+   {
+    "start_label": "WorkOrder",
+    "start_key": "WO-2031",
+    "type": "PERFORMED_ON",
+    "end_label": "Machine",
+    "end_key": "CNC-04"
+   },
+   {
+    "start_label": "WorkOrder",
+    "start_key": "WO-2031",
+    "type": "ASSIGNED_TO",
+    "end_label": "Technician",
+    "end_key": "Priya Natarajan"
+   },
+   {
+    "start_label": "WorkOrder",
+    "start_key": "WO-2031",
+    "type": "INVOLVED",
+    "end_label": "Component",
+    "end_key": "spindle bearing"
+   },
+   {
+    "start_label": "WorkOrder",
+    "start_key": "WO-2031",
+    "type": "INVOLVED",
+    "end_label": "Component",
+    "end_key": "coolant pump"
+   },
+   {
+    "start_label": "WorkOrder",
+    "start_key": "WO-2031",
+    "type": "CAUSED_BY",
+    "end_label": "Fault",
+    "end_key": "WO-2031"
+   },
+   {
+    "start_label": "Component",
+    "start_key": "spindle bearing",
+    "type": "SUPPLIED_BY",
+    "end_label": "Supplier",
+    "end_key": "SKF"
+   },
+   {
+    "start_label": "WorkOrder",
+    "start_key": "WO-2031",
+    "type": "HAS_FOLLOW_UP",
+    "end_label": "FollowUp",
+    "end_key": "WO-2031#1"
+   },
+   {
+    "start_label": "WorkOrder",
+    "start_key": "WO-2031",
+    "type": "HAS_FOLLOW_UP",
+    "end_label": "FollowUp",
+    "end_key": "WO-2031#2"
+   },
+   {
+    "start_label": "FollowUp",
+    "start_key": "WO-2031#1",
+    "type": "ASSIGNED_TO",
+    "end_label": "Technician",
+    "end_key": "Priya Natarajan"
+   },
+   {
+    "start_label": "FollowUp",
+    "start_key": "WO-2031#2",
+    "type": "ASSIGNED_TO",
+    "end_label": "Technician",
+    "end_key": "Marcus Webb"
+   }
+  ],
+  "definitions": [
+   {
+    "concept": "Supplier",
+    "definition": "A vendor that replacement components are ordered from."
+   },
+   {
+    "concept": "Supplier.name",
+    "definition": "The vendor's name."
+   },
+   {
+    "concept": "SUPPLIED_BY",
+    "definition": "The supplier a replacement component was ordered from."
+   }
+  ]
+ }
+}

@@ -1,0 +1,87 @@
+# Who uses the plant Knowledge Graph, what they do with it, and the questions that work
+# needs answered.
+#
+# Two Consumers read the graph, and each says, with a Consumer Gate, what it may not
+# lose when a new version of the graph comes along:
+# - the reliability dashboard triages breakdowns: who handled each one, and what
+#   breakdowns cost against preventive work. It filters work orders on kind, so it
+#   loses rows the moment kind holds anything but `breakdown` or `preventive`;
+# - the maintenance assistant (an agent) explains each work order's root cause.
+#
+# Questions no Task needs (orders-per-machine, open-follow-ups, downstream-of-press,
+# line-for-order, repeat-faults) stay: they are still judged on every run and version.
+#
+# A question with a `query` is executed against the graph at the end of every
+# Construction Run (competency_question_execution). Every question is also judged
+# structurally against each Ontology Version (structural_answerability): does the
+# Ontology even have the Concepts the question needs? The Cypher below runs on the
+# candidate graph in Neo4j, through stetiq's built-in Neo4j Graph Source.
+description: "Plant maintenance: which machines hurt us most, who fixed what, and what is still open."
+competency_questions:
+  - id: orders-per-machine
+    question: Which machines generate the most work orders?
+    query: >-
+      MATCH (w:WorkOrder)-[:PERFORMED_ON]->(m:Machine)
+      RETURN m.name AS machine, count(w) AS work_orders ORDER BY work_orders DESC
+  - id: breakdown-technicians
+    question: Who handled each breakdown?
+    query: >-
+      MATCH (w:WorkOrder {kind: 'breakdown'})-[:ASSIGNED_TO]->(t:Technician)
+      RETURN w.id AS work_order, t.name AS technician
+  - id: open-follow-ups
+    question: Which follow-ups are still open, and who owns them?
+    query: >-
+      MATCH (w:WorkOrder)-[:HAS_FOLLOW_UP]->(f:FollowUp {status: 'open'})-[:ASSIGNED_TO]->(t:Technician)
+      RETURN w.id AS work_order, f.description AS follow_up, t.name AS owner
+  - id: downstream-of-press
+    question: If Press-02 stops, which machines downstream starve within three steps?
+    query: >-
+      MATCH (:Machine {name: 'Press-02'})-[:FEEDS*1..3]->(m:Machine)
+      RETURN DISTINCT m.name AS machine
+    expected_answer: [Weld-03, Paint-01, Packer-05]
+  - id: root-causes
+    question: What was the root cause of each work order?
+    query: >-
+      MATCH (w:WorkOrder)-[:CAUSED_BY]->(f:Fault)
+      RETURN w.id AS work_order, f.description AS fault
+  - id: line-for-order
+    question: Which line does the machine of a work order sit on?
+    concepts: [WorkOrder, "(WorkOrder)-[PERFORMED_ON]->(Machine)", "(Machine)-[PART_OF]->(Line)", Line.name]
+  - id: repeat-faults
+    question: Which faults keep coming back on the same machine?
+    # No query and no Concept mapping yet: stetiq reports it as unmapped until a
+    # question mapper (STETIQ_QUESTION_MAPPER) or a human maps it.
+  - id: downtime-by-kind
+    question: How much downtime did breakdowns cost compared with preventive work?
+    query: >-
+      MATCH (w:WorkOrder)
+      RETURN w.kind AS kind, sum(w.downtime_minutes) AS downtime_minutes
+consumers:
+  - id: reliability-dashboard
+    name: Reliability dashboard
+    kind: dashboard
+    contact: Tomasz Wieczorek
+    description: The shop-floor screen the morning stand-up triages breakdowns from.
+    tasks:
+      - id: triage-breakdowns
+        description: Show who handled each breakdown and what breakdowns cost against preventive work
+        competency_questions: [breakdown-technicians, downtime-by-kind]
+    consumer_gates:
+      - name: triage-rows-hold
+        check: row_count_drop
+        task: triage-breakdowns
+        max_drop: 0.10
+  - id: maintenance-assistant
+    name: Maintenance assistant
+    kind: agent
+    contact: Priya Natarajan
+    description: Answers the shift lead's questions about why a machine stopped.
+    tasks:
+      - id: explain-root-causes
+        description: Explain the root cause of each work order
+        competency_questions: [root-causes]
+    consumer_gates:
+      - name: root-causes-hold
+        check: row_count_drop
+        task: explain-root-causes
+        max_drop: 0.10

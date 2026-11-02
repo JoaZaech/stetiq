@@ -128,9 +128,8 @@ def neo4j_databases(neo4j_enterprise) -> tuple[str, ...]:
     return ("neo4j", "other") if neo4j_enterprise else ("neo4j",)
 
 
-@pytest.fixture(scope="session")
-def neo4j_container(neo4j_enterprise):
-    """A throwaway Neo4j server for the whole session; skipped when Docker is unavailable."""
+def _neo4j_server(enterprise: bool):
+    """Start a throwaway Neo4j server; skips the test when Docker is unavailable."""
     try:
         import docker
         from testcontainers.community.neo4j import Neo4jContainer
@@ -141,12 +140,27 @@ def neo4j_container(neo4j_enterprise):
     except Exception as exc:  # noqa: BLE001 - any failure means "no Docker here"
         pytest.skip(f"Docker is unavailable: {exc}")
     container = Neo4jContainer(_neo4j_image(), password="testpassword")
-    if neo4j_enterprise:
+    if enterprise:
         container = container.with_env("NEO4J_ACCEPT_LICENSE_AGREEMENT", "yes")
-    with container:
+    return container
+
+
+@pytest.fixture(scope="session")
+def neo4j_container(neo4j_enterprise):
+    """A throwaway Neo4j server for the whole session; skipped when Docker is unavailable."""
+    with _neo4j_server(neo4j_enterprise) as container:
         if neo4j_enterprise:
             with container.get_driver() as driver:
                 driver.execute_query("CREATE DATABASE other IF NOT EXISTS WAIT", database_="system")
+        yield container
+
+
+@pytest.fixture(scope="session")
+def neo4j_second_container(neo4j_enterprise):
+    """A second throwaway Neo4j server, for tests that need two graph databases (the
+    plant-assistant showcase's candidate and production graphs); started only by the
+    tests that ask for it."""
+    with _neo4j_server(neo4j_enterprise) as container:
         yield container
 
 
