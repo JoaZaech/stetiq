@@ -135,3 +135,40 @@ def test_a_count_change_is_new_on_every_observation_that_raises_it(
         [("count_increase", "Customer", True)],
         [("count_increase", "Customer", True)],
     ]
+
+
+PLANT = """
+node_types:
+  - label: WorkOrder
+  - label: Machine
+relationship_types:
+  - label: ASSIGNED_TO
+patterns:
+  - [WorkOrder, ASSIGNED_TO, Machine]
+"""
+
+
+def seed_work_orders(graph_source, database, on_a_machine, without, machines=1):
+    serving = [graph_source.add_node(["Machine"], {}, database=database) for _ in range(machines)]
+    for _ in range(on_a_machine):
+        order = graph_source.add_node(["WorkOrder"], {}, database=database)
+        graph_source.add_relationship(order, "ASSIGNED_TO", serving[0])
+    for _ in range(without):
+        graph_source.add_node(["WorkOrder"], {}, database=database)
+
+
+def test_a_patterns_out_and_in_degree_findings_are_different_findings(client, graph_source):
+    """The in-degree Coverage drop is new although the previous Observation had the
+    out-degree one on the same pattern, at a lower Coverage."""
+    client.create_knowledge_graph("plant", ontology=PLANT)
+    seed_work_orders(graph_source, "first", on_a_machine=20, without=0)  # out 100%, in 100%
+    seed_work_orders(graph_source, "second", on_a_machine=1, without=19)  # out 5%, in 100%
+    seed_work_orders(graph_source, "third", on_a_machine=1, without=19, machines=2)  # in 50%
+    coverage = DriftThresholds(max_coverage_drop=0.05)
+
+    outcomes = [observe_in(client, "plant", s, thresholds=coverage) for s in (FIRST, SECOND, THIRD)]
+
+    assert [[(f.kind, f.direction, f.new) for f in o.drift.findings] for o in outcomes[1:]] == [
+        [("coverage_drop", "out", True)],
+        [("coverage_drop", "out", False), ("coverage_drop", "in", True)],
+    ]

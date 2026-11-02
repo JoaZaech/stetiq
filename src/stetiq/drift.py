@@ -737,8 +737,9 @@ def mark_new(
 
 
 def _identity(f: DriftFinding) -> tuple[Any, ...]:
-    """What makes two Observations' findings the same one, whatever its kind."""
-    return (f.kind, f.subject, f.subject_kind, f.value, f.violation)
+    """What makes two Observations' findings the same one, whatever its kind. A pattern's
+    out- and in-degree findings (Coverage, cardinality) differ only by `direction`."""
+    return (f.kind, f.subject, f.subject_kind, f.value, f.violation, f.direction)
 
 
 def _is_new(f: DriftFinding, before: DriftFinding | None) -> bool:
