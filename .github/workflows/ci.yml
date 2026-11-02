@@ -1,11 +1,29 @@
 name: CI
 
+# Docs-only changes (Markdown anywhere, anything under docs/) skip CI: they cannot change
+# behaviour. The exceptions are docs/guide/ and docs/vision.md, which the web UI bundles
+# and the tests check (ADR 0004), so they still run it. Later patterns override earlier
+# ones. GitHub ignores path filters on tag pushes, so a release always runs.
 on:
   push:
     branches: [main]
     # A release: the image job publishes :X.Y.Z, :X.Y and :latest.
     tags: ['v*']
+    paths:
+      - '**'
+      - '!**.md'
+      - '!docs/**'
+      - '!.claude/**'
+      - 'docs/guide/**'
+      - 'docs/vision.md'
   pull_request:
+    paths:
+      - '**'
+      - '!**.md'
+      - '!docs/**'
+      - '!.claude/**'
+      - 'docs/guide/**'
+      - 'docs/vision.md'
 
 jobs:
   frontend:
@@ -74,18 +92,20 @@ jobs:
       # The Docker image tests belong where the image is built, not in this job.
       - run: uv run pytest -m "not image"
 
-  # The demo image (Dockerfile). Every run builds both architectures and tests amd64;
-  # only a push to main or of a v* tag publishes it.
+  # The demo image (Dockerfile). Pull requests stop at the tests above. A push to main
+  # builds both architectures and tests amd64, so main is always built and tested; only
+  # a v* tag publishes it.
   image:
     needs: check
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     env:
       IMAGE: ghcr.io/joazaech/stetiq
-      # on.push only fires for main and v* tags, so any push publishes.
-      PUBLISH: ${{ github.event_name == 'push' }}
+      # Only a release tag publishes; a push to main builds and tests without pushing.
+      PUBLISH: ${{ github.ref_type == 'tag' }}
     steps:
       - uses: actions/checkout@v4
       # A release tag must name the version the wheel in the image carries.
@@ -104,17 +124,15 @@ jobs:
           path: src/stetiq/_frontend
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
-      # One place for the image's tags and OCI labels: main gives :main and :sha-<short>;
-      # a tag vX.Y.Z gives :X.Y.Z, :X.Y and :latest. latest=false stops metadata-action
-      # adding :latest on its own, so only a release tag moves it.
+      # One place for the image's tags and OCI labels: a tag vX.Y.Z gives :X.Y.Z, :X.Y
+      # and :latest; main gives none, as it does not publish. latest=false stops
+      # metadata-action adding :latest on its own, so only a release tag moves it.
       - id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.IMAGE }}
           flavor: latest=false
           tags: |
-            type=ref,event=branch
-            type=sha,enable=${{ github.ref_type != 'tag' }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
@@ -141,9 +159,9 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # Pull requests still build both architectures, so a Dockerfile that breaks arm64
-      # fails before merge; only main and release tags push.
-      - name: Build amd64 + arm64, and push from main or a release tag
+      # main builds both architectures too, so a Dockerfile that breaks arm64 fails on
+      # main, not first at release; only a release tag pushes.
+      - name: Build amd64 + arm64, and push from a release tag
         uses: docker/build-push-action@v6
         with:
           context: .
