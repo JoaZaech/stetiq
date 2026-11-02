@@ -154,19 +154,27 @@ class ConsumerGateOutcome:
 
 
 @dataclass(frozen=True)
+class BaselineUseCase:
+    """The Use Case Version a baseline run's Competency Questions were executed under:
+    its number and its question ids."""
+
+    version: int
+    questions: frozenset[str]
+
+
+@dataclass(frozen=True)
 class ConsumerGateInputs:
     """The row counts of the Candidate run and the baseline run (None: no baseline run),
     by Competency Question id. `baseline_version` is the Contract Alias's version, None
-    when it points to none. `baseline_use_case_version` is the Use Case Version the
-    baseline run's questions were executed under, and `baseline_questions` its question
-    ids (empty when the baseline run executed none: it had no Use Case)."""
+    when it points to none. `baseline_use_case` is what the baseline run's questions were
+    executed under; None when it executed none (no Use Case, or no Graph Source), so no
+    question counts as new and each one lacks its baseline row count."""
 
     task_questions: Mapping[str, Sequence[str]]  # Task id -> its Competency Question ids
     candidate: Mapping[str, QuestionRows]
     baseline: Mapping[str, QuestionRows] | None
     baseline_version: int | None
-    baseline_use_case_version: int | None = None
-    baseline_questions: frozenset[str] = frozenset()
+    baseline_use_case: BaselineUseCase | None = None
 
 
 def evaluate_consumer_gate(
@@ -204,16 +212,18 @@ def evaluate_consumer_gate(
         )
     findings_list: list[RowCountFinding] = []
     reasons: list[str] = []
-    new = tuple(q for q in questions if q not in inputs.baseline_questions)
+    baseline_use_case = inputs.baseline_use_case
+    new = (
+        ()
+        if baseline_use_case is None
+        else tuple(q for q in questions if q not in baseline_use_case.questions)
+    )
     for q in questions:
-        if q in new:
-            judged_by = (
-                "the baseline run executed no Competency Question"
-                if inputs.baseline_use_case_version is None
-                else f"not in the baseline run's Use Case Version "
-                f"{inputs.baseline_use_case_version}"
+        if baseline_use_case is not None and q in new:
+            reasons.append(
+                f"{gate.task} / {q}: new, no baseline (not in the baseline run's Use Case "
+                f"Version {baseline_use_case.version})"
             )
-            reasons.append(f"{gate.task} / {q}: new, no baseline ({judged_by})")
             continue
         before, after = inputs.baseline.get(q), inputs.candidate.get(q)
         missing = _missing(before, after)

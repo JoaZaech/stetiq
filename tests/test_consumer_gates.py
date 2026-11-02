@@ -473,6 +473,28 @@ def test_a_new_question_without_a_baseline_run_still_fails(client, plant, graph_
     assert {f.missing for f in outcome.findings} == {"no_baseline_run"}
 
 
+def test_a_baseline_run_that_executed_no_question_is_a_missing_baseline(client, graph_source):
+    # The baseline run had no Use Case, so it recorded no executed questions at all:
+    # nothing on it can be compared, which is a missing baseline, not "every question new".
+    client.create_knowledge_graph(KG, ontology=ONTOLOGY)
+    client.bind_graph_source(KG, GraphSourceScope(database="neo4j"))
+    baseline = run_with(client, graph_source)
+    client.register_use_case(KG, USE_CASE)
+    run_with(client, graph_source)
+
+    result, outcome = outcome_of(
+        client.evaluate_consumer_gates(KG, consumer="maintenance-assistant"),
+        "maintenance-assistant",
+    )
+
+    assert result.baseline_run_id == baseline.id
+    assert not result.passed and not outcome.passed
+    assert outcome.new_questions == ()
+    assert [(f.competency_question, f.missing, f.after) for f in outcome.findings] == [
+        ("machines", "baseline_missing", 4)
+    ]
+
+
 def test_a_baseline_of_zero_rows_cannot_drop(client, plant, graph_source):
     run_with(client, graph_source, technicians=0)
     run_with(client, graph_source, technicians=0)

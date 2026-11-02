@@ -92,7 +92,12 @@ from stetiq.tracking.entities import (
 from stetiq.tracking.store import Store
 from stetiq.use_case import UseCase
 from stetiq.use_case.concepts import ConceptRef, PropertyRef, parse_concept_reference
-from stetiq.use_case.consumer_gates import ConsumerGateInputs, QuestionRows, evaluate_consumer_gate
+from stetiq.use_case.consumer_gates import (
+    BaselineUseCase,
+    ConsumerGateInputs,
+    QuestionRows,
+    evaluate_consumer_gate,
+)
 
 # What the SDK observed at the end of a run: the scope it read and the Observed Schema.
 # The Observation itself happens SDK-side (the Graph Source adapter and its credentials
@@ -1185,12 +1190,14 @@ class LocalTrackingService:
                 if baseline is None
                 else self._question_rows(knowledge_graph, baseline),
                 baseline_version=contract,
-                baseline_use_case_version=None
+                baseline_use_case=None
                 if baseline_use_case is None
-                else baseline_use_case.number,
-                baseline_questions=frozenset()
-                if baseline_use_case is None
-                else frozenset(q.id for q in baseline_use_case.use_case.competency_questions),
+                else BaselineUseCase(
+                    version=baseline_use_case.number,
+                    questions=frozenset(
+                        q.id for q in baseline_use_case.use_case.competency_questions
+                    ),
+                ),
             )
             evaluated_at = _now()
             results = []
