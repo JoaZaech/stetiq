@@ -1,7 +1,7 @@
 {
  "prompt_version": "v2",
  "model": "claude-opus-5-5",
- "recorded_at": "2026-11-01",
+ "recorded_at": "2026-11-02",
  "report": "WO-2037.txt",
  "response": {
   "nodes": [
@@ -157,7 +157,7 @@
   "definitions": [
    {
     "concept": "Supplier",
-    "definition": "A vendor from which a replacement component was ordered."
+    "definition": "A vendor from which replacement components are ordered."
    },
    {
     "concept": "Supplier.name",
@@ -165,7 +165,7 @@
    },
    {
     "concept": "SUPPLIED_BY",
-    "definition": "Links a component to the supplier a replacement for it was ordered from."
+    "definition": "The supplier from which a replacement for the component was ordered."
    }
   ]
  }
