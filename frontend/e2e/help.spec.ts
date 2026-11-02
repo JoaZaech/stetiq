@@ -110,9 +110,9 @@ test('Getting started shows how to try stetiq with Docker', async ({ page }) => 
   const body = page.getByRole('article')
 
   await expect(body.getByRole('heading', { name: 'Try it with Docker' })).toBeInViewport()
-  await expect(body.locator('pre code').filter({ hasText: 'docker run' }).first()).toContainText(
-    'docker run --rm -p 5000:5000 ghcr.io/joazaech/stetiq',
-  )
+  await expect(
+    body.locator('pre code', { hasText: 'docker run --rm -p 5000:5000 ghcr.io/joazaech/stetiq' }).first(),
+  ).toBeVisible()
 })
 
 test('an unknown guide page shows the not-found page', async ({ page }) => {

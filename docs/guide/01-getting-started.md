@@ -18,9 +18,9 @@ To look around before installing anything, run the demo image:
 docker run --rm -p 5000:5000 ghcr.io/joazaech/stetiq
 ```
 
-Then open <http://localhost:5000/ui>. The web UI shows the *plant-kg* example: a factory's maintenance Knowledge Graph with its Ontology Versions, Construction Runs, Gates and Promotions, and actions recorded under the actor `demo`. What you change is kept only inside the container, so the demo starts over when the container restarts.
+Then open <http://localhost:5000/ui>. The web UI shows the *plant-kg* example: a factory's maintenance Knowledge Graph with its Ontology Versions, Construction Runs, Gates and Promotions, and actions recorded under the actor `demo`. What you change is kept only inside the container, and `--rm` removes the container when it stops, so each `docker run` starts from the clean demo.
 
-To open your own tracking database instead, mount its folder and point `$STETIQ_TRACKING_URI` at it:
+To open your own tracking database instead, mount its folder and point `$STETIQ_TRACKING_URI` at it (see [Tracking URI](./04-cli.md#tracking-uri)):
 
 ```bash
 docker run --rm -p 5000:5000 \
@@ -29,9 +29,9 @@ docker run --rm -p 5000:5000 \
   ghcr.io/joazaech/stetiq
 ```
 
-This opens `.stetiq/stetiq.db` from the current folder, the default `stetiq ui` uses, and changes are written back to it. A `postgresql://` URI works too, with no volume. On Linux the container runs as user ID 1000, which needs write access to the mounted folder.
+This opens `.stetiq/stetiq.db` from the current folder, the default `stetiq ui` uses, and changes are written back to it. The image sets `$STETIQ_ACTOR` to `demo`, so the audit log records your changes under `demo` here too; add `-e STETIQ_ACTOR=<name>` to record them under your own name. On Linux the container runs as user ID 1000, which needs write access to the mounted folder.
 
-The web UI in the image has no sign-in: anyone who can reach the port can read and change your Knowledge Graphs. To keep it on your own machine, publish the port as `-p 127.0.0.1:5000:5000` rather than on a public interface.
+The web UI in the image runs `stetiq ui --no-auth` (see [Web UI, server and API Tokens](./04-cli.md#web-ui-server-and-api-tokens)), so it has no sign-in: anyone who can reach the port can read and change your Knowledge Graphs. To keep it on your own machine, publish the port as `-p 127.0.0.1:5000:5000` rather than on a public interface.
 
 ## Install
 
