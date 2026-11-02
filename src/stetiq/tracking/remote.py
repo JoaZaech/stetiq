@@ -355,6 +355,13 @@ class RemoteTrackingService:
         data = self._call("GET", self._kg_path(knowledge_graph) + "/gate-results")
         return [codec.gate_result_from_json(r) for r in data]
 
+    def latest_gate_result(
+        self, knowledge_graph: str, *, run: str | None = None, version: int | None = None
+    ) -> GateResult | None:
+        path = f"{self._kg_path(knowledge_graph)}/latest-gate-result"
+        data = self._call("GET", path + _query(run=run, version=version))
+        return None if data is None else codec.gate_result_from_json(data)
+
     def preview_gates(self, knowledge_graph: str) -> list[GatePreview]:
         data = self._call("GET", self._kg_path(knowledge_graph) + "/gate-previews")
         return [codec.gate_preview_from_json(p) for p in data]
@@ -377,12 +384,14 @@ class RemoteTrackingService:
     def list_consumer_gate_results(
         self, knowledge_graph: str, *, consumer: str | None = None, version: int | None = None
     ) -> list[ConsumerGateResult]:
-        filters = [
-            f"{key}={quote(str(value), safe='')}"
-            for key, value in (("consumer", consumer), ("version", version))
-            if value is not None
-        ]
         path = f"{self._kg_path(knowledge_graph)}/consumer-gate-results"
-        if filters:
-            path += "?" + "&".join(filters)
-        return [codec.consumer_gate_result_from_json(r) for r in self._call("GET", path)]
+        data = self._call("GET", path + _query(consumer=consumer, version=version))
+        return [codec.consumer_gate_result_from_json(r) for r in data]
+
+
+def _query(**filters: str | int | None) -> str:
+    """`?key=value&…` for the filters given (not None), each value URL-quoted; "" for none."""
+    given = [
+        f"{key}={quote(str(value), safe='')}" for key, value in filters.items() if value is not None
+    ]
+    return "?" + "&".join(given) if given else ""

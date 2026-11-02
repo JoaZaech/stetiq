@@ -12,6 +12,7 @@ store rows); format conversion is the SDK's job.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import uuid
 from collections.abc import Mapping, Sequence
@@ -359,6 +360,16 @@ class TrackingService(Protocol):
 
     def list_gate_results(self, knowledge_graph: str) -> list[GateResult]:
         """Every recorded Gate evaluation, oldest first."""
+        ...
+
+    def latest_gate_result(
+        self, knowledge_graph: str, *, run: str | None = None, version: int | None = None
+    ) -> GateResult | None:
+        """The latest recorded Gate result about Construction Run `run`, else about the
+        Ontology Version it stands for; a run that did not finish (strict Evolution Mode
+        failed it) stands for none. Without a run, the latest about Ontology Version
+        `version` (default: the latest). Read, never evaluated (ADR 0007); None when
+        none was recorded."""
         ...
 
     def preview_gates(self, knowledge_graph: str) -> list[GatePreview]:
@@ -790,18 +801,23 @@ class LocalTrackingService:
             ]
             if not ended:
                 return None
-            run = ended[-1]
+            # The one that ended last, whatever order the runs started in.
+            run = max(reversed(ended), key=lambda r: r.ended_at or r.started_at)
             if run.candidate_version is not None:
                 candidate = self.get_ontology_version(
                     knowledge_graph, run.candidate_version
                 ).ontology
-            elif run.status == "failed" and run.observation_id is not None:
+                return EndedRun(run=run, candidate=candidate)
+            if run.status == "failed" and run.observation_id is not None:
                 # Strict Evolution Mode failed it: what `end_run` would have registered.
                 observed = self.get_observation(run.observation_id).schema
-                candidate = candidate_ontology(consumed.ontology, observed)
-            else:
-                candidate = None
-            return EndedRun(run=run, candidate=candidate)
+                would_be = candidate_ontology(consumed.ontology, observed)
+                if would_be is not None:
+                    candidate, withheld = _without_observed_values(consumed.ontology, would_be)
+                    return EndedRun(
+                        run=run, candidate=candidate, withheld_vocabulary_values=withheld
+                    )
+            return EndedRun(run=run)
 
     def _running(self, run_id: str) -> ConstructionRun:
         run = self.get_run(run_id)
@@ -1140,6 +1156,35 @@ class LocalTrackingService:
         self.get_knowledge_graph(knowledge_graph)
         return self._store.list_gate_results(knowledge_graph)
 
+    def latest_gate_result(
+        self, knowledge_graph: str, *, run: str | None = None, version: int | None = None
+    ) -> GateResult | None:
+        if version is not None and run is not None:
+            raise ConflictingArgumentsError(
+                "A Gate result is read for a version or a run, not both"
+            )
+        with self._store.transaction():
+            if run is not None:
+                self._check_subject(knowledge_graph, "construction_run", run)
+                about_run = self._latest_gate_result_about(knowledge_graph, "construction_run", run)
+                subject = self.get_run(run)
+                if about_run is not None or subject.status != "finished":
+                    return about_run
+                version = _stands_for(subject)
+            elif version is None:
+                version = self.list_ontology_versions(knowledge_graph)[-1].number
+            else:
+                self.get_ontology_version(knowledge_graph, version)
+            return self._latest_gate_result_about(knowledge_graph, "ontology_version", str(version))
+
+    def _latest_gate_result_about(
+        self, knowledge_graph: str, subject_kind: SubjectKind, subject_id: str
+    ) -> GateResult | None:
+        for result in reversed(self._store.list_gate_results(knowledge_graph)):
+            if (result.subject_kind, result.subject_id) == (subject_kind, subject_id):
+                return result
+        return None
+
     def preview_gates(self, knowledge_graph: str) -> list[GatePreview]:
         with self._store.transaction():
             results = self.list_gate_results(knowledge_graph)
@@ -1348,6 +1393,19 @@ def _latest_per_evaluator(results: Sequence[EvaluationResult]) -> list[Evaluatio
 def _stands_for(run: ConstructionRun) -> int:
     """The Ontology Version a run stands for: its Candidate, else the version it consumed."""
     return run.candidate_version or run.ontology_version
+
+
+def _without_observed_values(consumed: Ontology, would_be: Ontology) -> tuple[Ontology, int]:
+    """A strict-failed run's would-be Candidate without the Vocabulary Values it would
+    have added to `consumed`, and how many it would have added. That Candidate was never
+    registered, so those values were observed in the graph and never became Ontology
+    (ADR 0012). A would-be Candidate only extends the Vocabularies `consumed` declares."""
+    declared = {v.label: v for v in consumed.vocabularies}
+    vocabularies = tuple(declared.get(v.label, v) for v in would_be.vocabularies)
+    withheld = sum(len(v.values) for v in would_be.vocabularies) - sum(
+        len(v.values) for v in vocabularies
+    )
+    return dataclasses.replace(would_be, vocabularies=vocabularies), withheld
 
 
 def _now() -> datetime:

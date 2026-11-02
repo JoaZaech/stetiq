@@ -203,7 +203,7 @@ SAMPLES: dict[type, Any] = {
         ontology=ONTOLOGY,
     ),
     ConstructionRun: RUN,
-    EndedRun: EndedRun(run=RUN, candidate=ONTOLOGY),
+    EndedRun: EndedRun(run=RUN, candidate=ONTOLOGY, withheld_vocabulary_values=2),
     Observation: OBSERVATION,
     Alias: Alias(knowledge_graph="support", name="staging", version=2, updated_at=AT),
     Promotion: Promotion(

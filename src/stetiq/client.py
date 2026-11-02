@@ -143,19 +143,6 @@ def _without_details(results: Sequence[EvaluationResult]) -> tuple[EvaluationRes
     )
 
 
-def _without_observed_values(added: OntologyDiff) -> tuple[OntologyDiff, int]:
-    """A strict-failed run's would-be Ontology Diff without the Vocabulary Values it
-    would have added, and how many were withheld. That Candidate was never registered,
-    so those values were observed in the graph and never became Ontology: the run context
-    withholds them for the reason it drops Conformance details (ADR 0012)."""
-    kept = tuple(
-        c
-        for c in added.changes
-        if not (c.concept_kind == "vocabulary" and c.value is not None and c.kind == "added")
-    )
-    return OntologyDiff(kept), len(added.changes) - len(kept)
-
-
 def _to_ontology(ontology: OntologyInput) -> Ontology:
     if isinstance(ontology, Ontology):
         return ontology
@@ -465,9 +452,10 @@ class Client:
             question_executions=executed_questions(run_results),
             verdicts=self._recorded_verdicts(
                 knowledge_graph,
+                use_case_version,
+                # A finished run stands for this version: its Gate result falls back to it.
                 run=None if run is None else run.id,
-                ontology_version=ontology_version.number,
-                use_case_version=use_case_version,
+                version=ontology_version.number if run is None else None,
             ),
             last_attempt=self._last_attempt(knowledge_graph, ontology_version, use_case_version),
         )
@@ -485,46 +473,28 @@ class Client:
             return None
         run = ended.run
         results = self._service.get_evaluation_results(knowledge_graph, "construction_run", run.id)
-        added = diff_ontologies(consumed.ontology, ended.candidate or consumed.ontology)
-        withheld = 0
-        if run.candidate_version is None:  # never registered: what it saw is not Ontology
-            added, withheld = _without_observed_values(added)
         return LastAttempt(
             run=run,
-            added=added,
-            withheld_vocabulary_values=withheld,
+            added=diff_ontologies(consumed.ontology, ended.candidate or consumed.ontology),
+            withheld_vocabulary_values=ended.withheld_vocabulary_values,
             evaluation_results=_without_details(results),
             question_executions=executed_questions(results),
-            verdicts=self._recorded_verdicts(
-                knowledge_graph,
-                run=run.id,
-                # A strict-failed run stands for no version: no fallback Gate result.
-                ontology_version=None
-                if run.status != "finished"
-                else run.candidate_version or run.ontology_version,
-                use_case_version=use_case_version,
-            ),
+            verdicts=self._recorded_verdicts(knowledge_graph, use_case_version, run=run.id),
         )
 
     def _recorded_verdicts(
         self,
         knowledge_graph: str,
-        *,
-        run: str | None,
-        ontology_version: int | None,
         use_case_version: UseCaseVersion | None,
+        *,
+        run: str | None = None,
+        version: int | None = None,
     ) -> RecordedVerdicts:
-        """The verdicts CI recorded about Construction Run `run` (None: no run), read
-        and never evaluated (ADR 0007): the latest Gate result about the run, else about
-        Ontology Version `ontology_version` (None: no fallback), and for each Consumer of
-        `use_case_version` declaring a Consumer Gate its latest Consumer Gate result about
-        the run."""
-        gate_results = self.list_gate_results(knowledge_graph)  # oldest first
-
-        def latest_about(kind: str, subject: str | None) -> GateResult | None:
-            about = [r for r in gate_results if (r.subject_kind, r.subject_id) == (kind, subject)]
-            return about[-1] if about else None
-
+        """The verdicts CI recorded, read and never evaluated (ADR 0007): the service's
+        latest Gate result about Construction Run `run` (or Ontology Version `version`),
+        and for each Consumer of `use_case_version` declaring a Consumer Gate its latest
+        Consumer Gate result about the run."""
+        gate_result = self._service.latest_gate_result(knowledge_graph, run=run, version=version)
         gated = (
             []
             if use_case_version is None
@@ -535,11 +505,6 @@ class Client:
             for result in self.list_consumer_gate_results(knowledge_graph):  # oldest first
                 if result.run_id == run:
                     latest[result.consumer] = result
-        gate_result = latest_about("construction_run", run) or (
-            None
-            if ontology_version is None
-            else latest_about("ontology_version", str(ontology_version))
-        )
         return RecordedVerdicts(
             gate_result=None if gate_result is None else without_quoted_reasons(gate_result),
             consumer_gate_results={consumer: latest.get(consumer) for consumer in gated},

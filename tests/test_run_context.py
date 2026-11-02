@@ -535,6 +535,20 @@ def test_a_crashed_run_is_skipped_for_the_last_ended_one(client, plant, graph_so
     assert data["added"] == {"classification": None, "changes": []}
 
 
+def test_of_two_overlapping_runs_the_one_that_ended_last_is_the_last_attempt(
+    client, plant, graph_source
+):
+    finish_a_run(client, graph_source)
+    started_first = client.start_run("plant")
+    started_second = client.start_run("plant")
+    started_second.end()
+    started_first.end()  # ends last, though it started first
+
+    data = client.run_context("plant").to_dict()["last_attempt"]
+
+    assert data["id"] == started_first.id
+
+
 def test_the_last_attempt_is_null_on_a_fresh_knowledge_graph(client, plant):
     assert client.run_context("plant").to_dict()["last_attempt"] is None
 
