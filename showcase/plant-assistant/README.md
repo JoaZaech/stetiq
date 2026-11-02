@@ -143,13 +143,15 @@ for them.
 **Epilogue (`--epilogue`, if there is time).** Someone edits `graph-production` by hand:
 
 ```text
-hand edit: +3 SparePart, −6 done FollowUp   Drift ⚠ against production -> v3 (3 structural, 3 statistical)
+hand edit: +3 SparePart, −6 done FollowUp   Drift ⚠ against production -> v3 (3 structural, 5 statistical)
     undeclared      SparePart
     undeclared      SparePart.name
     undeclared      SparePart.stock
     count_drop      FollowUp  count dropped from 12 to 6 (-50%)
     count_drop      ASSIGNED_TO  count dropped from 20 to 14 (-30%)
     count_drop      HAS_FOLLOW_UP  count dropped from 12 to 6 (-50%)
+    count_drop      (FollowUp)-[ASSIGNED_TO]->(Technician)  count dropped from 12 to 6 (-50%)
+    count_drop      (WorkOrder)-[HAS_FOLLOW_UP]->(FollowUp)  count dropped from 12 to 6 (-50%)
 ```
 
 The Drift event is in `stetiq ui`. *Say:* the same contract that gates a release also

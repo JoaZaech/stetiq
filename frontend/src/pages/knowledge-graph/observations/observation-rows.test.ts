@@ -57,6 +57,18 @@ describe('formatThresholds', () => {
       'max drop 10% · max rise off · max violation rise off',
     )
   })
+
+  it('adds the fill-rate drop and min count only when set', () => {
+    expect(
+      formatThresholds({
+        max_count_drop: null,
+        max_count_increase: null,
+        max_violation_increase: null,
+        max_fill_rate_drop: 0.05,
+        min_count: 100,
+      }),
+    ).toBe('max drop off · max rise off · max violation rise off · max fill drop 5 pts · min count 100')
+  })
 })
 
 describe('notComparableRows', () => {

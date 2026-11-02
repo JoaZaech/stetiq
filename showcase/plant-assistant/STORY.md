@@ -121,10 +121,11 @@ Someone edits `graph-production` by hand: adds `SparePart` nodes and deletes the
 follow-ups. The next Observation records Drift against `production` in `stetiq ui`
 (`show.py --epilogue`):
 
-- Terminal: `hand edit: +3 SparePart, −6 done FollowUp   Drift ⚠ against production -> v3 (3 structural, 3 statistical)`
+- Terminal: `hand edit: +3 SparePart, −6 done FollowUp   Drift ⚠ against production -> v3 (3 structural, 5 statistical)`
 - Structural: `SparePart`, `SparePart.name` and `SparePart.stock` are undeclared by v3.
 - Statistical (beyond `stetiq.yaml`'s `max_count_drop: 0.25`): `FollowUp` 12 → 6,
-  `HAS_FOLLOW_UP` 12 → 6, `ASSIGNED_TO` 20 → 14.
+  `HAS_FOLLOW_UP` 12 → 6, `ASSIGNED_TO` 20 → 14, and the patterns
+  `(WorkOrder)-[HAS_FOLLOW_UP]->(FollowUp)` 12 → 6 and `(FollowUp)-[ASSIGNED_TO]->(Technician)` 12 → 6.
 
 ## If something goes wrong on stage
 

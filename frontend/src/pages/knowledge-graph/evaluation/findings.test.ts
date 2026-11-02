@@ -86,6 +86,21 @@ describe('findingsFromDrift', () => {
       ['Attribute', 'Violation Rate rose', 'Required but not always set: 0.5% → 3% (+2.5 pts)'],
     ])
   })
+
+  it('shows a fallen fill rate as baseline → now', () => {
+    const rows = findingsFromDrift([
+      drift({
+        kind: 'fill_rate_drop',
+        subject: 'Ticket.opened_at',
+        subject_kind: 'property',
+        previous_count: null,
+        observed_count: null,
+        baseline_rate: 1,
+        observed_rate: 0.8,
+      }),
+    ])
+    expect(rows.map((r) => [r.kind, r.finding, r.change])).toEqual([['Attribute', 'Fill rate fell', '100% → 80% (−20 pts)']])
+  })
 })
 
 describe('countChange', () => {

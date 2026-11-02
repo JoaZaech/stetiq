@@ -106,10 +106,13 @@ The graph can change between runs: someone edits it by hand, or another process 
 
 stetiq also watches statistics:
 
-- **Counts** are compared with the previous Observation, and a change beyond your thresholds is Drift.
+- **Counts** of classes, relations and patterns are compared with the previous Observation, and a change beyond your thresholds is Drift.
 - **Violation Rates** are compared with the **Baseline Observation**. A Violation Rate is the share of nodes or relationships that fail a Conformance check, e.g. the share of Customers without their required `name`. The Baseline Observation is the first Observation (the end of a Construction Run counts) since the Contract Alias's current Ontology Version became the contract, by a Promotion or by switching the Contract Alias. A rate more than one percentage point above its baseline value is Drift (`violation_increase`, see [`drift`](./06-stetiq-yaml.md#drift)). So a slow decay shows up even when no two Observations differ much, and a graph that has always had a few gaps doesn't alert on every Observation. The first Observation after a Promotion is its own baseline, so it raises no rate Drift.
+- **Fill rates** of declared attributes that aren't required (the share of nodes or relationships that have the attribute) are compared with the Baseline Observation too, if you set a threshold. Only a drop is Drift (`fill_rate_drop`).
 
-A check that lacks its input raises no Drift. It is listed with the Observation as **not comparable** instead, e.g. when the Baseline Observation didn't observe the Attribute at all, or when an Attribute had more distinct values than stetiq reads, so their share is unknown.
+Relative changes on small numbers are noise: a class falling from 3 to 2 nodes is a third of it. Set `min_count` to skip the statistical checks of classes, relations, patterns and attribute owners with fewer nodes or relationships than that.
+
+A check that lacks its input raises no Drift. It is listed with the Observation as **not comparable** instead, e.g. when the Baseline Observation didn't observe the Attribute at all, when a class is below `min_count`, or when an Attribute had more distinct values than stetiq reads, so their share is unknown.
 
 ## Where your data stays
 

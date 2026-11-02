@@ -89,17 +89,21 @@ drift:
   max_count_drop: 0.1           # a node or relationship type losing more than 10% is Drift
   max_count_increase: 0.5       # a type growing by more than 50% is Drift
   max_violation_increase: 0.02  # a Violation Rate 2 points above its baseline is Drift
+  max_fill_rate_drop: 0.05      # an optional attribute filled 5 points less than at the baseline is Drift
+  min_count: 100                # types, patterns and owners with fewer than 100 aren't compared
 ```
 
 | Key | Compared with | Drift when | Default |
 | --- | --- | --- | --- |
-| `max_count_drop` | the previous Observation | A node or relationship type's count falls by more than this fraction of its previous count (`0.1` is 10%). | off |
-| `max_count_increase` | the previous Observation | A node or relationship type's count rises by more than this fraction of its previous count. | off |
+| `max_count_drop` | the previous Observation | A node or relationship type's or a pattern's count falls by more than this fraction of its previous count (`0.1` is 10%). A pattern's finding is on the pattern, e.g. `(Customer)-[OPENED]->(Ticket)`. | off |
+| `max_count_increase` | the previous Observation | A node or relationship type's or a pattern's count rises by more than this fraction of its previous count. | off |
 | `max_violation_increase` | the [Baseline Observation](./02-concepts.md#observation-and-drift) | A Violation Rate rises more than this many absolute points above its value in the Baseline Observation (`0.01` is one percentage point, e.g. 0.5% to more than 1.5%). The finding is `violation_increase`, with both rates. Today it covers required attributes that aren't always set. | `0.01` |
+| `max_fill_rate_drop` | the Baseline Observation | A declared attribute that isn't required is set on a share of its nodes or relationships more than this many absolute points below its share in the Baseline Observation (`0.05` is 5 points, e.g. 90% to less than 85%). Only drops count. The finding is `fill_rate_drop`, with both fill rates. A required attribute has its Violation Rate instead. | off |
+| `min_count` | the Observation each check compares with | A whole number. A node or relationship type or a pattern with fewer than this many in the previous Observation isn't checked for count changes. A Violation Rate or fill rate whose node or relationship type has fewer than this many, in the Baseline Observation or now, isn't checked either. Each skipped check is *not comparable*. | `0` |
 
-Every key is optional, and each must be a non-negative number or `null`. A missing key takes its default, and `null` turns that check off (`max_violation_increase: null`). A change exactly at the threshold isn't Drift. Structural Drift (Concepts that are observed but not declared by the Contract Alias's Ontology Version, or declared but no longer observed, and values outside a bound attribute's Vocabulary) is always checked.
+Every key is optional. Each threshold must be a non-negative number or `null`, and `min_count` a non-negative whole number. A missing key takes its default, and `null` turns that check off (`max_violation_increase: null`). A change exactly at the threshold isn't Drift. Structural Drift (Concepts that are observed but not declared by the Contract Alias's Ontology Version, or declared but no longer observed, and values outside a bound attribute's Vocabulary) is always checked.
 
-A check that lacks its input never raises Drift: a Violation Rate whose Attribute the Baseline Observation didn't observe, or the share of a value outside the Vocabulary when the attribute had more distinct values than stetiq reads. `stetiq observe` prints one `Not comparable: N checks` line for them, and the web UI lists them with the Observation.
+A check that lacks its input never raises Drift: a Violation Rate whose Attribute the Baseline Observation didn't observe, a fill rate whose node or relationship type it didn't observe, a type, pattern or owner below `min_count`, or the share of a value outside the Vocabulary when the attribute had more distinct values than stetiq reads. `stetiq observe` prints one `Not comparable: N checks` line for them, and the web UI lists them with the Observation.
 
 Any other key in `drift:` is an error. `stetiq observe` exits 3 on Drift and 1 on an error. If you run it without `--config` and there is no `./stetiq.yaml`, it uses an empty config. A `--config` file that doesn't exist is an error.
 
