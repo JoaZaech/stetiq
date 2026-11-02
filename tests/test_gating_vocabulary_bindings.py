@@ -150,7 +150,7 @@ def test_an_accepted_binding_beside_another_breaking_change_still_fails(client, 
 
     assert not outcome.passed
     assert outcome.reasons == (
-        "breaking change (v1 -> v2): removed WorkOrder.title: property WorkOrder.title removed",
+        "breaking change (v1 -> v2): removed WorkOrder.title: Attribute WorkOrder.title removed",
         ACCEPTED,
     )
 
