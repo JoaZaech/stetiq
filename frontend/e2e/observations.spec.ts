@@ -83,11 +83,11 @@ test.describe('with Drift', () => {
     // Concept kinds in the glossary's words: Class, Relation, Attribute.
     const findings = sheet.getByRole('table', { name: 'Findings' }).getByRole('row')
     await expect(findings).toHaveText([
-      'ConceptKindFindingChange',
-      /^TicketClassCount rose1 → 4 \(\+300%\)$/,
-      /^ESCALATEDRelationObserved but not declared$/,
-      /^RefundClassObserved but not declared$/,
-      /^Ticket\.channelAttributeObserved but not declared$/,
+      'ConceptKindFindingChangeStatus',
+      /^TicketClassCount rose1 → 4 \(\+300%\)New$/,
+      /^ESCALATEDRelationObserved but not declaredNew$/,
+      /^RefundClassObserved but not declaredNew$/,
+      /^Ticket\.channelAttributeObserved but not declaredNew$/,
     ])
     await expect(sheet).not.toContainText(/node type|relationship type|property/)
     await expect(sheet).not.toContainText(/Pending Migration|Adopt into a Candidate|Planned/)
@@ -109,9 +109,9 @@ test.describe('with Violation Rates', () => {
 
     const sheet = page.getByRole('dialog')
     await expect(sheet.getByRole('table', { name: 'Findings' }).getByRole('row')).toHaveText([
-      'ConceptKindFindingChange',
-      /^WorkOrder\.statusAttributeValue outside the Vocabulary“on_hold” × 2$/,
-      /^WorkOrder\.codeAttributeViolation Rate roseRequired but not always set: 0% → 50% \(\+50 pts\)$/,
+      'ConceptKindFindingChangeStatus',
+      /^WorkOrder\.statusAttributeValue outside the Vocabulary“on_hold” × 2New$/,
+      /^WorkOrder\.codeAttributeViolation Rate roseRequired but not always set: 0% → 50% \(\+50 pts\)New$/,
     ])
     await expect(sheet.getByRole('table', { name: 'Not comparable' }).getByRole('row')).toHaveText([
       'SubjectKindCheckReason',
@@ -125,6 +125,21 @@ test.describe('with Violation Rates', () => {
     await page.getByRole('table', { name: 'Observations' }).getByRole('row').nth(2).click()
 
     await expect(page.getByRole('dialog')).toContainText('baseline: itself')
+  })
+})
+
+test.describe('with persisting Drift', () => {
+  test.use({ seed: 'observed_persisting_drift' })
+
+  test('the sheet lists new findings first, then those the previous Observation had too', async ({ page }) => {
+    await page.goto('/ui/kg/support/observations')
+    await page.getByRole('table', { name: 'Observations' }).getByRole('row').nth(1).click()
+
+    await expect(page.getByRole('dialog').getByRole('table', { name: 'Findings' }).getByRole('row')).toHaveText([
+      'ConceptKindFindingChangeStatus',
+      /^RefundClassObserved but not declaredNew$/,
+      /^AgentClassObserved but not declaredPersisting$/,
+    ])
   })
 })
 

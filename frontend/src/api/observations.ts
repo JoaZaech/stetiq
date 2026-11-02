@@ -111,6 +111,8 @@ export interface DriftFinding {
    * Coverage); on `violation_increase` of a `cardinality_violation`, which degree's rate rose.
    */
   direction?: 'out' | 'in'
+  /** False when the previous Observation had it too (a rate finding: at a rate no better). */
+  new: boolean
 }
 
 /** drift.NotComparable: a check that lacked its input, so it raised no finding. */

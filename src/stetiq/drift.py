@@ -93,6 +93,9 @@ class DriftFinding:
     baseline_rate: float | None = None
     observed_rate: float | None = None
     direction: Direction | None = None
+    # False when the previous Observation already had it (see `mark_new`). Findings stored
+    # before this distinction read as new: each of them made `stetiq observe` exit 3.
+    new: bool = True
 
     @property
     def structural(self) -> bool:
@@ -106,6 +109,7 @@ class DriftFinding:
             "detail": self.detail,
             "previous_count": self.previous_count,
             "observed_count": self.observed_count,
+            "new": self.new,
         }
         optional = {
             "value": self.value,
@@ -136,6 +140,7 @@ class DriftFinding:
             baseline_rate=d.get("baseline_rate"),
             observed_rate=d.get("observed_rate"),
             direction=d.get("direction"),
+            new=d.get("new", True),
         )
 
 
@@ -717,3 +722,30 @@ def _counts(types: Any) -> dict[str, int]:
 
 def _pattern_counts(schema: ObservedSchema) -> dict[str, int]:
     return {str(p.pattern): p.count for p in schema.patterns}
+
+
+def mark_new(
+    findings: tuple[DriftFinding, ...], previous: tuple[DriftFinding, ...]
+) -> tuple[DriftFinding, ...]:
+    """`findings` with each marked new or persisting by comparison with `previous`, the
+    previous Observation's findings. A finding persists when `previous` has one with the
+    same identity (`_identity`), and, for a rate finding, when its rate has not worsened
+    since: moved further from the baseline in the direction it drifted. A count finding
+    is always new, since it is itself a change since the previous Observation."""
+    before = {_identity(f): f for f in previous}
+    return tuple(replace(f, new=_is_new(f, before.get(_identity(f)))) for f in findings)
+
+
+def _identity(f: DriftFinding) -> tuple[Any, ...]:
+    """What makes two Observations' findings the same one, whatever its kind."""
+    return (f.kind, f.subject, f.subject_kind, f.value, f.violation)
+
+
+def _is_new(f: DriftFinding, before: DriftFinding | None) -> bool:
+    if before is None or f.previous_count is not None:
+        return True
+    if f.observed_rate is None or f.baseline_rate is None or before.observed_rate is None:
+        return False
+    direction = 1 if f.observed_rate >= f.baseline_rate else -1
+    # Rounded, so that float error is not a worsening.
+    return round((f.observed_rate - before.observed_rate) * direction, 9) > 0

@@ -272,6 +272,12 @@ class DriftEvent:
     def statistical(self) -> tuple[DriftFinding, ...]:
         return tuple(f for f in self.findings if not f.structural)
 
+    @property
+    def new_findings(self) -> tuple[DriftFinding, ...]:
+        """The findings the previous Observation did not have (or, for a rate, had at a
+        rate no worse); the rest are persisting."""
+        return tuple(f for f in self.findings if f.new)
+
 
 @dataclass(frozen=True)
 class ObservationOutcome:

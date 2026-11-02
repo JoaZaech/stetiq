@@ -21,7 +21,7 @@ from typing import Protocol, get_args
 
 from stetiq import use_case as use_case_format
 from stetiq.conformance import apply_definitions, assess_conformance, candidate_ontology
-from stetiq.drift import DriftThresholds, assess_drift
+from stetiq.drift import DriftFinding, DriftThresholds, assess_drift, mark_new
 from stetiq.errors import (
     ConflictingArgumentsError,
     EvaluatorError,
@@ -995,7 +995,12 @@ class LocalTrackingService:
                 ontology_version=contract.number,
             )
             self._store.add_observation(obs)
-            findings = drift.findings
+            findings = mark_new(
+                drift.findings,
+                self._previous_findings(
+                    knowledge_graph, history, contract.ontology, thresholds, baseline
+                ),
+            )
             if not findings:
                 return ObservationOutcome(observation=obs)
             event = DriftEvent(
@@ -1011,6 +1016,39 @@ class LocalTrackingService:
             )
             self._store.add_drift_event(event)
             return ObservationOutcome(observation=obs, drift=event)
+
+    def _previous_findings(
+        self,
+        knowledge_graph: str,
+        history: list[Observation],
+        contract: Ontology,
+        thresholds: DriftThresholds,
+        baseline: Observation | None,
+    ) -> tuple[DriftFinding, ...]:
+        """The previous Observation's Drift findings: its event's, or, when it raised none
+        (a run-end Observation is never checked), recomputed against today's contract,
+        thresholds and Baseline Observation."""
+        if not history:
+            return ()
+        previous = history[-1]
+        event = next(
+            (
+                e
+                for e in self._store.list_drift_events(knowledge_graph)
+                if e.observation_id == previous.id
+            ),
+            None,
+        )
+        if event is not None:
+            return event.findings
+        before = history[-2] if len(history) > 1 else None
+        return assess_drift(
+            contract,
+            previous.schema,
+            None if before is None else before.schema,
+            thresholds,
+            baseline=None if baseline is None else baseline.schema,
+        ).findings
 
     def _baseline_observation(
         self, knowledge_graph: str, history: list[Observation]

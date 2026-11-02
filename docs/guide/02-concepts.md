@@ -115,6 +115,8 @@ stetiq also watches statistics:
 
 Relative changes on small numbers are noise: a class falling from 3 to 2 nodes is a third of it. Set `min_count` to skip the statistical checks of classes, relations, patterns and attribute owners with fewer nodes or relationships than that.
 
+Each finding is **new** or **persisting**. It is persisting when the previous Observation had it too, and, for a rate (a Violation Rate, Coverage or fill rate), the rate hasn't moved further from its baseline value since. A count finding is always new, since it is itself a change since the previous Observation. Only new findings make `stetiq observe` exit with an alert, so a gap you already know about doesn't alert on every Observation; persisting ones are still recorded and shown.
+
 A check that lacks its input raises no Drift. It is listed with the Observation as **not comparable** instead, e.g. when the Baseline Observation didn't observe the Attribute at all, when a class is below `min_count`, or when an Attribute had more distinct values than stetiq reads, so their share is unknown.
 
 ## Where your data stays

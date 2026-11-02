@@ -18,6 +18,8 @@ export interface FindingRow {
   /** The change or the detail, e.g. `12 → 6 (−50%)`; empty when the finding says it all. */
   change: string
   tone: StatusTone
+  /** A Drift finding only: whether the previous Observation had it too. */
+  status?: 'New' | 'Persisting'
 }
 
 export const MISMATCH_FINDING: Record<Mismatch['kind'], string> = {
@@ -57,20 +59,22 @@ export function findingsFromMismatches(mismatches: readonly Mismatch[]): Finding
 }
 
 /**
- * An Observation's Drift findings as rows: a count change as `12 → 6 (−50%)`, a risen
- * Violation Rate as `Required but not always set: 0.5% → 3% (+2.5 pts)`, a dropped
- * Coverage as `Out-degree: 95% → 85% (−10 pts)`, a fallen fill rate as `100% → 80% (−20 pts)`.
+ * An Observation's Drift findings as rows, new before persisting: a count change as
+ * `12 → 6 (−50%)`, a risen Violation Rate as `Required but not always set: 0.5% → 3% (+2.5 pts)`,
+ * a dropped Coverage as `Out-degree: 95% → 85% (−10 pts)`, a fallen fill rate as `100% → 80% (−20 pts)`.
  */
 export function findingsFromDrift(findings: readonly DriftFinding[]): FindingRow[] {
-  return sortRows(
+  const rows = sortRows(
     findings.map((f) => ({
       subject: f.subject,
       kind: subjectKindLabel(f.subject_kind),
       finding: DRIFT_FINDING[f.kind],
       change: driftChange(f),
       tone: 'warning',
+      status: f.new ? 'New' : 'Persisting',
     })),
   )
+  return [...rows.filter((r) => r.status === 'New'), ...rows.filter((r) => r.status !== 'New')]
 }
 
 function driftChange(f: DriftFinding): string {

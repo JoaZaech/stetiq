@@ -179,7 +179,7 @@ Evaluating a Knowledge Graph's most recently used Gates against a Construction R
 _Avoid_: Dry run, simulated gate, gate check
 
 **Drift**:
-A divergence, found by an Observation, between a Graph Source's Observed Schema and the Contract Alias's Ontology Version, or a statistic that moved too far: a count since the previous Observation, or a Violation Rate or Coverage since the Baseline Observation; it raises an alert unless it is a Pending Migration, and never creates a new Ontology Version by itself. A check that lacks its input is *not comparable* and raises nothing.
+A divergence, found by an Observation, between a Graph Source's Observed Schema and the Contract Alias's Ontology Version, or a statistic that moved too far: a count since the previous Observation, or a Violation Rate, Coverage or fill rate since the Baseline Observation; it raises an alert unless it is a Pending Migration, and never creates a new Ontology Version by itself. A check that lacks its input is *not comparable* and raises nothing. Each finding is *new*, or *persisting* when the previous Observation had it too (a rate: no further from its baseline); only new findings make `stetiq observe` alert.
 _Avoid_: Schema change, deviation
 
 **Pending Migration**:

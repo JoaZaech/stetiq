@@ -23,7 +23,7 @@ const drift: DriftEvent = {
   ontology_version: 3,
   detected_at: '2026-11-02T10:00:00Z',
   findings: [
-    { kind: 'undeclared', subject: 'Refund', subject_kind: 'node_type', detail: '', previous_count: null, observed_count: null },
+    { kind: 'undeclared', subject: 'Refund', subject_kind: 'node_type', detail: '', previous_count: null, observed_count: null, new: true },
   ],
   thresholds: { max_count_drop: null, max_count_increase: 0.5, max_violation_increase: 0.01 },
 }
