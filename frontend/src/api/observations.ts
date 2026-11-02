@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { api, kgPath } from './client'
-import type { Mismatch, MismatchSubjectKind } from './runs'
+import type { Conformance, Mismatch, MismatchSubjectKind } from './runs'
 
 /** wire.graph_source_scope_to_json: a database, optionally narrowed by label or namespace. */
 export interface GraphSourceScope {
@@ -35,6 +35,26 @@ export interface Observation {
   baseline_observation_id: string | null
   /** The Drift checks that lacked their input, so raised no finding. */
   not_comparable: NotComparable[]
+  /**
+   * An on-demand Observation's Conformance to `ontology_version`, the Contract Alias's
+   * version when it was made. Null for a run-end Observation (its run holds its
+   * Conformance) and for one made before Observations were scored.
+   */
+  conformance: Conformance | null
+  ontology_version: number | null
+}
+
+/**
+ * wire.alignment_point_to_json: one Conformance score on the alignment trend. A
+ * Construction Run's (`run_id` set; `observation_id` is the Observation it ended with) or
+ * an on-demand Observation's; `ontology_version` is the version it was judged against.
+ */
+export interface AlignmentPoint {
+  at: string
+  score: number
+  ontology_version: number
+  observation_id: string
+  run_id: string | null
 }
 
 /**
@@ -105,6 +125,7 @@ export const observationQueryKeys = {
   all: (kg: string) => ['observations', kg] as const,
   one: (id: string | null) => ['observation', id] as const,
   driftEvents: (kg: string) => ['drift-events', kg] as const,
+  alignmentTrend: (kg: string) => ['alignment-trend', kg] as const,
 }
 
 /** The Knowledge Graph's Observations, oldest first. */
@@ -120,6 +141,13 @@ export const driftEventsQuery = (kg: string) => ({
   queryFn: () => api<DriftEvent[]>(kgPath(kg) + '/drift-events'),
 })
 export const useDriftEvents = (kg: string) => useQuery(driftEventsQuery(kg))
+
+/** The alignment trend: run and on-demand Conformance scores, oldest first. */
+export const alignmentTrendQuery = (kg: string) => ({
+  queryKey: observationQueryKeys.alignmentTrend(kg),
+  queryFn: () => api<AlignmentPoint[]>(kgPath(kg) + '/alignment-trend'),
+})
+export const useAlignmentTrend = (kg: string) => useQuery(alignmentTrendQuery(kg))
 
 /** The Observed Schema (graph_source.ObservedSchema); the run page reads only its sizes. */
 export interface ObservedSchema {
