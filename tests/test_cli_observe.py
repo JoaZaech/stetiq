@@ -133,3 +133,43 @@ def test_observe_prints_one_line_for_the_checks_that_were_not_comparable(cli_env
 
     lines = [line for line in result.output.splitlines() if "not comparable" in line.lower()]
     assert lines == ["Not comparable: 1 check (listed with the Observation in the web UI)"]
+
+
+def test_observe_exits_zero_when_every_finding_persists_and_marks_it(cli_env):
+    graph, _ = cli_env
+    graph.add_node(["Agent"], {})
+    runner = CliRunner()
+
+    first = runner.invoke(app, ["observe", "support"])
+    second = runner.invoke(app, ["observe", "support"])
+
+    assert first.exit_code == DRIFT_EXIT_CODE, first.output
+    assert second.exit_code == 0, second.output
+    assert "Drift: 1 finding(s), 0 new, against production" in second.output
+    [line] = [line for line in second.output.splitlines() if "Agent" in line]
+    assert line.split()[:2] == ["persisting", "undeclared"]
+
+
+def test_observe_exits_non_zero_on_persisting_findings_with_fail_on_persisting(cli_env):
+    graph, _ = cli_env
+    graph.add_node(["Agent"], {})
+    runner = CliRunner()
+    runner.invoke(app, ["observe", "support"])
+
+    second = runner.invoke(app, ["observe", "support", "--fail-on-persisting"])
+
+    assert second.exit_code == DRIFT_EXIT_CODE, second.output
+
+
+def test_drift_list_counts_each_events_new_findings(cli_env):
+    graph, _ = cli_env
+    graph.add_node(["Agent"], {})
+    runner = CliRunner()
+    runner.invoke(app, ["observe", "support"])
+    runner.invoke(app, ["observe", "support"])
+
+    listed = runner.invoke(app, ["drift", "list", "support"])
+
+    header, *rows = listed.output.strip().splitlines()
+    new = header.split().index("NEW")
+    assert [row.split()[new] for row in rows] == ["1", "0"]

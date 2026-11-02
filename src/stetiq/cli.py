@@ -717,8 +717,8 @@ def token_revoke(token_id: str, database_url: DatabaseUrl = None) -> None:
 drift_app = typer.Typer(no_args_is_help=True, help="Drift events.")
 app.add_typer(drift_app, name="drift")
 
-# `stetiq observe` exits with this code when the Observation raised Drift (errors exit 1),
-# so a scheduler can tell "the graph drifted" from "the check could not run".
+# `stetiq observe` exits with this code when the Observation raised new Drift (errors exit
+# 1), so a scheduler can tell "the graph drifted" from "the check could not run".
 DRIFT_EXIT_CODE = 3
 DEFAULT_CONFIG = Path(DEFAULT_CONFIG_PATH)
 
@@ -744,7 +744,10 @@ def _repo_config(path: Path | None) -> dict:
 
 def _echo_findings(findings) -> None:
     for f in findings:
-        typer.echo(f"  {f.kind:<18} {f.subject_kind:<18} {f.subject}  {f.detail}".rstrip())
+        status = "new" if f.new else "persisting"
+        typer.echo(
+            f"  {status:<11}{f.kind:<18} {f.subject_kind:<18} {f.subject}  {f.detail}".rstrip()
+        )
 
 
 def _echo_not_comparable(entries) -> None:
@@ -762,14 +765,23 @@ def observe(
         str | None, typer.Argument(help="Default: `knowledge_graph` from the repo config")
     ] = None,
     config: ConfigPath = None,
+    fail_on_persisting: Annotated[
+        bool,
+        typer.Option(
+            "--fail-on-persisting",
+            help="Exit 3 on any Drift finding, not only on new ones",
+        ),
+    ] = False,
     tracking_uri: TrackingUri = None,
 ) -> None:
     """Observe the Knowledge Graph's Graph Source now and check it for Drift.
 
     Compares the Observed Schema with the Contract Alias's Ontology Version, its counts
     with the previous Observation and its Violation Rates with the Baseline Observation
-    (thresholds from the `drift:` section of the repo config). Exits 3 on Drift, 1 on
-    errors. Schedule it with your own cron, Airflow or CI."""
+    (thresholds from the `drift:` section of the repo config). Each finding is new or
+    persisting (the previous Observation had it too). Exits 3 when a finding is new (on
+    any finding with --fail-on-persisting), 1 on errors. Schedule it with your own cron,
+    Airflow or CI."""
     from stetiq.drift import thresholds_from_config
 
     try:
@@ -791,12 +803,13 @@ def observe(
         return
     d = outcome.drift
     typer.echo(
-        f"Drift: {len(d.findings)} finding(s) against {d.contract_alias} "
-        f"(Ontology Version {d.ontology_version})"
+        f"Drift: {len(d.findings)} finding(s), {len(d.new_findings)} new, against "
+        f"{d.contract_alias} (Ontology Version {d.ontology_version})"
     )
     _echo_findings(d.findings)
     _echo_not_comparable(obs.not_comparable)
-    raise typer.Exit(code=DRIFT_EXIT_CODE)
+    if d.new_findings or fail_on_persisting:
+        raise typer.Exit(code=DRIFT_EXIT_CODE)
 
 
 @drift_app.command("list")
@@ -806,12 +819,14 @@ def drift_list(knowledge_graph: str, tracking_uri: TrackingUri = None) -> None:
         events = _client(tracking_uri).list_drift_events(knowledge_graph)
     except StetiqError as e:
         raise _fail(e) from None
-    typer.echo(f"{'DETECTED':<33} {'CONTRACT':<16} {'STRUCT':<7} {'STATS':<6} OBSERVATION")
+    typer.echo(
+        f"{'DETECTED':<33} {'CONTRACT':<16} {'STRUCT':<7} {'STATS':<6} {'NEW':<4} OBSERVATION"
+    )
     for e in events:
         contract = f"{e.contract_alias}@{e.ontology_version}"
         typer.echo(
             f"{e.detected_at.isoformat():<33} {contract:<16} {len(e.structural):<7} "
-            f"{len(e.statistical):<6} {e.observation_id}"
+            f"{len(e.statistical):<6} {len(e.new_findings):<4} {e.observation_id}"
         )
 
 

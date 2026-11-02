@@ -156,7 +156,7 @@ DRIFT_EVENT = DriftEvent(
     detected_at=LATER,
     findings=(
         DriftFinding(DriftKind.COUNT_DROP, "Customer", "node_type", "fell", 10, 3),
-        DriftFinding(DriftKind.UNDECLARED, "Invoice", "node_type"),
+        DriftFinding(DriftKind.UNDECLARED, "Invoice", "node_type", new=False),
         DriftFinding(
             DriftKind.UNDECLARED_VALUE,
             "Ticket.status",
