@@ -13,7 +13,7 @@ from, and the **maintenance assistant**, an agent that explains why a machine st
 cd examples/plant-kg
 uv run python demo.py --reset      # the three rounds (--reset starts over)
 uv run python demo.py --reset --epilogue   # ... then hand edits to the graph, and Drift
-uv run python demo.py --reset --until v2   # stop with round 2 red: the flywheel step
+uv run python demo.py --reset --until v2   # stop with round 2 red: the agent step
 uv run stetiq ui                   # the same verdicts at http://127.0.0.1:5000/ui
 ```
 
@@ -65,10 +65,11 @@ keeps its 8 rows, and `parts-suppliers` was not in the Use Case Version the base
 was judged by, so it has no baseline and is reported as new, not compared. Candidate v2
 stays unpromoted, like an open red pull request.
 
-**The flywheel step (shown, never required).** Between rounds 2 and 3, a coding agent
-works out the fix from what stetiq recorded. See [The flywheel step](#the-flywheel-step)
-below. The committed round 3 is what the replay runs, so nobody needs an agent or an API
-key to see the story.
+**The agent step (shown, never required).** Between rounds 2 and 3, a coding agent
+works out the fix from what stetiq recorded. See
+[The agent step: reading the Run Context](#the-agent-step-reading-the-run-context) below.
+The committed round 3 is what the replay runs, so nobody needs an agent or an API key to
+see the story.
 
 **3. The fix.** `ontology/fix.yaml` is v1 plus what Candidate v2 added, with
 `WorkOrder.kind` bound to the `WorkOrderKind` Vocabulary {`breakdown`, `preventive`}.
@@ -89,7 +90,7 @@ nodes and deletes the done follow-ups. The next Observation records Drift agains
 `production`: two undeclared Concepts and three count drops past the 25% in
 `stetiq.yaml`.
 
-## The flywheel step
+## The agent step: reading the Run Context
 
 Stop the replay with round 2's Consumer Gate red, then let a coding agent read the
 [Run Context](../../docs/guide/03-python-sdk.md#the-run-context) through `stetiq mcp`,

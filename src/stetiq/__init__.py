@@ -39,12 +39,13 @@ from stetiq.gates import Gate, GateOutcome, load_gates
 from stetiq.graph_source import GraphSource, GraphSourceScope, InMemoryGraphSource
 from stetiq.impact import ConsumerImpact, QuestionImpact, TaskImpact, UseCaseImpact
 from stetiq.ontology.diff import Change, ChangeKind, Classification, OntologyDiff
-from stetiq.run_context import RunContext
+from stetiq.run_context import LastAttempt, RecordedVerdicts, RunContext
 from stetiq.tracking import (
     Alias,
     ConstructionRun,
     ConsumerGateResult,
     DriftEvent,
+    EndedRun,
     EvaluationResult,
     GatePreview,
     GatePreviewSource,
@@ -91,6 +92,7 @@ __all__ = [
     "DriftFinding",
     "DriftKind",
     "DriftThresholds",
+    "EndedRun",
     "EntryPoint",
     "EntryPointError",
     "Evaluation",
@@ -115,6 +117,7 @@ __all__ = [
     "KnowledgeGraph",
     "KnowledgeGraphAlreadyExistsError",
     "KnowledgeGraphSummary",
+    "LastAttempt",
     "LlmQuestionMapper",
     "Mismatch",
     "MismatchKind",
@@ -131,6 +134,7 @@ __all__ = [
     "PermissionDeniedError",
     "Promotion",
     "QuestionImpact",
+    "RecordedVerdicts",
     "RowCountDropGate",
     "RowCountFinding",
     "RunComparison",

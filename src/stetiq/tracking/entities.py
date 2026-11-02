@@ -99,10 +99,13 @@ class EndedRun:
 
     `candidate` is the Ontology of the Candidate it gave rise to, or for a strict-failed
     run the Candidate it would have produced from its ending Observation (never
-    registered); None when it added nothing."""
+    registered); None when it added nothing. That would-be Candidate leaves out the
+    Vocabulary Values it would have added: they were observed in the graph and never
+    became Ontology (ADR 0012). `withheld_vocabulary_values` counts them."""
 
     run: ConstructionRun
     candidate: Ontology | None = None
+    withheld_vocabulary_values: int = 0
 
 
 @dataclass(frozen=True)

@@ -519,6 +519,14 @@ def create_app(
     def list_gate_results(name: str) -> list[dict[str, Any]]:
         return [codec.gate_result_to_json(r) for r in tracking.list_gate_results(name)]
 
+    @api.get("/knowledge-graphs/{name}/latest-gate-result")
+    def latest_gate_result(
+        name: str, run: str | None = None, version: int | None = None
+    ) -> dict[str, Any] | None:
+        # The service checks that `run` belongs to `name`.
+        result = tracking.latest_gate_result(name, run=run, version=version)
+        return None if result is None else codec.gate_result_to_json(result)
+
     @api.get("/knowledge-graphs/{name}/gate-previews")
     def preview_gates(name: str) -> list[dict[str, Any]]:
         # Computed here from stored results and never recorded (ADR 0007).

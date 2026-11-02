@@ -3,7 +3,7 @@
 `Client.run_context` composes it from existing service calls; `stetiq context` prints
 `RunContext.to_dict()` as JSON for upstream pipelines that don't use the Python SDK. It
 holds Ontology, Use Case, metrics and counts, never instance data (ADR 0001): only the
-built-ins that judge an Ontology Version keep their details (ADR 0010); every other
+built-ins that judge an Ontology Version keep their details (ADR 0012); every other
 result comes without them, since they can quote observed values (`Client.run_context`
 drops them; `to_dict` writes the results in their wire form).
 """
@@ -29,7 +29,10 @@ from stetiq.tracking.entities import (
     UseCaseVersion,
 )
 
-NOT_EVALUATED: dict[str, Any] = {"status": "not_evaluated"}
+
+def _not_evaluated() -> dict[str, Any]:
+    """A verdict nobody recorded, fresh each time so no output shares it."""
+    return {"status": "not_evaluated"}
 
 
 @dataclass(frozen=True)
@@ -50,11 +53,11 @@ class RecordedVerdicts:
         """`gate_result` and `consumer_gate_results`, each verdict with a `status` of
         `passed` or `failed`, or `{"status": "not_evaluated"}` when none was recorded."""
         return {
-            "gate_result": NOT_EVALUATED
+            "gate_result": _not_evaluated()
             if self.gate_result is None
             else _gate_result_to_dict(self.gate_result),
             "consumer_gate_results": [
-                {"consumer": consumer, **NOT_EVALUATED}
+                {"consumer": consumer, **_not_evaluated()}
                 if result is None
                 else {
                     "status": _status(result.passed),
@@ -72,8 +75,9 @@ def without_quoted_reasons(result: GateResult) -> GateResult:
     """`result` with only the reasons stetiq writes itself. A `metric` or `conformance`
     Gate's first reason states the observed value against its limit; the rest list the
     Evaluator's details or Conformance mismatches, which can quote values observed in the
-    graph, so they are dropped (ADR 0001, ADR 0010). Other Gates' reasons name only
+    graph, so they are dropped (ADR 0001, ADR 0012). Other Gates' reasons name only
     Concepts and type counts."""
+    # `reasons[:1]` is safe: both checks always put their own value-vs-limit line first.
     return dataclasses.replace(
         result,
         outcomes=tuple(
@@ -100,7 +104,7 @@ class LastAttempt:
     - `added`: the Ontology Diff from the version it consumed to its Candidate, or to the
       Candidate it would have produced (strict); empty when it added nothing. A
       strict-failed run's would-be Vocabulary Values are left out, since they are values
-      observed in the graph that never became Ontology (ADR 0010);
+      observed in the graph that never became Ontology (ADR 0012);
       `withheld_vocabulary_values` counts them.
     - `evaluation_results`: its run-level results (metrics only), `question_executions`
       each executed Competency Question's status and row count, and `verdicts` the

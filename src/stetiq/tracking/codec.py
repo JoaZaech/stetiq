@@ -264,6 +264,7 @@ def ended_run_to_json(e: EndedRun) -> dict[str, Any]:
     return {
         "run": run_to_json(e.run),
         "candidate": None if e.candidate is None else ontology_to_json(e.candidate),
+        "withheld_vocabulary_values": e.withheld_vocabulary_values,
     }
 
 
@@ -271,6 +272,7 @@ def ended_run_from_json(d: dict[str, Any]) -> EndedRun:
     return EndedRun(
         run=run_from_json(d["run"]),
         candidate=None if d.get("candidate") is None else from_dict(d["candidate"]),
+        withheld_vocabulary_values=d.get("withheld_vocabulary_values", 0),
     )
 
 

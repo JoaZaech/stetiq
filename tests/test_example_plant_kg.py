@@ -196,7 +196,7 @@ def test_the_use_case_names_the_two_consumers_and_their_tasks(demo):
     }
 
 
-# --- the flywheel step: a coding agent reads the red round 2 through `stetiq mcp` ---
+# --- the agent step: a coding agent reads the red round 2 through `stetiq mcp` ---
 
 
 @pytest.fixture(scope="module")

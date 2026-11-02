@@ -4,6 +4,8 @@ A token with edit permission can send any request body, not only what the SDK se
 These tests talk HTTP to the server directly, the way such a client would.
 """
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -509,3 +511,67 @@ def test_a_client_cannot_supply_or_alter_the_last_attempt(server, admin, support
     attempt = admin.run_context(support, version=1).last_attempt
     assert attempt is not None and attempt.run.id == run.id
     assert "Agent" in {c.concept for c in attempt.added.changes}
+
+
+ORDERS_WITH_STATUS = """
+node_types:
+  - label: WorkOrder
+    properties:
+      - {name: status, type: STRING, vocabulary: Status}
+vocabularies:
+  - label: Status
+    values: [open]
+"""
+
+
+def test_the_latest_ended_run_never_returns_a_strict_failed_runs_observed_values(server):
+    _, http = server
+    url = str(http.base_url)
+    _, token = TokenRegistry(server[0]).issue("ada", {"*": "edit"})
+    graph = InMemoryGraphSource()
+    graph.add_node(["WorkOrder"], {"status": "open"})
+    graph.add_node(["WorkOrder"], {"status": "Press 9"})  # outside the Vocabulary
+    ada = stetiq.Client(
+        url, service=RemoteTrackingService(url, http=http, token=token), graph_source=graph
+    )
+    ada.create_knowledge_graph("orders", ontology=ORDERS_WITH_STATUS)
+    ada.set_evolution_mode("orders", "strict")
+    ada.bind_graph_source("orders", stetiq.GraphSourceScope(database="neo4j"))
+    with ada.start_run("orders") as run:
+        pass
+    reader = _headers(server, "rita", {"orders": "read"})
+
+    response = http.get(
+        f"{API}/knowledge-graphs/orders/ontology-versions/1/latest-ended-run", headers=reader
+    )
+
+    assert response.status_code == 200, response.text
+    # Observed in the graph, never Ontology: not in what the run would have added. (The
+    # run's own Conformance report names it, as `GET /runs/{id}` does for any reader.)
+    assert "Press 9" not in json.dumps(response.json()["candidate"])
+    ended = codec.ended_run_from_json(response.json())
+    assert ended.run.id == run.id
+    assert ended.run.status == "failed"
+    assert ended.withheld_vocabulary_values == 1
+
+
+def test_the_latest_gate_result_is_read_only_about_a_run_of_the_named_knowledge_graph(
+    server, admin, support, support_ontology
+):
+    _, http = server
+    admin.create_knowledge_graph("other", ontology=support_ontology)
+    admin.bind_graph_source("other", stetiq.GraphSourceScope(database="neo4j"))
+    with admin.start_run("other") as foreign:
+        pass
+    run = _run_id(admin, support)
+    admin.evaluate_gates(support, [gate_from_dict(NO_BREAKING)], run=run)
+    reader = _headers(server, "rita", {"support": "read", "other": "read"})
+    path = f"{API}/knowledge-graphs/support/latest-gate-result"
+
+    about_run = http.get(path, params={"run": run}, headers=reader)
+    foreign_run = http.get(path, params={"run": foreign.id}, headers=reader)
+
+    assert about_run.status_code == 200, about_run.text
+    assert about_run.json()["subject_id"] == run
+    assert foreign_run.status_code == 404
+    assert http.post(path, headers=reader, json={}).status_code == 405
