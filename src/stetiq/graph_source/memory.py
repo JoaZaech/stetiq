@@ -163,7 +163,7 @@ def _observed_properties(
     records: list[dict[str, Any]], read_values_of: set[str], value_cap: int
 ) -> tuple[ObservedProperty, ...]:
     total = len(records)
-    types: dict[str, set[str]] = defaultdict(set)
+    types: dict[str, Counter[str]] = defaultdict(Counter)
     filled: Counter[str] = Counter()
     values: dict[str, Counter[str]] = defaultdict(Counter)
     for record in records:
@@ -171,7 +171,7 @@ def _observed_properties(
             if value is None:
                 continue
             filled[name] += 1
-            types[name].add(_type_name(value))
+            types[name][_type_name(value)] += 1
             if name in read_values_of and isinstance(value, str):
                 values[name][value] += 1
     return tuple(
@@ -183,6 +183,7 @@ def _observed_properties(
             ObservedValues.capped(values[name].items(), value_cap)
             if name in read_values_of
             else None,
+            tuple(sorted(types[name].items())),
         )
         for name in sorted(filled)
     )

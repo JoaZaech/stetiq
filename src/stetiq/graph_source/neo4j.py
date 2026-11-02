@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import re
+from collections import Counter, defaultdict
 from collections.abc import Collection, Mapping
 from typing import Any, LiteralString, cast
 from urllib.parse import unquote, urlsplit, urlunsplit
@@ -222,7 +223,7 @@ def _queries(scope: GraphSourceScope) -> dict[str, str]:
             MATCH (n) WHERE {n}
             UNWIND {_labels("n")} AS owner
             UNWIND {node_keys} AS key
-            RETURN owner, key, count(*) AS filled, collect(DISTINCT valueType(n[key])) AS types
+            RETURN owner, key, valueType(n[key]) AS type, count(*) AS filled
         """,
         "rel_counts": f"""
             MATCH (a)-[r]->(b) WHERE {a} AND {b}
@@ -231,8 +232,7 @@ def _queries(scope: GraphSourceScope) -> dict[str, str]:
         "rel_properties": f"""
             MATCH (a)-[r]->(b) WHERE {a} AND {b}
             UNWIND keys(r) AS key
-            RETURN type(r) AS owner, key, count(*) AS filled,
-                   collect(DISTINCT valueType(r[key])) AS types
+            RETURN type(r) AS owner, key, valueType(r[key]) AS type, count(*) AS filled
         """,
         # Degree stats over nodes with at least one edge; zero-degree nodes are added
         # back in Python from the label counts.
@@ -276,17 +276,22 @@ def _group_properties(
     owner_kind: str,
     observed_values: Mapping[tuple[str, str, str], ObservedValues],
 ) -> dict[str, tuple[ObservedProperty, ...]]:
-    grouped: dict[str, list[ObservedProperty]] = {}
+    """Fold the rows, one per (owner, key, valueType), into one property per (owner, key)
+    with its count per type. Several valueTypes map to one type name (`LIST<…>`)."""
+    type_counts: dict[tuple[str, str], Counter[str]] = defaultdict(Counter)
     for row in rows:
-        owner, filled = row["owner"], row["filled"]
-        types = tuple(sorted({_type_name(t) for t in row["types"]}))
+        type_counts[(row["owner"], row["key"])][_type_name(row["type"])] += row["filled"]
+    grouped: dict[str, list[ObservedProperty]] = {}
+    for (owner, key), counts in type_counts.items():
+        filled = counts.total()
         grouped.setdefault(owner, []).append(
             ObservedProperty(
-                row["key"],
-                types,
+                key,
+                tuple(sorted(counts)),
                 filled,
                 filled / owner_counts[owner],
-                observed_values.get((owner_kind, owner, row["key"])),
+                observed_values.get((owner_kind, owner, key)),
+                tuple(sorted(counts.items())),
             )
         )
     return {owner: tuple(sorted(ps, key=lambda p: p.name)) for owner, ps in grouped.items()}

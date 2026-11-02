@@ -108,7 +108,13 @@ SCHEMA = ObservedSchema(
             "Customer",
             3,
             (
-                ObservedProperty("name", ("STRING",), 3, 1.0),
+                ObservedProperty(
+                    "name",
+                    ("INTEGER", "STRING"),
+                    3,
+                    1.0,
+                    type_counts=(("INTEGER", 1), ("STRING", 2)),
+                ),
                 ObservedProperty(
                     "tier",
                     ("STRING",),

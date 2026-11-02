@@ -55,7 +55,7 @@ The formal structure definition a Construction Run is given as input; every Cons
 _Avoid_: Target schema, spec
 
 **Observed Schema**:
-The Ontology as it actually appears in a Graph Source, together with its aggregate statistics (counts per class and relation, cardinalities, attribute fill rates, and the capped set of values each Vocabulary-bound Attribute takes), derived from but never containing instance data.
+The Ontology as it actually appears in a Graph Source, together with its aggregate statistics (counts per class and relation, cardinalities, attribute fill rates, how many values of each type each attribute holds, and the capped set of values each Vocabulary-bound Attribute takes), derived from but never containing instance data.
 _Avoid_: Inferred ontology, actual schema
 
 **Conformance**:
