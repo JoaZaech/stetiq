@@ -1,6 +1,6 @@
 # Getting started
 
-stetiq versions, evaluates and governs the Ontology of a Knowledge Graph, the way MLflow does for models. Your instance data stays in your graph database: stetiq only reads it to observe its structure.
+stetiq versions the Ontology of a Knowledge Graph as a contract between the pipeline that builds the graph and the Consumers that use it, and checks every change against both sides before it's promoted. Your instance data stays in your graph database: stetiq only reads it to observe its structure.
 
 This page takes you from installing stetiq to your first tracked Construction Run in the web UI. The words used here (Knowledge Graph, Ontology Version, Construction Run…) are explained on the [Concepts](./02-concepts.md) page.
 
