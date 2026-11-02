@@ -131,8 +131,8 @@ An Ontology Version no Alias has pointed to yet, typically created by an evolvin
 _Avoid_: Draft, proposal
 
 **Promotion**:
-Moving an Alias to an Ontology Version; it is not blocked by Gates, but the audit records whether the version's latest Gate result passed.
-_Avoid_: Release, deploy
+Moving an Alias to an Ontology Version; it is not blocked by Gates or by any approval, but the audit records whether the version's latest Gate result passed.
+_Avoid_: Release, deploy, approval
 
 **Observation**:
 Capturing a Graph Source's current Observed Schema, either at the end of a Construction Run or on demand between runs.
