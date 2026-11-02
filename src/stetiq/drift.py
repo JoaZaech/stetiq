@@ -33,7 +33,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from enum import StrEnum
-from typing import Any, Literal
+from typing import Any
 
 from stetiq.conformance import (
     Conformance,
@@ -45,10 +45,7 @@ from stetiq.conformance import (
 from stetiq.errors import InvalidDriftConfigError
 from stetiq.graph_source import ObservedSchema
 from stetiq.ontology import Ontology
-from stetiq.ontology.model import Pattern
-
-# Which endpoint nodes a Coverage is over: `out` the pattern's source, `in` its target.
-Direction = Literal["out", "in"]
+from stetiq.ontology.model import Direction, Pattern
 
 # `max_violation_increase` when `stetiq.yaml`, a request or the SDK leaves it out.
 DEFAULT_MAX_VIOLATION_INCREASE = 0.01
@@ -462,11 +459,7 @@ def _coverage_drops(
     gaps: list[NotComparable] = []
     for declared in contract.patterns:
         subject = str(declared)
-        endpoints: tuple[tuple[Direction, str], ...] = (
-            ("out", declared.source),
-            ("in", declared.target),
-        )
-        for direction, endpoint in endpoints:
+        for direction, endpoint in declared.directions:
             if not _count(observed, endpoint):
                 continue
             now = _coverage(observed, declared, direction)
@@ -513,15 +506,14 @@ def _count(schema: ObservedSchema, label: str) -> int:
 def _coverage(schema: ObservedSchema, declared: Pattern, direction: Direction) -> float | None:
     """The share of the pattern's `direction` endpoint nodes with at least one such
     relationship: None when no such node was observed or the degree lacks `with_edges`."""
-    endpoint = declared.source if direction == "out" else declared.target
-    endpoints = _count(schema, endpoint)
+    endpoints = _count(schema, declared.endpoint(direction))
     if not endpoints:
         return None
     pattern = schema.pattern(declared.source, declared.relationship, declared.target)
     if pattern is None:
         return 0.0  # endpoint nodes, but no such relationship between them
-    degree = pattern.out_degree if direction == "out" else pattern.in_degree
-    return None if degree.with_edges is None else degree.with_edges / endpoints
+    with_edges = pattern.degree(direction).with_edges
+    return None if with_edges is None else with_edges / endpoints
 
 
 def _direction(direction: str | None) -> str:
@@ -720,7 +712,7 @@ def _endpoint_min_count_gap(
 ) -> NotComparable | None:
     """`baseline_min_count_gap` for a pattern's degree, whose owners are the degree's
     endpoint nodes (the source for `out`, the target for `in`), not its relationships."""
-    endpoint = declared.source if direction == "out" else declared.target
+    endpoint = declared.endpoint(direction)
     small = baseline_min_count_gap(
         check, endpoint, "node_type", min_count, baseline, observed, violation
     )

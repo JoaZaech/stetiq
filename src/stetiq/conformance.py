@@ -22,7 +22,13 @@ from stetiq.graph_source import (
 )
 from stetiq.ontology import NodeType, Ontology, Pattern, Property, RelationshipType
 from stetiq.ontology.diff import WIDENING_TYPE_CHANGES, AddedConcept, added_concepts
-from stetiq.ontology.model import ConceptKind, Vocabulary, VocabularyValue, is_deprecated
+from stetiq.ontology.model import (
+    ConceptKind,
+    Direction,
+    Vocabulary,
+    VocabularyValue,
+    is_deprecated,
+)
 
 # What a mismatch is about. Concepts are node types, relationship types and properties
 # (identity `Owner.property`, as in the Ontology Diff); patterns are endpoint patterns
@@ -59,7 +65,7 @@ class Mismatch:
     # outside the bound) or for a kind without one.
     rate: float | None = None
     # For `cardinality_violation`: which degree breaks the bound, `out` or `in`.
-    direction: Literal["out", "in"] | None = None
+    direction: Direction | None = None
 
 
 @dataclass(frozen=True)
@@ -379,17 +385,12 @@ def _check_cardinality(checks: _Checks, declared: Pattern, observed: ObservedSch
     Violation Rate (see `_cardinality_rate`). A pattern that is not observed gives every
     node of its type degree 0; with no such nodes either, its bounds hold."""
     seen = observed.pattern(declared.source, declared.relationship, declared.target)
-    directions: tuple[tuple[Literal["out", "in"], str], ...] = (
-        ("out", declared.source),
-        ("in", declared.target),
-    )
-    for direction, node_type in directions:
-        low = getattr(declared, f"min_{direction}")
-        high = getattr(declared, f"max_{direction}")
+    for direction, node_type in declared.directions:
+        low, high = declared.bounds(direction)
         if low is None and high is None:
             continue
         if seen is not None:
-            degree = seen.out_degree if direction == "out" else seen.in_degree
+            degree = seen.degree(direction)
             observed_range: tuple[int, int] | None = (degree.min, degree.max)
         else:
             nodes = observed.node_type(node_type)
@@ -426,7 +427,7 @@ def _check_cardinality(checks: _Checks, declared: Pattern, observed: ObservedSch
 
 def _cardinality_rate(
     seen: ObservedPattern | None,
-    direction: Literal["out", "in"],
+    direction: Direction,
     low: int | None,
     high: int | None,
     endpoints: ObservedNodeType | None,
@@ -439,7 +440,7 @@ def _cardinality_rate(
         return None
     if seen is None:
         return 1.0
-    outside = (seen.out_degree if direction == "out" else seen.in_degree).outside_bounds
+    outside = seen.degree(direction).outside_bounds
     if outside is None or (outside.min, outside.max) != (low, high):
         return None
     return outside.count / endpoints.count

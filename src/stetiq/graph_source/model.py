@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Literal, NamedTuple
 
-from stetiq.ontology.model import Ontology, Pattern
+from stetiq.ontology.model import Direction, Ontology, Pattern
 
 # A namespace scope selects nodes whose property of this name equals the namespace.
 NAMESPACE_PROPERTY = "namespace"
@@ -68,7 +68,7 @@ class PatternBound(NamedTuple):
     source: str
     relationship: str
     target: str
-    direction: Literal["out", "in"]
+    direction: Direction
     min: int | None
     max: int | None
 
@@ -77,12 +77,9 @@ def pattern_bounds(ontology: Ontology) -> tuple[PatternBound, ...]:
     """Every declared cardinality bound of `ontology`'s Patterns, one per bounded
     direction: what Observation counts the endpoint nodes outside of."""
     bounds = [
-        bound
+        PatternBound(p.source, p.relationship, p.target, direction, *p.bounds(direction))
         for p in ontology.patterns
-        for bound in (
-            PatternBound(p.source, p.relationship, p.target, "out", p.min_out, p.max_out),
-            PatternBound(p.source, p.relationship, p.target, "in", p.min_in, p.max_in),
-        )
+        for direction, _ in p.directions
     ]
     return tuple(b for b in bounds if b.min is not None or b.max is not None)
 
@@ -228,6 +225,10 @@ class ObservedPattern:
     def pattern(self) -> Pattern:
         """The endpoint pattern observed, without its statistics."""
         return Pattern(self.source, self.relationship, self.target)
+
+    def degree(self, direction: Direction) -> Degree:
+        """`out_degree` or `in_degree`."""
+        return self.out_degree if direction == "out" else self.in_degree
 
 
 @dataclass(frozen=True)
