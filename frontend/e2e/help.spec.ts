@@ -105,6 +105,16 @@ test('a guide page renders tables and syntax-highlighted code', async ({ page })
   expect(await keyword.evaluate(color)).not.toBe(await python.evaluate(color))
 })
 
+test('Getting started shows how to try stetiq with Docker', async ({ page }) => {
+  await page.goto('/ui/help/getting-started#try-it-with-docker')
+  const body = page.getByRole('article')
+
+  await expect(body.getByRole('heading', { name: 'Try it with Docker' })).toBeInViewport()
+  await expect(
+    body.locator('pre code', { hasText: 'docker run --rm -p 5000:5000 ghcr.io/joazaech/stetiq' }).first(),
+  ).toBeVisible()
+})
+
 test('an unknown guide page shows the not-found page', async ({ page }) => {
   await page.goto('/ui/help/no-such-page')
 
