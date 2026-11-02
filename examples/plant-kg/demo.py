@@ -3,6 +3,7 @@
     cd examples/plant-kg
     uv run python demo.py              # replays three recorded Claude rounds, offline
     uv run python demo.py --epilogue   # ... then hand edits to the graph, and Drift
+    uv run python demo.py --until v2   # stop with round 2 red, for the flywheel step
     uv run python demo.py --live       # calls Claude for real (needs the `claude` CLI)
     uv run stetiq ui                   # then browse the same verdicts
 
@@ -259,6 +260,14 @@ class Demo:
             f"  {f'uv run stetiq gate {KG} --run <run id>':<60}  # the Gates of stetiq.yaml",
             f"  {f'uv run stetiq consumer gate {KG} --run <run id>':<60}  # every Consumer Gate",
         )
+        if "v2" in self.rounds and "fix" not in self.rounds:
+            self.say(
+                "",
+                "Round 2 is red. Ask a coding agent why, through the read-only MCP server",
+                "(README.md, 'The flywheel step'):",
+                f"  {'claude mcp add stetiq -- uv run stetiq mcp':<60}  # from this folder",
+                f"  {f'uv run stetiq context {KG}':<60}  # the same Run Context",
+            )
 
 
 # --- output -------------------------------------------------------------------------
@@ -362,8 +371,11 @@ def run_demo(
     record: frozenset[Round] = frozenset(),
     live: bool = False,
     epilogue: bool = False,
+    until: Round = "fix",
     quiet: bool = False,
 ) -> Demo:
+    """Replay the rounds up to and including `until`; `until="v2"` stops with round 2's
+    Consumer Gate red, where the flywheel step's coding agent picks up (README.md)."""
     demo = Demo(
         tracking_uri=tracking_uri,
         graph_file=graph_file,
@@ -375,10 +387,12 @@ def run_demo(
     demo.say(WITHOUT_STETIQ, "")
     demo.declare()
     demo.round_v1()
-    demo.round_v2()
-    demo.round_fix()
-    if epilogue:
-        demo.epilogue()
+    if until != "v1":
+        demo.round_v2()
+    if until == "fix":
+        demo.round_fix()
+        if epilogue:
+            demo.epilogue()
     demo.finish()
     return demo
 
@@ -403,6 +417,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--epilogue", action="store_true", help="add the Drift beat")
     parser.add_argument(
+        "--until",
+        choices=ROUNDS,
+        default="fix",
+        metavar="ROUND",
+        help="stop after this round; --until v2 leaves round 2's Consumer Gate red for the "
+        "flywheel step (default: fix, all three)",
+    )
+    parser.add_argument(
         "--model", default=DEFAULT_MODEL, help=f"model for Claude (default {DEFAULT_MODEL})"
     )
     parser.add_argument("--tracking-uri", default=DEFAULT_TRACKING_URI)
@@ -413,6 +435,8 @@ def main(argv: list[str] | None = None) -> int:
         help="delete the tracking database and the graph store first",
     )
     args = parser.parse_args(argv)
+    if args.epilogue and args.until != "fix":
+        parser.error("--epilogue follows the fix; it cannot be combined with --until")
 
     db = (
         Path(args.tracking_uri.removeprefix("sqlite:///"))
@@ -443,6 +467,7 @@ def main(argv: list[str] | None = None) -> int:
             record=record,
             live=args.live,
             epilogue=args.epilogue,
+            until=args.until,
         )
     except (stetiq.StetiqError, ExtractionError) as e:
         print(f"error: {e}", file=sys.stderr)
