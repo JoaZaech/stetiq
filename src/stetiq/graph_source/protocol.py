@@ -10,6 +10,7 @@ from stetiq.graph_source.model import (
     BoundAttribute,
     GraphSourceScope,
     ObservedSchema,
+    PatternBound,
 )
 
 
@@ -23,12 +24,17 @@ class GraphSource(Protocol):
         bound_attributes: Collection[BoundAttribute] = (),
         *,
         value_cap: int = DEFAULT_VALUE_CAP,
+        pattern_bounds: Collection[PatternBound] = (),
     ) -> ObservedSchema:
         """The Observed Schema of everything inside `scope`, with aggregate statistics.
 
         For each of `bound_attributes` (the Vocabulary-bound Attributes) that the graph
         holds, its `ObservedProperty.values` gives the distinct string values with
-        counts, at most `value_cap` of them. No other instance value is read."""
+        counts, at most `value_cap` of them. No other instance value is read.
+
+        For each of `pattern_bounds` (the declared cardinalities) whose Pattern is
+        observed, that direction's `Degree.outside_bounds` counts the endpoint nodes in
+        scope whose degree lies outside the bound, zero-degree nodes included."""
         ...
 
     def execute_read(

@@ -75,7 +75,8 @@ export function findingsFromDrift(findings: readonly DriftFinding[]): FindingRow
 function driftChange(f: DriftFinding): string {
   if (f.previous_count !== null && f.observed_count !== null) return countChange(f.previous_count, f.observed_count)
   if (f.violation !== undefined && f.baseline_rate !== undefined && f.observed_rate !== undefined) {
-    return `${MISMATCH_FINDING[f.violation]}: ${rateChange(f.baseline_rate, f.observed_rate)}`
+    const degree = f.direction === undefined ? '' : ` (${f.direction}-degree)`
+    return `${MISMATCH_FINDING[f.violation]}${degree}: ${rateChange(f.baseline_rate, f.observed_rate)}`
   }
   if (f.direction !== undefined && f.baseline_rate !== undefined && f.observed_rate !== undefined) {
     return `${f.direction === 'out' ? 'Out' : 'In'}-degree: ${rateChange(f.baseline_rate, f.observed_rate)}`

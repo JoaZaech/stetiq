@@ -70,7 +70,8 @@ class DriftFinding:
     `undeclared_value` carries the value, how many owners hold it (`count`) and their share
     of the owner (`share`, None when the value list was truncated). `violation_increase`
     carries the Conformance check (`violation`) and its Violation Rate in the Baseline
-    Observation and now (`baseline_rate`, `observed_rate`). `coverage_drop` carries the
+    Observation and now (`baseline_rate`, `observed_rate`); for a `cardinality_violation`
+    on a pattern, `direction` says which degree (`out` or `in`). `coverage_drop` carries the
     degree (`direction`: `out` over the source nodes, `in` over the target nodes) and its
     Coverage in the Baseline Observation and now (`baseline_rate`, `observed_rate`)."""
 
@@ -258,7 +259,11 @@ _STRUCTURAL = {
 
 # The Conformance checks whose Violation Rate Drift compares with the baseline.
 # `value_outside_vocabulary` has a rate too, but its Drift is `undeclared_value`.
-_RATED = (MismatchKind.REQUIRED_MISSING, MismatchKind.TYPE_MISMATCH)
+_RATED = (
+    MismatchKind.REQUIRED_MISSING,
+    MismatchKind.TYPE_MISMATCH,
+    MismatchKind.CARDINALITY_VIOLATION,
+)
 
 
 def assess_drift(
@@ -324,14 +329,17 @@ def _violation_increases(
     """A finding per Violation Rate more than `limit` above its baseline value. A check
     the baseline passed had rate 0; one it could not run (its subject was not observed
     then), or whose rate is unknown on either side, is not comparable."""
-    before = {(m.kind, m.subject): m.rate for m in at_baseline.mismatches if m.kind in _RATED}
+    # A pattern's out- and in-degree are separate checks on the same subject.
+    before = {
+        (m.kind, m.subject, m.direction): m.rate for m in at_baseline.mismatches if m.kind in _RATED
+    }
     findings: list[DriftFinding] = []
     gaps: list[NotComparable] = []
     for m in conformance.mismatches:
         if m.kind not in _RATED:
             continue
-        if (m.kind, m.subject) in before:
-            then = before[(m.kind, m.subject)]
+        if (m.kind, m.subject, m.direction) in before:
+            then = before[(m.kind, m.subject, m.direction)]
         else:
             then = 0.0 if _observed_in(baseline, m.subject_kind, m.subject) else None
         if m.rate is None or then is None:
@@ -353,11 +361,12 @@ def _violation_increases(
                     kind=DriftKind.VIOLATION_INCREASE,
                     subject=m.subject,
                     subject_kind=m.subject_kind,
-                    detail=f"{m.kind} rate rose from {then:.1%} to {m.rate:.1%} "
-                    "since the Baseline Observation",
+                    detail=f"{m.kind}{_direction(m.direction)} rate rose from {then:.1%} "
+                    f"to {m.rate:.1%} since the Baseline Observation",
                     violation=m.kind,
                     baseline_rate=then,
                     observed_rate=m.rate,
+                    direction=m.direction,
                 )
             )
     return findings, gaps
@@ -427,6 +436,10 @@ def _coverage(schema: ObservedSchema, declared: Pattern, direction: Direction) -
         return 0.0  # endpoint nodes, but no such relationship between them
     degree = pattern.out_degree if direction == "out" else pattern.in_degree
     return None if degree.with_edges is None else degree.with_edges / endpoints
+
+
+def _direction(direction: str | None) -> str:
+    return "" if direction is None else f" ({direction}-degree)"
 
 
 def _observed_in(schema: ObservedSchema, subject_kind: MismatchSubjectKind, subject: str) -> bool:

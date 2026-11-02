@@ -26,6 +26,8 @@ from stetiq.graph_source.model import (
     ObservedRelationshipType,
     ObservedSchema,
     ObservedValues,
+    OutsideBounds,
+    PatternBound,
 )
 
 
@@ -92,6 +94,7 @@ class InMemoryGraphSource:
         bound_attributes: Collection[BoundAttribute] = (),
         *,
         value_cap: int = DEFAULT_VALUE_CAP,
+        pattern_bounds: Collection[PatternBound] = (),
     ) -> ObservedSchema:
         nodes = {n.id: n for n in self._nodes.values() if _in_scope(n, scope)}
         rels = [r for r in self._relationships if r.start in nodes and r.end in nodes]
@@ -137,14 +140,23 @@ class InMemoryGraphSource:
                 for lb in labels(nodes[rel.end]):
                     out_counts[(la, rel.type, lb)][rel.start] += 1
                     in_counts[(la, rel.type, lb)][rel.end] += 1
+        bounds = {(b.source, b.relationship, b.target, b.direction): b for b in pattern_bounds}
         patterns = tuple(
             ObservedPattern(
                 source=source,
                 relationship=type_,
                 target=target,
                 count=sum(out_counts[(source, type_, target)].values()),
-                out_degree=_degree(out_counts[(source, type_, target)], nodes_by_label[source]),
-                in_degree=_degree(in_counts[(source, type_, target)], nodes_by_label[target]),
+                out_degree=_degree(
+                    out_counts[(source, type_, target)],
+                    nodes_by_label[source],
+                    bounds.get((source, type_, target, "out")),
+                ),
+                in_degree=_degree(
+                    in_counts[(source, type_, target)],
+                    nodes_by_label[target],
+                    bounds.get((source, type_, target, "in")),
+                ),
             )
             for source, type_, target in sorted(out_counts)
         )
@@ -189,13 +201,28 @@ def _observed_properties(
     )
 
 
-def _degree(counts: Counter[int], endpoint_nodes: list[_Node]) -> Degree:
+def _degree(
+    counts: Counter[int], endpoint_nodes: list[_Node], bound: PatternBound | None
+) -> Degree:
     degrees = [counts.get(n.id, 0) for n in endpoint_nodes]
+    outside = None
+    if bound is not None:
+        low, high = bound.min, bound.max
+        outside = OutsideBounds(
+            low,
+            high,
+            sum(
+                1
+                for d in degrees
+                if (low is not None and d < low) or (high is not None and d > high)
+            ),
+        )
     return Degree(
         min=min(degrees),
         max=max(degrees),
         mean=sum(degrees) / len(degrees),
         with_edges=sum(1 for d in degrees if d),
+        outside_bounds=outside,
     )
 
 

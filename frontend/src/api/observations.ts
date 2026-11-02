@@ -98,8 +98,9 @@ export interface DriftFinding {
   baseline_rate?: number
   observed_rate?: number
   /**
-   * `coverage_drop` only: whose Coverage dropped, `out` over the pattern's source nodes or
-   * `in` over its target nodes; `baseline_rate` / `observed_rate` hold the Coverage.
+   * Which degree of the pattern, `out` over its source nodes or `in` over its target nodes:
+   * on `coverage_drop`, whose Coverage dropped (`baseline_rate` / `observed_rate` hold the
+   * Coverage); on `violation_increase` of a `cardinality_violation`, which degree's rate rose.
    */
   direction?: 'out' | 'in'
 }
