@@ -7,11 +7,12 @@
 stetiq is a remote server (`STETIQ_TRACKING_URI`, an API token in `STETIQ_TOKEN`); the
 pipeline writes two Neo4j servers, the candidate graph every Construction Run builds
 (`PLANT_CANDIDATE_URI`) and the production graph a promoted run is deployed to
-(`PLANT_PRODUCTION_URI`), with `NEO4J_USER` / `NEO4J_PASSWORD`. STORY.md tells the
-story and its running order.
+(`PLANT_PRODUCTION_URI`), with `NEO4J_USER` / `NEO4J_PASSWORD`. The maintenance
+assistant runs at `PLANT_ASSISTANT_URL`; the show asks it the scripted questions over
+its HTTP API. STORY.md tells the story and its running order.
 
 Act 0, Monday morning: prompt v1 builds v1, the Gates pass, `production` is promoted
-to v1 and the run is deployed.
+to v1 and the run is deployed. The assistant, on v1, answers both scripted questions.
 
 Act 2, with stetiq: prompt v2 with Line 2's EAM export passes every Gate but fails the
 maintenance assistant's and the reliability dashboard's Consumer Gates, so it stays the
@@ -34,6 +35,7 @@ sys.path.insert(0, str(SHOWCASE_DIR))
 
 from dataclasses import replace  # noqa: E402
 
+import httpx  # noqa: E402
 import neo4j  # noqa: E402
 from plant_assistant.deploy import deploy  # noqa: E402
 from plant_assistant.evaluators import Documented, ReportCoverage  # noqa: E402
@@ -64,6 +66,10 @@ Competency Questions are in `use-case.yaml`."""
 
 ROUND_LABEL: dict[Round, str] = {"v1": "v1", "v2": "prompt v2", "fix": "fix"}
 
+LINE_2 = "Why did Line 2's machines break down?"
+SUPPLIERS = "Which suppliers' components keep failing?"
+SCRIPTED_QUESTIONS = (LINE_2, SUPPLIERS)
+
 # Before prompt v2, the assistant's root-cause Task also needs to know which suppliers'
 # components keep failing: the reason prompt v2 may add Supplier (unjustified-additions).
 PARTS_SUPPLIERS = CompetencyQuestion(
@@ -86,6 +92,18 @@ class Graphs:
 
 
 @dataclass(frozen=True)
+class Answer:
+    """The assistant's answer to a question, as its HTTP API returned it."""
+
+    question: str
+    answer: str
+    cypher: str
+    work_orders: list[str]
+    ontology_version: int
+    source: str  # live (Claude) | recorded
+
+
+@dataclass(frozen=True)
 class ActState:
     """What one act did, as the audience sees it (`line`) and as stetiq recorded it."""
 
@@ -100,6 +118,10 @@ class ActState:
     consumer_gates: tuple[stetiq.ConsumerGateResult, ...] = ()
     # The run whose Extraction the production graph holds after the act.
     production_run: str | None = None
+    # The assistant's banner and its answers to the scripted questions after the act
+    # (None and empty when the show runs without the assistant).
+    banner: str | None = None
+    answers: dict[str, Answer] = field(default_factory=dict)
 
 
 @dataclass
@@ -119,10 +141,17 @@ class ShowState:
 
 class Show:
     def __init__(
-        self, client: stetiq.Client, graphs: Graphs, *, extraction: LlmMode, quiet: bool
+        self,
+        client: stetiq.Client,
+        graphs: Graphs,
+        *,
+        extraction: LlmMode,
+        quiet: bool,
+        assistant: httpx.Client | None = None,
     ) -> None:
         self.client = client
         self.graphs = graphs
+        self.assistant = assistant
         self.extraction: LlmMode = extraction
         self.quiet = quiet
         self.state = ShowState()
@@ -168,22 +197,40 @@ class Show:
         parts = [ROUND_LABEL["v1"], f"Gate {_mark(gates.passed)}"]
         if promoted:
             parts += [f"promoted: production -> v{gates.ontology_version}", "deployed"]
+        line = "   ".join(parts)
+        self.say("Act 0, Monday morning", line)
+        for o in gates.outcomes:
+            if not o.passed:
+                self.say(f"    Gate {o.gate.name} failed: {'; '.join(o.reasons[:3])}")
+        banner, answers = self.consult_assistant()
         act = ActState(
             0,
             "v1",
-            "   ".join(parts),
+            line,
             run,
             gates,
             promoted,
             promoted,
             production_run=self.state.production_run,
+            banner=banner,
+            answers=answers,
         )
         self.state.acts[0] = act
-        self.say("Act 0, Monday morning", act.line)
-        for o in gates.outcomes:
-            if not o.passed:
-                self.say(f"    Gate {o.gate.name} failed: {'; '.join(o.reasons[:3])}")
         return act
+
+    def consult_assistant(self) -> tuple[str | None, dict[str, Answer]]:
+        """Ask the assistant, over its HTTP API only, to check stetiq now, then read its
+        banner and ask it the scripted questions."""
+        if self.assistant is None:
+            return None, {}
+        banner = _banner(_json(self.assistant.post("/api/poll")))
+        self.say(f"  assistant: {banner}")
+        answers: dict[str, Answer] = {}
+        for question in SCRIPTED_QUESTIONS:
+            reply = _json(self.assistant.post("/api/ask", json={"question": question}))
+            answers[question] = Answer(**reply)
+            self.say(f"  Q: {question}", f"  A: {reply['answer']}")
+        return banner, answers
 
     def declare_parts_suppliers(self) -> stetiq.UseCaseVersion:
         """Before prompt v2: the assistant's root-cause Task now also asks which
@@ -262,6 +309,23 @@ class Show:
         return act
 
 
+class AssistantError(Exception):
+    """The maintenance assistant refused or failed a request the show made."""
+
+
+def _json(response: httpx.Response) -> dict:
+    if response.is_error:
+        raise AssistantError(f"the assistant answered {response.status_code}: {response.text}")
+    return response.json()
+
+
+def _banner(status: dict) -> str:
+    """The assistant's banner, as its chat page shows it."""
+    if status["in_use"] is None:
+        return "no Ontology Version yet"
+    return f"on Ontology v{status['in_use']}"
+
+
 def _mark(passed: bool) -> str:
     return "✅" if passed else "❌"
 
@@ -329,14 +393,20 @@ def run_show(
     *,
     extraction: LlmMode = "replay",
     quiet: bool = False,
+    assistant: httpx.Client | None = None,
 ) -> ShowState:
     """Run the show headless from an empty stetiq and empty graphs.
 
     `client` reaches the stetiq server and observes the candidate graph: its Graph Source
     must be `graphs.candidate` (e.g. `Neo4jGraphSource(graphs.candidate)`). `extraction`
     is how Claude's extraction runs: `replay` (the committed llm-cache/ only; a miss is
-    an error), `live` (Claude on a miss) or `record` (Claude for every report)."""
-    show = Show(client, graphs, extraction=extraction, quiet=quiet)
+    an error), `live` (Claude on a miss) or `record` (Claude for every report).
+
+    `assistant` is an HTTP client on the maintenance assistant's base URL (an
+    `httpx.Client(base_url=...)`, or a FastAPI TestClient over its app); after an act
+    the show reads its banner and asks it the scripted questions, over its HTTP API
+    only."""
+    show = Show(client, graphs, extraction=extraction, quiet=quiet, assistant=assistant)
     show.declare()
     show.act_0()
     show.act_2()
@@ -369,11 +439,14 @@ def main(argv: list[str] | None = None) -> int:
     with (
         _driver("PLANT_CANDIDATE_URI", "bolt://localhost:7687") as candidate,
         _driver("PLANT_PRODUCTION_URI", "bolt://localhost:7688") as production,
+        httpx.Client(
+            base_url=os.environ.get("PLANT_ASSISTANT_URL", "http://localhost:8000"), timeout=120
+        ) as assistant,
     ):
         client = stetiq.Client(graph_source=Neo4jGraphSource(candidate))
         try:
-            run_show(client, Graphs(candidate, production), extraction=mode)
-        except (stetiq.StetiqError, ExtractionError) as e:
+            run_show(client, Graphs(candidate, production), extraction=mode, assistant=assistant)
+        except (stetiq.StetiqError, ExtractionError, AssistantError, httpx.HTTPError) as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
     return 0

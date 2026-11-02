@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maintenance assistant</title>
+<style>
+  :root { --bg: #f6f5f1; --fg: #1d1d1b; --muted: #6b6a64; --card: #fff; --line: #dedcd3;
+          --accent: #2f6f4f; --warn: #a3471b; --code: #f0eee6; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #161614; --fg: #ecebe6; --muted: #9c9b94; --card: #21211e; --line: #3a3a35;
+            --accent: #6cc095; --warn: #f08a5d; --code: #2a2a26; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 17px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 120px; }
+  h1 { font-size: 1.3rem; margin: 0 0 4px; }
+  #banner { font-weight: 600; color: var(--accent); margin-bottom: 4px; }
+  #notice { color: var(--warn); margin: 0 0 16px; }
+  .scripted { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--fg);
+           border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  form { display: flex; gap: 8px; }
+  input { flex: 1; font: inherit; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line);
+          background: var(--card); color: var(--fg); min-width: 0; }
+  .turn { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+          padding: 14px 16px; margin-top: 16px; }
+  .q { font-weight: 600; }
+  .meta { color: var(--muted); font-size: .85rem; margin-top: 8px; }
+  pre { background: var(--code); padding: 10px 12px; border-radius: 6px; overflow-x: auto;
+        font-size: .85rem; margin: 6px 0 0; white-space: pre-wrap; }
+  .error { color: var(--warn); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Maintenance assistant</h1>
+  <div id="banner">connecting to stetiq…</div>
+  <p id="notice" hidden></p>
+  <div class="scripted">
+    <button data-q="Why did Line 2's machines break down?">Why did Line 2's machines break down?</button>
+    <button data-q="Which suppliers' components keep failing?">Which suppliers' components keep failing?</button>
+  </div>
+  <form id="ask">
+    <input id="question" placeholder="Ask about the plant…" autocomplete="off">
+    <button class="primary" type="submit">Ask</button>
+  </form>
+  <div id="log"></div>
+</main>
+<script>
+const banner = document.getElementById("banner");
+const notice = document.getElementById("notice");
+const input = document.getElementById("question");
+const log = document.getElementById("log");
+
+async function refresh() {
+  try {
+    const s = await (await fetch("/api/status")).json();
+    banner.textContent = s.in_use === null ? "no Ontology Version yet" : `on Ontology v${s.in_use}`;
+    notice.hidden = s.free_form;
+    notice.textContent = s.message || "";
+    input.disabled = !s.free_form;
+    input.placeholder = s.free_form ? "Ask about the plant…" : "Free-form questions are off (no API key)";
+  } catch (e) {
+    banner.textContent = "assistant unreachable";
+  }
+}
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+async function ask(question) {
+  const turn = el("div", "turn");
+  turn.append(el("div", "q", question));
+  const body = el("div", "", "…");
+  turn.append(body);
+  log.prepend(turn);
+  const r = await fetch("/api/ask", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({question}),
+  });
+  const a = await r.json();
+  if (!r.ok) { body.className = "error"; body.textContent = a.detail; return; }
+  body.textContent = a.answer;
+  const source = a.source === "recorded" ? " · recorded answer" : "";
+  turn.append(el("div", "meta", `Ontology v${a.ontology_version}${source} · Cypher it ran:`));
+  turn.append(el("pre", "", a.cypher));
+}
+
+document.querySelectorAll("[data-q]").forEach(b => b.addEventListener("click", () => ask(b.dataset.q)));
+document.getElementById("ask").addEventListener("submit", e => {
+  e.preventDefault();
+  if (input.value.trim()) { ask(input.value.trim()); input.value = ""; }
+});
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>
