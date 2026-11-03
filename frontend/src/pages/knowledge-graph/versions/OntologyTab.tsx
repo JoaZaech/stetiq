@@ -35,6 +35,9 @@ import {
 import { MAP_VIEWS } from './map-view'
 import { useMapViewControls } from './map-view-controls'
 import { OntologyMap } from './map/OntologyMap'
+import { PrototypeSwitcher } from '@/components/PrototypeSwitcher'
+import { OntologyMapPrototype } from './map-prototype/OntologyMapPrototype'
+import { PROTOTYPE_VARIANTS } from './map-prototype/variants.prototype'
 import { conceptRowId, selectedRowProps, type TableLinks, TableLinksContext } from './table/table-links'
 import { AttributeCountLink, ConceptLink, ShowOnMap } from './table/TableLinks'
 import { useOntologyVersionTab } from './version-context'
@@ -65,9 +68,22 @@ export function OntologyTab() {
         {controls}
       </div>
       {view === 'map' ? (
-        <OntologyMap ontology={version.ontology} query={query} filtersIn={filtersIn} />
+        // PROTOTYPE (branch prototype/ontology-map-d3): `?variant=A|B|C` swaps in a d3 variant.
+        params.get('variant') && params.get('variant') !== 'current' ? (
+          <OntologyMapPrototype key={version.number} page={version} query={query} />
+        ) : (
+          <OntologyMap ontology={version.ontology} query={query} filtersIn={filtersIn} />
+        )
       ) : (
         <OntologyTables ontology={version.ontology} />
+      )}
+      {view === 'map' && (
+        <PrototypeSwitcher
+          variants={[
+            { key: 'current', name: 'Today’s Map (React Flow)' },
+            ...Object.entries(PROTOTYPE_VARIANTS).map(([key, v]) => ({ key, name: v.name })),
+          ]}
+        />
       )}
     </div>
   )

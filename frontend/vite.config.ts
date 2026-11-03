@@ -25,7 +25,7 @@ export default defineConfig({
   },
   server: {
     // `npm run dev` proxies the API to a running `stetiq ui` (default port 5000).
-    proxy: { '/api': 'http://127.0.0.1:5000' },
+    proxy: { '/api': process.env.STETIQ_API ?? 'http://127.0.0.1:5000' },
     // The user guide and the vision live outside frontend/, in docs/ (ADR 0004).
     fs: { allow: [searchForWorkspaceRoot(process.cwd()), '../docs/guide', '../docs/vision.md'] },
   },
